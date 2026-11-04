@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 RF-01 Smoke runner: executes author insertion/deletion smoke cases using scripts/run_case.py,
-validates result counts against expected author output, and records full summary metrics.
+validates result counts against author reference outputs, prevents false passes,
+and records comprehensive summary metrics.
 """
 import argparse
 import csv
@@ -14,9 +15,15 @@ import sys
 
 def parse_resources(resources_file):
     res = {"elapsed_seconds": None, "max_rss_kb": None, "exit_status": None}
-    if not resources_file.exists():
+    resources_path = pathlib.Path(resources_file)
+    if not resources_path.is_file():
         return res
-    for line in resources_file.read_text().splitlines():
+    try:
+        content = resources_path.read_text(encoding="utf-8")
+    except OSError:
+        return res
+
+    for line in content.splitlines():
         if "=" in line:
             k, v = line.split("=", 1)
             k = k.strip()
@@ -32,18 +39,116 @@ def parse_resources(resources_file):
                 except ValueError: pass
     return res
 
-def parse_result_count(stdout_file):
-    if not stdout_file.exists():
+def parse_result_count_from_text(text):
+    """
+    Extracts the integer result count from stdout content.
+    Returns int if a valid 'Result count: <int>' line is found, else None.
+    """
+    if not text:
         return None
-    for line in stdout_file.read_text().splitlines():
-        if "Result count:" in line:
-            parts = line.split(":")
-            if len(parts) >= 2:
-                try:
-                    return int(parts[1].strip())
-                except ValueError:
-                    pass
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith("Result count:"):
+            parts = line.split(":", 1)
+            if len(parts) == 2:
+                val = parts[1].strip()
+                if val.isdigit():
+                    return int(val)
     return None
+
+def parse_result_count(stdout_file):
+    stdout_path = pathlib.Path(stdout_file)
+    if not stdout_path.is_file():
+        return None
+    try:
+        content = stdout_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    return parse_result_count_from_text(content)
+
+def load_author_expected_counts(expected_file_path):
+    """
+    Reads author's expected_output.txt formatted as:
+      Q_0:587884
+      Q_1:12866379
+    Returns dict mapping query_name to int count.
+    """
+    p = pathlib.Path(expected_file_path)
+    if not p.is_file():
+        raise FileNotFoundError(f"Author expected output file not found: {p}")
+    results = {}
+    for line in p.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if ":" in line:
+            q_name, count_str = line.split(":", 1)
+            q_name = q_name.strip()
+            count_str = count_str.strip()
+            if count_str.isdigit():
+                results[q_name] = int(count_str)
+    return results
+
+def evaluate_smoke_case(status, exit_code, actual_count, expected_count):
+    """
+    Pure evaluation function to determine if a smoke test run is a verified PASS or FAIL.
+    Prevents false PASS when actual_count is missing or when expected_count is unprovided.
+
+    Returns dict:
+      - case_ok (bool): True ONLY if execution succeeded (completed, exit 0),
+                        actual_count is a valid integer, expected_count is provided,
+                        and actual_count == expected_count.
+      - verdict (str): Status code describing the outcome.
+      - count_match (Optional[bool]): True/False if compared; None if unverified/missing.
+      - details (str): Descriptive text.
+    """
+    if status != "completed":
+        return {
+            "case_ok": False,
+            "verdict": f"FAIL_PROCESS_STATUS_{status.upper()}",
+            "count_match": False,
+            "details": f"Process execution ended with status '{status}' (expected 'completed')"
+        }
+
+    if exit_code != 0:
+        return {
+            "case_ok": False,
+            "verdict": "FAIL_NONZERO_EXIT",
+            "count_match": False,
+            "details": f"Process exited with non-zero exit code {exit_code}"
+        }
+
+    if actual_count is None:
+        return {
+            "case_ok": False,
+            "verdict": "FAIL_MISSING_RESULT_COUNT",
+            "count_match": False,
+            "details": "Process exited 0 but stdout contained no parseable 'Result count: <int>'"
+        }
+
+    if expected_count is None:
+        # Crucial fix for R4: never mark unverified executions as verified PASS
+        return {
+            "case_ok": False,
+            "verdict": "UNVERIFIED_NO_EXPECTED_COUNT",
+            "count_match": None,
+            "details": f"Executed successfully with Result count={actual_count}, but no expected count provided for reference verification"
+        }
+
+    if actual_count != expected_count:
+        return {
+            "case_ok": False,
+            "verdict": "FAIL_COUNT_MISMATCH",
+            "count_match": False,
+            "details": f"Count mismatch: actual {actual_count} != expected {expected_count}"
+        }
+
+    return {
+        "case_ok": True,
+        "verdict": "PASS_VERIFIED",
+        "count_match": True,
+        "details": f"Result count {actual_count} matches author reference {expected_count}"
+    }
 
 def main():
     repo_root = pathlib.Path(__file__).resolve().parents[1]
@@ -74,6 +179,14 @@ def main():
         print("ERROR: No test cases found in config.", file=sys.stderr)
         return 1
 
+    # Optional pre-validation: check author reference expected output files if specified
+    author_references = config.get("author_reference_files", {})
+    loaded_references = {}
+    for stream_type, ref_info in author_references.items():
+        ref_path = (repo_root / ref_info["path"]).resolve()
+        if ref_path.is_file():
+            loaded_references[stream_type] = load_author_expected_counts(ref_path)
+
     run_case_script = repo_root / "scripts/run_case.py"
     summary_rows = []
     all_passed = True
@@ -90,6 +203,13 @@ def main():
         s_path = str(repo_root / case["stream_path"])
         q_path = str(repo_root / case["query_path"])
         expected_count = case.get("expected_count")
+
+        # Cross-verify expected count with author reference file if available
+        if stream_type in loaded_references and query_name in loaded_references[stream_type]:
+            ref_expected = loaded_references[stream_type][query_name]
+            if expected_count is not None and expected_count != ref_expected:
+                print(f"WARNING: Config expected_count ({expected_count}) does not match author reference file ({ref_expected}) for {query_name}!", file=sys.stderr)
+
         num = str(case.get("num", "MAX"))
         time_limit = str(case.get("time_limit", 3600))
         timeout = case.get("timeout", 60)
@@ -115,7 +235,7 @@ def main():
 
         print(f"Running {case_id} [{stream_type} | {query_name}]...", end=" ", flush=True)
         proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=str(repo_root))
-        
+
         raw_dir = None
         status = "error"
         exit_code = proc.returncode
@@ -133,7 +253,6 @@ def main():
         elapsed_seconds = None
         max_rss_kb = None
         actual_count = None
-        count_match = False
 
         if raw_dir:
             raw_path = pathlib.Path(raw_dir)
@@ -142,16 +261,16 @@ def main():
             max_rss_kb = res["max_rss_kb"]
             actual_count = parse_result_count(raw_path / "stdout.log")
 
-            if expected_count is not None and actual_count is not None:
-                count_match = (actual_count == expected_count)
-            elif expected_count is None:
-                count_match = True
+        # Rigorous evaluation via pure evaluate_smoke_case
+        evaluation = evaluate_smoke_case(status, exit_code, actual_count, expected_count)
+        case_ok = evaluation["case_ok"]
+        verdict = evaluation["verdict"]
+        count_match = evaluation["count_match"]
 
-        case_ok = (status == "completed" and exit_code == 0 and count_match)
         if not case_ok:
             all_passed = False
 
-        print(f"Status: {status} | Actual: {actual_count} | Expected: {expected_count} | Match: {count_match} | Elapsed: {elapsed_seconds}s | RSS: {max_rss_kb} KB")
+        print(f"Verdict: {verdict} | Actual: {actual_count} | Expected: {expected_count} | Match: {count_match} | Elapsed: {elapsed_seconds}s | RSS: {max_rss_kb} KB")
 
         summary_rows.append({
             "case_id": case_id,
@@ -159,6 +278,7 @@ def main():
             "query": query_name,
             "status": status,
             "exit_code": exit_code,
+            "verdict": verdict,
             "wall_seconds": wall_seconds,
             "elapsed_seconds": elapsed_seconds,
             "max_rss_kb": max_rss_kb,
@@ -173,7 +293,7 @@ def main():
     output_csv_path = pathlib.Path(args.output_csv).resolve()
     output_csv_path.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = [
-        "case_id", "stream_type", "query", "status", "exit_code",
+        "case_id", "stream_type", "query", "status", "exit_code", "verdict",
         "wall_seconds", "elapsed_seconds", "max_rss_kb",
         "expected_count", "actual_count", "count_match",
         "output_mode", "raw_log_dir"
