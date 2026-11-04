@@ -1,0 +1,79 @@
+{
+  "description": "RF-01 Smoke test cases covering insertion and deletion streams from author test suite",
+  "source_commit": "2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1",
+  "binary_path": "baselines/rapidflow/source/build/streaming/RapidFlow.out",
+  "cases": [
+    {
+      "case_id": "rf01_smoke_insert_Q0",
+      "stream_type": "insert",
+      "query_name": "Q_0",
+      "dataset_path": "baselines/rapidflow/source/test/insert/data_graph/data.graph",
+      "stream_path": "baselines/rapidflow/source/test/insert/data_graph/insertion.graph",
+      "query_path": "baselines/rapidflow/source/test/insert/query_graph/Q_0",
+      "num": "MAX",
+      "time_limit": 3600,
+      "timeout": 60,
+      "expected_count": 587884
+    },
+    {
+      "case_id": "rf01_smoke_insert_Q1",
+      "stream_type": "insert",
+      "query_name": "Q_1",
+      "dataset_path": "baselines/rapidflow/source/test/insert/data_graph/data.graph",
+      "stream_path": "baselines/rapidflow/source/test/insert/data_graph/insertion.graph",
+      "query_path": "baselines/rapidflow/source/test/insert/query_graph/Q_1",
+      "num": "MAX",
+      "time_limit": 3600,
+      "timeout": 60,
+      "expected_count": 12866379
+    },
+    {
+      "case_id": "rf01_smoke_insert_Q2",
+      "stream_type": "insert",
+      "query_name": "Q_2",
+      "dataset_path": "baselines/rapidflow/source/test/insert/data_graph/data.graph",
+      "stream_path": "baselines/rapidflow/source/test/insert/data_graph/insertion.graph",
+      "query_path": "baselines/rapidflow/source/test/insert/query_graph/Q_2",
+      "num": "MAX",
+      "time_limit": 3600,
+      "timeout": 60,
+      "expected_count": 1139364
+    },
+    {
+      "case_id": "rf01_smoke_delete_Q0",
+      "stream_type": "delete",
+      "query_name": "Q_0",
+      "dataset_path": "baselines/rapidflow/source/test/delete/data_graph/data.graph",
+      "stream_path": "baselines/rapidflow/source/test/delete/data_graph/deletion.graph",
+      "query_path": "baselines/rapidflow/source/test/delete/query_graph/Q_0",
+      "num": "MAX",
+      "time_limit": 3600,
+      "timeout": 60,
+      "expected_count": 587984
+    },
+    {
+      "case_id": "rf01_smoke_delete_Q1",
+      "stream_type": "delete",
+      "query_name": "Q_1",
+      "dataset_path": "baselines/rapidflow/source/test/delete/data_graph/data.graph",
+      "stream_path": "baselines/rapidflow/source/test/delete/data_graph/deletion.graph",
+      "query_path": "baselines/rapidflow/source/test/delete/query_graph/Q_1",
+      "num": "MAX",
+      "time_limit": 3600,
+      "timeout": 60,
+      "expected_count": 12864072
+    },
+    {
+      "case_id": "rf01_smoke_delete_Q2",
+      "stream_type": "delete",
+      "query_name": "Q_2",
+      "dataset_path": "baselines/rapidflow/source/test/delete/data_graph/data.graph",
+      "stream_path": "baselines/rapidflow/source/test/delete/data_graph/deletion.graph",
+      "query_path": "baselines/rapidflow/source/test/delete/query_graph/Q_2",
+      "num": "MAX",
+      "time_limit": 3600,
+      "timeout": 60,
+      "expected_count": 1140656
+    }
+  ]
+}
