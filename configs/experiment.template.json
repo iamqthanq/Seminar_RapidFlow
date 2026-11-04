@@ -1,0 +1,11 @@
+{
+  "case_id": "EXAMPLE_NOT_EXECUTABLE",
+  "dataset_path": "/absolute/path/to/data.graph",
+  "query_path": "/absolute/path/to/query.graph",
+  "stream_path": "/absolute/path/to/updates.graph",
+  "source_commit": "TO_FILL",
+  "output_semantics": "explicit_delta_embeddings_OR_count_only_TO_VERIFY",
+  "timeout_seconds": 60,
+  "memory_limit_mb": null,
+  "notes": "Template only; replace all placeholders before an experiment."
+}
