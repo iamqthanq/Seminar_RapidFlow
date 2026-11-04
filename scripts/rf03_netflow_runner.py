@@ -30,6 +30,7 @@ EXPECTED_BASELINE_COMMIT = "2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1"
 EXPECTED_BINARY_SHA256 = "abdd26847885c0df24198641a5e630a89fe686e115372d8cf685273fe1d02cd6"
 EXPECTED_DATA_GRAPH_SHA256 = "bfedd2cab6d2c460141da945e77b0be39ae24c74d9a28b9394a38ee35b652fc6"
 MIN_FREE_RAM_BYTES = 4 * 1024 * 1024 * 1024  # 4 GiB threshold
+CANONICAL_BASELINE_CSV_REL = pathlib.Path("results/summary/rf03_baseline_runs.csv")
 
 
 class RunnerError(Exception):
@@ -401,22 +402,107 @@ def write_summary_csv(output_path: pathlib.Path, rows: List[Dict[str, Any]]) -> 
     tmp_path.replace(output_path)
 
 
-def recover_summary_from_logs(run_log_dir: pathlib.Path) -> List[Dict[str, Any]]:
+def recover_summary_from_logs(run_log_dir: pathlib.Path) -> Tuple[List[Dict[str, Any]], List[str]]:
     """
     Recover summary rows from individual attempt metadata.json files in a run directory.
-    Guarantees auditability and recovery if benchmark execution is interrupted.
+    Audited recovery: detects corrupt files, missing fields, and duplicate (case_id, repeat_index).
+    Returns (recovered_rows, warnings_or_errors).
     """
-    rows = []
+    rows: List[Dict[str, Any]] = []
+    warnings: List[str] = []
     if not run_log_dir.is_dir():
-        return rows
+        return rows, [f"Directory not found: {run_log_dir}"]
+
+    seen_keys = set()
     for meta_file in sorted(run_log_dir.glob("*_rep*/metadata.json")):
         try:
-            data = json.loads(meta_file.read_text(encoding="utf-8"))
-            if "summary_row" in data:
-                rows.append(data["summary_row"])
-        except Exception:
+            content = meta_file.read_text(encoding="utf-8")
+            data = json.loads(content)
+        except Exception as e:
+            warnings.append(f"Corrupt or unreadable metadata in {meta_file}: {e}")
             continue
-    return rows
+
+        if not isinstance(data, dict) or "summary_row" not in data or not isinstance(data["summary_row"], dict):
+            warnings.append(f"Missing summary_row dictionary in {meta_file}")
+            continue
+
+        srow = data["summary_row"]
+        key = (srow.get("case_id"), srow.get("repeat_index"))
+        if key in seen_keys:
+            warnings.append(f"Duplicate attempt metadata for case {key[0]} repeat {key[1]} at {meta_file}")
+            continue
+        seen_keys.add(key)
+        rows.append(srow)
+
+    return rows, warnings
+
+
+def promote_run_to_canonical(
+    run_id: str,
+    workspace_root: pathlib.Path,
+    logs_base_dir: Optional[pathlib.Path] = None,
+    canonical_csv_rel: pathlib.Path = CANONICAL_BASELINE_CSV_REL,
+    dry_run: bool = False,
+) -> Tuple[bool, str]:
+    """
+    Explicitly promote a validated full benchmark run into the canonical baseline CSV.
+    Strict promotion gates:
+    1. Exactly 30 rows (10 pinned cases x 3 repeats).
+    2. All 30 rows have status == 'COMPLETED'.
+    3. Exactly 0 count divergences across repeats for each case.
+    4. Safe non-destructive archive/backup of prior canonical file.
+    """
+    logs_dir = logs_base_dir or (workspace_root / "results" / "logs" / "rf03")
+    run_dir = logs_dir / run_id
+    if not run_dir.is_dir():
+        return False, f"Run directory not found: {run_dir}"
+
+    summary_file = run_dir / "summary_runs.csv"
+    if not summary_file.exists():
+        summary_file = run_dir / "checkpoint_runs.csv"
+    if not summary_file.exists():
+        return False, f"No summary CSV found in {run_dir}"
+
+    try:
+        with open(summary_file, newline="", encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+    except Exception as e:
+        return False, f"Failed to read summary file {summary_file}: {e}"
+
+    if len(rows) != 30:
+        return False, f"Promotion rejected: expected exactly 30 rows, got {len(rows)}"
+
+    from collections import defaultdict
+    case_map = defaultdict(list)
+    for r in rows:
+        if r.get("status") != "COMPLETED":
+            return False, f"Promotion rejected: row {r.get('case_id')} rep {r.get('repeat_index')} status is {r.get('status')}, expected COMPLETED"
+        case_map[r["case_id"]].append(r)
+
+    if len(case_map) != 10:
+        return False, f"Promotion rejected: expected 10 distinct cases, found {len(case_map)}"
+
+    for cid, crows in case_map.items():
+        if len(crows) != 3:
+            return False, f"Promotion rejected: case {cid} has {len(crows)} repeats, expected 3"
+        counts = [r["result_count"] for r in crows]
+        if len(set(counts)) != 1:
+            return False, f"Promotion rejected: case {cid} has divergent counts across repeats: {counts}"
+
+    canonical_dest = workspace_root / canonical_csv_rel
+    if not dry_run:
+        canonical_dest.parent.mkdir(parents=True, exist_ok=True)
+        if canonical_dest.exists():
+            backup_path = canonical_dest.with_suffix(f".bak.{int(time.time())}")
+            shutil.copy2(canonical_dest, backup_path)
+            shutil.copy2(canonical_dest, canonical_dest.with_suffix(".bak"))
+
+        # Atomic copy
+        tmp_dest = canonical_dest.with_suffix(".tmp")
+        shutil.copy2(summary_file, tmp_dest)
+        tmp_dest.replace(canonical_dest)
+
+    return True, f"Run {run_id} successfully promoted to canonical baseline CSV at {canonical_dest}"
 
 
 def run_benchmark(
@@ -451,12 +537,24 @@ def run_benchmark(
     binary_path = binary_path_override or (source_dir / "build" / "streaming" / "RapidFlow.out")
     data_graph_path = workspace_root / cfg["data_graph"]["path"]
 
-    summary_path = summary_csv_path or (workspace_root / "results" / "summary" / "rf03_baseline_runs.csv")
     logs_dir = logs_base_dir or (workspace_root / "results" / "logs" / "rf03")
 
     run_id = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "_" + uuid.uuid4().hex[:8]
     run_log_dir = logs_dir / run_id
     host_info = get_host_telemetry()
+
+    canonical_csv_path = workspace_root / CANONICAL_BASELINE_CSV_REL
+    if summary_csv_path is not None:
+        summary_path = summary_csv_path
+        # Safety guard: prevent accidental direct overwrite of committed canonical CSV during benchmark execution
+        if canonical_csv_path.exists() and summary_path.resolve() == canonical_csv_path.resolve():
+            raise RuntimeError(
+                f"Directly targeting the canonical baseline CSV ({canonical_csv_path}) during benchmark execution is prohibited. "
+                "Execute the benchmark to its isolated run directory, then invoke promote_run_to_canonical() after validating completeness."
+            )
+    else:
+        # Default behavior: run summary is isolated strictly inside its own immutable run directory
+        summary_path = run_log_dir / "summary_runs.csv"
 
     print("=" * 60)
     print("RF-03 NETFLOW BASELINE RUNNER (Gate G2)")
@@ -534,6 +632,56 @@ def run_benchmark(
     if dry_run:
         print("[DRY-RUN] Preflight completed successfully. No executions performed.")
         return 0, []
+
+    # Write immutable run-level manifest for linked provenance
+    run_log_dir.mkdir(parents=True, exist_ok=True)
+    bin_sha = file_sha256(binary_path) if binary_path.is_file() else None
+    data_sha = file_sha256(data_graph_path) if data_graph_path.is_file() else None
+    cfg_sha = file_sha256(config_path) if config_path.is_file() else None
+    manifest = {
+        "run_id": run_id,
+        "timestamp_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "command_argv": list(sys.argv),
+        "workspace_root": str(workspace_root),
+        "config_path": str(config_path),
+        "config_sha256": cfg_sha,
+        "source_dir": str(source_dir),
+        "source_git_commit": EXPECTED_BASELINE_COMMIT,
+        "binary_path": str(binary_path),
+        "binary_sha256": bin_sha,
+        "data_graph_path": str(data_graph_path),
+        "data_graph_sha256": data_sha,
+        "queries": {
+            qid: {
+                "path": str(workspace_root / q["path"]),
+                "sha256": q["sha256"],
+                "vertices": q.get("vertices"),
+                "edges": q.get("edges"),
+                "category": q.get("category"),
+            }
+            for qid, q in cfg.get("queries", {}).items()
+        },
+        "streams": {
+            sid: {
+                "path": str(workspace_root / s["path"]),
+                "sha256": s["sha256"],
+                "prefix_length": s.get("prefix_length"),
+                "stream_type": s.get("stream_type"),
+            }
+            for sid, s in cfg.get("streams", {}).items()
+        },
+        "host_telemetry": host_info,
+        "resource_policy": {
+            "default_repeats": default_repeats,
+            "default_timeout_sec": default_timeout,
+            "default_rss_cap_mb": default_rss_cap,
+            "runtime_rss_enforcement": False,
+            "rss_check_mode": "post_execution_time_v",
+            "safe_memory_floor_gb": 4.0,
+        },
+    }
+    manifest_path = run_log_dir / "run_manifest.json"
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
 
     # Execution matrix
     summary_rows: List[Dict[str, Any]] = []
@@ -649,6 +797,10 @@ def run_benchmark(
                 "repeat_index": rep,
                 "timestamp_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 "status": status,
+                "manifest_path": str(manifest_path),
+                "command_argv": list(sys.argv),
+                "binary_sha256": bin_sha,
+                "data_graph_sha256": data_sha,
                 "host_telemetry": host_info,
                 "summary_row": row,
             }
@@ -665,14 +817,59 @@ def run_benchmark(
 
         # Multi-repeat count consistency check for the case
         completed_counts = case_results[c_id]
-        if len(completed_counts) > 1:
-            if len(set(completed_counts)) != 1:
-                print(f"[FAIL] Count mismatch across repeats for case {c_id}: {completed_counts}", file=sys.stderr)
-                had_error = True
+        is_divergent = len(completed_counts) > 1 and len(set(completed_counts)) != 1
+        case_verdict = {
+            "case_id": c_id,
+            "query_id": q_id,
+            "stream_id": s_id,
+            "repeats": default_repeats,
+            "completed_repeats": len(completed_counts),
+            "result_counts": completed_counts,
+            "verdict": "FAIL_COUNT_MISMATCH" if is_divergent else "PASS_CONSISTENT",
+            "is_divergent": is_divergent,
+            "timestamp_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        }
+
+        if is_divergent:
+            had_error = True
+            mismatch_msg = f"COUNT_MISMATCH_ACROSS_REPEATS: completed repeats produced divergent result counts {completed_counts}"
+            print(f"[FAIL] {mismatch_msg} for case {c_id}", file=sys.stderr)
+            # Update all rows for this case in summary_rows
+            for r in summary_rows:
+                if r["case_id"] == c_id:
+                    r["status"] = "COUNT_MISMATCH_ACROSS_REPEATS"
+                    r["error_message"] = mismatch_msg
+
+            # Update on-disk metadata.json files for this case
+            for rep in range(1, default_repeats + 1):
+                rep_meta_file = run_log_dir / f"{c_id}_rep{rep}" / "metadata.json"
+                if rep_meta_file.exists():
+                    try:
+                        m_data = json.loads(rep_meta_file.read_text(encoding="utf-8"))
+                        m_data["status"] = "COUNT_MISMATCH_ACROSS_REPEATS"
+                        m_data["summary_row"]["status"] = "COUNT_MISMATCH_ACROSS_REPEATS"
+                        m_data["summary_row"]["error_message"] = mismatch_msg
+                        m_data["case_verdict"] = case_verdict
+                        rep_meta_file.write_text(json.dumps(m_data, indent=2) + "\n")
+                    except Exception:
+                        pass
+
+        # Write durable case verdict file
+        (run_log_dir / f"{c_id}_verdict.json").write_text(json.dumps(case_verdict, indent=2) + "\n")
+
+        # Immediately update the checkpoint CSV with the updated status
+        run_checkpoint_csv = run_log_dir / "checkpoint_runs.csv"
+        write_summary_csv(run_checkpoint_csv, summary_rows)
+        if summary_path != run_checkpoint_csv:
+            write_summary_csv(summary_path, summary_rows)
 
     # Persist summary CSV
+    run_checkpoint_csv = run_log_dir / "checkpoint_runs.csv"
+    write_summary_csv(run_checkpoint_csv, summary_rows)
     write_summary_csv(summary_path, summary_rows)
     print(f"\n[DONE] Summary written to {summary_path} ({len(summary_rows)} rows recorded).")
+    if summary_path != run_checkpoint_csv:
+        print(f"[DONE] Checkpoint preserved in {run_checkpoint_csv}.")
 
     return (1 if had_error else 0), summary_rows
 
@@ -692,9 +889,23 @@ def main() -> int:
     parser.add_argument("--skip-git-check", action="store_true", help="Bypass git commit check (for mock unit tests only)")
     parser.add_argument("--binary-path", default=None, help="Override RapidFlow executable path")
     parser.add_argument("--source-dir", default=None, help="Override RapidFlow source dir")
+    parser.add_argument("--promote-run-id", default=None, help="Explicitly promote a validated 30-run suite from logs into canonical baseline CSV")
 
     args = parser.parse_args()
     workspace_root = pathlib.Path(__file__).resolve().parent.parent
+
+    logs_dir = pathlib.Path(args.logs_dir) if args.logs_dir else None
+    if logs_dir and not logs_dir.is_absolute():
+        logs_dir = workspace_root / logs_dir
+
+    if args.promote_run_id:
+        ok, msg = promote_run_to_canonical(args.promote_run_id, workspace_root=workspace_root, logs_base_dir=logs_dir)
+        if ok:
+            print(f"[PROMOTION SUCCESS] {msg}")
+            return 0
+        else:
+            print(f"[PROMOTION REJECTED] {msg}", file=sys.stderr)
+            return 1
 
     config_path = pathlib.Path(args.config)
     if not config_path.is_absolute():

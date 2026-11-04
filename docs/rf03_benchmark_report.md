@@ -80,7 +80,12 @@ Every single run completed with exit status 0. Below are median values across $n
 
 - **Durable Canonical CSV Evidence:** [`results/summary/rf03_baseline_runs.csv`](../results/summary/rf03_baseline_runs.csv) (SHA-256: `05bfeb2423983e2250f6d94d6e718c3906b9654a900258d87db7e15dc0ac0036`).
 - **Canonical Run ID:** `20261104T132326Z_0786a355` (30 runs, exit code 0).
-- **Immutable Log Directory:** `results/logs/rf03/20261104T132326Z_0786a355/` (30 subdirectories, each with `stdout.log`, `stderr.log`, `metadata.json`, and run-level `checkpoint_runs.csv`).
+- **Immutable Log Directory:** `results/logs/rf03/20261104T132326Z_0786a355/` (30 subdirectories, each with `stdout.log`, `stderr.log`, and `metadata.json`).
+
+> [!NOTE] Evidence Provenance, Checkpoint Durability, and Canonical Protection
+> - **Historical Baseline Run (`20261104T132326Z_0786a355`):** Generated and audited under the initial runner implementation. It contains complete per-attempt raw directories (`stdout.log`, `stderr.log`, and `metadata.json`). Per-run incremental checkpointing (`checkpoint_runs.csv`) and `run_manifest.json` are runner features implemented for all subsequent executions and are not retroactively synthesized into the historical canonical directory.
+> - **Canonical CSV Protection & Promotion Protocol:** All executions (`--dry-run`, `--pilot`, `--case-id`, or full benchmark) strictly write run-level summaries to isolated run directories (`results/logs/rf03/<run_id>/summary_runs.csv` and `checkpoint_runs.csv`). Direct specification or overwriting of `results/summary/rf03_baseline_runs.csv` during benchmark runs is strictly prohibited and fails closed. Updating or replacing the canonical baseline requires explicit execution of `--promote-run-id <RUN_ID>` (`promote_run_to_canonical()`), which validates that all 30 benchmark cases succeeded, verifies cross-repeat count invariance, and archives the existing canonical file with an atomic `.bak` backup.
+> - **Repeat Divergence Handling:** In the event that repeated executions of the same case produce divergent `Result count` values, all affected rows in both memory and disk checkpoints are updated to `status: "COUNT_MISMATCH_ACROSS_REPEATS"`, error metadata is recorded, a per-case `<case_id>_verdict.json` (`verdict: "FAIL_COUNT_MISMATCH"`) is emitted, and the runner terminates with a non-zero exit code.
 
 ### 4.1. Inter-Run Variability & Historical Run Disclosure
 
@@ -133,7 +138,7 @@ The edge-label check at `streaming_engine.cpp:115` (`if (!query_graph->hasEdgeLa
    - These findings establish a baseline only. No algorithmic modifications or search-space optimizations were performed.
    - For profiling hypotheses and next steps in Gate G3, refer to [`docs/rf03_candidate_bottlenecks.md`](rf03_candidate_bottlenecks.md).
 4. **Post-Execution Budget Check vs Lack of Runtime Memory Enforcement:**
-   - The runner evaluates `/usr/bin/time -v` post-execution. It does not enforce a hard OS cgroup or rlimit runtime kill while RapidFlow executes, and cannot prevent active memory leaks at runtime.
+   - The runner evaluates Peak RSS post-execution via `/usr/bin/time -v`. It does not enforce active in-flight runtime memory limits (e.g., hard OS cgroup or `setrlimit` kills) during RapidFlow execution. Active runtime memory enforcement and in-flight termination remain an open scope limitation for manager acceptance prior to RF-04.
    - All 30 baseline runs safely recorded Peak RSS between $816.8\,\text{MB}$ and $1{,}047.1\,\text{MB}$, remaining well within the $3\,\text{GiB}$ budget check.
 
 ---
@@ -142,15 +147,18 @@ The edge-label check at `streaming_engine.cpp:115` (`if (!query_graph->hasEdgeLa
 
 To replicate all audit checks and benchmark results from scratch:
 ```bash
-# 1. Run all unit and regression tests (66 tests)
+# 1. Run all unit and regression tests (71 tests across RF-01, RF-02, and RF-03)
+#    - RF-01: 18 tests (tests/test_rf01_smoke_runner.py)
+#    - RF-02: 30 tests (tests/test_rf02_oracle.py: 15, tests/test_rf02_runner.py: 15)
+#    - RF-03: 23 tests (tests/test_rf03_runner.py)
 python3 -m unittest discover -s tests -p 'test_*.py' -v
 
 # 2. Run benchmark runner preflight in dry-run mode
 python3 scripts/rf03_netflow_runner.py --dry-run
 
-# 3. Run pilot execution (3 cases, 1 repeat each)
+# 3. Run pilot execution (3 cases, 1 repeat each; output isolated to run dir)
 python3 scripts/rf03_netflow_runner.py --pilot
 
-# 4. Run full benchmark matrix (10 cases x 3 repeats = 30 runs)
+# 4. Run full benchmark matrix (10 cases x 3 repeats = 30 runs; output isolated to run dir)
 python3 scripts/rf03_netflow_runner.py
 ```

@@ -341,6 +341,26 @@ class TestRF03RunnerFailurePreservation(unittest.TestCase):
         self.assertEqual(exit_code, 1)  # Mismatch across repeats flagged
         self.assertEqual(rows[0]["result_count"], 10)
         self.assertEqual(rows[1]["result_count"], 20)
+        # Check that divergence is persisted in CSV rows and case verdict!
+        self.assertEqual(rows[0]["status"], "COUNT_MISMATCH_ACROSS_REPEATS")
+        self.assertEqual(rows[1]["status"], "COUNT_MISMATCH_ACROSS_REPEATS")
+        self.assertIn("COUNT_MISMATCH_ACROSS_REPEATS", rows[0]["error_message"])
+        self.assertIn("COUNT_MISMATCH_ACROSS_REPEATS", rows[1]["error_message"])
+
+        # Also inspect on-disk summary CSV
+        with open(self.summary_csv, newline="", encoding="utf-8") as f:
+            disk_rows = list(csv.DictReader(f))
+        self.assertEqual(disk_rows[0]["status"], "COUNT_MISMATCH_ACROSS_REPEATS")
+        self.assertEqual(disk_rows[1]["status"], "COUNT_MISMATCH_ACROSS_REPEATS")
+
+        # Also inspect case_verdict.json
+        run_dirs = [d for d in self.logs_dir.iterdir() if d.is_dir()]
+        self.assertEqual(len(run_dirs), 1)
+        verdict_file = run_dirs[0] / "c_test_01_verdict.json"
+        self.assertTrue(verdict_file.exists())
+        verdict_data = json.loads(verdict_file.read_text(encoding="utf-8"))
+        self.assertEqual(verdict_data["verdict"], "FAIL_COUNT_MISMATCH")
+        self.assertTrue(verdict_data["is_divergent"])
 
     @patch("scripts.rf03_netflow_runner.verify_provenance", return_value=(True, "OK"))
     @patch("scripts.rf03_netflow_runner.execute_case_run")
@@ -428,14 +448,167 @@ class TestRF03RunnerFailurePreservation(unittest.TestCase):
         self.assertEqual(cp_rows[0]["result_count"], "5")
 
         # 3. Test log-based recovery function
-        recovered = runner.recover_summary_from_logs(run_dirs[0])
+        recovered, warnings = runner.recover_summary_from_logs(run_dirs[0])
+        self.assertEqual(warnings, [])
         self.assertEqual(len(recovered), 1)
         self.assertEqual(recovered[0]["result_count"], 5)
 
     def test_recover_summary_from_empty_or_missing_dir(self):
         empty_dir = self.base / "nonexistent_dir"
-        recovered = runner.recover_summary_from_logs(empty_dir)
+        recovered, warnings = runner.recover_summary_from_logs(empty_dir)
         self.assertEqual(recovered, [])
+        self.assertTrue(any("Directory not found" in w for w in warnings))
+
+    def test_recover_summary_reports_corrupt_files(self):
+        """Verify recover_summary_from_logs detects corrupt and duplicate files."""
+        run_dir = self.base / "corrupt_run_dir"
+        run_dir.mkdir(parents=True, exist_ok=True)
+
+        rep1_dir = run_dir / "c1_rep1"
+        rep1_dir.mkdir()
+        (rep1_dir / "metadata.json").write_text("NOT_VALID_JSON{")
+
+        rep2_dir = run_dir / "c1_rep2"
+        rep2_dir.mkdir()
+        rep2_meta = {"summary_row": {"case_id": "c1", "repeat_index": 2, "result_count": 42}}
+        (rep2_dir / "metadata.json").write_text(json.dumps(rep2_meta))
+
+        recovered, warnings = runner.recover_summary_from_logs(run_dir)
+        self.assertEqual(len(recovered), 1)
+        self.assertEqual(recovered[0]["result_count"], 42)
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("Corrupt or unreadable metadata", warnings[0])
+
+    @patch("scripts.rf03_netflow_runner.verify_provenance", return_value=(True, "OK"))
+    @patch("scripts.rf03_netflow_runner.execute_case_run")
+    def test_canonical_csv_protected_from_pilot_and_case_overwrites(self, mock_exec, mock_prov):
+        """Verify that running --pilot or partial runs does NOT overwrite canonical baseline CSV."""
+        mock_exec.return_value = runner.SubprocessResult(
+            returncode=0,
+            stdout=TestRF03OutputParsing.SAMPLE_VALID_STDOUT.replace("Result count: 120\n", "Result count: 0\n").replace("Updates num: 100\n", "Updates num: 1\n").replace("Edge process count: 100\n", "Edge process count: 1\n"),
+            stderr="",
+            duration_sec=0.1,
+            rss_kb=5000,
+        )
+
+        # Create mock canonical CSV with sentinel rows in workspace results/summary/
+        canonical_file = self.base / "results" / "summary" / "rf03_baseline_runs.csv"
+        canonical_file.parent.mkdir(parents=True, exist_ok=True)
+        sentinel_rows = [{"run_id": "sentinel_canonical_run", "case_id": f"c_{i}", "status": "COMPLETED"} for i in range(30)]
+        runner.write_summary_csv(canonical_file, sentinel_rows)
+        sentinel_sha = runner.file_sha256(canonical_file)
+
+        # Run benchmark with default summary_csv_path (None) and pilot_only=True
+        exit_code, rows = runner.run_benchmark(
+            config_path=self.cfg_file,
+            workspace_root=self.base,
+            pilot_only=True,
+            logs_base_dir=self.logs_dir,
+            skip_memory_check=True,
+            skip_git_check=True,
+        )
+
+        self.assertEqual(exit_code, 0)
+        # Check that canonical CSV was NOT touched
+        self.assertEqual(runner.file_sha256(canonical_file), sentinel_sha)
+
+        # Check that run-scoped summary was written inside run directory
+        run_dirs = [d for d in self.logs_dir.iterdir() if d.is_dir()]
+        self.assertEqual(len(run_dirs), 1)
+        run_summary = run_dirs[0] / "summary_runs.csv"
+        self.assertTrue(run_summary.exists())
+        with open(run_summary, newline="", encoding="utf-8") as f:
+            run_rows = list(csv.DictReader(f))
+        self.assertEqual(len(run_rows), 1)
+
+    @patch("scripts.rf03_netflow_runner.verify_provenance", return_value=(True, "OK"))
+    def test_canonical_csv_direct_targeting_prohibited(self, mock_prov):
+        """Verify that passing the canonical CSV path directly to run_benchmark raises RuntimeError."""
+        canonical_file = self.base / "results" / "summary" / "rf03_baseline_runs.csv"
+        canonical_file.parent.mkdir(parents=True, exist_ok=True)
+        canonical_file.write_text("dummy canonical\n")
+
+        with self.assertRaises(RuntimeError) as ctx:
+            runner.run_benchmark(
+                config_path=self.cfg_file,
+                workspace_root=self.base,
+                summary_csv_path=canonical_file,
+                logs_base_dir=self.logs_dir,
+                skip_memory_check=True,
+                skip_git_check=True,
+            )
+        self.assertIn("Directly targeting the canonical baseline CSV", str(ctx.exception))
+
+    def test_promote_run_to_canonical_validation(self):
+        """Test promotion validation gates and backup creation."""
+        canonical_file = self.base / "results" / "summary" / "rf03_baseline_runs.csv"
+        canonical_file.parent.mkdir(parents=True, exist_ok=True)
+        canonical_file.write_text("old canonical\n")
+
+        # 1. Incomplete run (e.g. only 2 rows) -> rejected
+        run_id = "test_run_incomplete"
+        run_dir = self.logs_dir / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        runner.write_summary_csv(run_dir / "summary_runs.csv", [{"case_id": "c1", "status": "COMPLETED"}])
+        ok, msg = runner.promote_run_to_canonical(run_id, workspace_root=self.base, logs_base_dir=self.logs_dir)
+        self.assertFalse(ok)
+        self.assertIn("expected exactly 30 rows", msg)
+        self.assertEqual(canonical_file.read_text(), "old canonical\n")
+
+        # 2. Run with failed status -> rejected
+        rows_failed = []
+        for c in range(10):
+            for rep in range(3):
+                rows_failed.append({"case_id": f"c_{c}", "repeat_index": str(rep+1), "result_count": "0", "status": "ERROR" if c == 0 else "COMPLETED"})
+        runner.write_summary_csv(run_dir / "summary_runs.csv", rows_failed)
+        ok, msg = runner.promote_run_to_canonical(run_id, workspace_root=self.base, logs_base_dir=self.logs_dir)
+        self.assertFalse(ok)
+        self.assertIn("expected COMPLETED", msg)
+
+        # 3. Valid 30 rows -> promoted and backup created
+        rows_valid = []
+        for c in range(10):
+            for rep in range(3):
+                rows_valid.append({"case_id": f"c_{c}", "repeat_index": str(rep+1), "result_count": "100", "status": "COMPLETED"})
+        runner.write_summary_csv(run_dir / "summary_runs.csv", rows_valid)
+        ok, msg = runner.promote_run_to_canonical(run_id, workspace_root=self.base, logs_base_dir=self.logs_dir)
+        self.assertTrue(ok)
+        self.assertIn("successfully promoted", msg)
+        self.assertTrue((canonical_file.with_suffix(".bak")).exists())
+        self.assertEqual((canonical_file.with_suffix(".bak")).read_text(), "old canonical\n")
+        with open(canonical_file, newline="", encoding="utf-8") as f:
+            promoted_rows = list(csv.DictReader(f))
+        self.assertEqual(len(promoted_rows), 30)
+
+    @patch("scripts.rf03_netflow_runner.verify_provenance", return_value=(True, "OK"))
+    @patch("scripts.rf03_netflow_runner.execute_case_run")
+    def test_run_manifest_created(self, mock_exec, mock_prov):
+        """Verify immutable run_manifest.json created with full provenance."""
+        mock_exec.return_value = runner.SubprocessResult(
+            returncode=0,
+            stdout=TestRF03OutputParsing.SAMPLE_VALID_STDOUT.replace("Updates num: 100\n", "Updates num: 1\n").replace("Edge process count: 100\n", "Edge process count: 1\n"),
+            stderr="",
+            duration_sec=0.1,
+            rss_kb=5000,
+        )
+
+        exit_code, rows = runner.run_benchmark(
+            config_path=self.cfg_file,
+            workspace_root=self.base,
+            logs_base_dir=self.logs_dir,
+            skip_memory_check=True,
+            skip_git_check=True,
+        )
+
+        self.assertEqual(exit_code, 0)
+        run_dirs = [d for d in self.logs_dir.iterdir() if d.is_dir()]
+        self.assertEqual(len(run_dirs), 1)
+        manifest_file = run_dirs[0] / "run_manifest.json"
+        self.assertTrue(manifest_file.exists())
+        mdata = json.loads(manifest_file.read_text(encoding="utf-8"))
+        self.assertIn("command_argv", mdata)
+        self.assertIn("resource_policy", mdata)
+        self.assertEqual(mdata["resource_policy"]["runtime_rss_enforcement"], False)
 
 
 class TestRF03BenchmarkReportConsistency(unittest.TestCase):
