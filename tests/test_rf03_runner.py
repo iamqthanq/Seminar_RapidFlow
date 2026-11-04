@@ -618,13 +618,28 @@ class TestRF03RunnerFailurePreservation(unittest.TestCase):
             cid = c["case_id"]
             qid = c["query_id"]
             sid = c["stream_id"]
-            prefix_len = cfg["streams"][sid]["prefix_length"]
+            q_meta = cfg["queries"][qid]
+            s_meta = cfg["streams"][sid]
+            prefix_len = s_meta["prefix_length"]
+            stype = s_meta.get("stream_type") or s_meta.get("type", "insertion")
 
             for rep in range(1, 4):
                 rep_dir = run_dir / f"{cid}_rep{rep}"
                 rep_dir.mkdir(parents=True, exist_ok=True)
 
-                stdout_text = f"Result count: 100\nUpdates num: {prefix_len}\nEdge process count: {prefix_len}\n"
+                stdout_text = (
+                    f"Result count: 100\n"
+                    f"Updates num: {prefix_len}\n"
+                    f"Edge process count: {prefix_len}\n"
+                    f"Preprocessing time (seconds): 0.010000\n"
+                    f"Query time (seconds): 0.001000\n"
+                    f"Global view update time (seconds): 0.000000\n"
+                    f"Local view update time (seconds): 0.000000\n"
+                    f"Search time (seconds): 0.001000\n"
+                    f"Relevant update count: 1\n"
+                    f"Search count: 0\n"
+                    f"Positive update count: 0\n"
+                )
                 stderr_text = "Elapsed (wall clock) time: 0:00.10\nMaximum resident set size (kbytes): 5000\n"
                 (rep_dir / "stdout.log").write_text(stdout_text)
                 (rep_dir / "stderr.log").write_text(stderr_text)
@@ -637,7 +652,11 @@ class TestRF03RunnerFailurePreservation(unittest.TestCase):
                     "case_id": cid,
                     "repeat_index": str(rep),
                     "query_id": qid,
+                    "query_category": q_meta.get("category", "test"),
+                    "query_v": str(q_meta.get("vertices", 2)),
+                    "query_e": str(q_meta.get("edges", 1)),
                     "stream_id": sid,
+                    "stream_type": stype,
                     "prefix_length": str(prefix_len),
                     "status": "COMPLETED",
                     "exit_code": "0",
@@ -650,9 +669,15 @@ class TestRF03RunnerFailurePreservation(unittest.TestCase):
                     "search_time_sec": "0.001000",
                     "updates_num": str(prefix_len),
                     "edge_process_count": str(prefix_len),
+                    "relevant_update_count": "1",
+                    "search_count": "0",
+                    "positive_update_count": "0",
                     "result_count": "100",
+                    "query_sha256": q_meta["sha256"],
+                    "stream_sha256": s_meta["sha256"],
                     "stdout_sha256": stdout_sha,
                     "stderr_sha256": stderr_sha,
+                    "log_dir": str(rep_dir.resolve()),
                     "error_message": "",
                 }
                 summary_rows.append(row)
@@ -1123,6 +1148,155 @@ class TestRF03RunnerFailurePreservation(unittest.TestCase):
         # 2. No spurious backup files created
         backups = list(canonical_file.parent.glob("rf03_baseline_runs_*.csv.bak"))
         self.assertEqual(len(backups), 0, "No backup file should be created when validation fails")
+
+    def test_r5_schema_wide_csv_tampering_rejected(self):
+        """Task C (R5-F1): Table-driven verification that tampering any individual schema field in CSV triggers rejection."""
+        cfg_path, cfg = self._create_synthetic_10case_workload()
+        run_dir = self._create_synthetic_run_suite(cfg_path, cfg, "run_r5_tamper")
+
+        with open(run_dir / "summary_runs.csv", newline="", encoding="utf-8") as f:
+            base_rows = list(csv.DictReader(f))
+
+        tampering_cases = [
+            ("preprocessing_time_sec", "999.000000"),
+            ("query_time_sec", "999.000000"),
+            ("search_time_sec", "999.000000"),
+            ("gv_update_time_sec", "999.000000"),
+            ("lv_update_time_sec", "999.000000"),
+            ("search_count", "999999"),
+            ("relevant_update_count", "999999"),
+            ("positive_update_count", "999999"),
+            ("query_sha256", "0" * 64),
+            ("stream_sha256", "0" * 64),
+            ("log_dir", "/tmp/unauthorized_external_path"),
+            ("query_category", "tampered_category"),
+            ("query_v", "999"),
+            ("query_e", "999"),
+            ("stream_type", "tampered_stream"),
+            ("prefix_length", "999"),
+            ("status", "FAILED"),
+            ("exit_code", "1"),
+            ("error_message", "SPURIOUS_ERROR_ON_PASS"),
+        ]
+
+        for field_name, bad_value in tampering_cases:
+            with self.subTest(field=field_name):
+                tampered_rows = [dict(r) for r in base_rows]
+                tampered_rows[0][field_name] = bad_value
+                runner.write_summary_csv(run_dir / "summary_runs.csv", tampered_rows)
+
+                ok, msg = runner.promote_run_to_canonical(
+                    "run_r5_tamper",
+                    workspace_root=self.base,
+                    logs_base_dir=self.logs_dir,
+                    workload_config_rel=cfg_path,
+                )
+                self.assertFalse(ok, f"Expected rejection for tampered field '{field_name}'")
+                self.assertIn(field_name, msg, f"Expected '{field_name}' in rejection message: {msg}")
+
+        # Restore valid summary for cleanup
+        runner.write_summary_csv(run_dir / "summary_runs.csv", base_rows)
+
+    def test_r5_unsupported_csv_column_rejected(self):
+        """Task C (R5-F1): Adding an unsupported / unknown CSV column is rejected and not quietly accepted."""
+        cfg_path, cfg = self._create_synthetic_10case_workload()
+        run_dir = self._create_synthetic_run_suite(cfg_path, cfg, "run_r5_extra_col")
+
+        with open(run_dir / "summary_runs.csv", newline="", encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+
+        # Manually write CSV with extra unsupported header column
+        extra_fields = runner.SUMMARY_FIELDNAMES + ["unsupported_metric_column"]
+        with open(run_dir / "summary_runs.csv", "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=extra_fields)
+            writer.writeheader()
+            for r in rows:
+                r_extra = dict(r)
+                r_extra["unsupported_metric_column"] = "unexpected_metric_value"
+                writer.writerow(r_extra)
+
+        ok, msg = runner.promote_run_to_canonical(
+            "run_r5_extra_col",
+            workspace_root=self.base,
+            logs_base_dir=self.logs_dir,
+            workload_config_rel=cfg_path,
+        )
+        self.assertFalse(ok)
+        self.assertIn("unsupported/unknown schema fields", msg)
+
+    def test_r5_missing_csv_column_rejected(self):
+        """Task C (R5-F1): Omitting a required CSV column is rejected."""
+        cfg_path, cfg = self._create_synthetic_10case_workload()
+        run_dir = self._create_synthetic_run_suite(cfg_path, cfg, "run_r5_missing_col")
+
+        with open(run_dir / "summary_runs.csv", newline="", encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+
+        # Write CSV with query_time_sec missing from header
+        fewer_fields = [f for f in runner.SUMMARY_FIELDNAMES if f != "query_time_sec"]
+        with open(run_dir / "summary_runs.csv", "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fewer_fields)
+            writer.writeheader()
+            for r in rows:
+                r_less = {k: v for k, v in r.items() if k != "query_time_sec"}
+                writer.writerow(r_less)
+
+        ok, msg = runner.promote_run_to_canonical(
+            "run_r5_missing_col",
+            workspace_root=self.base,
+            logs_base_dir=self.logs_dir,
+            workload_config_rel=cfg_path,
+        )
+        self.assertFalse(ok)
+        self.assertIn("missing required schema fields", msg)
+
+    def test_r5_valid_synthetic_suite_promoted_in_dry_run(self):
+        """Task C (R5-F1): Completely valid 30-run suite passes all schema-wide checks in dry-run mode."""
+        cfg_path, cfg = self._create_synthetic_10case_workload()
+        run_dir = self._create_synthetic_run_suite(cfg_path, cfg, "run_r5_dry_pass")
+
+        ok, msg = runner.promote_run_to_canonical(
+            "run_r5_dry_pass",
+            workspace_root=self.base,
+            logs_base_dir=self.logs_dir,
+            workload_config_rel=cfg_path,
+            dry_run=True,
+        )
+        self.assertTrue(ok)
+        self.assertIn("successfully promoted", msg)
+
+    def test_r5_tampered_promotion_leaves_canonical_sha_unmodified(self):
+        """Task C (R5-F1): Failed promotions on schema tampering leave canonical untouched and create zero backup files."""
+        canonical_file = self.base / "results" / "summary" / "rf03_baseline_runs.csv"
+        canonical_file.parent.mkdir(parents=True, exist_ok=True)
+        canonical_file.write_text("PRISTINE_CANONICAL_SENTINEL_R5\n")
+        orig_sha = runner.file_sha256(canonical_file)
+
+        cfg_path, cfg = self._create_synthetic_10case_workload()
+        run_dir = self._create_synthetic_run_suite(cfg_path, cfg, "run_r5_rejection_guard")
+
+        with open(run_dir / "summary_runs.csv", newline="", encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+        rows[0]["query_time_sec"] = "999.000000"
+        runner.write_summary_csv(run_dir / "summary_runs.csv", rows)
+
+        ok, msg = runner.promote_run_to_canonical(
+            "run_r5_rejection_guard",
+            workspace_root=self.base,
+            logs_base_dir=self.logs_dir,
+            workload_config_rel=cfg_path,
+            dry_run=False,
+        )
+        self.assertFalse(ok)
+        self.assertIn("query_time_sec mismatch", msg)
+
+        # Verify canonical unchanged
+        self.assertEqual(runner.file_sha256(canonical_file), orig_sha)
+        self.assertEqual(canonical_file.read_text(), "PRISTINE_CANONICAL_SENTINEL_R5\n")
+
+        # Verify no spurious backup files
+        backups = list(canonical_file.parent.glob("rf03_baseline_runs_*.csv.bak"))
+        self.assertEqual(len(backups), 0)
 
     @patch("scripts.rf03_netflow_runner.verify_provenance", return_value=(True, "OK"))
     @patch("scripts.rf03_netflow_runner.execute_case_run")

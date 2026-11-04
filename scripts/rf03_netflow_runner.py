@@ -33,6 +33,204 @@ EXPECTED_DATA_GRAPH_SHA256 = "bfedd2cab6d2c460141da945e77b0be39ae24c74d9a28b9394
 MIN_FREE_RAM_BYTES = 4 * 1024 * 1024 * 1024  # 4 GiB threshold
 CANONICAL_BASELINE_CSV_REL = pathlib.Path("results/summary/rf03_baseline_runs.csv")
 
+SUMMARY_FIELDNAMES = [
+    "run_id",
+    "case_id",
+    "repeat_index",
+    "query_id",
+    "query_category",
+    "query_v",
+    "query_e",
+    "stream_id",
+    "stream_type",
+    "prefix_length",
+    "status",
+    "exit_code",
+    "wall_time_sec",
+    "rss_kb",
+    "preprocessing_time_sec",
+    "query_time_sec",
+    "gv_update_time_sec",
+    "lv_update_time_sec",
+    "search_time_sec",
+    "updates_num",
+    "edge_process_count",
+    "relevant_update_count",
+    "search_count",
+    "positive_update_count",
+    "result_count",
+    "query_sha256",
+    "stream_sha256",
+    "stdout_sha256",
+    "stderr_sha256",
+    "log_dir",
+    "error_message",
+]
+
+SCHEMA_FIELD_SPECS: Dict[str, Dict[str, Any]] = {
+    "run_id": {
+        "type": "string",
+        "description": "Unique benchmark run identifier",
+    },
+    "case_id": {
+        "type": "string",
+        "description": "Benchmark workload case identifier",
+    },
+    "repeat_index": {
+        "type": "integer",
+        "min": 1,
+        "description": "Repeat iteration index (1-based)",
+    },
+    "query_id": {
+        "type": "string",
+        "description": "Query graph identifier",
+    },
+    "query_category": {
+        "type": "string",
+        "description": "Query category/family",
+    },
+    "query_v": {
+        "type": "integer",
+        "min": 1,
+        "description": "Query vertex count",
+    },
+    "query_e": {
+        "type": "integer",
+        "min": 0,
+        "description": "Query edge count",
+    },
+    "stream_id": {
+        "type": "string",
+        "description": "Edge stream identifier",
+    },
+    "stream_type": {
+        "type": "string",
+        "description": "Stream type (insertion or mixed_deletion)",
+    },
+    "prefix_length": {
+        "type": "integer",
+        "min": 1,
+        "description": "Stream prefix slice length",
+    },
+    "status": {
+        "type": "string",
+        "expected": "COMPLETED",
+        "description": "Execution status",
+    },
+    "exit_code": {
+        "type": "integer",
+        "expected": 0,
+        "description": "Process exit return code",
+    },
+    "wall_time_sec": {
+        "type": "float",
+        "tolerance": 1e-4,
+        "min": 0.0,
+        "description": "End-to-end wall-clock duration in seconds",
+    },
+    "rss_kb": {
+        "type": "integer",
+        "min": 0,
+        "description": "Peak Resident Set Size in kilobytes",
+    },
+    "preprocessing_time_sec": {
+        "type": "float",
+        "tolerance": 1e-4,
+        "min": 0.0,
+        "stdout_attr": "preprocessing_time_sec",
+        "description": "RapidFlow preprocessing time in seconds",
+    },
+    "query_time_sec": {
+        "type": "float",
+        "tolerance": 1e-4,
+        "min": 0.0,
+        "stdout_attr": "query_time_sec",
+        "description": "RapidFlow query evaluation time in seconds",
+    },
+    "gv_update_time_sec": {
+        "type": "float",
+        "tolerance": 1e-4,
+        "min": 0.0,
+        "stdout_attr": "gv_update_time_sec",
+        "description": "RapidFlow global view update time in seconds",
+    },
+    "lv_update_time_sec": {
+        "type": "float",
+        "tolerance": 1e-4,
+        "min": 0.0,
+        "stdout_attr": "lv_update_time_sec",
+        "description": "RapidFlow local view update time in seconds",
+    },
+    "search_time_sec": {
+        "type": "float",
+        "tolerance": 1e-4,
+        "min": 0.0,
+        "stdout_attr": "search_time_sec",
+        "description": "RapidFlow search time in seconds",
+    },
+    "updates_num": {
+        "type": "integer",
+        "min": 0,
+        "stdout_attr": "updates_num",
+        "description": "Total updates parsed by RapidFlow",
+    },
+    "edge_process_count": {
+        "type": "integer",
+        "min": 0,
+        "stdout_attr": "edge_process_count",
+        "description": "Edges processed by RapidFlow",
+    },
+    "relevant_update_count": {
+        "type": "integer",
+        "min": 0,
+        "stdout_attr": "relevant_update_count",
+        "description": "Edge updates relevant to query graph",
+    },
+    "search_count": {
+        "type": "integer",
+        "min": 0,
+        "stdout_attr": "search_count",
+        "description": "Search invocations in RapidFlow",
+    },
+    "positive_update_count": {
+        "type": "integer",
+        "min": 0,
+        "stdout_attr": "positive_update_count",
+        "description": "Updates that produced positive match delta",
+    },
+    "result_count": {
+        "type": "integer",
+        "min": 0,
+        "stdout_attr": "result_count",
+        "description": "Cumulative incremental match count sum",
+    },
+    "query_sha256": {
+        "type": "hash",
+        "description": "SHA-256 checksum of query graph file",
+    },
+    "stream_sha256": {
+        "type": "hash",
+        "description": "SHA-256 checksum of stream prefix file",
+    },
+    "stdout_sha256": {
+        "type": "hash",
+        "description": "SHA-256 checksum of stdout.log",
+    },
+    "stderr_sha256": {
+        "type": "hash",
+        "description": "SHA-256 checksum of stderr.log",
+    },
+    "log_dir": {
+        "type": "path",
+        "description": "Filesystem path to attempt log directory",
+    },
+    "error_message": {
+        "type": "nullable_string",
+        "expected_on_pass": "",
+        "description": "Error diagnostic message or empty on success",
+    },
+}
+
 
 class RunnerError(Exception):
     """Base exception for runner errors."""
@@ -228,7 +426,7 @@ def parse_rapidflow_stdout(stdout: str) -> ParsedMetrics:
 
     # Parse timing fields
     def parse_float(label: str) -> Optional[float]:
-        pattern = rf"^{re.escape(label)}:\s*([\d.]+)"
+        pattern = rf"^{re.escape(label)}:\s*([0-9.eE+-]+)"
         matches = re.findall(pattern, stdout, re.MULTILINE)
         return float(matches[-1]) if len(matches) >= 1 else None
 
@@ -362,43 +560,9 @@ def execute_case_run(
 def write_summary_csv(output_path: pathlib.Path, rows: List[Dict[str, Any]]) -> None:
     """Atomic and durable CSV writer ensuring results are persisted."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    fieldnames = [
-        "run_id",
-        "case_id",
-        "repeat_index",
-        "query_id",
-        "query_category",
-        "query_v",
-        "query_e",
-        "stream_id",
-        "stream_type",
-        "prefix_length",
-        "status",
-        "exit_code",
-        "wall_time_sec",
-        "rss_kb",
-        "preprocessing_time_sec",
-        "query_time_sec",
-        "gv_update_time_sec",
-        "lv_update_time_sec",
-        "search_time_sec",
-        "updates_num",
-        "edge_process_count",
-        "relevant_update_count",
-        "search_count",
-        "positive_update_count",
-        "result_count",
-        "query_sha256",
-        "stream_sha256",
-        "stdout_sha256",
-        "stderr_sha256",
-        "log_dir",
-        "error_message",
-    ]
-
     tmp_path = output_path.with_suffix(".tmp")
     with open(tmp_path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+        writer = csv.DictWriter(f, fieldnames=SUMMARY_FIELDNAMES, extrasaction="ignore")
         writer.writeheader()
         for r in rows:
             writer.writerow(r)
@@ -438,6 +602,225 @@ def recover_summary_from_logs(run_log_dir: pathlib.Path) -> Tuple[List[Dict[str,
         rows.append(srow)
 
     return rows, warnings
+
+
+def validate_row_schema_and_artifacts(
+    row: Dict[str, Any],
+    metadata_summary_row: Dict[str, Any],
+    parsed_stdout: ParsedMetrics,
+    stderr_parsed_rss: Optional[int],
+    act_stdout_sha: str,
+    act_stderr_sha: str,
+    rep_dir: pathlib.Path,
+    case_spec: Dict[str, Any],
+    workload_cfg: Dict[str, Any],
+    manifest: Dict[str, Any],
+    expected_run_id: str,
+    expected_case_id: str,
+    expected_rep: int,
+) -> Tuple[bool, str]:
+    """
+    Schema-wide cross-artifact validator.
+    Validates all 31 fields between CSV, metadata.summary_row, and independent secondary sources.
+    """
+    # 1. Structural schema completeness
+    row_keys = set(row.keys())
+    expected_keys = set(SUMMARY_FIELDNAMES)
+    if row_keys != expected_keys:
+        missing = expected_keys - row_keys
+        if missing:
+            return False, f"row missing required schema fields: {sorted(missing)}"
+        extra = row_keys - expected_keys
+        if extra:
+            return False, f"row contains unsupported/unknown schema fields: {sorted(extra)}"
+
+    # 2. Schema registry coverage guard
+    if set(SCHEMA_FIELD_SPECS.keys()) != expected_keys:
+        unreg = expected_keys ^ set(SCHEMA_FIELD_SPECS.keys())
+        return False, f"schema registry mismatch with SUMMARY_FIELDNAMES: {sorted(unreg)}"
+
+    # 3. Field-by-field verification
+    cid = expected_case_id
+    rep = expected_rep
+    for fld in SUMMARY_FIELDNAMES:
+        spec = SCHEMA_FIELD_SPECS.get(fld)
+        if spec is None:
+            return False, f"field '{fld}' has no registered validation specification"
+
+        csv_val = row.get(fld)
+        meta_val = metadata_summary_row.get(fld)
+
+        if csv_val is None:
+            return False, f"{fld} missing in CSV for case {cid} rep {rep}"
+        if meta_val is None:
+            return False, f"{fld} missing in metadata for case {cid} rep {rep}"
+
+        ftype = spec["type"]
+
+        # Type-specific CSV <-> Metadata validation
+        if ftype == "string":
+            csv_s = str(csv_val).strip()
+            meta_s = str(meta_val).strip()
+            if csv_s != meta_s:
+                return False, f"{fld} mismatch for case {cid} rep {rep}: CSV='{csv_s}' != metadata='{meta_s}'"
+            if "expected" in spec and csv_s != spec["expected"]:
+                return False, f"{fld} '{csv_s}' != expected '{spec['expected']}' for case {cid} rep {rep}"
+
+        elif ftype == "nullable_string":
+            csv_s = "" if csv_val is None else str(csv_val).strip()
+            meta_s = "" if meta_val is None else str(meta_val).strip()
+            if csv_s != meta_s:
+                return False, f"{fld} mismatch for case {cid} rep {rep}: CSV='{csv_s}' != metadata='{meta_s}'"
+            if "expected_on_pass" in spec and csv_s != spec["expected_on_pass"]:
+                return False, f"{fld} on successful pass must be empty, got '{csv_s}' for case {cid} rep {rep}"
+
+        elif ftype == "integer":
+            try:
+                csv_i = int(csv_val)
+            except (ValueError, TypeError):
+                return False, f"invalid integer for {fld} in CSV for case {cid} rep {rep}: '{csv_val}'"
+            try:
+                meta_i = int(meta_val)
+            except (ValueError, TypeError):
+                return False, f"invalid integer for {fld} in metadata for case {cid} rep {rep}: '{meta_val}'"
+            if csv_i != meta_i:
+                return False, f"{fld} mismatch for case {cid} rep {rep}: CSV={csv_i} != metadata={meta_i}"
+            if "min" in spec and csv_i < spec["min"]:
+                return False, f"{fld} {csv_i} < min {spec['min']} for case {cid} rep {rep}"
+            if "expected" in spec and csv_i != spec["expected"]:
+                return False, f"{fld} {csv_i} != expected {spec['expected']} for case {cid} rep {rep}"
+
+        elif ftype == "float":
+            try:
+                csv_f = float(csv_val)
+            except (ValueError, TypeError):
+                return False, f"non-float {fld} for case {cid} rep {rep}: '{csv_val}'"
+            try:
+                meta_f = float(meta_val)
+            except (ValueError, TypeError):
+                return False, f"non-float {fld} in metadata for case {cid} rep {rep}: '{meta_val}'"
+            if math.isnan(csv_f) or math.isnan(meta_f) or math.isinf(csv_f) or math.isinf(meta_f):
+                return False, f"invalid {fld} (NaN/Inf) for case {cid} rep {rep}"
+            if "min" in spec and (csv_f < spec["min"] or meta_f < spec["min"]):
+                return False, f"invalid {fld} negative ({csv_f}) for case {cid} rep {rep}"
+            tol = spec.get("tolerance", 1e-4)
+            if abs(csv_f - meta_f) > tol:
+                return False, f"{fld} mismatch for case {cid} rep {rep}: CSV={csv_f} != metadata={meta_f}"
+
+        elif ftype == "hash":
+            csv_h = str(csv_val).strip().lower()
+            meta_h = str(meta_val).strip().lower()
+            if len(csv_h) != 64 or not all(c in "0123456789abcdef" for c in csv_h):
+                return False, f"invalid SHA-256 for {fld} in CSV for case {cid} rep {rep}: '{csv_val}'"
+            if len(meta_h) != 64 or not all(c in "0123456789abcdef" for c in meta_h):
+                return False, f"invalid SHA-256 for {fld} in metadata for case {cid} rep {rep}: '{meta_val}'"
+            if csv_h != meta_h:
+                return False, f"{fld} mismatch for case {cid} rep {rep}: CSV={csv_h} != metadata={meta_h}"
+
+        elif ftype == "path":
+            csv_p = pathlib.Path(str(csv_val)).resolve()
+            meta_p = pathlib.Path(str(meta_val)).resolve()
+            if csv_p != meta_p:
+                return False, f"{fld} mismatch for case {cid} rep {rep}: CSV={csv_p} != metadata={meta_p}"
+
+        # 4. Secondary source ground truth validations
+        # A. RapidFlow stdout parser checks
+        if spec.get("stdout_attr"):
+            attr_name = spec["stdout_attr"]
+            if hasattr(parsed_stdout, attr_name):
+                stdout_val = getattr(parsed_stdout, attr_name)
+                if stdout_val is not None:
+                    if ftype == "integer":
+                        if int(csv_val) != int(stdout_val):
+                            return False, f"{fld} mismatch for case {cid} rep {rep}: CSV={csv_val} != stdout={stdout_val}"
+                    elif ftype == "float":
+                        tol = spec.get("tolerance", 1e-4)
+                        if abs(float(csv_val) - float(stdout_val)) > tol:
+                            return False, f"{fld} mismatch for case {cid} rep {rep}: CSV={float(csv_val)} != stdout={float(stdout_val)}"
+
+        # B. Stderr RSS check (/usr/bin/time -v)
+        if fld == "rss_kb" and stderr_parsed_rss is not None and stderr_parsed_rss > 0:
+            if int(csv_val) != stderr_parsed_rss:
+                return False, f"rss_kb mismatch for case {cid} rep {rep}: CSV={int(csv_val)} != stderr={stderr_parsed_rss}"
+
+        # C. Filesystem SHA checks
+        if fld == "stdout_sha256":
+            if str(csv_val).strip().lower() != act_stdout_sha:
+                return False, f"stdout SHA mismatch for {cid} rep {rep}: disk={act_stdout_sha} != CSV={csv_val}"
+        if fld == "stderr_sha256":
+            if str(csv_val).strip().lower() != act_stderr_sha:
+                return False, f"stderr SHA mismatch for {cid} rep {rep}: disk={act_stderr_sha} != CSV={csv_val}"
+
+        # D. Secure directory resolution check
+        if fld == "log_dir":
+            if pathlib.Path(str(csv_val)).resolve() != rep_dir.resolve():
+                return False, f"log_dir mismatch for case {cid} rep {rep}: CSV={pathlib.Path(str(csv_val)).resolve()} != expected={rep_dir.resolve()}"
+
+        # E. Workload and manifest provenance checks
+        if fld == "run_id":
+            if str(csv_val) != expected_run_id:
+                return False, f"run_id mismatch for case {cid} rep {rep}: CSV={csv_val} != expected={expected_run_id}"
+            if manifest.get("run_id") and manifest.get("run_id") != expected_run_id:
+                return False, f"manifest run_id mismatch: {manifest.get('run_id')} != {expected_run_id}"
+        elif fld == "case_id":
+            if str(csv_val) != cid:
+                return False, f"case_id mismatch: CSV={csv_val} != expected={cid}"
+        elif fld == "repeat_index":
+            if int(csv_val) != rep:
+                return False, f"repeat_index mismatch: CSV={csv_val} != expected={rep}"
+        elif fld == "query_id":
+            exp_qid = case_spec["query_id"]
+            if str(csv_val) != exp_qid:
+                return False, f"query_id mismatch for case {cid}: CSV={csv_val} != expected={exp_qid}"
+        elif fld == "query_category":
+            exp_qcat = workload_cfg.get("queries", {}).get(case_spec["query_id"], {}).get("category")
+            if exp_qcat is not None and str(csv_val) != str(exp_qcat):
+                return False, f"query_category mismatch for case {cid}: CSV={csv_val} != expected={exp_qcat}"
+        elif fld == "query_v":
+            exp_qv = workload_cfg.get("queries", {}).get(case_spec["query_id"], {}).get("vertices")
+            if exp_qv is not None and int(csv_val) != int(exp_qv):
+                return False, f"query_v mismatch for case {cid}: CSV={csv_val} != expected={exp_qv}"
+        elif fld == "query_e":
+            exp_qe = workload_cfg.get("queries", {}).get(case_spec["query_id"], {}).get("edges")
+            if exp_qe is not None and int(csv_val) != int(exp_qe):
+                return False, f"query_e mismatch for case {cid}: CSV={csv_val} != expected={exp_qe}"
+        elif fld == "stream_id":
+            exp_sid = case_spec["stream_id"]
+            if str(csv_val) != exp_sid:
+                return False, f"stream_id mismatch for case {cid}: CSV={csv_val} != expected={exp_sid}"
+        elif fld == "stream_type":
+            smeta = workload_cfg.get("streams", {}).get(case_spec["stream_id"], {})
+            exp_stype = smeta.get("stream_type") or smeta.get("type")
+            if exp_stype is not None and str(csv_val) != str(exp_stype):
+                return False, f"stream_type mismatch for case {cid}: CSV={csv_val} != expected={exp_stype}"
+        elif fld == "prefix_length":
+            smeta = workload_cfg.get("streams", {}).get(case_spec["stream_id"], {})
+            exp_plen = smeta.get("prefix_length")
+            if exp_plen is not None and int(csv_val) != int(exp_plen):
+                return False, f"prefix_length mismatch for case {cid}: CSV={csv_val} != expected={exp_plen}"
+        elif fld in ("updates_num", "edge_process_count"):
+            smeta = workload_cfg.get("streams", {}).get(case_spec["stream_id"], {})
+            exp_plen = smeta.get("prefix_length")
+            if exp_plen is not None and int(csv_val) != int(exp_plen):
+                return False, f"{fld} mismatch with prefix_length for case {cid}: CSV={csv_val} != {exp_plen}"
+        elif fld == "query_sha256":
+            exp_qsha = workload_cfg.get("queries", {}).get(case_spec["query_id"], {}).get("sha256")
+            if exp_qsha and str(csv_val).strip().lower() != exp_qsha.strip().lower():
+                return False, f"query_sha256 mismatch for case {cid} rep {rep}: CSV={csv_val} != expected={exp_qsha}"
+            man_q = manifest.get("queries", {}).get(case_spec["query_id"], {})
+            man_qsha = man_q.get("sha256") if isinstance(man_q, dict) else None
+            if man_qsha and str(csv_val).strip().lower() != str(man_qsha).strip().lower():
+                return False, f"query_sha256 mismatch with manifest for case {cid} rep {rep}: CSV={csv_val} != manifest={man_qsha}"
+        elif fld == "stream_sha256":
+            exp_ssha = workload_cfg.get("streams", {}).get(case_spec["stream_id"], {}).get("sha256")
+            if exp_ssha and str(csv_val).strip().lower() != exp_ssha.strip().lower():
+                return False, f"stream_sha256 mismatch for case {cid} rep {rep}: CSV={csv_val} != expected={exp_ssha}"
+            man_s = manifest.get("streams", {}).get(case_spec["stream_id"], {})
+            man_ssha = man_s.get("sha256") if isinstance(man_s, dict) else None
+            if man_ssha and str(csv_val).strip().lower() != str(man_ssha).strip().lower():
+                return False, f"stream_sha256 mismatch with manifest for case {cid} rep {rep}: CSV={csv_val} != manifest={man_ssha}"
+
+    return True, "OK"
 
 
 def promote_run_to_canonical(
@@ -534,9 +917,26 @@ def promote_run_to_canonical(
 
     try:
         with open(summary_file, newline="", encoding="utf-8") as f:
-            rows = list(csv.DictReader(f))
+            reader = csv.DictReader(f)
+            csv_fieldnames = list(reader.fieldnames or [])
+            rows = list(reader)
     except Exception as e:
         return False, f"Failed to read summary file {summary_file}: {e}"
+
+    expected_fieldnames_set = set(SUMMARY_FIELDNAMES)
+    actual_fieldnames_set = set(csv_fieldnames)
+
+    missing_fields = expected_fieldnames_set - actual_fieldnames_set
+    if missing_fields:
+        return False, f"Promotion rejected: CSV missing required schema fields: {sorted(missing_fields)}"
+
+    extra_fields = actual_fieldnames_set - expected_fieldnames_set
+    if extra_fields:
+        return False, f"Promotion rejected: CSV contains unsupported/unknown schema fields: {sorted(extra_fields)}"
+
+    if set(SCHEMA_FIELD_SPECS.keys()) != expected_fieldnames_set:
+        unreg = expected_fieldnames_set ^ set(SCHEMA_FIELD_SPECS.keys())
+        return False, f"Promotion rejected: schema specification mismatch with SUMMARY_FIELDNAMES: {sorted(unreg)}"
 
     if len(rows) != expected_total_rows:
         return False, f"Promotion rejected: expected exactly {expected_total_rows} rows, got {len(rows)}"
@@ -664,23 +1064,18 @@ def promote_run_to_canonical(
 
             if parsed_stdout.result_count is None:
                 return False, f"Promotion rejected: stdout parsed result_count is None for case {cid} rep {rep}"
-            if int(r["result_count"]) != parsed_stdout.result_count:
-                return False, (
-                    f"Promotion rejected: result_count mismatch for case {cid} rep {rep}: "
-                    f"CSV={r.get('result_count')} != stdout={parsed_stdout.result_count}"
-                )
-            if int(r["updates_num"]) != parsed_stdout.updates_num:
-                return False, (
-                    f"Promotion rejected: updates_num mismatch for case {cid} rep {rep}: "
-                    f"CSV={r.get('updates_num')} != stdout={parsed_stdout.updates_num}"
-                )
-            if int(r["edge_process_count"]) != parsed_stdout.edge_process_count:
-                return False, (
-                    f"Promotion rejected: edge_process_count mismatch for case {cid} rep {rep}: "
-                    f"CSV={r.get('edge_process_count')} != stdout={parsed_stdout.edge_process_count}"
-                )
 
-            # Cross-Artifact Reconciliation: CSV ↔ metadata.json
+            # Stderr RSS parse if available
+            parsed_rss = None
+            stderr_content = stderr_file.read_text(encoding="utf-8", errors="replace")
+            for line in stderr_content.splitlines():
+                if "Maximum resident set size (kbytes):" in line:
+                    try:
+                        parsed_rss = int(line.split(":")[-1].strip())
+                    except (ValueError, TypeError):
+                        pass
+
+            # Metadata.json
             try:
                 mdata = json.loads(meta_file.read_text(encoding="utf-8"))
             except Exception as e:
@@ -699,64 +1094,24 @@ def promote_run_to_canonical(
             if not isinstance(summary_row, dict):
                 return False, f"Promotion rejected: metadata missing valid summary_row dictionary in {rep_dir}"
 
-            # String identity fields match
-            str_fields = ["run_id", "case_id", "repeat_index", "query_id", "stream_id", "status"]
-            for fld in str_fields:
-                if str(r.get(fld)) != str(summary_row.get(fld)):
-                    return False, (
-                        f"Promotion rejected: {fld} mismatch for case {cid} rep {rep}: "
-                        f"CSV={r.get(fld)} != metadata={summary_row.get(fld)}"
-                    )
-
-            # Integer fields match
-            int_fields = ["result_count", "updates_num", "edge_process_count", "prefix_length", "exit_code", "rss_kb"]
-            for fld in int_fields:
-                csv_val = r.get(fld)
-                meta_val = summary_row.get(fld)
-                if csv_val is None or meta_val is None:
-                    return False, f"Promotion rejected: field '{fld}' missing in CSV or metadata for case {cid} rep {rep}"
-                try:
-                    if int(csv_val) != int(meta_val):
-                        return False, (
-                            f"Promotion rejected: {fld} mismatch for case {cid} rep {rep}: "
-                            f"CSV={csv_val} != metadata={meta_val}"
-                        )
-                except (ValueError, TypeError):
-                    return False, f"Promotion rejected: invalid integer for {fld} in case {cid} rep {rep}"
-
-            # Wall time float match
-            csv_wall_str = r.get("wall_time_sec")
-            meta_wall_str = summary_row.get("wall_time_sec")
-            if csv_wall_str is None or meta_wall_str is None:
-                return False, f"Promotion rejected: wall_time_sec missing in CSV or metadata for case {cid} rep {rep}"
-            try:
-                csv_wall = float(csv_wall_str)
-                meta_wall = float(meta_wall_str)
-                if math.isnan(csv_wall) or math.isnan(meta_wall) or math.isinf(csv_wall) or math.isinf(meta_wall) or csv_wall < 0 or meta_wall < 0:
-                    return False, f"Promotion rejected: invalid wall_time_sec for case {cid} rep {rep}"
-                if abs(csv_wall - meta_wall) > 1e-4:
-                    return False, (
-                        f"Promotion rejected: wall_time_sec mismatch for case {cid} rep {rep}: "
-                        f"CSV={csv_wall} != metadata={meta_wall}"
-                    )
-            except (ValueError, TypeError):
-                return False, f"Promotion rejected: non-float wall_time_sec for case {cid} rep {rep}"
-
-            # Task C: Reconcile RSS from stderr if /usr/bin/time output is available
-            stderr_content = stderr_file.read_text(encoding="utf-8", errors="replace")
-            for line in stderr_content.splitlines():
-                if "Maximum resident set size (kbytes):" in line:
-                    try:
-                        parsed_rss = int(line.split(":")[-1].strip())
-                        if parsed_rss > 0:
-                            csv_rss = int(r.get("rss_kb"))
-                            if csv_rss != parsed_rss:
-                                return False, (
-                                    f"Promotion rejected: rss_kb mismatch for case {cid} rep {rep}: "
-                                    f"CSV={csv_rss} != stderr={parsed_rss}"
-                                )
-                    except (ValueError, TypeError):
-                        pass
+            cspec = expected_cases[cid]
+            ok_row, val_msg = validate_row_schema_and_artifacts(
+                row=r,
+                metadata_summary_row=summary_row,
+                parsed_stdout=parsed_stdout,
+                stderr_parsed_rss=parsed_rss,
+                act_stdout_sha=act_stdout_sha,
+                act_stderr_sha=act_stderr_sha,
+                rep_dir=rep_dir,
+                case_spec=cspec,
+                workload_cfg=cfg,
+                manifest=manifest,
+                expected_run_id=run_id,
+                expected_case_id=cid,
+                expected_rep=int(rep),
+            )
+            if not ok_row:
+                return False, f"Promotion rejected: {val_msg}"
 
     canonical_dest = (canonical_csv_rel if canonical_csv_rel.is_absolute() else (workspace_root / canonical_csv_rel)).resolve()
     if not dry_run:

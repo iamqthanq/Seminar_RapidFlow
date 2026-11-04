@@ -148,10 +148,10 @@ The edge-label check at `streaming_engine.cpp:115` (`if (!query_graph->hasEdgeLa
 
 To replicate all audit checks and benchmark results from scratch:
 ```bash
-# 1. Run all unit and regression tests (92 tests across RF-01, RF-02, and RF-03)
+# 1. Run all unit and regression tests (97 tests across RF-01, RF-02, and RF-03)
 #    - RF-01: 18 tests (tests/test_rf01_smoke_runner.py)
 #    - RF-02: 30 tests (tests/test_rf02_oracle.py: 15, tests/test_rf02_runner.py: 15)
-#    - RF-03: 44 tests (tests/test_rf03_runner.py)
+#    - RF-03: 49 tests (tests/test_rf03_runner.py)
 python3 -m unittest discover -s tests -p 'test_*.py' -v
 
 # 2. Run benchmark runner preflight in dry-run mode
