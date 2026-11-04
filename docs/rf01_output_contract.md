@@ -1,7 +1,7 @@
 # RF-01: Output Contract and Semantics Audit (Gate G0)
 
 ## 1. Mục tiêu
-Tài liệu này kiểm định chi tiết giao diện dòng lệnh (CLI), định dạng kết quả thực tế, và bản chất ngữ nghĩa đầu ra (Output Semantics) của RapidFlow mã nguồn gốc. Kết luận phân định rõ ràng giữa **liệt kê đầy đủ (Full Enumeration)** và **đếm số lượng (Count-Only)** để phục vụ các cổng nghiệm thu tiếp theo (G1–G6).
+Tài liệu này kiểm định chi tiết giao diện dòng lệnh (CLI), định dạng kết quả thực tế, và bản chất ngữ nghĩa đầu ra (Output Semantics) của RapidFlow mã nguồn gốc. Kết luận phân định rõ ràng giữa **liệt kê đầy đủ (Full Enumeration)** và **đếm số lượng (Count-Only)**, đồng thời làm rõ ngữ nghĩa tích lũy dòng sự kiện (stream aggregation) để phục vụ các cổng nghiệm thu tiếp theo (G1–G6).
 
 ---
 
@@ -94,13 +94,58 @@ Tại `streaming/search_engine.cpp` (dòng 170–200), tác giả từng thử n
 
 ---
 
-## 5. Kết luận kiểm toán và Ràng buộc cho Gate G1–G6
+## 5. Phân tích chi tiết ngữ nghĩa Result count (Giải quyết R2)
+
+Nhằm làm rõ bản chất của `Result count` phục vụ việc thiết kế kiểm chứng độc lập ở Cổng G1 (RF-02), dưới đây là phân tích chi tiết dựa trên mã nguồn thực tế:
+
+### 5.1. Bản chất của chỉ số `Result count`
+- **Là tổng cộng dồn trên toàn bộ stream (Stream-Aggregated Count):**
+  Trong `streaming/streaming_engine.h` và `streaming/streaming_engine.cpp`:
+  - Phép gán `result_count_ = 0;` được định nghĩa tại `streaming/streaming_engine.h:52–64` (dòng 58, bên trong phương thức `reset_performance_counters()`), và được gọi từ `streaming/streaming_engine.cpp:335` ngay trước khi bắt đầu duyệt stream.
+  - Dòng 350–352 trong `streaming/streaming_engine.cpp`:
+    ```cpp
+    for (auto& update : stream) {
+        execute(query_graph, update, true, true);
+    ```
+  - Dòng 240 (bên trong hàm `execute`):
+    ```cpp
+    result_count_ += result_count;
+    ```
+  - Dòng 411 (trong hàm `print_metrics`):
+    ```cpp
+    printf("Result count: %zu\n", result_count_);
+    ```
+  Như vậy, `Result count` cuối cùng là $\sum_{i=1}^{M} \Delta_i$, trong đó $\Delta_i$ là số lượng match mới xuất hiện hoặc bị hủy ở cập nhật thứ $i$ ($M = 1{,}221{,}704$ trong bộ test của tác giả).
+
+### 5.2. Các câu hỏi trọng tâm về ngữ nghĩa
+1. **`Result count` cuối chương trình là gì?**
+   Là tổng số lượt match được phát hiện tích lũy qua tất cả các cập nhật cạnh trong file stream.
+2. **Nó được cộng dồn qua những cập nhật nào?**
+   Được cộng dồn qua **tất cả** các cập nhật cạnh hợp lệ trong file stream đầu vào (`stream_path`).
+3. **Nó có phải số embedding của trạng thái graph cuối cùng không?**
+   **TUYỆT ĐỐI KHÔNG.** Trong bài toán Continuous Subgraph Matching (CSM), dữ liệu là dòng sự kiện biến đổi đồ thị. Nếu một embedding xuất hiện tại bước $t_1$, bị xóa tại bước $t_2$, rồi lại xuất hiện tại bước $t_3$, thì mỗi lần xuất hiện/biến mất đều được tính vào dòng sự kiện. Chỉ số này không phản ánh số lượng subgraph isomorphism tồn tại trên snapshot đồ thị tĩnh $G_{final}$.
+4. **Nó có phải delta của một update duy nhất không?**
+   **KHÔNG.** Nó là tổng dồn qua toàn bộ stream. Từ một số duy nhất ở cuối chương trình, không thể biết được update nào sinh ra bao nhiêu match.
+5. **Nó có cung cấp danh sách mapping không?**
+   **KHÔNG.** Thuật toán chỉ đếm số lượng, không sinh các bộ ánh xạ $f: V(Q) \to V(G)$.
+6. **Với phép Deletion, cần hiểu số đếm theo ngữ nghĩa nào?**
+   Với phép xóa cạnh (`Update::op_ == REMOVE`), khi một cạnh $(u, v)$ bị gỡ bỏ, `search_on_reduced_query` được kích hoạt **trước khi** cập nhật các index cấu trúc để tìm tất cả các embedding đang chứa cạnh $(u, v)$ đó. Do đó, `Result count` trong kịch bản deletion là **tổng số embedding bị hủy bỏ (invalidated / removed matches)** do các cạnh bị xóa.
+7. **Có thể dùng trực tiếp chỉ số này để kiểm chứng correctness theo từng update không?**
+   **KHÔNG THỂ.** Để kiểm chứng tính đúng đắn độc lập ở Cổng G1 (RF-02):
+   - Một chỉ số tổng hợp duy nhất cho $1.2$ triệu updates có thể che giấu các sai số bù trừ (cancellation of errors: bước $A$ thừa 2 match, bước $B$ thiếu 2 match dẫn đến tổng vẫn bằng nhau).
+   - Muốn kiểm chứng correctness nghiêm ngặt, bắt buộc phải đối chiếu số đếm hoặc tập hợp kết quả theo **từng bước cập nhật đơn lẻ** (per-update delta validation).
+
+---
+
+## 6. Kết luận kiểm toán và Ràng buộc cho Gate G1–G6
 
 1. **Khẳng định phân loại:**
-   RapidFlow nguyên bản hoạt động ở chế độ **COUNT-ONLY** (đếm số lượng embedding tăng dần theo từng cập nhật cạnh). Nó **không** xuất, không lưu và không truyền ra ngoài danh sách các mapping đỉnh cụ thể $(u \mapsto v)$.
+   RapidFlow nguyên bản hoạt động ở chế độ **COUNT-ONLY STREAM-AGGREGATED**. Thuật toán không bao giờ xuất hay lưu trữ tập ánh xạ cụ thể $(u \mapsto v)$.
 2. **Không đánh tráo khái niệm:**
-   Mọi báo cáo tốc độ/thời gian của RapidFlow trên bộ test tác giả là thời gian đếm tổng hợp (`Result count`), không phải chi phí materialization hay output formatting.
-3. **Ảnh hưởng tới Cổng G1 (Correctness Verification):**
-   Ở Gate G1, việc kiểm chứng tính đúng đắn với một Oracle độc lập (như NewSP hay BSM Solver) cần:
-   - Hoặc so sánh tổng số kết quả đếm theo từng edge update (nếu Oracle hỗ trợ đếm).
-   - Hoặc phải thiết kế phương thức xuất embedding có kiểm soát chặt chẽ để đối chiếu mapping sets, nhưng cần tách biệt rõ giữa phiên bản baseline nguyên bản và bản phục vụ kiểm định.
+   - RapidFlow COUNT-ONLY **không chứng minh được** khả năng liệt kê đầy đủ (Full Enumeration).
+   - Tốc độ chạy của RapidFlow đạt được một phần nhờ việc cắt tỉa tại lá (cộng trực tiếp kích thước mảng ứng viên) và nhân hệ số tự đẳng cấu $|Aut(Q)|$ mà không phải duyệt từng nghiệm.
+3. **Yêu cầu đối với Gate G1 (Correctness Verification):**
+   Để kiểm chứng tính đúng đắn ở Gate G1 với Oracle độc lập:
+   - Phải thiết kế kịch bản kiểm thử per-update (chạy từng update hoặc checkpoint từng bước).
+   - Đối chiếu số đếm per-update giữa RapidFlow và Oracle.
+   - Nếu muốn đối chiếu tập ánh xạ (mapping sets), phải xây dựng một adapter/wrapper hỗ trợ explicit mapping có kiểm soát chặt chẽ, tách bạch hoàn toàn với mã nguồn baseline nguyên bản.

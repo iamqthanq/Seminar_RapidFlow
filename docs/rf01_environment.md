@@ -25,17 +25,24 @@ Tài liệu này ghim toàn bộ thông tin môi trường, phiên bản công c
 
 ---
 
-## 4. Chuỗi công cụ (Toolchain)
+## 4. Chuỗi công cụ (Toolchain) & Nguồn gốc CMake Portable (Provenance)
 - **C++ Compiler:** `g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0`
 - **Make:** `GNU Make 4.3`
 - **Python:** `Python 3.12.3`
 - **Bộ đo tài nguyên:** `/usr/bin/time` (GNU time 1.9)
 - **Git:** `git version 2.43.0`
 - **GitHub CLI:** `gh version 2.45.0`
-- **CMake:**
-  - Trạng thái ban đầu: Chưa được cài đặt trong `PATH` hệ thống.
-  - Xử lý theo quy định Issue #2 (*"If CMake is absent, document and request permission before system package installation"*): Để không can thiệp vào gói hệ thống (`apt-get install` đòi hỏi quyền root/sudo), chúng tôi sử dụng bản binary portable chính thức Kitware CMake `3.28.3-linux-x86_64`.
-  - Vị trí cài đặt portable: `external/tools/cmake-3.28.3-linux-x86_64/bin/cmake` (nằm trong thư mục `external/` đã được Git-ignore).
+- **CMake Portable Provenance (Giải quyết R5):**
+  - **Trạng thái ban đầu:** Hệ điều hành Ubuntu 24.04 chưa có sẵn gói `cmake` trong `PATH`.
+  - **Quy tắc an toàn:** Tuân thủ quy định tại Issue #2 (*"If CMake is absent, document and request permission before system package installation"*), tuyệt đối không tự ý chạy `sudo apt install cmake` can thiệp vào các gói hệ thống.
+  - **Giải pháp:** Sử dụng bản binary portable chính thức phát hành bởi Kitware cho nền tảng Linux x86_64.
+  - **Nguồn phát hành chính thức (Kitware Official):**
+    - Release Archive URL: `https://github.com/Kitware/CMake/releases/download/v3.28.3/cmake-3.28.3-linux-x86_64.tar.gz`
+    - Kitware Checksums Manifest: `https://github.com/Kitware/CMake/releases/download/v3.28.3/cmake-3.28.3-SHA-256.txt`
+    - Checksum Archive gốc (từ file kiểm tra chính thức của Kitware): `804d231460ab3c8b556a42d2660af4ac7a0e21c98a7f8ee3318a74b4a9a187a6`
+  - **Vị trí cài đặt nội bộ:** `external/tools/cmake-3.28.3-linux-x86_64/bin/cmake` (nằm trong thư mục `external/` đã được Git-ignore).
+  - **Phiên bản thực tế:** `cmake version 3.28.3`
+  - **Checksum binary thực thi:** `b801b21dfdb444a91fb9f8ad3d39910f5471d4c32328ee8c9aa0352ef50154f0`
 
 ---
 
