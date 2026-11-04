@@ -13,6 +13,7 @@ results/raw/*
 results/summary/*.jsonl
 results/summary/*.csv
 !results/summary/rf01_smoke_summary.csv
+!results/summary/rf02_correctness.csv
 __pycache__/
 *.pyc
 .env
