@@ -69,10 +69,10 @@ flowchart TD
 
 ### 2.3. Phase C: Search Enumeration vs Output Volume
 - **Observations:**
-  - For chordal 5-vertex and 6-vertex queries (`Q01`, `Q02`, `Q03`, `Q04`), `result_count = 0` during the first 100 updates because no complete 5-vertex cycles or dense 6-vertex cliques were completed by the stream edges.
-  - In contrast, for the 4-vertex star probe `Q05_probe_star4_l0` ($K_{1,3}$, label 0), a massive count of **$16{,}514{,}940$ embeddings** was detected within the 100 updates.
-  - Remarkably, despite finding $16.5$ million embeddings, `Q05` executed in only $7.63\text{s}$ wall time ($~0.01\text{s}$ stream query time) with peak RSS of $881\,\text{MB}$.
-  - **Reason for High Throughput:** At the leaf depth of the search tree, RapidFlow adds the size of the leaf candidate set directly (`search_engine.cpp:161`) and scales by $|Aut(Q)| = 6$ (`streaming_engine.cpp:181`), completely avoiding the generation of $16.5$ million explicit mapping vectors.
+  - For chordal 5-vertex and 6-vertex queries (`Q01`, `Q02`, `Q03`, `Q04`), `result_count = 0` during the first 100 updates because no complete 5-vertex cycles or dense 6-vertex cliques were completed by the stream edges. This counter reflects only the stream delta count ($\sum \Delta_t$); it does not imply that zero embeddings exist in the initial static data graph, nor does it provide evidence of matching-order bottlenecks on dense queries.
+  - In contrast, for the 4-vertex star probe `Q05_probe_star4_l0` ($K_{1,3}$, label 0), RapidFlow registered a stream-aggregated incremental count of **$16{,}514{,}940$ matches** within the 100 updates in COUNT-ONLY mode. RapidFlow does **not** materialize or output $16{,}514{,}940$ individual embedding tuples.
+  - Remarkably, despite registering $16.5$ million matching embeddings in count mode, `Q05` executed in $8.52\text{s}$ wall time ($~0.014\text{s}$ stream query time) with peak RSS of $861\,\text{MB}$.
+  - **Reason for High Counting Throughput:** At the leaf depth of the search tree, RapidFlow adds the size of the leaf candidate set directly (`search_engine.cpp:161`) and scales by $|Aut(Q)| = 6$ (`streaming_engine.cpp:181`), completely avoiding the generation or output of $16.5$ million explicit mapping vectors. Rapid count throughput must not be equated with full embedding materialization.
 
 ---
 

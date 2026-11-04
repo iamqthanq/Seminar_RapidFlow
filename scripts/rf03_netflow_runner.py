@@ -331,11 +331,11 @@ def execute_case_run(
                 except ValueError:
                     pass
 
-    # Check RSS cap
+    # Check post-execution RSS budget
     if rss_kb is not None and rss_cap_mb is not None:
         if rss_kb > (rss_cap_mb * 1024):
             oom_killed = True
-            error_msg = f"Process exceeded RSS cap: {rss_kb} KB > {rss_cap_mb * 1024} KB"
+            error_msg = f"Process exceeded post-execution RSS budget: {rss_kb} KB > {rss_cap_mb * 1024} KB"
 
     # Persist raw logs immediately if log_dir provided
     if log_dir is not None:
@@ -401,6 +401,24 @@ def write_summary_csv(output_path: pathlib.Path, rows: List[Dict[str, Any]]) -> 
     tmp_path.replace(output_path)
 
 
+def recover_summary_from_logs(run_log_dir: pathlib.Path) -> List[Dict[str, Any]]:
+    """
+    Recover summary rows from individual attempt metadata.json files in a run directory.
+    Guarantees auditability and recovery if benchmark execution is interrupted.
+    """
+    rows = []
+    if not run_log_dir.is_dir():
+        return rows
+    for meta_file in sorted(run_log_dir.glob("*_rep*/metadata.json")):
+        try:
+            data = json.loads(meta_file.read_text(encoding="utf-8"))
+            if "summary_row" in data:
+                rows.append(data["summary_row"])
+        except Exception:
+            continue
+    return rows
+
+
 def run_benchmark(
     config_path: pathlib.Path,
     workspace_root: pathlib.Path,
@@ -437,6 +455,7 @@ def run_benchmark(
     logs_dir = logs_base_dir or (workspace_root / "results" / "logs" / "rf03")
 
     run_id = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "_" + uuid.uuid4().hex[:8]
+    run_log_dir = logs_dir / run_id
     host_info = get_host_telemetry()
 
     print("=" * 60)
@@ -537,7 +556,7 @@ def run_benchmark(
 
         for rep in range(1, default_repeats + 1):
             rep_label = f"{c_id}_rep{rep}"
-            rep_log_dir = logs_dir / run_id / rep_label
+            rep_log_dir = run_log_dir / rep_label
             print(f"  [Repeat {rep}/{default_repeats}] Executing...", end="", flush=True)
 
             sub_res = execute_case_run(
@@ -634,6 +653,11 @@ def run_benchmark(
                 "summary_row": row,
             }
             (rep_log_dir / "metadata.json").write_text(json.dumps(rep_meta, indent=2) + "\n")
+
+            # Durable incremental checkpoints: update run-local checkpoint CSV and aggregate summary CSV
+            run_checkpoint_csv = run_log_dir / "checkpoint_runs.csv"
+            write_summary_csv(run_checkpoint_csv, summary_rows)
+            write_summary_csv(summary_path, summary_rows)
 
             rss_str = f"{sub_res.rss_kb} KB" if sub_res.rss_kb else "N/A"
             res_count_str = str(parsed.result_count) if parsed.result_count is not None else "N/A"

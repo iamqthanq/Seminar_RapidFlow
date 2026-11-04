@@ -15,8 +15,8 @@
 The objective of Gate G2 (RF-03) is to establish a rigorous, auditable, and reproducible **COUNT-ONLY baseline** for pristine RapidFlow on the public NetFlow dataset. This protocol establishes:
 1. Complete provenance verification for the unmodified RapidFlow C++ source (`2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1`) and executable (`abdd26847885c0df24198641a5e630a89fe686e115372d8cf685273fe1d02cd6`).
 2. An exhaustive syntactic and structural audit of the NewSP NetFlow archive, identifying format incompatibilities and invalid labels before execution.
-3. A pre-declared, bounded benchmark matrix (10 query/stream combinations, 3 repeated runs each = 30 runs) designed with deterministic criteria before looking at execution runtimes, eliminating cherry-picking.
-4. Hard resource bounds (external timeout $\le 60\text{s}$, memory cap $3\,\text{GiB}$, safe memory floor $\ge 4\,\text{GiB}$) and fail-closed error handling.
+3. A pre-declared, bounded benchmark matrix (10 query/stream combinations, 3 repeated runs each = 30 runs) designed with deterministic criteria before looking at execution runtimes, eliminating cherry-picking. (Note: pre-registration was conceptual; independent third-party timestamping prior to commit is unverified).
+4. Resource safeguards (external timeout $\le 60\text{s}$, post-execution peak RSS budget check $3\,\text{GiB}$, safe memory floor $\ge 4\,\text{GiB}$) and fail-closed error handling.
 5. Strict adherence to output semantics: RapidFlow operates exclusively in **COUNT-ONLY mode** (`EXECUTION_MODE=0`); Gate G1-B (explicit mapping sets) remains **UNVERIFIED**. No claims of algorithm novelty, speedup, or full enumeration correctness are permitted.
 
 ---
@@ -117,12 +117,12 @@ To ensure reproducibility and bounded execution time, stream prefixes of 100 upd
 
 Runner script: `scripts/rf03_netflow_runner.py`
 - **External Timeout:** $60.0\,\text{seconds}$ enforced via `subprocess.communicate(timeout=60)`. On timeout, SIGTERM followed by SIGKILL ensures no orphaned background processes.
-- **Memory Cap:** $3{,}072\,\text{MB}$ peak RSS cap tracked via `/usr/bin/time -v`. If exceeded, classified as `OOM`.
+- **Peak RSS Budget Check:** $3{,}072\,\text{MB}$ post-execution budget check tracked via `/usr/bin/time -v`. If exceeded after process exit, classified as `OOM` (indicating budget exceeded, not kernel OOM-killer). Note: No runtime memory limit or active leak prevention is enforced during execution.
 - **Preflight Safe RAM Floor:** Requires at least $4.0\,\text{GiB}$ available memory in `/proc/meminfo` prior to launching.
 - **Fail-Closed Parsing:** Exact single match required for `Result count:`, `Updates num:`, and `Edge process count:`. Any discrepancy flags `PARSE_ERROR`.
 - **Repeat Consistency Verification:** Completed repeated runs of the identical case must yield **exact 100% agreement on `Result count`**. Any numerical divergence flags `COUNT_MISMATCH_ACROSS_REPEATS`.
 - **Immutable Per-Run Logs:** Unique `run_id` (timestamp + UUID). Dedicated directory storing `stdout.log`, `stderr.log`, and `metadata.json` containing complete host telemetry and checksums. No historical logs are overwritten.
-- **Durable Summary CSV:** Versioned records persisted to `results/summary/rf03_baseline_runs.csv`.
+- **Durable Summary CSV & Incremental Checkpoints:** Incremental checkpoints written atomically after each attempt to `run_log_dir / checkpoint_runs.csv` and `summary_path`, preventing data loss on interruption. Canonical baseline records persisted to `results/summary/rf03_baseline_runs.csv`.
 
 ---
 

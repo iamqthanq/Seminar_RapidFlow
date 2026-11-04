@@ -384,5 +384,117 @@ class TestRF03RunnerFailurePreservation(unittest.TestCase):
         self.assertEqual(len(rows), 0)
 
 
+    @patch("scripts.rf03_netflow_runner.verify_provenance", return_value=(True, "OK"))
+    @patch("scripts.rf03_netflow_runner.execute_case_run")
+    def test_interrupted_run_checkpoint_durability(self, mock_exec, mock_prov):
+        """Verify incremental checkpointing persists rows and permits recovery on interrupted runs."""
+        mock_exec.side_effect = [
+            runner.SubprocessResult(
+                returncode=0,
+                stdout=TestRF03OutputParsing.SAMPLE_VALID_STDOUT.replace("Result count: 120\n", "Result count: 5\n").replace("Updates num: 100\n", "Updates num: 1\n").replace("Edge process count: 100\n", "Edge process count: 1\n"),
+                stderr="",
+                duration_sec=0.1,
+                rss_kb=5000,
+            ),
+            KeyboardInterrupt("Simulated Ctrl+C interruption on attempt 2"),
+        ]
+
+        with self.assertRaises(KeyboardInterrupt):
+            runner.run_benchmark(
+                config_path=self.cfg_file,
+                workspace_root=self.base,
+                summary_csv_path=self.summary_csv,
+                logs_base_dir=self.logs_dir,
+                skip_memory_check=True,
+                skip_git_check=True,
+            )
+
+        # 1. Ensure aggregate summary_csv contains completed attempt 1
+        self.assertTrue(self.summary_csv.exists())
+        with open(self.summary_csv, newline="", encoding="utf-8") as f:
+            saved_rows = list(csv.DictReader(f))
+        self.assertEqual(len(saved_rows), 1)
+        self.assertEqual(saved_rows[0]["status"], "COMPLETED")
+        self.assertEqual(saved_rows[0]["result_count"], "5")
+
+        # 2. Ensure run-local checkpoint_runs.csv was created and contains attempt 1
+        run_dirs = [d for d in self.logs_dir.iterdir() if d.is_dir()]
+        self.assertEqual(len(run_dirs), 1)
+        checkpoint_file = run_dirs[0] / "checkpoint_runs.csv"
+        self.assertTrue(checkpoint_file.exists())
+        with open(checkpoint_file, newline="", encoding="utf-8") as f:
+            cp_rows = list(csv.DictReader(f))
+        self.assertEqual(len(cp_rows), 1)
+        self.assertEqual(cp_rows[0]["result_count"], "5")
+
+        # 3. Test log-based recovery function
+        recovered = runner.recover_summary_from_logs(run_dirs[0])
+        self.assertEqual(len(recovered), 1)
+        self.assertEqual(recovered[0]["result_count"], 5)
+
+    def test_recover_summary_from_empty_or_missing_dir(self):
+        empty_dir = self.base / "nonexistent_dir"
+        recovered = runner.recover_summary_from_logs(empty_dir)
+        self.assertEqual(recovered, [])
+
+
+class TestRF03BenchmarkReportConsistency(unittest.TestCase):
+    """Verifies that docs/rf03_benchmark_report.md table strictly matches canonical results/summary/rf03_baseline_runs.csv."""
+
+    def test_markdown_table_matches_canonical_csv(self):
+        import re
+        import statistics
+        from collections import defaultdict
+
+        repo_root = pathlib.Path(__file__).resolve().parent.parent
+        csv_path = repo_root / "results" / "summary" / "rf03_baseline_runs.csv"
+        report_path = repo_root / "docs" / "rf03_benchmark_report.md"
+
+        self.assertTrue(csv_path.exists(), f"Missing canonical CSV at {csv_path}")
+        self.assertTrue(report_path.exists(), f"Missing report at {report_path}")
+
+        with open(csv_path, newline="", encoding="utf-8") as f:
+            csv_rows = list(csv.DictReader(f))
+
+        self.assertEqual(len(csv_rows), 30, "Canonical CSV must have exactly 30 runs")
+        cases = defaultdict(list)
+        for r in csv_rows:
+            cases[r["case_id"]].append(r)
+
+        report_text = report_path.read_text(encoding="utf-8")
+        row_pattern = re.compile(
+            r"^\|\s*`([^`]+)`\s*\|\s*`([^`]+)`\s*\|\s*`([^`]+)`\s*\|\s*`([^`]+)`\s*\|\s*(\d+)\s*\|\s*\*\*?([0-9,]+)\*\*?\s*\|\s*([\d.]+)\s*\[([\d.]+)[–-]([\d.]+)\]\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|",
+            re.MULTILINE,
+        )
+        matches = row_pattern.findall(report_text)
+        self.assertEqual(len(matches), 10, f"Expected 10 table rows in report, found {len(matches)}")
+
+        for m in matches:
+            cid = m[0]
+            self.assertIn(cid, cases, f"Case {cid} not found in CSV")
+            crows = cases[cid]
+            self.assertEqual(len(crows), 3, f"Expected 3 repeats for case {cid}")
+
+            expected_count = int(m[5].replace(",", ""))
+            csv_counts = [int(r["result_count"]) for r in crows]
+            self.assertEqual(csv_counts, [expected_count, expected_count, expected_count])
+
+            reported_wall_median = float(m[6])
+            reported_wall_min = float(m[7])
+            reported_wall_max = float(m[8])
+            csv_wall = [float(r["wall_time_sec"]) for r in crows]
+            self.assertAlmostEqual(reported_wall_median, statistics.median(csv_wall), places=2)
+            self.assertAlmostEqual(reported_wall_min, min(csv_wall), places=2)
+            self.assertAlmostEqual(reported_wall_max, max(csv_wall), places=2)
+
+            reported_rss = float(m[9])
+            csv_rss = [float(r["rss_kb"]) / 1024.0 for r in crows]
+            self.assertAlmostEqual(reported_rss, statistics.median(csv_rss), delta=0.5)
+
+            reported_prep = float(m[10])
+            csv_prep = [float(r["preprocessing_time_sec"]) for r in crows]
+            self.assertAlmostEqual(reported_prep, statistics.median(csv_prep), places=2)
+
+
 if __name__ == "__main__":
     unittest.main()
