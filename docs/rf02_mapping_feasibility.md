@@ -54,11 +54,11 @@ RapidFlow groups symmetric query configurations using query automorphisms ($\ope
 For example, on a triangle query ($K_3$) where $|Aut(K_3)| = 6$, RapidFlow searches a representative orientation and multiplies the result by 6. The other 5 symmetric permutations are never generated or visited.
 
 ### 2.3. Output Contract is Strictly Scalar Count
-In `main.cpp` and `streaming_engine.cpp:411`:
+In `streaming/streaming_engine.cpp:411` (invoked from `int main` in `streaming/streaming_engine.cpp:529`):
 ```cpp
 printf("Result count: %zu\n", result_count_);
 ```
-The standard binary prints only scalar summary counters to stdout. Setting `EXECUTION_MODE=1` in `configuration/config.h` does not output mappings; it was merely an internal author development flag that did not alter the core search engine loops.
+The standard binary prints only scalar summary counters to stdout. Setting `EXECUTION_MODE=1` in `streaming/streaming_config.h:15` does not output mappings; it was merely an internal author development flag that did not alter the core search engine loops.
 
 ---
 

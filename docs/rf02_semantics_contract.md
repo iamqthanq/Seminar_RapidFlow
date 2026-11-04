@@ -80,14 +80,17 @@ $$u_t = (\text{op}_t, x_t, y_t, l_t), \quad \text{op}_t \in \{+, -\}, \; x_t, y_
 ## 3. RapidFlow Baseline Output Contract vs Oracle Delta
 
 ### 3.1. RapidFlow Aggregate Output
-The pristine RapidFlow executable (`streaming_engine.cpp`) accumulates the delta result count across all stream updates into a single scalar counter `result_count_`:
-- For insertion $u_t = (+, x, y, l)$, RapidFlow searches for all embeddings containing $\{x, y\}$ in $G_t$ and increments:
-  $$\text{result\_count} \gets |\Delta_t^+|$$
-- For deletion $u_t = (-, x, y, l)$, RapidFlow searches for all embeddings containing $\{x, y\}$ in $G_{t-1}$ (before removal) and increments:
-  $$\text{result\_count} \gets |\Delta_t^-|$$
-At the conclusion of processing a stream of length $m$, RapidFlow prints:
-$$\text{Result count: } C_m = \sum_{t=1}^m \delta_t^{\text{RapidFlow}}$$
-where $\delta_t^{\text{RapidFlow}} = |\Delta_t^+|$ for insertions and $|\Delta_t^-|$ for deletions.
+The pristine RapidFlow executable (`streaming_engine.cpp`) accumulates the delta result count across all stream updates into a single scalar member counter `result_count_` (initialized to 0):
+- For each update $u_t$, `StreamingEngine::execute` computes a per-update local increment `result_count`:
+  - For insertion $u_t = (+, x, y, l)$, RapidFlow searches for all embeddings containing $\{x, y\}$ in $G_t$:
+    $$\text{local } \text{result\_count} = |\Delta_t^+|$$
+  - For deletion $u_t = (-, x, y, l)$, RapidFlow searches for all embeddings containing $\{x, y\}$ in $G_{t-1}$ (before removal):
+    $$\text{local } \text{result\_count} = |\Delta_t^-|$$
+  - Then adds this local increment to the cumulative counter (`streaming_engine.cpp:240`):
+    $$\text{result\_count\_} \mathrel{+}= \text{result\_count}$$
+- At the conclusion of processing a stream of length $m$, RapidFlow prints the cumulative scalar (`streaming_engine.cpp:411`):
+  $$\text{Result count: } C_m = \text{result\_count\_} = \sum_{t=1}^m \delta_t^{\text{RapidFlow}}$$
+  where $\delta_t^{\text{RapidFlow}} = |\Delta_t^+|$ for insertions and $|\Delta_t^-|$ for deletions.
 
 ### 3.2. Prefix Replay Differential Protocol
 Because pristine RapidFlow prints only the aggregate sum $C_m$, per-update verification is executed using **Prefix Replay**:
