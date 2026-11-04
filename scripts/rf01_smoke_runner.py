@@ -1,17 +1,25 @@
 #!/usr/bin/env python3
 """
 RF-01 Smoke runner: executes author insertion/deletion smoke cases using scripts/run_case.py,
-validates result counts against author reference outputs, prevents false passes,
-and records comprehensive summary metrics.
+validates result counts against author reference outputs with fail-closed provenance checks,
+tracks telemetry evidence completeness, and records comprehensive summary metrics.
 """
 import argparse
 import csv
+import hashlib
 import json
 import os
 import pathlib
 import re
 import subprocess
 import sys
+
+class ReferenceVerificationError(Exception):
+    """Raised when author reference file is missing, corrupt, or contradicts configuration."""
+    def __init__(self, code, message):
+        super().__init__(message)
+        self.code = code
+        self.message = message
 
 def parse_resources(resources_file):
     res = {"elapsed_seconds": None, "max_rss_kb": None, "exit_status": None}
@@ -66,42 +74,80 @@ def parse_result_count(stdout_file):
         return None
     return parse_result_count_from_text(content)
 
-def load_author_expected_counts(expected_file_path):
+def verify_and_load_author_reference(file_path, expected_sha256=None):
     """
-    Reads author's expected_output.txt formatted as:
-      Q_0:587884
-      Q_1:12866379
+    Validates author reference file existence, SHA-256 integrity, and parses expected counts.
+    Fails closed if file is missing, hash mismatches, or file contains invalid integer values.
     Returns dict mapping query_name to int count.
     """
-    p = pathlib.Path(expected_file_path)
+    p = pathlib.Path(file_path)
     if not p.is_file():
-        raise FileNotFoundError(f"Author expected output file not found: {p}")
+        raise ReferenceVerificationError("FILE_NOT_FOUND", f"Author reference file missing: {p}")
+
+    if expected_sha256:
+        h = hashlib.sha256()
+        with p.open("rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                h.update(chunk)
+        actual_sha = h.hexdigest().lower()
+        if actual_sha != expected_sha256.lower():
+            raise ReferenceVerificationError(
+                "SHA256_MISMATCH",
+                f"Author reference file SHA-256 mismatch for {p.name}: expected {expected_sha256}, got {actual_sha}"
+            )
+
     results = {}
-    for line in p.read_text(encoding="utf-8").splitlines():
+    lines = p.read_text(encoding="utf-8").splitlines()
+    for idx, line in enumerate(lines, 1):
         line = line.strip()
         if not line or line.startswith("#"):
             continue
-        if ":" in line:
-            q_name, count_str = line.split(":", 1)
-            q_name = q_name.strip()
-            count_str = count_str.strip()
-            if count_str.isdigit():
-                results[q_name] = int(count_str)
+        if ":" not in line:
+            continue
+        q_name, count_str = line.split(":", 1)
+        q_name = q_name.strip()
+        count_str = count_str.strip()
+        if not count_str.isdigit():
+            raise ReferenceVerificationError(
+                "MALFORMED_INTEGER",
+                f"Non-integer value '{count_str}' for query '{q_name}' at line {idx} in {p.name}"
+            )
+        results[q_name] = int(count_str)
     return results
 
-def evaluate_smoke_case(status, exit_code, actual_count, expected_count):
+def evaluate_telemetry(elapsed_seconds, max_rss_kb, raw_dir):
+    """
+    F2: Evaluates telemetry evidence completeness required for Gate G0 acceptance.
+    Separates runtime metrics availability from matching count verification.
+    """
+    if elapsed_seconds is not None and max_rss_kb is not None and max_rss_kb > 0 and raw_dir:
+        return "COMPLETE_METRICS"
+    return "INCOMPLETE_METRICS"
+
+def evaluate_smoke_case(status, exit_code, actual_count, expected_count,
+                        ref_expected_count=None, ref_error_code=None, ref_error_msg=None):
     """
     Pure evaluation function to determine if a smoke test run is a verified PASS or FAIL.
-    Prevents false PASS when actual_count is missing or when expected_count is unprovided.
+    F1: Fail closed if reference provenance verification fails or config contradicts reference.
+    F4: Never false PASS when actual_count is missing or when expected_count is unprovided.
 
     Returns dict:
       - case_ok (bool): True ONLY if execution succeeded (completed, exit 0),
-                        actual_count is a valid integer, expected_count is provided,
-                        and actual_count == expected_count.
+                        reference verification succeeded, actual_count is valid integer,
+                        and actual_count == expected_count == ref_expected_count.
       - verdict (str): Status code describing the outcome.
       - count_match (Optional[bool]): True/False if compared; None if unverified/missing.
       - details (str): Descriptive text.
     """
+    # F1: Fail closed on reference provenance defects
+    if ref_error_code:
+        return {
+            "case_ok": False,
+            "verdict": f"FAIL_REFERENCE_{ref_error_code}",
+            "count_match": False if actual_count is not None and expected_count is not None else None,
+            "details": ref_error_msg or f"Author reference verification failed: {ref_error_code}"
+        }
+
     if status != "completed":
         return {
             "case_ok": False,
@@ -127,7 +173,6 @@ def evaluate_smoke_case(status, exit_code, actual_count, expected_count):
         }
 
     if expected_count is None:
-        # Crucial fix for R4: never mark unverified executions as verified PASS
         return {
             "case_ok": False,
             "verdict": "UNVERIFIED_NO_EXPECTED_COUNT",
@@ -179,17 +224,24 @@ def main():
         print("ERROR: No test cases found in config.", file=sys.stderr)
         return 1
 
-    # Optional pre-validation: check author reference expected output files if specified
+    # F1: Fail-closed verification and loading of author reference files
     author_references = config.get("author_reference_files", {})
     loaded_references = {}
+    reference_errors = {}
+
     for stream_type, ref_info in author_references.items():
         ref_path = (repo_root / ref_info["path"]).resolve()
-        if ref_path.is_file():
-            loaded_references[stream_type] = load_author_expected_counts(ref_path)
+        expected_sha = ref_info.get("sha256")
+        try:
+            loaded_references[stream_type] = verify_and_load_author_reference(ref_path, expected_sha)
+        except ReferenceVerificationError as e:
+            reference_errors[stream_type] = e
+            print(f"ERROR in author reference for '{stream_type}': {e.message}", file=sys.stderr)
 
     run_case_script = repo_root / "scripts/run_case.py"
     summary_rows = []
     all_passed = True
+    all_telemetry_complete = True
 
     print(f"=== Starting RF-01 Smoke Suite ({len(cases)} cases) ===")
     print(f"Binary: {binary_path}")
@@ -204,11 +256,31 @@ def main():
         q_path = str(repo_root / case["query_path"])
         expected_count = case.get("expected_count")
 
-        # Cross-verify expected count with author reference file if available
-        if stream_type in loaded_references and query_name in loaded_references[stream_type]:
-            ref_expected = loaded_references[stream_type][query_name]
-            if expected_count is not None and expected_count != ref_expected:
-                print(f"WARNING: Config expected_count ({expected_count}) does not match author reference file ({ref_expected}) for {query_name}!", file=sys.stderr)
+        # F1: Fail-closed check against author reference
+        ref_error_code = None
+        ref_error_msg = None
+        ref_expected_count = None
+
+        if stream_type in reference_errors:
+            ref_err = reference_errors[stream_type]
+            ref_error_code = ref_err.code
+            ref_error_msg = ref_err.message
+        elif stream_type in loaded_references:
+            stream_ref = loaded_references[stream_type]
+            if query_name not in stream_ref:
+                ref_error_code = "QUERY_NOT_FOUND"
+                ref_error_msg = f"Query {query_name} not found in author reference for {stream_type}"
+            else:
+                ref_expected_count = stream_ref[query_name]
+                if expected_count is not None and expected_count != ref_expected_count:
+                    ref_error_code = "CONFIG_MISMATCH"
+                    ref_error_msg = (
+                        f"Config expected count ({expected_count}) contradicts "
+                        f"author reference ({ref_expected_count}) for {query_name}"
+                    )
+        elif case.get("expected_source"):
+            ref_error_code = "REF_STREAM_MISSING"
+            ref_error_msg = f"Author reference definition missing for stream_type '{stream_type}'"
 
         num = str(case.get("num", "MAX"))
         time_limit = str(case.get("time_limit", 3600))
@@ -261,16 +333,29 @@ def main():
             max_rss_kb = res["max_rss_kb"]
             actual_count = parse_result_count(raw_path / "stdout.log")
 
-        # Rigorous evaluation via pure evaluate_smoke_case
-        evaluation = evaluate_smoke_case(status, exit_code, actual_count, expected_count)
+        # F1 evaluation
+        evaluation = evaluate_smoke_case(
+            status=status,
+            exit_code=exit_code,
+            actual_count=actual_count,
+            expected_count=expected_count,
+            ref_expected_count=ref_expected_count,
+            ref_error_code=ref_error_code,
+            ref_error_msg=ref_error_msg
+        )
         case_ok = evaluation["case_ok"]
         verdict = evaluation["verdict"]
         count_match = evaluation["count_match"]
 
+        # F2 evaluation
+        evidence_status = evaluate_telemetry(elapsed_seconds, max_rss_kb, raw_dir)
+
         if not case_ok:
             all_passed = False
+        if evidence_status != "COMPLETE_METRICS":
+            all_telemetry_complete = False
 
-        print(f"Verdict: {verdict} | Actual: {actual_count} | Expected: {expected_count} | Match: {count_match} | Elapsed: {elapsed_seconds}s | RSS: {max_rss_kb} KB")
+        print(f"Verdict: {verdict} | Metrics: {evidence_status} | Actual: {actual_count} | Expected: {expected_count} | Match: {count_match} | Elapsed: {elapsed_seconds}s | RSS: {max_rss_kb} KB")
 
         summary_rows.append({
             "case_id": case_id,
@@ -279,6 +364,7 @@ def main():
             "status": status,
             "exit_code": exit_code,
             "verdict": verdict,
+            "evidence_status": evidence_status,
             "wall_seconds": wall_seconds,
             "elapsed_seconds": elapsed_seconds,
             "max_rss_kb": max_rss_kb,
@@ -294,7 +380,7 @@ def main():
     output_csv_path.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = [
         "case_id", "stream_type", "query", "status", "exit_code", "verdict",
-        "wall_seconds", "elapsed_seconds", "max_rss_kb",
+        "evidence_status", "wall_seconds", "elapsed_seconds", "max_rss_kb",
         "expected_count", "actual_count", "count_match",
         "output_mode", "raw_log_dir"
     ]
@@ -305,8 +391,9 @@ def main():
         writer.writerows(summary_rows)
 
     print(f"\nSummary CSV saved to: {output_csv_path}")
-    print(f"Overall suite status: {'PASS' if all_passed else 'FAIL'}")
-    return 0 if all_passed else 1
+    print(f"Suite verification status: {'PASS' if all_passed else 'FAIL'}")
+    print(f"G0 telemetry evidence completeness: {'COMPLETE' if all_telemetry_complete else 'INCOMPLETE'}")
+    return 0 if (all_passed and all_telemetry_complete) else 1
 
 if __name__ == "__main__":
     sys.exit(main())

@@ -1,7 +1,7 @@
-case_id,stream_type,query,status,exit_code,verdict,wall_seconds,elapsed_seconds,max_rss_kb,expected_count,actual_count,count_match,output_mode,raw_log_dir
-rf01_smoke_insert_Q0,insert,Q_0,completed,0,PASS_VERIFIED,3.523392,3.5,265368,587884,587884,True,count_only,/home/iamqthanq/Desktop/Seminar_RapidFlow/results/raw/rf01_smoke_insert_Q0/20261104T104252Z_5f2f0e17
-rf01_smoke_insert_Q1,insert,Q_1,completed,0,PASS_VERIFIED,4.124198,4.1,277924,12866379,12866379,True,count_only,/home/iamqthanq/Desktop/Seminar_RapidFlow/results/raw/rf01_smoke_insert_Q1/20261104T104255Z_2a4a7a9e
-rf01_smoke_insert_Q2,insert,Q_2,completed,0,PASS_VERIFIED,3.071287,3.02,255536,1139364,1139364,True,count_only,/home/iamqthanq/Desktop/Seminar_RapidFlow/results/raw/rf01_smoke_insert_Q2/20261104T104300Z_16ba471d
-rf01_smoke_delete_Q0,delete,Q_0,completed,0,PASS_VERIFIED,3.92364,3.9,332652,587984,587984,True,count_only,/home/iamqthanq/Desktop/Seminar_RapidFlow/results/raw/rf01_smoke_delete_Q0/20261104T104303Z_59000853
-rf01_smoke_delete_Q1,delete,Q_1,completed,0,PASS_VERIFIED,4.48242,4.44,341848,12864072,12864072,True,count_only,/home/iamqthanq/Desktop/Seminar_RapidFlow/results/raw/rf01_smoke_delete_Q1/20261104T104307Z_d0d1ddb9
-rf01_smoke_delete_Q2,delete,Q_2,completed,0,PASS_VERIFIED,3.622984,3.57,321908,1140656,1140656,True,count_only,/home/iamqthanq/Desktop/Seminar_RapidFlow/results/raw/rf01_smoke_delete_Q2/20261104T104312Z_1ea1c9c4
+case_id,stream_type,query,status,exit_code,verdict,evidence_status,wall_seconds,elapsed_seconds,max_rss_kb,expected_count,actual_count,count_match,output_mode,raw_log_dir
+rf01_smoke_insert_Q0,insert,Q_0,completed,0,PASS_VERIFIED,COMPLETE_METRICS,3.572709,3.56,265192,587884,587884,True,count_only,/home/iamqthanq/Desktop/Seminar_RapidFlow/results/raw/rf01_smoke_insert_Q0/20261104T111300Z_6522e2fd
+rf01_smoke_insert_Q1,insert,Q_1,completed,0,PASS_VERIFIED,COMPLETE_METRICS,4.224238,4.2,277968,12866379,12866379,True,count_only,/home/iamqthanq/Desktop/Seminar_RapidFlow/results/raw/rf01_smoke_insert_Q1/20261104T111303Z_64ec6e80
+rf01_smoke_insert_Q2,insert,Q_2,completed,0,PASS_VERIFIED,COMPLETE_METRICS,3.321428,3.27,255664,1139364,1139364,True,count_only,/home/iamqthanq/Desktop/Seminar_RapidFlow/results/raw/rf01_smoke_insert_Q2/20261104T111308Z_3f2686e9
+rf01_smoke_delete_Q0,delete,Q_0,completed,0,PASS_VERIFIED,COMPLETE_METRICS,4.023887,4.01,332516,587984,587984,True,count_only,/home/iamqthanq/Desktop/Seminar_RapidFlow/results/raw/rf01_smoke_delete_Q0/20261104T111311Z_8ce85b8e
+rf01_smoke_delete_Q1,delete,Q_1,completed,0,PASS_VERIFIED,COMPLETE_METRICS,4.525327,4.51,341836,12864072,12864072,True,count_only,/home/iamqthanq/Desktop/Seminar_RapidFlow/results/raw/rf01_smoke_delete_Q1/20261104T111316Z_675dc058
+rf01_smoke_delete_Q2,delete,Q_2,completed,0,PASS_VERIFIED,COMPLETE_METRICS,3.823224,3.79,321868,1140656,1140656,True,count_only,/home/iamqthanq/Desktop/Seminar_RapidFlow/results/raw/rf01_smoke_delete_Q2/20261104T111320Z_2ff4a6a7

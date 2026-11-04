@@ -100,9 +100,9 @@ Nhằm làm rõ bản chất của `Result count` phục vụ việc thiết k�
 
 ### 5.1. Bản chất của chỉ số `Result count`
 - **Là tổng cộng dồn trên toàn bộ stream (Stream-Aggregated Count):**
-  Trong `streaming/streaming_engine.cpp`:
-  - Dòng 335: `result_count_ = 0;` (khởi tạo về 0 trước khi bắt đầu duyệt stream).
-  - Dòng 350–352:
+  Trong `streaming/streaming_engine.h` và `streaming/streaming_engine.cpp`:
+  - Phép gán `result_count_ = 0;` được định nghĩa tại `streaming/streaming_engine.h:52–64` (dòng 58, bên trong phương thức `reset_performance_counters()`), và được gọi từ `streaming/streaming_engine.cpp:335` ngay trước khi bắt đầu duyệt stream.
+  - Dòng 350–352 trong `streaming/streaming_engine.cpp`:
     ```cpp
     for (auto& update : stream) {
         execute(query_graph, update, true, true);
