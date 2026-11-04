@@ -25,7 +25,7 @@ Workspace for **reproducible research on RapidFlow (PVLDB 2022)** using **NetFlo
 
 ## Git push policy
 
-**Only remote write target:** `iamqthanq/Seminar_RapidFlow`, branch `QuangThang` (not `main`). Use `bash scripts/push_quangthang.sh`. See `AGENTS.md`, `GEMINI.md`, `docs/BRANCH_POLICY.md`. The user alone authorizes a future merge to `main`. Issue review can use commit SHAs without a PR; a draft PR from `QuangThang` to `main` requires separate user approval.
+**Branch policy v2 (2026-11-04):** Work only inside `iamqthanq/Seminar_RapidFlow`. Each approved Issue uses a new `feature/rfNN-*` branch based on `QuangThang`. Gemini can push **only** the active feature branch via `bash scripts/push_issue_branch.sh`, then create one Draft PR **into `QuangThang`** with `bash scripts/open_issue_pr.sh <ISSUE_NUMBER>`. Additional commits update the same PR. Agent must never push directly to `QuangThang` or `main` or merge any PR; user authorizes merges. See `AGENTS.md`, `GEMINI.md`, `docs/BRANCH_POLICY.md`. RF-01 was pushed directly before policy v2 and is reviewed via its existing commit.
 
 ## Workflow
 

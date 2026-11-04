@@ -1,8 +1,13 @@
-# Gemini CLI — mandatory project instructions
-Follow [AGENTS.md](AGENTS.md) strictly. Its Git remote and branch write restrictions are binding for this workspace.
+# Gemini CLI — Mandatory GitHub workflow v2
 
-**Only push destination:** `iamqthanq/Seminar_RapidFlow`, branch `QuangThang`.
-**Only authorized push command:** `bash scripts/push_quangthang.sh`.
-No push/merge to `main`. Do not bypass local Git hooks, configure a new remote, or use a GitHub API to evade branch restrictions.
+Obey `AGENTS.md` and `docs/BRANCH_POLICY.md`.
 
-Start with Issue #1 (roadmap), then Issue #2 (RF-01). Work incrementally, preserve pristine RapidFlow source and NetFlow data, record reproducible evidence, stop on blocker. User must explicitly approve further work beyond current Issue.
+- Only `iamqthanq/Seminar_RapidFlow` repository.
+- Create ONE `feature/rfNN-topic` branch per approved implementation Issue, forked from `QuangThang`.
+- ONLY push from that branch to the identical branch via `bash scripts/push_issue_branch.sh`.
+- Immediately after first push, create ONE **Draft PR** into `QuangThang` using `bash scripts/open_issue_pr.sh <ISSUE_NUMBER>`; future pushes update the PR automatically.
+- Never push to `QuangThang`, `main`, fork, or any other repository. Never open a PR targeting `main`. Never merge PRs or bypass Git hook/API restrictions.
+- User alone approves PR merge into `QuangThang` and any future merge into `main`.
+- Read Issue #1 and the explicitly assigned Issue. DO NOT start RF-02 without user approval. RF-01 already landed on QuangThang under old policy: preserve history.
+
+Source RapidFlow must remain pristine. Require independent correctness, logs, hashes and output-mode honesty.

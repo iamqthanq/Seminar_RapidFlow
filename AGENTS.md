@@ -1,28 +1,40 @@
-# Repository-bound agent policy (mandatory)
+# Repository-bound agent instructions — Branch policy v2
 
-Repository: **iamqthanq/Seminar_RapidFlow** (only).
-Approved *remote write* destination: **https://github.com/iamqthanq/Seminar_RapidFlow/tree/QuangThang**.
-Workspace: **/home/iamqthanq/Desktop/Seminar_RapidFlow**.
+## Allowed repository and branch model
 
-## Non-negotiable rules
-1. Work on local branch `QuangThang` only. Push **only** `refs/heads/QuangThang` to `refs/heads/QuangThang` at `origin`. Do not push to `main`, another branch, another fork, or another repository.
-2. Explicit authorized push command: `bash scripts/push_quangthang.sh` (equivalent: `git push origin refs/heads/QuangThang:refs/heads/QuangThang`).
-3. Never run `git push --all`, `git push --mirror`, `git push --force`, `git push --force-with-lease`, `git push --tags`, `git push origin main`, `git push origin HEAD:main`, or a `gh api`/GitHub MCP write action that changes another branch.
-4. Never bypass or disable `.githooks/pre-push` or change `core.hooksPath`. No `--no-verify`, `-c core.hooksPath=...`, alternate repository clone for remote writes, or direct API push.
-5. Never create, close, or merge PRs, or merge `QuangThang` into `main`, unless the user explicitly authorizes the exact operation. The user alone decides when to merge to `main`. If PR review is requested, propose a **draft** PR `QuangThang -> main` and require user permission before creating it. **Do not merge**.
-6. Read Issue #1 (research roadmap) and Issue #2 (RF-01). Execute only the active Issue. Report missing dependencies and correctness uncertainties; no silent benchmark/algorithm changes.
-7. Source RapidFlow under `baselines/rapidflow/source/` is a pristine third-party checkout, not the outer Git repository. Do not commit its huge data or derived binaries. NetFlow raw archives and `results/raw/` are Git-ignored.
-8. Keep all result claims auditable with input hashes, source commit, flags, stdout/stderr, runtime, RSS, and failures. Do not confuse count-only and full enumeration.
-9. When a command would violate any constraint, STOP, state the conflict, and ask the user to authorize an alternative. Never reinterpret these limits implicitly.
+- Only repository: **https://github.com/iamqthanq/Seminar_RapidFlow**.
+- Protected integration branch: **QuangThang**.
+- Protected release branch: **main**. The USER ALONE decides any merge into main.
+- For each approved Issue, agent creates **one work branch** named `feature/rfNN-topic` FROM the updated `origin/QuangThang`. Example: `feature/rf02-correctness`.
+- Agent may commit and push **only its active feature branch to the same-named remote feature branch** in this repository.
+- **The only permitted push command:** `bash scripts/push_issue_branch.sh`.
+- After first push, open **one Draft PR into QuangThang** with `bash scripts/open_issue_pr.sh <ISSUE_NUMBER>`. Subsequent pushes update that SAME PR. Link relevant Issue and provide full logs/evidence. **Do not create a separate PR for every commit.**
+- **Do NOT merge any PR**, do not push directly into `QuangThang` or `main`, and do not create a PR targeting `main`. Only the user approves merging to QuangThang and eventually to main.
 
-## Start (read only)
+## Absolute safety constraints
+1. No push outside this repository, nor to `main`, `QuangThang`, other features, tags or forks.
+2. No force push, deleting remote branches, `--all`, `--mirror`, or modifying remote URLs / hook configuration.
+3. Never bypass `.githooks/pre-push` (`--no-verify`, `-c core.hooksPath=...`) or bypass the restriction through GitHub API/MCP, alternate checkout, or account credentials.
+4. Respect GitHub Issue scope. One active implementation Issue at a time; the user approves moving to next gate.
+5. Keep `baselines/rapidflow/source/` pristine at pinned `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1`. Third-party source, NetFlow raw data, large logs and binaries remain out of Git.
+6. Include all attempted cases, exact commands, input SHA-256, software/hardware/flags, exit/time/RSS, raw evidence and independent correctness where relevant. Never equate count-only with explicit embedding enumeration.
+7. If instructions conflict, STOP and ask for user clarification; never relax limits by inference.
+
+## Standard agent workflow
 ```bash
-cd /home/iamqthanq/Desktop/Seminar_RapidFlow
-git status --short --branch
-git remote -v
+cd ~/Desktop/Seminar_RapidFlow
 gh issue view 1 -R iamqthanq/Seminar_RapidFlow
-gh issue view 2 -R iamqthanq/Seminar_RapidFlow
+# Read the current approved Issue, e.g. gh issue view 4 -R ...
+git status --short --branch
+git fetch origin QuangThang
+git switch QuangThang
+git pull --ff-only origin QuangThang
+git switch -c feature/rf02-correctness
+# Implement & test the explicitly approved Issue; commit with reproducibility evidence.
+bash scripts/push_issue_branch.sh
+bash scripts/open_issue_pr.sh 4
 ```
 
-## Review workflow under the one-branch restriction
-After an Issue's commits are pushed to `QuangThang`, provide commit SHA(s), GitHub compare/permalink and evidence. ChatGPT can review the commit/diff and issue without a new PR. A PR that *targets* `QuangThang` would need a separate remote head branch, which is forbidden by the current rule. Use a draft PR `QuangThang -> main` **only if the user authorizes**; it is never self-merged.
+**Important:** RF-01 (Issue #2, commit `d358082`) is a *pre-v2 legacy exception*: it was already directly pushed to QuangThang before per-Issue PRs were adopted. Do not rewrite history to manufacture an RF-01 PR. Review RF-01 by commit evidence.
+
+Further rules: `GEMINI.md`, `docs/BRANCH_POLICY.md` and `docs/CODEX_HANDOFF.md`.

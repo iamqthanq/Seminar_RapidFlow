@@ -1,13 +1,11 @@
-# Codex/Gemini handoff rules
+# Codex / Gemini handoff — workflow v2
 
-- Work in `Seminar_RapidFlow`, on local branch `QuangThang` ONLY; push exclusively to `iamqthanq/Seminar_RapidFlow:QuangThang`, using `bash scripts/push_quangthang.sh`. Read `AGENTS.md` and `GEMINI.md`. Never push/commit/merge to main.
-- Do NOT implement UACR or other proposed optimization unless explicitly authorized.
-- First inventory existing source and dataset. Never silently clone/download duplicate copies.
-- Do NOT change source semantics, output mode, graph labels, query/update ordering.
-- Keep binary outputs and large raw datasets outside version control.
-- Before benchmark: provide evidence of independent correctness and exact invocation.
-- For every PR: original commit, git diff, commands, environment, dataset/query/stream hashes, full result files, limitations.
-- Classify claims as PAPER / BUILD / SMOKE / CORRECT / BENCHMARK; do not conflate.
-- Changes to matching logic require an independent oracle comparison and regression tests.
-- Never fabricate data or infer a performance gain from mismatched output formats.
-- Stop for review after each stage; push solely to `QuangThang` under the active Issue. No PR creation or merge without explicit user authorization. A PR from `QuangThang` to `main` must remain draft and unmerged until the user approves.
+- Repository `iamqthanq/Seminar_RapidFlow` only. Read `AGENTS.md`, `GEMINI.md`, and `docs/BRANCH_POLICY.md` first.
+- Use one feature branch from `QuangThang` per approved Issue: `feature/rfNN-topic`.
+- Commit locally, push **only** this feature branch with `bash scripts/push_issue_branch.sh`.
+- Open one Draft PR to `QuangThang` using `bash scripts/open_issue_pr.sh <ISSUE_NUMBER>`; keep all fixes on this same PR. Never push to QuangThang/main and NEVER merge.
+- Keep RapidFlow upstream pristine. Do not implement UACR or any other optimization unless explicitly accepted after profiling and prior-art review.
+- Inventory sources and NetFlow provenance. No data mutation to hide failures. Don't mix 10k NewSP update streams with RapidFlow paper's 10% benchmark.
+- Distinguish count-only from full explicit delta embeddings. Do not claim correctness or speedup from only a smoke count.
+- Every PR requires complete attempted cases, input SHA-256, exact commands, CPU/RAM/compiler/flags, exit code, times, RSS, logs, limitations and independent oracle evidence when requested.
+- Classify claims PAPER/BUILD/SMOKE/CORRECT/BENCHMARK/HYPOTHESIS. All phases need manager review, external AI critique and explicit approval before next gate.

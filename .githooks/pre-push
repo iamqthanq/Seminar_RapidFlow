@@ -1,31 +1,56 @@
 #!/bin/sh
-# Deny all remote pushes except QuangThang to iamqthanq/Seminar_RapidFlow.
-# Local safety rail only, not server-side access control.
+# Restrict normal pushes from this checkout to feature/rfNN-* in the exact repo.
+# One-time, tightly-scoped migration exception for the branch-policy update from
+# the known pre-migration QuangThang SHA. Once integrated, the exception expires.
+# GitHub server protections are required; hooks alone are NOT a security boundary.
 set -eu
 remote_name="${1:-}"
 remote_url="${2:-}"
-allowed_repo="https://github.com/iamqthanq/Seminar_RapidFlow"
-case "$remote_name" in
-  origin) ;;
-  *) echo "DENIED: push remote must be origin" >&2; exit 1;;
-esac
+allow_url="https://github.com/iamqthanq/Seminar_RapidFlow"
+zero="0000000000000000000000000000000000000000"
+original_quangthang="d3580823306e4ca0ad7b1552a785cbd6f39914f4"
+
+[ "$remote_name" = "origin" ] || { echo "DENIED: origin only" >&2; exit 1; }
 case "$remote_url" in
-  "$allowed_repo"|"$allowed_repo.git") ;;
-  *) echo "DENIED: wrong repository URL: $remote_url" >&2; exit 1;;
+ "$allow_url"|"$allow_url.git") ;;
+ *) echo "DENIED: wrong remote repository $remote_url" >&2; exit 1 ;;
 esac
+
 branch="$(git symbolic-ref -q --short HEAD || true)"
-if [ "$branch" != "QuangThang" ]; then
-  echo "DENIED: current branch must be QuangThang" >&2
-  exit 1
-fi
+count=0
 while read -r local_ref local_sha remote_ref remote_sha; do
-  if [ "$local_ref" != "refs/heads/QuangThang" ] || [ "$remote_ref" != "refs/heads/QuangThang" ]; then
-    echo "DENIED: allowed refspec only QuangThang -> QuangThang" >&2
-    exit 1
-  fi
-  if [ "$local_sha" = "0000000000000000000000000000000000000000" ]; then
-    echo "DENIED: branch deletion" >&2
-    exit 1
-  fi
+ count=$((count+1))
+ [ "$local_sha" != "$zero" ] || { echo "DENIED: no deletion" >&2; exit 1; }
+
+ if [ "$branch" = "QuangThang" ] &&
+    [ "$local_ref" = "refs/heads/QuangThang" ] &&
+    [ "$remote_ref" = "refs/heads/QuangThang" ] &&
+    [ "$remote_sha" = "$original_quangthang" ]; then
+   # Authorized one-time migration: only the first child commit of the
+   # prior QuangThang state, containing governance / workflow files.
+   [ "$(git rev-parse "HEAD^" 2>/dev/null)" = "$original_quangthang" ] || {
+     echo "DENIED: migration must be one commit atop original QuangThang" >&2; exit 1;
+   }
+   bad_files="$(git diff --name-only "$original_quangthang" HEAD | grep -Ev '^(\.githooks/pre-push|AGENTS\.md|GEMINI\.md|README\.md|docs/(BRANCH_POLICY|CODEX_HANDOFF)\.md|scripts/(push_quangthang|push_issue_branch|open_issue_pr)\.sh|\.github/pull_request_template\.md)$' || true)"
+   [ -z "$bad_files" ] || { echo "DENIED: migration modifies other files: $bad_files" >&2; exit 1; }
+ else
+   printf '%s\n' "$branch" | grep -Eq '^feature/rf[0-9][0-9]-[a-z0-9][a-z0-9-]*$' || {
+     echo "DENIED: only feature/rfNN-* work branches may push; current=$branch" >&2; exit 1;
+   }
+   [ "$local_ref" = "refs/heads/$branch" ] && [ "$remote_ref" = "refs/heads/$branch" ] || {
+     echo "DENIED: push only current feature branch to same-name remote feature branch" >&2; exit 1;
+   }
+ fi
+
+ if [ "$remote_sha" != "$zero" ]; then
+   git cat-file -e "$remote_sha^{commit}" 2>/dev/null || {
+     echo "DENIED: remote commit not available locally (fetch first)" >&2; exit 1;
+   }
+   git merge-base --is-ancestor "$remote_sha" "$local_sha" || {
+     echo "DENIED: force push / non-fast-forward" >&2; exit 1;
+   }
+ fi
 done
+
+[ "$count" -eq 1 ] || { echo "DENIED: push exactly one branch" >&2; exit 1; }
 exit 0
