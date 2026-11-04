@@ -10,9 +10,12 @@ baselines/rapidflow/source/
 baselines/rapidflow/build/
 results/raw/*
 !results/raw/.gitkeep
+results/logs/*
+!results/logs/.gitkeep
 results/summary/*.jsonl
 results/summary/*.csv
 !results/summary/rf01_smoke_summary.csv
+!results/summary/rf02_correctness.csv
 __pycache__/
 *.pyc
 .env
