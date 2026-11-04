@@ -1,0 +1,31 @@
+#!/bin/sh
+# Deny all remote pushes except QuangThang to iamqthanq/Seminar_RapidFlow.
+# Local safety rail only, not server-side access control.
+set -eu
+remote_name="${1:-}"
+remote_url="${2:-}"
+allowed_repo="https://github.com/iamqthanq/Seminar_RapidFlow"
+case "$remote_name" in
+  origin) ;;
+  *) echo "DENIED: push remote must be origin" >&2; exit 1;;
+esac
+case "$remote_url" in
+  "$allowed_repo"|"$allowed_repo.git") ;;
+  *) echo "DENIED: wrong repository URL: $remote_url" >&2; exit 1;;
+esac
+branch="$(git symbolic-ref -q --short HEAD || true)"
+if [ "$branch" != "QuangThang" ]; then
+  echo "DENIED: current branch must be QuangThang" >&2
+  exit 1
+fi
+while read -r local_ref local_sha remote_ref remote_sha; do
+  if [ "$local_ref" != "refs/heads/QuangThang" ] || [ "$remote_ref" != "refs/heads/QuangThang" ]; then
+    echo "DENIED: allowed refspec only QuangThang -> QuangThang" >&2
+    exit 1
+  fi
+  if [ "$local_sha" = "0000000000000000000000000000000000000000" ]; then
+    echo "DENIED: branch deletion" >&2
+    exit 1
+  fi
+done
+exit 0

@@ -1,0 +1,1 @@
+Local third-party checkouts go here. Ignored by Git, apart from this note. Do not clone unless existing locations have been checked.

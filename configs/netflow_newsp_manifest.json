@@ -1,0 +1,97 @@
+{
+  "id": "netflow-newsp-icde2024-release",
+  "status": "ACQUIRED_AND_FORMAT_AUDITED_NOT_YET_RAPIDFLOW_EXECUTED",
+  "acquired_date": "2026-11-04",
+  "release": {
+    "repository": "https://github.com/hnuGraph/NewSP",
+    "source_commit": "c5c6eb05ce5059be0fa803d7a29d57cc26060a25",
+    "archive_url": "https://raw.githubusercontent.com/hnuGraph/NewSP/main/netflow.zip",
+    "github_blob_sha": "414d90ec03795bfaa1a7e109f398a8412700549a",
+    "archive_sha256": "19460c5a69723ba108c484de26da79a616edff915f76de3f6bca7f6a12f4e66a"
+  },
+  "paths": {
+    "zip": "data/netflow/source_archive/netflow.zip",
+    "graph": "data/netflow/release_newsp/netflow/data_graph/Ndata.graph",
+    "stream_insert": "data/netflow/release_newsp/netflow/data_graph/Ninsertion.graph",
+    "queries": "data/netflow/release_newsp/netflow/Nquery/"
+  },
+  "graph": {
+    "vertices": 3114895,
+    "edges": 2849732,
+    "vertex_labels": [
+      0
+    ],
+    "edge_labels": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "max_degree": 49014,
+    "sha256": "bfedd2cab6d2c460141da945e77b0be39ae24c74d9a28b9394a38ee35b652fc6"
+  },
+  "stream_insert": {
+    "updates": 10000,
+    "sha256": "e45f2d908eaed5098653d4635076bef0152438014ad6e3aa03df522cef85ab05"
+  },
+  "stream_mixed": {
+    "Ndeletion10": {
+      "total": 10000,
+      "deletions": 1000
+    },
+    "Ndeletion20": {
+      "total": 10000,
+      "deletions": 2000
+    },
+    "Ndeletion30": {
+      "total": 10000,
+      "deletions": 3000
+    },
+    "Ndeletion40": {
+      "total": 10000,
+      "deletions": 4000
+    },
+    "Ndeletion50": {
+      "total": 10000,
+      "deletions": 5000
+    }
+  },
+  "stream_consistency": {
+    "method": "Only update-referenced edges tracked across graph and streams; sequential apply per stream starting from base graph",
+    "invalid_updates": 0,
+    "not_independent_embedding_correctness": true
+  },
+  "query_audit": {
+    "files": 2700,
+    "nonrapidflow_format_count": 30,
+    "nonrapidflow_format_group": "Nquery/staticCaseStudyQuery",
+    "out_of_domain_label_files": [
+      "Nquery/Nquery180_8/Q_136"
+    ],
+    "out_of_domain_edge_label": 32513
+  },
+  "comparability": {
+    "identical_to_rapidflow_pvldb2022": "UNVERIFIED",
+    "notes": [
+      "RapidFlow paper reports 7 edge labels, this archive contains 8.",
+      "NewSP update stream has 10000 operations, not RapidFlow paper 10% update stream.",
+      "Do not assert paper-equivalent workload."
+    ]
+  },
+  "rapidflow_source": {
+    "repository": "https://github.com/shixuansun/RapidFlow",
+    "commit": "2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1",
+    "source_tree": "baselines/rapidflow/source"
+  },
+  "validation": {
+    "source_pristine": true,
+    "archive_integrity": "zip extracted without error",
+    "build_status": "NOT_BUILT",
+    "independent_correctness": "NOT_RUN",
+    "benchmark": "NOT_RUN"
+  }
+}

@@ -1,0 +1,18 @@
+# Large inputs and machine-specific data
+data/netflow/*
+!data/netflow/README.md
+data/streams/*
+!data/streams/README.md
+data/queries/generated/
+external/*
+!external/README.md
+baselines/rapidflow/source/
+baselines/rapidflow/build/
+results/raw/*
+!results/raw/.gitkeep
+results/summary/*.jsonl
+results/summary/*.csv
+__pycache__/
+*.pyc
+.env
+*.log
