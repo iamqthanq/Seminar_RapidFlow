@@ -14,6 +14,7 @@ import csv
 import datetime
 import hashlib
 import json
+import math
 import os
 import pathlib
 import re
@@ -619,6 +620,18 @@ def promote_run_to_canonical(
             return False, f"Promotion rejected: case {cid} is_pass is not True"
         if vdata.get("failure_reasons") != []:
             return False, f"Promotion rejected: case {cid} has failure reasons: {vdata.get('failure_reasons')}"
+        if vdata.get("completed_repeats") != expected_repeats:
+            return False, f"Promotion rejected: case {cid} verdict completed_repeats {vdata.get('completed_repeats')} != expected {expected_repeats}"
+
+        # Reconcile case verdict result_counts with CSV rows (sorted by repeat_index)
+        sorted_crows = sorted(crows, key=lambda x: int(x["repeat_index"]))
+        csv_counts = [int(x["result_count"]) for x in sorted_crows]
+        verdict_counts = [int(x) for x in vdata.get("result_counts", [])]
+        if csv_counts != verdict_counts:
+            return False, (
+                f"Promotion rejected: case {cid} result_counts in verdict {verdict_counts} "
+                f"!= CSV counts {csv_counts}"
+            )
 
         for r in crows:
             rep = r["repeat_index"]
@@ -642,12 +655,108 @@ def promote_run_to_canonical(
             if act_stderr_sha != r.get("stderr_sha256"):
                 return False, f"Promotion rejected: stderr SHA mismatch for {cid} rep {rep}: {act_stderr_sha} != {r.get('stderr_sha256')}"
 
+            # Cross-Artifact Reconciliation: CSV ↔ stdout.log
+            stdout_content = stdout_file.read_text(encoding="utf-8", errors="replace")
+            try:
+                parsed_stdout = parse_rapidflow_stdout(stdout_content)
+            except OutputParseError as ope:
+                return False, f"Promotion rejected: stdout parsing failed for case {cid} rep {rep}: {ope}"
+
+            if parsed_stdout.result_count is None:
+                return False, f"Promotion rejected: stdout parsed result_count is None for case {cid} rep {rep}"
+            if int(r["result_count"]) != parsed_stdout.result_count:
+                return False, (
+                    f"Promotion rejected: result_count mismatch for case {cid} rep {rep}: "
+                    f"CSV={r.get('result_count')} != stdout={parsed_stdout.result_count}"
+                )
+            if int(r["updates_num"]) != parsed_stdout.updates_num:
+                return False, (
+                    f"Promotion rejected: updates_num mismatch for case {cid} rep {rep}: "
+                    f"CSV={r.get('updates_num')} != stdout={parsed_stdout.updates_num}"
+                )
+            if int(r["edge_process_count"]) != parsed_stdout.edge_process_count:
+                return False, (
+                    f"Promotion rejected: edge_process_count mismatch for case {cid} rep {rep}: "
+                    f"CSV={r.get('edge_process_count')} != stdout={parsed_stdout.edge_process_count}"
+                )
+
+            # Cross-Artifact Reconciliation: CSV ↔ metadata.json
             try:
                 mdata = json.loads(meta_file.read_text(encoding="utf-8"))
             except Exception as e:
                 return False, f"Promotion rejected: corrupt metadata in {rep_dir}: {e}"
+
             if mdata.get("status") != "COMPLETED":
                 return False, f"Promotion rejected: metadata status '{mdata.get('status')}' != COMPLETED in {rep_dir}"
+            if mdata.get("run_id") != run_id:
+                return False, f"Promotion rejected: metadata run_id '{mdata.get('run_id')}' != '{run_id}' in {rep_dir}"
+            if mdata.get("case_id") != cid:
+                return False, f"Promotion rejected: metadata case_id '{mdata.get('case_id')}' != '{cid}' in {rep_dir}"
+            if str(mdata.get("repeat_index")) != str(rep):
+                return False, f"Promotion rejected: metadata repeat_index '{mdata.get('repeat_index')}' != '{rep}' in {rep_dir}"
+
+            summary_row = mdata.get("summary_row")
+            if not isinstance(summary_row, dict):
+                return False, f"Promotion rejected: metadata missing valid summary_row dictionary in {rep_dir}"
+
+            # String identity fields match
+            str_fields = ["run_id", "case_id", "repeat_index", "query_id", "stream_id", "status"]
+            for fld in str_fields:
+                if str(r.get(fld)) != str(summary_row.get(fld)):
+                    return False, (
+                        f"Promotion rejected: {fld} mismatch for case {cid} rep {rep}: "
+                        f"CSV={r.get(fld)} != metadata={summary_row.get(fld)}"
+                    )
+
+            # Integer fields match
+            int_fields = ["result_count", "updates_num", "edge_process_count", "prefix_length", "exit_code", "rss_kb"]
+            for fld in int_fields:
+                csv_val = r.get(fld)
+                meta_val = summary_row.get(fld)
+                if csv_val is None or meta_val is None:
+                    return False, f"Promotion rejected: field '{fld}' missing in CSV or metadata for case {cid} rep {rep}"
+                try:
+                    if int(csv_val) != int(meta_val):
+                        return False, (
+                            f"Promotion rejected: {fld} mismatch for case {cid} rep {rep}: "
+                            f"CSV={csv_val} != metadata={meta_val}"
+                        )
+                except (ValueError, TypeError):
+                    return False, f"Promotion rejected: invalid integer for {fld} in case {cid} rep {rep}"
+
+            # Wall time float match
+            csv_wall_str = r.get("wall_time_sec")
+            meta_wall_str = summary_row.get("wall_time_sec")
+            if csv_wall_str is None or meta_wall_str is None:
+                return False, f"Promotion rejected: wall_time_sec missing in CSV or metadata for case {cid} rep {rep}"
+            try:
+                csv_wall = float(csv_wall_str)
+                meta_wall = float(meta_wall_str)
+                if math.isnan(csv_wall) or math.isnan(meta_wall) or math.isinf(csv_wall) or math.isinf(meta_wall) or csv_wall < 0 or meta_wall < 0:
+                    return False, f"Promotion rejected: invalid wall_time_sec for case {cid} rep {rep}"
+                if abs(csv_wall - meta_wall) > 1e-4:
+                    return False, (
+                        f"Promotion rejected: wall_time_sec mismatch for case {cid} rep {rep}: "
+                        f"CSV={csv_wall} != metadata={meta_wall}"
+                    )
+            except (ValueError, TypeError):
+                return False, f"Promotion rejected: non-float wall_time_sec for case {cid} rep {rep}"
+
+            # Task C: Reconcile RSS from stderr if /usr/bin/time output is available
+            stderr_content = stderr_file.read_text(encoding="utf-8", errors="replace")
+            for line in stderr_content.splitlines():
+                if "Maximum resident set size (kbytes):" in line:
+                    try:
+                        parsed_rss = int(line.split(":")[-1].strip())
+                        if parsed_rss > 0:
+                            csv_rss = int(r.get("rss_kb"))
+                            if csv_rss != parsed_rss:
+                                return False, (
+                                    f"Promotion rejected: rss_kb mismatch for case {cid} rep {rep}: "
+                                    f"CSV={csv_rss} != stderr={parsed_rss}"
+                                )
+                    except (ValueError, TypeError):
+                        pass
 
     canonical_dest = (canonical_csv_rel if canonical_csv_rel.is_absolute() else (workspace_root / canonical_csv_rel)).resolve()
     if not dry_run:
@@ -997,9 +1106,9 @@ def run_benchmark(
         elif completed_repeats < default_repeats:
             failure_reasons.append("INCOMPLETE_REPEATS")
 
-        # 2. Specific failure statuses observed
-        for st in ["TIMEOUT", "OOM", "PROCESS_ERROR", "PARSE_ERROR", "INCOMPLETE_UPDATES"]:
-            if st in repeat_statuses and st not in failure_reasons:
+        # 2. Specific failure statuses directly emitted by runner attempts
+        for st in repeat_statuses:
+            if st != "COMPLETED" and st not in failure_reasons:
                 failure_reasons.append(st)
 
         # 3. Result count validity & consistency among completed repeats
@@ -1010,16 +1119,17 @@ def run_benchmark(
                     if "INVALID_RESULT_COUNT" not in failure_reasons:
                         failure_reasons.append("INVALID_RESULT_COUNT")
                 if len(set(int_counts)) > 1:
-                    failure_reasons.append("COUNT_MISMATCH")
+                    if "COUNT_MISMATCH" not in failure_reasons:
+                        failure_reasons.append("COUNT_MISMATCH")
             except (ValueError, TypeError):
                 if "INVALID_RESULT_COUNT" not in failure_reasons:
                     failure_reasons.append("INVALID_RESULT_COUNT")
 
-        # 4. Incomplete update stream processing
+        # 4. Incomplete update stream processing on completed rows
         for r in completed_rows:
             if r.get("updates_num") != prefix_len or r.get("edge_process_count") != prefix_len:
-                if "INCOMPLETE_UPDATES" not in failure_reasons:
-                    failure_reasons.append("INCOMPLETE_UPDATES")
+                if "INCOMPLETE_STREAM" not in failure_reasons:
+                    failure_reasons.append("INCOMPLETE_STREAM")
 
         is_divergent = "COUNT_MISMATCH" in failure_reasons
         if len(failure_reasons) == 0:

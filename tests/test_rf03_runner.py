@@ -982,6 +982,148 @@ class TestRF03RunnerFailurePreservation(unittest.TestCase):
         self.assertFalse(ok)
         self.assertEqual(canonical_file.read_text(), "IMMUTABLE_SENTINEL_DATA\n")
 
+    # ---------------------------------------------------------
+    # Task D / Round 4 Cross-Artifact Reconciliation Tests (D1..D8)
+    # ---------------------------------------------------------
+
+    def test_d1_promotion_rejects_tampered_csv_count(self):
+        """D1: CSV count tampered (Stdout count = 100, Metadata count = 100, CSV count = 999999)."""
+        cfg_path, cfg = self._create_synthetic_10case_workload()
+        run_dir = self._create_synthetic_run_suite(cfg_path, cfg, "run_d1")
+
+        # Tamper ONLY CSV result_count for c01_test rep 1, 2, 3
+        with open(run_dir / "summary_runs.csv", newline="", encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+        for r in rows:
+            if r["case_id"] == "c01_test":
+                r["result_count"] = "999999"
+        runner.write_summary_csv(run_dir / "summary_runs.csv", rows)
+
+        ok, msg = runner.promote_run_to_canonical("run_d1", workspace_root=self.base, logs_base_dir=self.logs_dir, workload_config_rel=cfg_path)
+        self.assertFalse(ok)
+        self.assertTrue("result_count mismatch" in msg or "case c01_test result_counts in verdict" in msg)
+
+    def test_d2_promotion_rejects_tampered_metadata_count(self):
+        """D2: Metadata count tampered (Stdout count = 100, CSV count = 100, Metadata count = 999999)."""
+        cfg_path, cfg = self._create_synthetic_10case_workload()
+        run_dir = self._create_synthetic_run_suite(cfg_path, cfg, "run_d2")
+
+        meta_file = run_dir / "c01_test_rep1" / "metadata.json"
+        mdata = json.loads(meta_file.read_text(encoding="utf-8"))
+        mdata["summary_row"]["result_count"] = 999999
+        meta_file.write_text(json.dumps(mdata, indent=2))
+
+        ok, msg = runner.promote_run_to_canonical("run_d2", workspace_root=self.base, logs_base_dir=self.logs_dir, workload_config_rel=cfg_path)
+        self.assertFalse(ok)
+        self.assertIn("result_count mismatch for case c01_test rep 1", msg)
+
+    def test_d3_promotion_rejects_verdict_count_mismatch(self):
+        """D3: Case verdict count does not match CSV counts."""
+        cfg_path, cfg = self._create_synthetic_10case_workload()
+        run_dir = self._create_synthetic_run_suite(cfg_path, cfg, "run_d3")
+
+        vfile = run_dir / "c01_test_verdict.json"
+        vdata = json.loads(vfile.read_text(encoding="utf-8"))
+        vdata["result_counts"] = [200, 200, 200]
+        vfile.write_text(json.dumps(vdata, indent=2))
+
+        ok, msg = runner.promote_run_to_canonical("run_d3", workspace_root=self.base, logs_base_dir=self.logs_dir, workload_config_rel=cfg_path)
+        self.assertFalse(ok)
+        self.assertIn("result_counts in verdict", msg)
+
+    def test_d4_promotion_rejects_tampered_csv_rss(self):
+        """D4: CSV RSS tampered (CSV RSS != Metadata RSS)."""
+        cfg_path, cfg = self._create_synthetic_10case_workload()
+        run_dir = self._create_synthetic_run_suite(cfg_path, cfg, "run_d4")
+
+        with open(run_dir / "summary_runs.csv", newline="", encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+        rows[0]["rss_kb"] = "999999"
+        runner.write_summary_csv(run_dir / "summary_runs.csv", rows)
+
+        ok, msg = runner.promote_run_to_canonical("run_d4", workspace_root=self.base, logs_base_dir=self.logs_dir, workload_config_rel=cfg_path)
+        self.assertFalse(ok)
+        self.assertIn("rss_kb mismatch", msg)
+
+    def test_d5_promotion_rejects_tampered_csv_wall_time(self):
+        """D5: CSV Wall Time tampered (CSV Wall Time != Metadata Wall Time)."""
+        cfg_path, cfg = self._create_synthetic_10case_workload()
+        run_dir = self._create_synthetic_run_suite(cfg_path, cfg, "run_d5")
+
+        with open(run_dir / "summary_runs.csv", newline="", encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+        rows[0]["wall_time_sec"] = "9999.000000"
+        runner.write_summary_csv(run_dir / "summary_runs.csv", rows)
+
+        ok, msg = runner.promote_run_to_canonical("run_d5", workspace_root=self.base, logs_base_dir=self.logs_dir, workload_config_rel=cfg_path)
+        self.assertFalse(ok)
+        self.assertIn("wall_time_sec mismatch", msg)
+
+    @patch("scripts.rf03_netflow_runner.verify_provenance", return_value=(True, "OK"))
+    @patch("scripts.rf03_netflow_runner.execute_case_run")
+    def test_d6_case_verdict_captures_incomplete_stream_reason(self, mock_exec, mock_prov):
+        """D6: Repeat 1 COMPLETED, Repeat 2 INCOMPLETE_STREAM -> failure_reasons contains INCOMPLETE_STREAM and INCOMPLETE_REPEATS."""
+        stdout_rep1 = TestRF03OutputParsing.SAMPLE_VALID_STDOUT.replace("Updates num: 100\n", "Updates num: 1\n").replace("Edge process count: 100\n", "Edge process count: 1\n")
+        stdout_rep2 = TestRF03OutputParsing.SAMPLE_VALID_STDOUT.replace("Updates num: 100\n", "Updates num: 0\n").replace("Edge process count: 100\n", "Edge process count: 0\n")
+
+        mock_exec.side_effect = [
+            runner.SubprocessResult(returncode=0, stdout=stdout_rep1, stderr="", duration_sec=0.1, rss_kb=5000),
+            runner.SubprocessResult(returncode=0, stdout=stdout_rep2, stderr="", duration_sec=0.1, rss_kb=5000),
+        ]
+
+        exit_code, rows = runner.run_benchmark(
+            config_path=self.cfg_file,
+            workspace_root=self.base,
+            logs_base_dir=self.logs_dir,
+            skip_memory_check=True,
+            skip_git_check=True,
+        )
+
+        self.assertEqual(exit_code, 1)
+        run_dirs = [d for d in self.logs_dir.iterdir() if d.is_dir()]
+        vfile = run_dirs[0] / "c_test_01_verdict.json"
+        vdata = json.loads(vfile.read_text(encoding="utf-8"))
+        self.assertEqual(vdata["verdict"], "INCONCLUSIVE_INCOMPLETE_REPEATS")
+        self.assertFalse(vdata["is_pass"])
+        self.assertIn("INCOMPLETE_REPEATS", vdata["failure_reasons"])
+        self.assertIn("INCOMPLETE_STREAM", vdata["failure_reasons"])
+
+    def test_d7_valid_suite_accepted_in_dry_run(self):
+        """D7: Completely valid suite with all cross-artifact reconciliations passes in dry-run mode."""
+        cfg_path, cfg = self._create_synthetic_10case_workload()
+        run_dir = self._create_synthetic_run_suite(cfg_path, cfg, "run_d7")
+
+        ok, msg = runner.promote_run_to_canonical("run_d7", workspace_root=self.base, logs_base_dir=self.logs_dir, workload_config_rel=cfg_path, dry_run=True)
+        self.assertTrue(ok)
+        self.assertIn("successfully promoted", msg)
+
+    def test_d8_canonical_unmodified_and_no_spurious_backup_on_failure(self):
+        """D8: Failed promotions leave canonical unchanged and create NO spurious backup files."""
+        canonical_file = self.base / "results" / "summary" / "rf03_baseline_runs.csv"
+        canonical_file.parent.mkdir(parents=True, exist_ok=True)
+        canonical_file.write_text("PRISTINE_CANONICAL_SENTINEL\n")
+        orig_sha = runner.file_sha256(canonical_file)
+
+        cfg_path, cfg = self._create_synthetic_10case_workload()
+        run_dir = self._create_synthetic_run_suite(cfg_path, cfg, "run_d8")
+
+        # Corrupt the CSV count
+        with open(run_dir / "summary_runs.csv", newline="", encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+        rows[0]["result_count"] = "999999"
+        runner.write_summary_csv(run_dir / "summary_runs.csv", rows)
+
+        ok, msg = runner.promote_run_to_canonical("run_d8", workspace_root=self.base, logs_base_dir=self.logs_dir, workload_config_rel=cfg_path, dry_run=False)
+        self.assertFalse(ok)
+
+        # 1. Canonical unchanged
+        self.assertEqual(runner.file_sha256(canonical_file), orig_sha)
+        self.assertEqual(canonical_file.read_text(), "PRISTINE_CANONICAL_SENTINEL\n")
+
+        # 2. No spurious backup files created
+        backups = list(canonical_file.parent.glob("rf03_baseline_runs_*.csv.bak"))
+        self.assertEqual(len(backups), 0, "No backup file should be created when validation fails")
+
     @patch("scripts.rf03_netflow_runner.verify_provenance", return_value=(True, "OK"))
     @patch("scripts.rf03_netflow_runner.execute_case_run")
     def test_run_manifest_created(self, mock_exec, mock_prov):
