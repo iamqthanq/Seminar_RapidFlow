@@ -4,6 +4,10 @@ Workspace for **reproducible research on RapidFlow (PVLDB 2022)** using **NetFlo
 
 **Research state (2026-11-04):** NetFlow is selected; RapidFlow is the algorithm under investigation. **No improvement or novelty is selected.** Do not silently switch enumeration of incremental embeddings to counting.
 
+## Bàn giao cho AI ở tài khoản khác
+
+**Đọc [AI_PROJECT_HANDOFF.md](AI_PROJECT_HANDOFF.md)** để hiểu đầy đủ bài toán CSM, trạng thái nghiên cứu, phân công AI quản lý/AI Coding Agent/AI phản biện, quy trình Issue–Draft PR, bằng chứng cần nộp và quy tắc GitHub. File này là bản snapshot có thể tải rồi gửi cho một AI/tài khoản khác, không tự cấp quyền truy cập GitHub hoặc Linux. Đọc các Issue/PR mới nhất trước khi hành động.
+
 ## Map
 
 | Directory | Purpose |
