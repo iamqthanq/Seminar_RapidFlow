@@ -45,7 +45,7 @@ To replicate all results from scratch:
 # 1. Run Independent Oracle Unit & Self-Validation Tests (15 tests)
 python3 -m unittest tests/test_rf02_oracle.py
 
-# 2. Run All Project Unit & Regression Tests (48 tests: Smoke + Oracle + Runner Failure Tests)
+# 2. Run All Project Unit & Regression Tests (53 tests: Smoke + Oracle + Runner Failure & Portability Tests)
 python3 -m unittest discover -s tests -p 'test_*.py' -v
 
 # 3. Run Differential Testing Runner in Pilot Mode (3 cases, 4 steps)
@@ -95,22 +95,22 @@ Following the independent review by ChatGPT ([comment 6630198447](https://github
    - Explicitly initialized all per-step result variables before subprocess execution, completely eliminating `UnboundLocalError`.
    - Safely caught `subprocess.TimeoutExpired`, `OSError`, `OutputParseError`, and `InternalTimeoutError`, classifying them into `TIMEOUT` or `ERROR` without losing previously written CSV rows.
    - Implemented predecessor failure blocking: if prefix $P_{k-1}$ fails, step $k$ is marked `BLOCKED_PREDECESSOR` and no invalid delta is inferred.
-   - Added adversarial regression tests in `tests/test_rf02_runner.py` verifying that failures produce durable CSV rows and return exit code 2.
+   - Added integration-level synthetic/mock adversarial regression tests in `tests/test_rf02_runner.py` verifying that update count mismatch, subprocess timeout, internal timeout, malformed output, duplicate output, non-zero crash exits (signal 11), count mismatches, and predecessor failures produce durable CSV rows and return exit code 2.
 
 2. **F2 — Provenance & Source Citations:**
-   - Corrected actual operating environment based on physical host commands (Ubuntu 24.04.5 LTS, x86_64, Intel i5-8265U, Python 3.12.3, g++ 13.3.0).
+   - Corrected actual operating environment based on physical host commands (`uname -a`, `lsb_release -a`, `python3 --version`, `g++ --version`, `lscpu`: Ubuntu 24.04.5 LTS, x86_64, Intel i5-8265U, Python 3.12.3, g++ 13.3.0).
    - Removed unverified "no memory leaks" claim, adding proper qualification.
    - Corrected source citations: `EXECUTION_MODE` is in `streaming/streaming_config.h:15`, and `main()` is in `streaming/streaming_engine.cpp:529`.
    - Normalized all file links to repository-relative Markdown links.
 
 3. **F3 — Run Isolation & Log Preservation:**
-   - Every runner execution receives a distinct `run_id` (UTC timestamp + UUID), e.g. `20261104T121643Z_d1826589`.
+   - Every runner execution receives a distinct `run_id` (UTC timestamp + UUID), e.g. `20261104T122525Z_cc8b092b`.
    - Each step retains `stdout.log`, `stderr.log`, `prefix.update`, and `metadata.json` containing exact input/prefix/binary checksums and command lines.
    - Prior logs are preserved without overwriting.
 
 4. **F4 — Portable External Paths:**
    - Path resolution converts external directories (e.g. `/tmp/...`) gracefully to absolute paths when outside `workspace_root`, eliminating `ValueError: is not in the subpath`.
-   - Verified via unit test `TestRunnerFailurePreservation`.
+   - Verified via unit test `test_external_tmp_paths_success` in `TestRunnerFailurePreservation`.
 
 ---
 

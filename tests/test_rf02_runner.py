@@ -317,6 +317,125 @@ class TestRunnerFailurePreservation(unittest.TestCase):
             self.assertEqual(rows[1]["rf_inferred_delta"], "")
             self.assertIn("Predecessor prefix failed", rows[1]["failure_reason"])
 
+    def test_duplicate_output_preservation(self):
+        """Simulate duplicate Result count lines in stdout. Must record ERROR and preserve CSV."""
+        fake_duplicate_stdout = (
+            "Updates num: 1\n"
+            "Edge process count: 1\n"
+            "Result count: 10\n"
+            "Result count: 20\n"
+        )
+        fake_res = SubprocessResult(
+            returncode=0,
+            stdout=fake_duplicate_stdout,
+            stderr="Max RSS: 16000\n",
+            duration_sec=0.01,
+            rss_kb=16000,
+        )
+
+        with patch("scripts.rf02_differential_runner.run_prefix_command", return_value=fake_res):
+            with patch("sys.argv", ["runner", "--pilot", "--output", str(self.out_csv), "--logs-dir", str(self.logs_dir)]):
+                with self.assertRaises(SystemExit) as ctx:
+                    runner_main()
+                self.assertEqual(ctx.exception.code, 2)
+
+        self.assertTrue(self.out_csv.exists())
+        with open(self.out_csv, "r", encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+            self.assertGreater(len(rows), 0)
+            self.assertEqual(rows[0]["status"], "ERROR")
+            self.assertIn("Duplicate 'Result count:'", rows[0]["failure_reason"])
+
+    def test_nonzero_exit_code_preservation(self):
+        """Simulate non-zero exit code (e.g. segfault / crash). Must record ERROR and exit code in CSV."""
+        fake_crash_res = SubprocessResult(
+            returncode=139,
+            stdout="",
+            stderr="Segmentation fault (core dumped)\n",
+            duration_sec=0.02,
+            rss_kb=None,
+            error_message="Subprocess terminated with signal 11",
+        )
+
+        with patch("scripts.rf02_differential_runner.run_prefix_command", return_value=fake_crash_res):
+            with patch("sys.argv", ["runner", "--pilot", "--output", str(self.out_csv), "--logs-dir", str(self.logs_dir)]):
+                with self.assertRaises(SystemExit) as ctx:
+                    runner_main()
+                self.assertEqual(ctx.exception.code, 2)
+
+        self.assertTrue(self.out_csv.exists())
+        with open(self.out_csv, "r", encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+            self.assertGreater(len(rows), 0)
+            self.assertEqual(rows[0]["status"], "ERROR")
+            self.assertEqual(rows[0]["exit_code"], "139")
+
+    def test_count_mismatch_preservation(self):
+        """Simulate delta count mismatch. Must record FAIL, expected/actual delta, and exit non-zero."""
+        fake_mismatch_res = SubprocessResult(
+            returncode=0,
+            stdout="Updates num: 1\nEdge process count: 1\nResult count: 999\n",
+            stderr="Maximum resident set size (kbytes): 16000\n",
+            duration_sec=0.01,
+            rss_kb=16000,
+        )
+
+        with patch("scripts.rf02_differential_runner.run_prefix_command", return_value=fake_mismatch_res):
+            with patch("sys.argv", ["runner", "--pilot", "--output", str(self.out_csv), "--logs-dir", str(self.logs_dir)]):
+                with self.assertRaises(SystemExit) as ctx:
+                    runner_main()
+                self.assertEqual(ctx.exception.code, 2)
+
+        self.assertTrue(self.out_csv.exists())
+        with open(self.out_csv, "r", encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+            self.assertGreater(len(rows), 0)
+            self.assertEqual(rows[0]["status"], "FAIL")
+            self.assertIn("Delta count mismatch", rows[0]["failure_reason"])
+
+    def test_internal_timeout_preservation(self):
+        """Simulate internal timeout message in stdout. Must record TIMEOUT and exit non-zero."""
+        fake_timeout_stdout = (
+            "Updates num: 1\n"
+            "Edge process count: 1\n"
+            "Result count: 0\n"
+            "Time out...\n"
+        )
+        fake_res = SubprocessResult(
+            returncode=0,
+            stdout=fake_timeout_stdout,
+            stderr="",
+            duration_sec=1.5,
+            rss_kb=16000,
+        )
+
+        with patch("scripts.rf02_differential_runner.run_prefix_command", return_value=fake_res):
+            with patch("sys.argv", ["runner", "--pilot", "--output", str(self.out_csv), "--logs-dir", str(self.logs_dir)]):
+                with self.assertRaises(SystemExit) as ctx:
+                    runner_main()
+                self.assertEqual(ctx.exception.code, 2)
+
+        self.assertTrue(self.out_csv.exists())
+        with open(self.out_csv, "r", encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+            self.assertGreater(len(rows), 0)
+            self.assertEqual(rows[0]["status"], "TIMEOUT")
+            self.assertIn("RapidFlow reported internal timeout in stdout", rows[0]["failure_reason"])
+
+    def test_external_tmp_paths_success(self):
+        """Verify full successful execution with external /tmp paths (F4)."""
+        with patch("sys.argv", ["runner", "--pilot", "--output", str(self.out_csv), "--logs-dir", str(self.logs_dir)]):
+            runner_main()
+
+        self.assertTrue(self.out_csv.exists())
+        with open(self.out_csv, "r", encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+            self.assertEqual(len(rows), 4)
+            for r in rows:
+                self.assertEqual(r["status"], "PASS")
+                self.assertTrue(Path(r["log_file"]).is_absolute())
+                self.assertTrue(Path(r["log_file"]).exists())
+
 
 if __name__ == "__main__":
     unittest.main()

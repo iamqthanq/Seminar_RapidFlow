@@ -487,6 +487,13 @@ def main() -> None:
                                     f"(C_{step_idx}={rf_cum}) -> [FAIL]"
                                 )
                             prev_valid_rf_cum = rf_cum
+                    except InternalTimeoutError as e:
+                        status = "TIMEOUT"
+                        failure_reason = str(e)
+                        overall_all_pass = False
+                        predecessor_failed = True
+                        prev_valid_rf_cum = None
+                        print(f"  Step {step_idx:02d} ({u.op} {u.u}-{u.v} L{u.label}): Internal timeout: {e} -> [TIMEOUT]")
                     except RunnerError as e:
                         status = "ERROR"
                         failure_reason = str(e)
