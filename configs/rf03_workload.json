@@ -1,0 +1,231 @@
+{
+  "schema_version": "1.0.0",
+  "id": "rf03-netflow-baseline-workload",
+  "description": "Reproducible NetFlow COUNT-ONLY baseline workload specification for RF-03 / Gate G2.",
+  "created_date": "2026-11-04",
+  "selection_policy": {
+    "seed": 20261104,
+    "query_vertex_bounds": [
+      4,
+      6
+    ],
+    "rationale": "Predeclared topological and label diversity across author corpus (smallest |V|=5, 6) plus small 4-vertex star probe; pre-selected BEFORE timings to eliminate cherry-picking.",
+    "repeats_per_case": 3,
+    "per_run_timeout_seconds": 60,
+    "per_run_rss_cap_mb": 3072
+  },
+  "data_graph": {
+    "path": "data/netflow/release_newsp/netflow/data_graph/Ndata.graph",
+    "sha256": "bfedd2cab6d2c460141da945e77b0be39ae24c74d9a28b9394a38ee35b652fc6",
+    "vertices": 3114895,
+    "edges": 2849732,
+    "edge_labels": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ]
+  },
+  "queries": {
+    "Q01_auth_5v_l1": {
+      "path": "data/netflow/release_newsp/netflow/Nquery/Nquery150_6/Q_0",
+      "sha256": "59baa64cdb96d94ec2248cd36c409d12b5c074ec078c0fadf52b4dac7507bfe4",
+      "category": "author_newsp",
+      "vertices": 5,
+      "edges": 6,
+      "vertex_labels": [
+        0
+      ],
+      "edge_labels": [
+        1
+      ],
+      "degree_sequence": [
+        3,
+        3,
+        2,
+        2,
+        2
+      ],
+      "rationale": "Minimal author query (|V|=5, |E|=6), chordal cycle, edge label 1 (low update activity, baseline zero/sparse test)."
+    },
+    "Q02_auth_5v_l0": {
+      "path": "data/netflow/release_newsp/netflow/Nquery/Nquery150_6/Q_11",
+      "sha256": "576e3b78940db63d8d7ea412c2ab0d5e0026ed456b013c45ba26727a6b481859",
+      "category": "author_newsp",
+      "vertices": 5,
+      "edges": 6,
+      "vertex_labels": [
+        0
+      ],
+      "edge_labels": [
+        0
+      ],
+      "degree_sequence": [
+        3,
+        3,
+        2,
+        2,
+        2
+      ],
+      "rationale": "Minimal author query (|V|=5, |E|=6), chordal cycle, edge label 0 (matches prominent graph and stream edge label 0, 26% of updates)."
+    },
+    "Q03_auth_6v_l2": {
+      "path": "data/netflow/release_newsp/netflow/Nquery/Nquery150_8/Q_3",
+      "sha256": "60753a6152a27964528956c7a140917749f42c5045a40931b64741b0d594d6f5",
+      "category": "author_newsp",
+      "vertices": 6,
+      "edges": 8,
+      "vertex_labels": [
+        0
+      ],
+      "edge_labels": [
+        2
+      ],
+      "degree_sequence": [
+        4,
+        4,
+        2,
+        2,
+        2,
+        2
+      ],
+      "rationale": "6-vertex author query (|V|=6, |E|=8), dense diamond structure, edge label 2 (most frequent stream label, 73.7% of stream updates)."
+    },
+    "Q04_auth_5v_l1_3": {
+      "path": "data/netflow/release_newsp/netflow/Nquery/Nquery150_6/Q_118",
+      "sha256": "fccb838ba683454ec6019635a831831a28f63b20c7da635827799f8de8ac8fb7",
+      "category": "author_newsp",
+      "vertices": 5,
+      "edges": 6,
+      "vertex_labels": [
+        0
+      ],
+      "edge_labels": [
+        1,
+        3
+      ],
+      "degree_sequence": [
+        3,
+        3,
+        2,
+        2,
+        2
+      ],
+      "rationale": "Heterogeneous multi-label author query (|V|=5, |E|=6), contains edge label 3 (extremely rare in stream, only 2 updates total), exercises sparse path."
+    },
+    "Q05_probe_star4_l0": {
+      "path": "data/queries/probes/probe_star4_l0.graph",
+      "sha256": "e6d0457cef9bf7ff5e39c860e1897cd8d71b6098b6dfcee4fe85d905043d96ab",
+      "category": "synthetic_probe",
+      "vertices": 4,
+      "edges": 3,
+      "vertex_labels": [
+        0
+      ],
+      "edge_labels": [
+        0
+      ],
+      "degree_sequence": [
+        3,
+        1,
+        1,
+        1
+      ],
+      "rationale": "Synthetic 4-vertex star probe (K_{1,3}) with label 0; addresses absence of 4-vertex queries in author corpus, probes hub matching."
+    }
+  },
+  "streams": {
+    "insert_p100": {
+      "path": "data/streams/prefixes/Ninsertion_p100.graph",
+      "source_stream": "data/netflow/release_newsp/netflow/data_graph/Ninsertion.graph",
+      "source_stream_sha256": "e45f2d908eaed5098653d4635076bef0152438014ad6e3aa03df522cef85ab05",
+      "prefix_length": 100,
+      "sha256": "35e295ac5f1496590b1820546fd5e36a3f060f2e7c8110d09635b804aa0d5545",
+      "stream_type": "insertion",
+      "description": "Pure edge insertion prefix of first 100 updates from Ninsertion.graph."
+    },
+    "delete10_p100": {
+      "path": "data/streams/prefixes/Ndeletion10_p100.graph",
+      "source_stream": "data/netflow/release_newsp/netflow/data_graph/Ndeletion10.graph",
+      "source_stream_sha256": "ab051a6514ac8bedb2454dfe3da6b6fd5422bffcc9565ccc1c9970a41e077372",
+      "prefix_length": 100,
+      "sha256": "5516319644e94aad0c8d3c53952d5ab9f5bafd16b9757942d7c363f8cf37a4fa",
+      "stream_type": "mixed_deletion",
+      "description": "Mixed insertion/deletion prefix of first 100 updates (10% deletions) from Ndeletion10.graph."
+    }
+  },
+  "cases": [
+    {
+      "case_id": "c01_q01_insert_p100",
+      "query_id": "Q01_auth_5v_l1",
+      "stream_id": "insert_p100"
+    },
+    {
+      "case_id": "c02_q01_del10_p100",
+      "query_id": "Q01_auth_5v_l1",
+      "stream_id": "delete10_p100"
+    },
+    {
+      "case_id": "c03_q02_insert_p100",
+      "query_id": "Q02_auth_5v_l0",
+      "stream_id": "insert_p100"
+    },
+    {
+      "case_id": "c04_q02_del10_p100",
+      "query_id": "Q02_auth_5v_l0",
+      "stream_id": "delete10_p100"
+    },
+    {
+      "case_id": "c05_q03_insert_p100",
+      "query_id": "Q03_auth_6v_l2",
+      "stream_id": "insert_p100"
+    },
+    {
+      "case_id": "c06_q03_del10_p100",
+      "query_id": "Q03_auth_6v_l2",
+      "stream_id": "delete10_p100"
+    },
+    {
+      "case_id": "c07_q04_insert_p100",
+      "query_id": "Q04_auth_5v_l1_3",
+      "stream_id": "insert_p100"
+    },
+    {
+      "case_id": "c08_q04_del10_p100",
+      "query_id": "Q04_auth_5v_l1_3",
+      "stream_id": "delete10_p100"
+    },
+    {
+      "case_id": "c09_q05_insert_p100",
+      "query_id": "Q05_probe_star4_l0",
+      "stream_id": "insert_p100"
+    },
+    {
+      "case_id": "c10_q05_del10_p100",
+      "query_id": "Q05_probe_star4_l0",
+      "stream_id": "delete10_p100"
+    }
+  ],
+  "pilot_cases": [
+    "c01_q01_insert_p100",
+    "c03_q02_insert_p100",
+    "c06_q03_del10_p100"
+  ],
+  "exclusions": {
+    "staticCaseStudyQuery": {
+      "count": 30,
+      "reason": "Incompatible file syntax (t n m format without edge labels)."
+    },
+    "Nquery180_8_Q_136": {
+      "path": "data/netflow/release_newsp/netflow/Nquery/Nquery180_8/Q_136",
+      "reason": "Contains out-of-range edge label 32513 (valid NetFlow edge labels: 0..7)."
+    },
+    "large_queries": {
+      "reason": "Author corpus contains 1079 queries with |V|=7 and 987 with |V|>=8; excluded from baseline matrix to keep bounded runtime and focus on 4-6 vertices."
+    }
+  }
+}

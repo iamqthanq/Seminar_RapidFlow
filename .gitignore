@@ -16,6 +16,7 @@ results/summary/*.jsonl
 results/summary/*.csv
 !results/summary/rf01_smoke_summary.csv
 !results/summary/rf02_correctness.csv
+!results/summary/rf03_baseline_runs.csv
 __pycache__/
 *.pyc
 .env
