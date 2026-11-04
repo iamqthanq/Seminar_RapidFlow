@@ -84,8 +84,9 @@ Every single run completed with exit status 0. Below are median values across $n
 
 > [!NOTE] Evidence Provenance, Checkpoint Durability, and Canonical Protection
 > - **Historical Baseline Run (`20261104T132326Z_0786a355`):** Generated and audited under the initial runner implementation. It contains complete per-attempt raw directories (`stdout.log`, `stderr.log`, and `metadata.json`). Per-run incremental checkpointing (`checkpoint_runs.csv`) and `run_manifest.json` are runner features implemented for all subsequent executions and are not retroactively synthesized into the historical canonical directory.
-> - **Canonical CSV Protection & Promotion Protocol:** All executions (`--dry-run`, `--pilot`, `--case-id`, or full benchmark) strictly write run-level summaries to isolated run directories (`results/logs/rf03/<run_id>/summary_runs.csv` and `checkpoint_runs.csv`). Direct specification or overwriting of `results/summary/rf03_baseline_runs.csv` during benchmark runs is strictly prohibited and fails closed. Updating or replacing the canonical baseline requires explicit execution of `--promote-run-id <RUN_ID>` (`promote_run_to_canonical()`), which validates that all 30 benchmark cases succeeded, verifies cross-repeat count invariance, and archives the existing canonical file with an atomic `.bak` backup.
-> - **Repeat Divergence Handling:** In the event that repeated executions of the same case produce divergent `Result count` values, all affected rows in both memory and disk checkpoints are updated to `status: "COUNT_MISMATCH_ACROSS_REPEATS"`, error metadata is recorded, a per-case `<case_id>_verdict.json` (`verdict: "FAIL_COUNT_MISMATCH"`) is emitted, and the runner terminates with a non-zero exit code.
+> - **Canonical CSV Protection & Strict Promotion Protocol:** All executions (`--dry-run`, `--pilot`, `--case-id`, or full benchmark) strictly write run-level summaries to isolated run directories (`results/logs/rf03/<run_id>/summary_runs.csv` and `checkpoint_runs.csv`). Direct specification or targeting of `results/summary/rf03_baseline_runs.csv` during benchmark execution is unconditionally prohibited (whether canonical exists or not) and fails closed with `RuntimeError`. Updating or replacing the canonical baseline requires explicit execution of `--promote-run-id <RUN_ID>` (`promote_run_to_canonical()`), which validates full workload identity against `configs/rf03_workload.json` (exact 10 cases, distinct repeat indices {1, 2, 3}, full update process counts, verified run manifest, verified raw stdout/stderr SHA-256 hashes against recorded metadata), and archives the prior canonical baseline using unique non-destructive timestamp+UUID backups.
+> - **Case-Level Verdict & Failure Reason Persistence:** PASS is stamped only when all intended repeats complete successfully with valid, invariant counts and zero update errors (`PASS_CONSISTENT`). Any failure (incomplete repeats, timeout, OOM, count mismatch) records all contributing failure reasons into `failure_reasons` within `<case_id>_verdict.json`, updates row statuses, and forces a non-zero exit code.
+> - **Exact Subprocess Command Provenance:** In addition to wrapper arguments, each attempt records the exact RapidFlow invocation command (`rapidflow_command`) in its `metadata.json`.
 
 ### 4.1. Inter-Run Variability & Historical Run Disclosure
 
@@ -147,10 +148,10 @@ The edge-label check at `streaming_engine.cpp:115` (`if (!query_graph->hasEdgeLa
 
 To replicate all audit checks and benchmark results from scratch:
 ```bash
-# 1. Run all unit and regression tests (71 tests across RF-01, RF-02, and RF-03)
+# 1. Run all unit and regression tests (84 tests across RF-01, RF-02, and RF-03)
 #    - RF-01: 18 tests (tests/test_rf01_smoke_runner.py)
 #    - RF-02: 30 tests (tests/test_rf02_oracle.py: 15, tests/test_rf02_runner.py: 15)
-#    - RF-03: 23 tests (tests/test_rf03_runner.py)
+#    - RF-03: 36 tests (tests/test_rf03_runner.py)
 python3 -m unittest discover -s tests -p 'test_*.py' -v
 
 # 2. Run benchmark runner preflight in dry-run mode

@@ -23,7 +23,7 @@ import subprocess
 import sys
 import time
 import uuid
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 EXPECTED_BASELINE_COMMIT = "2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1"
@@ -63,6 +63,7 @@ class SubprocessResult:
     timed_out: bool = False
     oom_killed: bool = False
     error_message: Optional[str] = None
+    command: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -353,6 +354,7 @@ def execute_case_run(
         timed_out=timed_out,
         oom_killed=oom_killed,
         error_message=error_msg,
+        command=list(cmd),
     )
 
 
@@ -442,21 +444,87 @@ def promote_run_to_canonical(
     workspace_root: pathlib.Path,
     logs_base_dir: Optional[pathlib.Path] = None,
     canonical_csv_rel: pathlib.Path = CANONICAL_BASELINE_CSV_REL,
+    workload_config_rel: pathlib.Path = pathlib.Path("configs/rf03_workload.json"),
     dry_run: bool = False,
+    expected_commit: str = EXPECTED_BASELINE_COMMIT,
+    expected_binary_sha: str = EXPECTED_BINARY_SHA256,
 ) -> Tuple[bool, str]:
     """
     Explicitly promote a validated full benchmark run into the canonical baseline CSV.
     Strict promotion gates:
-    1. Exactly 30 rows (10 pinned cases x 3 repeats).
-    2. All 30 rows have status == 'COMPLETED'.
-    3. Exactly 0 count divergences across repeats for each case.
-    4. Safe non-destructive archive/backup of prior canonical file.
+    1. Workload identity: Exact match against pinned cases in workload configuration.
+    2. Repeat identity: Exact set of repeat indices (1..repeats_per_case) without gaps or duplicates.
+    3. Completion: All rows status == 'COMPLETED', exit_code == 0, updates_num == prefix_length.
+    4. Numerical consistency: Valid counts, 100% agreement across repeats, case verdict PASS_CONSISTENT.
+    5. Provenance & Integrity: Verified run_manifest.json (commit, binary SHA, data SHA, query/stream SHAs, config SHA).
+    6. Raw logs audit: Verified existence and SHA-256 match for stdout.log, stderr.log, metadata.json for every attempt.
+    7. Safe non-destructive atomic replacement with unique timestamp+UUID backup.
     """
     logs_dir = logs_base_dir or (workspace_root / "results" / "logs" / "rf03")
     run_dir = logs_dir / run_id
     if not run_dir.is_dir():
         return False, f"Run directory not found: {run_dir}"
 
+    cfg_path = workload_config_rel if workload_config_rel.is_absolute() else (workspace_root / workload_config_rel)
+    if not cfg_path.is_file():
+        return False, f"Workload configuration missing: {cfg_path}"
+
+    try:
+        cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        return False, f"Failed to read workload configuration {cfg_path}: {e}"
+
+    expected_cases = {c["case_id"]: c for c in cfg.get("cases", [])}
+    if not expected_cases:
+        return False, f"Workload configuration contains no cases: {cfg_path}"
+
+    expected_repeats = cfg.get("selection_policy", {}).get("repeats_per_case", 3)
+    expected_total_rows = len(expected_cases) * expected_repeats
+    expected_repeat_indices = {str(i) for i in range(1, expected_repeats + 1)}
+
+    target_commit = cfg.get("source_git_commit", expected_commit)
+    target_bin_sha = cfg.get("binary_sha256", expected_binary_sha)
+
+    # 1. Provenance check: run_manifest.json
+    manifest_path = run_dir / "run_manifest.json"
+    if not manifest_path.is_file():
+        return False, f"Promotion rejected: run_manifest.json missing in {run_dir}"
+
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        return False, f"Promotion rejected: corrupt run_manifest.json in {run_dir}: {e}"
+
+    if manifest.get("run_id") != run_id:
+        return False, f"Promotion rejected: manifest run_id '{manifest.get('run_id')}' != '{run_id}'"
+    if manifest.get("source_git_commit") != target_commit:
+        return False, f"Promotion rejected: manifest commit '{manifest.get('source_git_commit')}' != expected '{target_commit}'"
+    if manifest.get("binary_sha256") != target_bin_sha:
+        return False, f"Promotion rejected: manifest binary SHA '{manifest.get('binary_sha256')}' != expected '{target_bin_sha}'"
+
+    expected_data_sha = cfg.get("data_graph", {}).get("sha256")
+    if expected_data_sha and manifest.get("data_graph_sha256") != expected_data_sha:
+        return False, f"Promotion rejected: manifest data graph SHA '{manifest.get('data_graph_sha256')}' != expected '{expected_data_sha}'"
+
+    actual_cfg_sha = file_sha256(cfg_path)
+    if manifest.get("config_sha256") != actual_cfg_sha:
+        return False, f"Promotion rejected: manifest config SHA '{manifest.get('config_sha256')}' != actual config SHA '{actual_cfg_sha}'"
+
+    manifest_queries = manifest.get("queries", {})
+    for qid, qinfo in cfg.get("queries", {}).items():
+        mq = manifest_queries.get(qid, {})
+        mq_sha = mq.get("sha256") if isinstance(mq, dict) else None
+        if mq_sha != qinfo.get("sha256"):
+            return False, f"Promotion rejected: manifest query SHA mismatch for {qid}: {mq_sha} != {qinfo.get('sha256')}"
+
+    manifest_streams = manifest.get("streams", {})
+    for sid, sinfo in cfg.get("streams", {}).items():
+        ms = manifest_streams.get(sid, {})
+        ms_sha = ms.get("sha256") if isinstance(ms, dict) else None
+        if ms_sha != sinfo.get("sha256"):
+            return False, f"Promotion rejected: manifest stream SHA mismatch for {sid}: {ms_sha} != {sinfo.get('sha256')}"
+
+    # 2. Summary CSV read & verification
     summary_file = run_dir / "summary_runs.csv"
     if not summary_file.exists():
         summary_file = run_dir / "checkpoint_runs.csv"
@@ -469,36 +537,131 @@ def promote_run_to_canonical(
     except Exception as e:
         return False, f"Failed to read summary file {summary_file}: {e}"
 
-    if len(rows) != 30:
-        return False, f"Promotion rejected: expected exactly 30 rows, got {len(rows)}"
+    if len(rows) != expected_total_rows:
+        return False, f"Promotion rejected: expected exactly {expected_total_rows} rows, got {len(rows)}"
 
     from collections import defaultdict
     case_map = defaultdict(list)
+    observed_keys = set()
+
     for r in rows:
+        if r.get("run_id") != run_id:
+            return False, f"Promotion rejected: row run_id '{r.get('run_id')}' != '{run_id}'"
+
+        cid = r.get("case_id")
+        rep_idx = str(r.get("repeat_index"))
+        key = (cid, rep_idx)
+        if key in observed_keys:
+            return False, f"Promotion rejected: duplicate case attempt {cid} rep {rep_idx}"
+        observed_keys.add(key)
+
+        if cid not in expected_cases:
+            return False, f"Promotion rejected: unexpected case_id '{cid}' not declared in workload configuration"
+
+        cspec = expected_cases[cid]
+        expected_qid = cspec["query_id"]
+        expected_sid = cspec["stream_id"]
+        expected_prefix_len = str(cfg["streams"][expected_sid]["prefix_length"])
+
+        if r.get("query_id") != expected_qid:
+            return False, f"Promotion rejected: case {cid} query_id '{r.get('query_id')}' != expected '{expected_qid}'"
+        if r.get("stream_id") != expected_sid:
+            return False, f"Promotion rejected: case {cid} stream_id '{r.get('stream_id')}' != expected '{expected_sid}'"
+
         if r.get("status") != "COMPLETED":
-            return False, f"Promotion rejected: row {r.get('case_id')} rep {r.get('repeat_index')} status is {r.get('status')}, expected COMPLETED"
-        case_map[r["case_id"]].append(r)
+            return False, f"Promotion rejected: case {cid} rep {rep_idx} status '{r.get('status')}' != COMPLETED"
+        if str(r.get("exit_code")) != "0":
+            return False, f"Promotion rejected: case {cid} rep {rep_idx} exit_code '{r.get('exit_code')}' != 0"
+        if str(r.get("updates_num")) != expected_prefix_len:
+            return False, f"Promotion rejected: case {cid} rep {rep_idx} updates_num '{r.get('updates_num')}' != {expected_prefix_len}"
+        if str(r.get("edge_process_count")) != expected_prefix_len:
+            return False, f"Promotion rejected: case {cid} rep {rep_idx} edge_process_count '{r.get('edge_process_count')}' != {expected_prefix_len}"
 
-    if len(case_map) != 10:
-        return False, f"Promotion rejected: expected 10 distinct cases, found {len(case_map)}"
+        res_cnt = r.get("result_count")
+        if res_cnt is None:
+            return False, f"Promotion rejected: case {cid} rep {rep_idx} missing result_count"
+        try:
+            cnt_val = int(res_cnt)
+            if cnt_val < 0:
+                return False, f"Promotion rejected: case {cid} rep {rep_idx} negative result_count: {cnt_val}"
+        except ValueError:
+            return False, f"Promotion rejected: case {cid} rep {rep_idx} non-integer result_count: '{res_cnt}'"
 
+        case_map[cid].append(r)
+
+    if set(case_map.keys()) != set(expected_cases.keys()):
+        missing = set(expected_cases.keys()) - set(case_map.keys())
+        return False, f"Promotion rejected: missing cases {missing}"
+
+    # 3. Multi-repeat consistency, case verdicts, and raw log verification
     for cid, crows in case_map.items():
-        if len(crows) != 3:
-            return False, f"Promotion rejected: case {cid} has {len(crows)} repeats, expected 3"
+        if len(crows) != expected_repeats:
+            return False, f"Promotion rejected: case {cid} has {len(crows)} repeats, expected {expected_repeats}"
+
+        observed_rep_indices = {str(r.get("repeat_index")) for r in crows}
+        if observed_rep_indices != expected_repeat_indices:
+            return False, f"Promotion rejected: case {cid} repeat indices {observed_rep_indices} != expected {expected_repeat_indices}"
+
         counts = [r["result_count"] for r in crows]
         if len(set(counts)) != 1:
-            return False, f"Promotion rejected: case {cid} has divergent counts across repeats: {counts}"
+            return False, f"Promotion rejected: case {cid} divergent counts across repeats: {counts}"
 
-    canonical_dest = workspace_root / canonical_csv_rel
+        verdict_file = run_dir / f"{cid}_verdict.json"
+        if not verdict_file.is_file():
+            return False, f"Promotion rejected: verdict file missing for {cid}: {verdict_file}"
+        try:
+            vdata = json.loads(verdict_file.read_text(encoding="utf-8"))
+        except Exception as e:
+            return False, f"Promotion rejected: corrupt verdict file for {cid}: {e}"
+        if vdata.get("verdict") != "PASS_CONSISTENT":
+            return False, f"Promotion rejected: case {cid} verdict '{vdata.get('verdict')}' != PASS_CONSISTENT"
+        if vdata.get("is_pass") is not True:
+            return False, f"Promotion rejected: case {cid} is_pass is not True"
+        if vdata.get("failure_reasons") != []:
+            return False, f"Promotion rejected: case {cid} has failure reasons: {vdata.get('failure_reasons')}"
+
+        for r in crows:
+            rep = r["repeat_index"]
+            rep_dir = run_dir / f"{cid}_rep{rep}"
+            if not rep_dir.is_dir():
+                return False, f"Promotion rejected: attempt log directory missing: {rep_dir}"
+            stdout_file = rep_dir / "stdout.log"
+            stderr_file = rep_dir / "stderr.log"
+            meta_file = rep_dir / "metadata.json"
+            if not stdout_file.is_file():
+                return False, f"Promotion rejected: stdout.log missing in {rep_dir}"
+            if not stderr_file.is_file():
+                return False, f"Promotion rejected: stderr.log missing in {rep_dir}"
+            if not meta_file.is_file():
+                return False, f"Promotion rejected: metadata.json missing in {rep_dir}"
+
+            act_stdout_sha = file_sha256(stdout_file)
+            act_stderr_sha = file_sha256(stderr_file)
+            if act_stdout_sha != r.get("stdout_sha256"):
+                return False, f"Promotion rejected: stdout SHA mismatch for {cid} rep {rep}: {act_stdout_sha} != {r.get('stdout_sha256')}"
+            if act_stderr_sha != r.get("stderr_sha256"):
+                return False, f"Promotion rejected: stderr SHA mismatch for {cid} rep {rep}: {act_stderr_sha} != {r.get('stderr_sha256')}"
+
+            try:
+                mdata = json.loads(meta_file.read_text(encoding="utf-8"))
+            except Exception as e:
+                return False, f"Promotion rejected: corrupt metadata in {rep_dir}: {e}"
+            if mdata.get("status") != "COMPLETED":
+                return False, f"Promotion rejected: metadata status '{mdata.get('status')}' != COMPLETED in {rep_dir}"
+
+    canonical_dest = (canonical_csv_rel if canonical_csv_rel.is_absolute() else (workspace_root / canonical_csv_rel)).resolve()
     if not dry_run:
         canonical_dest.parent.mkdir(parents=True, exist_ok=True)
         if canonical_dest.exists():
-            backup_path = canonical_dest.with_suffix(f".bak.{int(time.time())}")
+            ts_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            uuid_suffix = uuid.uuid4().hex[:8]
+            backup_path = canonical_dest.parent / f"{canonical_dest.stem}_{ts_str}_{uuid_suffix}.csv.bak"
             shutil.copy2(canonical_dest, backup_path)
-            shutil.copy2(canonical_dest, canonical_dest.with_suffix(".bak"))
+            if not backup_path.exists() or file_sha256(backup_path) != file_sha256(canonical_dest):
+                return False, f"Promotion aborted: backup creation verification failed at {backup_path}"
 
-        # Atomic copy
-        tmp_dest = canonical_dest.with_suffix(".tmp")
+        tmp_uuid = uuid.uuid4().hex[:8]
+        tmp_dest = canonical_dest.parent / f".tmp_{canonical_dest.name}_{tmp_uuid}"
         shutil.copy2(summary_file, tmp_dest)
         tmp_dest.replace(canonical_dest)
 
@@ -547,7 +710,7 @@ def run_benchmark(
     if summary_csv_path is not None:
         summary_path = summary_csv_path
         # Safety guard: prevent accidental direct overwrite of committed canonical CSV during benchmark execution
-        if canonical_csv_path.exists() and summary_path.resolve() == canonical_csv_path.resolve():
+        if summary_path.resolve() == canonical_csv_path.resolve():
             raise RuntimeError(
                 f"Directly targeting the canonical baseline CSV ({canonical_csv_path}) during benchmark execution is prohibited. "
                 "Execute the benchmark to its isolated run directory, then invoke promote_run_to_canonical() after validating completeness."
@@ -798,9 +961,12 @@ def run_benchmark(
                 "timestamp_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 "status": status,
                 "manifest_path": str(manifest_path),
+                "rapidflow_command": sub_res.command,
                 "command_argv": list(sys.argv),
                 "binary_sha256": bin_sha,
                 "data_graph_sha256": data_sha,
+                "query_sha256": q_meta["sha256"],
+                "stream_sha256": s_meta["sha256"],
                 "host_telemetry": host_info,
                 "summary_row": row,
             }
@@ -815,30 +981,93 @@ def run_benchmark(
             res_count_str = str(parsed.result_count) if parsed.result_count is not None else "N/A"
             print(f" {status} (wall: {sub_res.duration_sec:.2f}s, RSS: {rss_str}, results: {res_count_str})")
 
-        # Multi-repeat count consistency check for the case
-        completed_counts = case_results[c_id]
-        is_divergent = len(completed_counts) > 1 and len(set(completed_counts)) != 1
+        # Multi-repeat count consistency and completion check for the case
+        case_rows = [r for r in summary_rows if r["case_id"] == c_id]
+        completed_rows = [r for r in case_rows if r["status"] == "COMPLETED"]
+        completed_repeats = len(completed_rows)
+        attempted_repeats = len(case_rows)
+        repeat_statuses = [r["status"] for r in case_rows]
+        repeat_counts = [r["result_count"] for r in completed_rows if r.get("result_count") is not None]
+
+        failure_reasons = []
+
+        # 1. Repeat completion check
+        if completed_repeats == 0:
+            failure_reasons.append("ALL_REPEATS_FAILED")
+        elif completed_repeats < default_repeats:
+            failure_reasons.append("INCOMPLETE_REPEATS")
+
+        # 2. Specific failure statuses observed
+        for st in ["TIMEOUT", "OOM", "PROCESS_ERROR", "PARSE_ERROR", "INCOMPLETE_UPDATES"]:
+            if st in repeat_statuses and st not in failure_reasons:
+                failure_reasons.append(st)
+
+        # 3. Result count validity & consistency among completed repeats
+        if len(repeat_counts) > 0:
+            try:
+                int_counts = [int(cnt) for cnt in repeat_counts]
+                if any(cnt < 0 for cnt in int_counts):
+                    if "INVALID_RESULT_COUNT" not in failure_reasons:
+                        failure_reasons.append("INVALID_RESULT_COUNT")
+                if len(set(int_counts)) > 1:
+                    failure_reasons.append("COUNT_MISMATCH")
+            except (ValueError, TypeError):
+                if "INVALID_RESULT_COUNT" not in failure_reasons:
+                    failure_reasons.append("INVALID_RESULT_COUNT")
+
+        # 4. Incomplete update stream processing
+        for r in completed_rows:
+            if r.get("updates_num") != prefix_len or r.get("edge_process_count") != prefix_len:
+                if "INCOMPLETE_UPDATES" not in failure_reasons:
+                    failure_reasons.append("INCOMPLETE_UPDATES")
+
+        is_divergent = "COUNT_MISMATCH" in failure_reasons
+        if len(failure_reasons) == 0:
+            verdict = "PASS_CONSISTENT"
+            is_pass = True
+        else:
+            is_pass = False
+            had_error = True
+            if completed_repeats == 0:
+                verdict = "FAIL_ALL_REPEATS_FAILED"
+            elif is_divergent:
+                verdict = "FAIL_COUNT_MISMATCH"
+            else:
+                verdict = "INCONCLUSIVE_INCOMPLETE_REPEATS"
+
         case_verdict = {
             "case_id": c_id,
             "query_id": q_id,
             "stream_id": s_id,
-            "repeats": default_repeats,
-            "completed_repeats": len(completed_counts),
-            "result_counts": completed_counts,
-            "verdict": "FAIL_COUNT_MISMATCH" if is_divergent else "PASS_CONSISTENT",
+            "verdict": verdict,
+            "is_pass": is_pass,
+            "failure_reasons": failure_reasons,
+            "expected_repeats": default_repeats,
+            "attempted_repeats": attempted_repeats,
+            "completed_repeats": completed_repeats,
+            "repeat_statuses": repeat_statuses,
+            "result_counts": repeat_counts,
             "is_divergent": is_divergent,
             "timestamp_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         }
 
-        if is_divergent:
+        if not is_pass:
             had_error = True
-            mismatch_msg = f"COUNT_MISMATCH_ACROSS_REPEATS: completed repeats produced divergent result counts {completed_counts}"
-            print(f"[FAIL] {mismatch_msg} for case {c_id}", file=sys.stderr)
-            # Update all rows for this case in summary_rows
-            for r in summary_rows:
-                if r["case_id"] == c_id:
-                    r["status"] = "COUNT_MISMATCH_ACROSS_REPEATS"
-                    r["error_message"] = mismatch_msg
+            if is_divergent:
+                mismatch_msg = f"COUNT_MISMATCH_ACROSS_REPEATS: completed repeats produced divergent result counts {repeat_counts}"
+                print(f"[FAIL] {mismatch_msg} for case {c_id}", file=sys.stderr)
+                for r in summary_rows:
+                    if r["case_id"] == c_id:
+                        if r["status"] == "COMPLETED":
+                            r["status"] = "COUNT_MISMATCH_ACROSS_REPEATS"
+                        r["error_message"] = mismatch_msg if not r.get("error_message") else f"{r.get('error_message')}; {mismatch_msg}"
+            else:
+                failure_summary = f"Case execution not fully consistent/completed: {', '.join(failure_reasons)}"
+                print(f"[FAIL] {failure_summary} for case {c_id}", file=sys.stderr)
+                for r in summary_rows:
+                    if r["case_id"] == c_id:
+                        if not r.get("error_message"):
+                            r["error_message"] = failure_summary
 
             # Update on-disk metadata.json files for this case
             for rep in range(1, default_repeats + 1):
@@ -846,9 +1075,21 @@ def run_benchmark(
                 if rep_meta_file.exists():
                     try:
                         m_data = json.loads(rep_meta_file.read_text(encoding="utf-8"))
-                        m_data["status"] = "COUNT_MISMATCH_ACROSS_REPEATS"
-                        m_data["summary_row"]["status"] = "COUNT_MISMATCH_ACROSS_REPEATS"
-                        m_data["summary_row"]["error_message"] = mismatch_msg
+                        matching_rows = [r for r in summary_rows if r["case_id"] == c_id and str(r["repeat_index"]) == str(rep)]
+                        if matching_rows:
+                            m_data["summary_row"] = matching_rows[0]
+                            m_data["status"] = matching_rows[0]["status"]
+                        m_data["case_verdict"] = case_verdict
+                        rep_meta_file.write_text(json.dumps(m_data, indent=2) + "\n")
+                    except Exception:
+                        pass
+        else:
+            # Case passed: ensure metadata files record passing case_verdict
+            for rep in range(1, default_repeats + 1):
+                rep_meta_file = run_log_dir / f"{c_id}_rep{rep}" / "metadata.json"
+                if rep_meta_file.exists():
+                    try:
+                        m_data = json.loads(rep_meta_file.read_text(encoding="utf-8"))
                         m_data["case_verdict"] = case_verdict
                         rep_meta_file.write_text(json.dumps(m_data, indent=2) + "\n")
                     except Exception:
@@ -899,7 +1140,8 @@ def main() -> int:
         logs_dir = workspace_root / logs_dir
 
     if args.promote_run_id:
-        ok, msg = promote_run_to_canonical(args.promote_run_id, workspace_root=workspace_root, logs_base_dir=logs_dir)
+        cfg_path = pathlib.Path(args.config)
+        ok, msg = promote_run_to_canonical(args.promote_run_id, workspace_root=workspace_root, logs_base_dir=logs_dir, workload_config_rel=cfg_path)
         if ok:
             print(f"[PROMOTION SUCCESS] {msg}")
             return 0

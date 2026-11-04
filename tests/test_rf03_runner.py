@@ -10,6 +10,7 @@ without running heavy NetFlow computations.
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import os
 import pathlib
@@ -521,12 +522,286 @@ class TestRF03RunnerFailurePreservation(unittest.TestCase):
             run_rows = list(csv.DictReader(f))
         self.assertEqual(len(run_rows), 1)
 
+    def _create_synthetic_10case_workload(self) -> Tuple[pathlib.Path, Dict[str, Any]]:
+        """Sets up a complete 10-case synthetic workload matching schema."""
+        cfg_dir = self.base / "configs"
+        cfg_dir.mkdir(parents=True, exist_ok=True)
+        cfg_file = cfg_dir / "rf03_workload.json"
+
+        dg_file = self.base / "data" / "data.graph"
+        dg_file.parent.mkdir(parents=True, exist_ok=True)
+        dg_file.write_text("v 0 0\n")
+        dg_sha = runner.file_sha256(dg_file)
+
+        q_file = self.base / "data" / "query.graph"
+        q_file.parent.mkdir(parents=True, exist_ok=True)
+        q_file.write_text("v 0 0\nv 1 0\ne 0 1 0\n")
+        q_sha = runner.file_sha256(q_file)
+
+        s_file = self.base / "data" / "stream.graph"
+        s_file.parent.mkdir(parents=True, exist_ok=True)
+        s_file.write_text("e 0 1 0\n")
+        s_sha = runner.file_sha256(s_file)
+
+        cases = []
+        for i in range(1, 11):
+            cases.append({
+                "case_id": f"c{i:02d}_test",
+                "query_id": "Q_test",
+                "stream_id": "S_test",
+            })
+
+        cfg = {
+            "schema_version": "1.0.0",
+            "id": "synthetic-10case-workload",
+            "selection_policy": {
+                "repeats_per_case": 3,
+                "per_run_timeout_seconds": 5,
+                "per_run_rss_cap_mb": 100,
+            },
+            "source_git_commit": runner.EXPECTED_BASELINE_COMMIT,
+            "binary_sha256": self.bin_sha,
+            "data_graph": {
+                "path": str(dg_file),
+                "sha256": dg_sha,
+            },
+            "queries": {
+                "Q_test": {
+                    "path": str(q_file),
+                    "sha256": q_sha,
+                    "category": "test",
+                    "vertices": 2,
+                    "edges": 1,
+                }
+            },
+            "streams": {
+                "S_test": {
+                    "path": str(s_file),
+                    "sha256": s_sha,
+                    "prefix_length": 100,
+                    "stream_type": "insertion",
+                }
+            },
+            "cases": cases,
+            "pilot_cases": ["c01_test", "c02_test", "c03_test"],
+        }
+        cfg_file.write_text(json.dumps(cfg, indent=2))
+        return cfg_file, cfg
+
+    def _create_synthetic_run_suite(
+        self,
+        cfg_path: pathlib.Path,
+        cfg: Dict[str, Any],
+        run_id: str = "run_synth_valid",
+    ) -> pathlib.Path:
+        """Constructs a fully valid, auditable 30-run suite on disk."""
+        run_dir = self.logs_dir / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+
+        manifest = {
+            "run_id": run_id,
+            "source_git_commit": runner.EXPECTED_BASELINE_COMMIT,
+            "binary_sha256": self.bin_sha,
+            "data_graph_sha256": cfg["data_graph"]["sha256"],
+            "config_sha256": runner.file_sha256(cfg_path),
+            "queries": {
+                qid: {"sha256": qinfo["sha256"]} for qid, qinfo in cfg["queries"].items()
+            },
+            "streams": {
+                sid: {"sha256": sinfo["sha256"]} for sid, sinfo in cfg["streams"].items()
+            },
+        }
+        (run_dir / "run_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+
+        summary_rows = []
+        for c in cfg["cases"]:
+            cid = c["case_id"]
+            qid = c["query_id"]
+            sid = c["stream_id"]
+            prefix_len = cfg["streams"][sid]["prefix_length"]
+
+            for rep in range(1, 4):
+                rep_dir = run_dir / f"{cid}_rep{rep}"
+                rep_dir.mkdir(parents=True, exist_ok=True)
+
+                stdout_text = f"Result count: 100\nUpdates num: {prefix_len}\nEdge process count: {prefix_len}\n"
+                stderr_text = "Elapsed (wall clock) time: 0:00.10\nMaximum resident set size (kbytes): 5000\n"
+                (rep_dir / "stdout.log").write_text(stdout_text)
+                (rep_dir / "stderr.log").write_text(stderr_text)
+
+                stdout_sha = hashlib.sha256(stdout_text.encode("utf-8")).hexdigest()
+                stderr_sha = hashlib.sha256(stderr_text.encode("utf-8")).hexdigest()
+
+                row = {
+                    "run_id": run_id,
+                    "case_id": cid,
+                    "repeat_index": str(rep),
+                    "query_id": qid,
+                    "stream_id": sid,
+                    "prefix_length": str(prefix_len),
+                    "status": "COMPLETED",
+                    "exit_code": "0",
+                    "wall_time_sec": "0.100000",
+                    "rss_kb": "5000",
+                    "preprocessing_time_sec": "0.010000",
+                    "query_time_sec": "0.001000",
+                    "gv_update_time_sec": "0.000000",
+                    "lv_update_time_sec": "0.000000",
+                    "search_time_sec": "0.001000",
+                    "updates_num": str(prefix_len),
+                    "edge_process_count": str(prefix_len),
+                    "result_count": "100",
+                    "stdout_sha256": stdout_sha,
+                    "stderr_sha256": stderr_sha,
+                    "error_message": "",
+                }
+                summary_rows.append(row)
+
+                rep_meta = {
+                    "run_id": run_id,
+                    "case_id": cid,
+                    "repeat_index": rep,
+                    "status": "COMPLETED",
+                    "summary_row": row,
+                }
+                (rep_dir / "metadata.json").write_text(json.dumps(rep_meta, indent=2) + "\n")
+
+            verdict_data = {
+                "case_id": cid,
+                "query_id": qid,
+                "stream_id": sid,
+                "verdict": "PASS_CONSISTENT",
+                "is_pass": True,
+                "failure_reasons": [],
+                "expected_repeats": 3,
+                "attempted_repeats": 3,
+                "completed_repeats": 3,
+                "repeat_statuses": ["COMPLETED", "COMPLETED", "COMPLETED"],
+                "result_counts": ["100", "100", "100"],
+                "is_divergent": False,
+            }
+            (run_dir / f"{cid}_verdict.json").write_text(json.dumps(verdict_data, indent=2) + "\n")
+
+        runner.write_summary_csv(run_dir / "summary_runs.csv", summary_rows)
+        return run_dir
+
+    # ---------------------------------------------------------
+    # Task E Regression Tests (15 Comprehensive Verification Cases)
+    # ---------------------------------------------------------
+
+    def test_01_promotion_rejects_nonexistent_case_id(self):
+        """1. Promotion with non-existent case ID."""
+        cfg_path, cfg = self._create_synthetic_10case_workload()
+        run_dir = self._create_synthetic_run_suite(cfg_path, cfg, "run_e01")
+
+        # Tamper summary CSV with unknown case ID
+        with open(run_dir / "summary_runs.csv", newline="", encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+        rows[0]["case_id"] = "c99_unknown"
+        runner.write_summary_csv(run_dir / "summary_runs.csv", rows)
+
+        ok, msg = runner.promote_run_to_canonical("run_e01", workspace_root=self.base, logs_base_dir=self.logs_dir, workload_config_rel=cfg_path)
+        self.assertFalse(ok)
+        self.assertIn("unexpected case_id", msg)
+
+    def test_02_promotion_rejects_duplicate_repeat_index(self):
+        """2. Promotion with duplicate repeat index."""
+        cfg_path, cfg = self._create_synthetic_10case_workload()
+        run_dir = self._create_synthetic_run_suite(cfg_path, cfg, "run_e02")
+
+        with open(run_dir / "summary_runs.csv", newline="", encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+        # Case c01 has repeats 1, 2, 3 -> set repeat 2 to 1 (duplicate)
+        rows[1]["repeat_index"] = "1"
+        runner.write_summary_csv(run_dir / "summary_runs.csv", rows)
+
+        ok, msg = runner.promote_run_to_canonical("run_e02", workspace_root=self.base, logs_base_dir=self.logs_dir, workload_config_rel=cfg_path)
+        self.assertFalse(ok)
+        self.assertIn("duplicate case attempt", msg)
+
+    def test_03_promotion_rejects_missing_repeat(self):
+        """3. Promotion missing repeat (only 29 rows instead of 30)."""
+        cfg_path, cfg = self._create_synthetic_10case_workload()
+        run_dir = self._create_synthetic_run_suite(cfg_path, cfg, "run_e03")
+
+        with open(run_dir / "summary_runs.csv", newline="", encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+        rows.pop()  # Drop one row
+        runner.write_summary_csv(run_dir / "summary_runs.csv", rows)
+
+        ok, msg = runner.promote_run_to_canonical("run_e03", workspace_root=self.base, logs_base_dir=self.logs_dir, workload_config_rel=cfg_path)
+        self.assertFalse(ok)
+        self.assertIn("expected exactly 30 rows", msg)
+
+    def test_04_promotion_rejects_incomplete_updates_count(self):
+        """4. Promotion with incomplete update count."""
+        cfg_path, cfg = self._create_synthetic_10case_workload()
+        run_dir = self._create_synthetic_run_suite(cfg_path, cfg, "run_e04")
+
+        with open(run_dir / "summary_runs.csv", newline="", encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+        rows[0]["updates_num"] = "99"  # Expected 100
+        runner.write_summary_csv(run_dir / "summary_runs.csv", rows)
+
+        ok, msg = runner.promote_run_to_canonical("run_e04", workspace_root=self.base, logs_base_dir=self.logs_dir, workload_config_rel=cfg_path)
+        self.assertFalse(ok)
+        self.assertIn("updates_num", msg)
+
+    def test_05_promotion_rejects_missing_raw_logs(self):
+        """5. Promotion missing raw logs."""
+        cfg_path, cfg = self._create_synthetic_10case_workload()
+        run_dir = self._create_synthetic_run_suite(cfg_path, cfg, "run_e05")
+
+        # Delete stdout.log for c01_test rep 1
+        (run_dir / "c01_test_rep1" / "stdout.log").unlink()
+
+        ok, msg = runner.promote_run_to_canonical("run_e05", workspace_root=self.base, logs_base_dir=self.logs_dir, workload_config_rel=cfg_path)
+        self.assertFalse(ok)
+        self.assertIn("stdout.log missing", msg)
+
+    def test_06_promotion_rejects_raw_log_sha_mismatch(self):
+        """6. Promotion with SHA mismatch between raw log and recorded hash."""
+        cfg_path, cfg = self._create_synthetic_10case_workload()
+        run_dir = self._create_synthetic_run_suite(cfg_path, cfg, "run_e06")
+
+        # Tamper stdout.log content
+        (run_dir / "c01_test_rep1" / "stdout.log").write_text("TAMPERED DATA\n")
+
+        ok, msg = runner.promote_run_to_canonical("run_e06", workspace_root=self.base, logs_base_dir=self.logs_dir, workload_config_rel=cfg_path)
+        self.assertFalse(ok)
+        self.assertIn("stdout SHA mismatch", msg)
+
+    def test_07_promotion_rejects_missing_manifest(self):
+        """7. Promotion without run_manifest.json."""
+        cfg_path, cfg = self._create_synthetic_10case_workload()
+        run_dir = self._create_synthetic_run_suite(cfg_path, cfg, "run_e07")
+
+        (run_dir / "run_manifest.json").unlink()
+
+        ok, msg = runner.promote_run_to_canonical("run_e07", workspace_root=self.base, logs_base_dir=self.logs_dir, workload_config_rel=cfg_path)
+        self.assertFalse(ok)
+        self.assertIn("run_manifest.json missing", msg)
+
+    def test_08_promotion_rejects_incorrect_binary_sha(self):
+        """8. Promotion with incorrect binary SHA."""
+        cfg_path, cfg = self._create_synthetic_10case_workload()
+        run_dir = self._create_synthetic_run_suite(cfg_path, cfg, "run_e08")
+
+        mfile = run_dir / "run_manifest.json"
+        mdata = json.loads(mfile.read_text())
+        mdata["binary_sha256"] = "0000000000000000000000000000000000000000000000000000000000000000"
+        mfile.write_text(json.dumps(mdata))
+
+        ok, msg = runner.promote_run_to_canonical("run_e08", workspace_root=self.base, logs_base_dir=self.logs_dir, workload_config_rel=cfg_path)
+        self.assertFalse(ok)
+        self.assertIn("manifest binary SHA", msg)
+
     @patch("scripts.rf03_netflow_runner.verify_provenance", return_value=(True, "OK"))
-    def test_canonical_csv_direct_targeting_prohibited(self, mock_prov):
-        """Verify that passing the canonical CSV path directly to run_benchmark raises RuntimeError."""
+    def test_09_canonical_path_guard_unconditional_nonexistent(self, mock_prov):
+        """9. Canonical path guard blocks direct targeting even when canonical DOES NOT exist."""
         canonical_file = self.base / "results" / "summary" / "rf03_baseline_runs.csv"
-        canonical_file.parent.mkdir(parents=True, exist_ok=True)
-        canonical_file.write_text("dummy canonical\n")
+        if canonical_file.exists():
+            canonical_file.unlink()
 
         with self.assertRaises(RuntimeError) as ctx:
             runner.run_benchmark(
@@ -539,46 +814,173 @@ class TestRF03RunnerFailurePreservation(unittest.TestCase):
             )
         self.assertIn("Directly targeting the canonical baseline CSV", str(ctx.exception))
 
-    def test_promote_run_to_canonical_validation(self):
-        """Test promotion validation gates and backup creation."""
+    @patch("scripts.rf03_netflow_runner.verify_provenance", return_value=(True, "OK"))
+    def test_10_canonical_path_guard_unconditional_existent(self, mock_prov):
+        """10. Canonical path guard blocks direct targeting when canonical DOES exist."""
         canonical_file = self.base / "results" / "summary" / "rf03_baseline_runs.csv"
         canonical_file.parent.mkdir(parents=True, exist_ok=True)
-        canonical_file.write_text("old canonical\n")
+        canonical_file.write_text("existing canonical\n")
 
-        # 1. Incomplete run (e.g. only 2 rows) -> rejected
-        run_id = "test_run_incomplete"
-        run_dir = self.logs_dir / run_id
-        run_dir.mkdir(parents=True, exist_ok=True)
-        runner.write_summary_csv(run_dir / "summary_runs.csv", [{"case_id": "c1", "status": "COMPLETED"}])
-        ok, msg = runner.promote_run_to_canonical(run_id, workspace_root=self.base, logs_base_dir=self.logs_dir)
+        with self.assertRaises(RuntimeError) as ctx:
+            runner.run_benchmark(
+                config_path=self.cfg_file,
+                workspace_root=self.base,
+                summary_csv_path=canonical_file,
+                logs_base_dir=self.logs_dir,
+                skip_memory_check=True,
+                skip_git_check=True,
+            )
+        self.assertIn("Directly targeting the canonical baseline CSV", str(ctx.exception))
+
+    @patch("scripts.rf03_netflow_runner.verify_provenance", return_value=(True, "OK"))
+    @patch("scripts.rf03_netflow_runner.execute_case_run")
+    def test_11_case_verdict_one_completed_one_timeout(self, mock_exec, mock_prov):
+        """11. Case verdict: One repeat COMPLETED, one repeat TIMEOUT -> INCONCLUSIVE_INCOMPLETE_REPEATS."""
+        mock_exec.side_effect = [
+            runner.SubprocessResult(
+                returncode=0,
+                stdout=TestRF03OutputParsing.SAMPLE_VALID_STDOUT.replace("Result count: 120\n", "Result count: 10\n").replace("Updates num: 100\n", "Updates num: 1\n").replace("Edge process count: 100\n", "Edge process count: 1\n"),
+                stderr="",
+                duration_sec=0.1,
+                rss_kb=5000,
+            ),
+            runner.SubprocessResult(
+                returncode=124,
+                stdout="",
+                stderr="",
+                duration_sec=5.0,
+                rss_kb=1000,
+                timed_out=True,
+            ),
+        ]
+
+        exit_code, rows = runner.run_benchmark(
+            config_path=self.cfg_file,
+            workspace_root=self.base,
+            logs_base_dir=self.logs_dir,
+            skip_memory_check=True,
+            skip_git_check=True,
+        )
+
+        self.assertEqual(exit_code, 1)
+        run_dirs = [d for d in self.logs_dir.iterdir() if d.is_dir()]
+        vfile = run_dirs[0] / "c_test_01_verdict.json"
+        self.assertTrue(vfile.exists())
+        vdata = json.loads(vfile.read_text())
+        self.assertEqual(vdata["verdict"], "INCONCLUSIVE_INCOMPLETE_REPEATS")
+        self.assertFalse(vdata["is_pass"])
+        self.assertIn("INCOMPLETE_REPEATS", vdata["failure_reasons"])
+        self.assertIn("TIMEOUT", vdata["failure_reasons"])
+        self.assertNotEqual(vdata["verdict"], "PASS_CONSISTENT")
+
+    @patch("scripts.rf03_netflow_runner.verify_provenance", return_value=(True, "OK"))
+    @patch("scripts.rf03_netflow_runner.execute_case_run")
+    def test_12_case_verdict_count_mismatch_and_timeout_multiple_failures(self, mock_exec, mock_prov):
+        """12. Case verdict: Two repeats count different and one repeat TIMEOUT -> records multiple failure reasons."""
+        mock_exec.side_effect = [
+            runner.SubprocessResult(
+                returncode=0,
+                stdout=TestRF03OutputParsing.SAMPLE_VALID_STDOUT.replace("Result count: 120\n", "Result count: 10\n").replace("Updates num: 100\n", "Updates num: 1\n").replace("Edge process count: 100\n", "Edge process count: 1\n"),
+                stderr="",
+                duration_sec=0.1,
+                rss_kb=5000,
+            ),
+            runner.SubprocessResult(
+                returncode=0,
+                stdout=TestRF03OutputParsing.SAMPLE_VALID_STDOUT.replace("Result count: 120\n", "Result count: 20\n").replace("Updates num: 100\n", "Updates num: 1\n").replace("Edge process count: 100\n", "Edge process count: 1\n"),
+                stderr="",
+                duration_sec=0.1,
+                rss_kb=5000,
+            ),
+            runner.SubprocessResult(
+                returncode=124,
+                stdout="",
+                stderr="",
+                duration_sec=5.0,
+                rss_kb=1000,
+                timed_out=True,
+            ),
+        ]
+
+        exit_code, rows = runner.run_benchmark(
+            config_path=self.cfg_file,
+            workspace_root=self.base,
+            repeats_override=3,
+            logs_base_dir=self.logs_dir,
+            skip_memory_check=True,
+            skip_git_check=True,
+        )
+
+        self.assertEqual(exit_code, 1)
+        run_dirs = [d for d in self.logs_dir.iterdir() if d.is_dir()]
+        vfile = run_dirs[0] / "c_test_01_verdict.json"
+        vdata = json.loads(vfile.read_text())
+        self.assertEqual(vdata["verdict"], "FAIL_COUNT_MISMATCH")
+        self.assertFalse(vdata["is_pass"])
+        self.assertIn("COUNT_MISMATCH", vdata["failure_reasons"])
+        self.assertIn("INCOMPLETE_REPEATS", vdata["failure_reasons"])
+        self.assertIn("TIMEOUT", vdata["failure_reasons"])
+
+    @patch("scripts.rf03_netflow_runner.verify_provenance", return_value=(True, "OK"))
+    @patch("scripts.rf03_netflow_runner.execute_case_run")
+    def test_13_case_verdict_all_repeats_timeout(self, mock_exec, mock_prov):
+        """13. Case verdict: All repeats TIMEOUT -> FAIL_ALL_REPEATS_FAILED."""
+        mock_exec.side_effect = [
+            runner.SubprocessResult(returncode=124, stdout="", stderr="", duration_sec=5.0, rss_kb=1000, timed_out=True),
+            runner.SubprocessResult(returncode=124, stdout="", stderr="", duration_sec=5.0, rss_kb=1000, timed_out=True),
+        ]
+
+        exit_code, rows = runner.run_benchmark(
+            config_path=self.cfg_file,
+            workspace_root=self.base,
+            logs_base_dir=self.logs_dir,
+            skip_memory_check=True,
+            skip_git_check=True,
+        )
+
+        self.assertEqual(exit_code, 1)
+        run_dirs = [d for d in self.logs_dir.iterdir() if d.is_dir()]
+        vfile = run_dirs[0] / "c_test_01_verdict.json"
+        vdata = json.loads(vfile.read_text())
+        self.assertEqual(vdata["verdict"], "FAIL_ALL_REPEATS_FAILED")
+        self.assertFalse(vdata["is_pass"])
+        self.assertIn("ALL_REPEATS_FAILED", vdata["failure_reasons"])
+        self.assertIn("TIMEOUT", vdata["failure_reasons"])
+
+    def test_14_promotion_creates_unique_backups_without_overwriting(self):
+        """14. Backup not overwritten when promoted twice."""
+        canonical_file = self.base / "results" / "summary" / "rf03_baseline_runs.csv"
+        canonical_file.parent.mkdir(parents=True, exist_ok=True)
+        canonical_file.write_text("original canonical\n")
+
+        cfg_path, cfg = self._create_synthetic_10case_workload()
+        run1 = self._create_synthetic_run_suite(cfg_path, cfg, "run_e14_1")
+        run2 = self._create_synthetic_run_suite(cfg_path, cfg, "run_e14_2")
+
+        ok1, msg1 = runner.promote_run_to_canonical("run_e14_1", workspace_root=self.base, logs_base_dir=self.logs_dir, workload_config_rel=cfg_path)
+        self.assertTrue(ok1)
+
+        ok2, msg2 = runner.promote_run_to_canonical("run_e14_2", workspace_root=self.base, logs_base_dir=self.logs_dir, workload_config_rel=cfg_path)
+        self.assertTrue(ok2)
+
+        backups = list(canonical_file.parent.glob("rf03_baseline_runs_*.csv.bak"))
+        self.assertEqual(len(backups), 2, "Expected 2 distinct timestamp+UUID backup files")
+        # Ensure backup names are unique
+        self.assertEqual(len({b.name for b in backups}), 2)
+
+    def test_15_promotion_failure_leaves_canonical_untouched(self):
+        """15. Promotion failure leaves canonical completely unchanged."""
+        canonical_file = self.base / "results" / "summary" / "rf03_baseline_runs.csv"
+        canonical_file.parent.mkdir(parents=True, exist_ok=True)
+        canonical_file.write_text("IMMUTABLE_SENTINEL_DATA\n")
+
+        cfg_path, cfg = self._create_synthetic_10case_workload()
+        run_dir = self._create_synthetic_run_suite(cfg_path, cfg, "run_e15")
+        (run_dir / "run_manifest.json").unlink()  # Corrupt the run
+
+        ok, msg = runner.promote_run_to_canonical("run_e15", workspace_root=self.base, logs_base_dir=self.logs_dir, workload_config_rel=cfg_path)
         self.assertFalse(ok)
-        self.assertIn("expected exactly 30 rows", msg)
-        self.assertEqual(canonical_file.read_text(), "old canonical\n")
-
-        # 2. Run with failed status -> rejected
-        rows_failed = []
-        for c in range(10):
-            for rep in range(3):
-                rows_failed.append({"case_id": f"c_{c}", "repeat_index": str(rep+1), "result_count": "0", "status": "ERROR" if c == 0 else "COMPLETED"})
-        runner.write_summary_csv(run_dir / "summary_runs.csv", rows_failed)
-        ok, msg = runner.promote_run_to_canonical(run_id, workspace_root=self.base, logs_base_dir=self.logs_dir)
-        self.assertFalse(ok)
-        self.assertIn("expected COMPLETED", msg)
-
-        # 3. Valid 30 rows -> promoted and backup created
-        rows_valid = []
-        for c in range(10):
-            for rep in range(3):
-                rows_valid.append({"case_id": f"c_{c}", "repeat_index": str(rep+1), "result_count": "100", "status": "COMPLETED"})
-        runner.write_summary_csv(run_dir / "summary_runs.csv", rows_valid)
-        ok, msg = runner.promote_run_to_canonical(run_id, workspace_root=self.base, logs_base_dir=self.logs_dir)
-        self.assertTrue(ok)
-        self.assertIn("successfully promoted", msg)
-        self.assertTrue((canonical_file.with_suffix(".bak")).exists())
-        self.assertEqual((canonical_file.with_suffix(".bak")).read_text(), "old canonical\n")
-        with open(canonical_file, newline="", encoding="utf-8") as f:
-            promoted_rows = list(csv.DictReader(f))
-        self.assertEqual(len(promoted_rows), 30)
+        self.assertEqual(canonical_file.read_text(), "IMMUTABLE_SENTINEL_DATA\n")
 
     @patch("scripts.rf03_netflow_runner.verify_provenance", return_value=(True, "OK"))
     @patch("scripts.rf03_netflow_runner.execute_case_run")
