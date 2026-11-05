@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "schema_version": "1.0.0-draft",
+  "document_type": "approximate_csm_semantics_specification",
+  "status": "DRAFT_SPECIFICATION_PENDING_VALIDATION",
+  "created_date": "2026-11-05",
+  "parent_gate": "Gate A0 (APX-01)",
+  "issue": 12,
+  "description": "Preregistered candidate semantics and parameter exploration grid for Approximate Continuous Subgraph Matching on dynamic NetFlow streams.",
+  "invariants": {
+    "graph_type": "undirected_simple_labeled",
+    "vertex_injectivity": true,
+    "hard_vertex_labels": true,
+    "edge_label_matching": "strict_or_missing_penalty",
+    "automorphism_mode": "concrete_ordered_mappings"
+  },
+  "recommended_model": {
+    "model_id": "model_c_decoupled_two_threshold",
+    "formal_notation": "M_t^(epsilon_m, epsilon_x)",
+    "components": {
+      "missing_edges": {
+        "metric": "m_t(f)",
+        "definition": "Count of query edges absent or label-mismatched in data graph G_t",
+        "domain": "integer [0, |E_Q|]",
+        "constraint": "m_t(f) <= epsilon_m"
+      },
+      "external_clutter": {
+        "metric": "x_out_t(f)",
+        "definition": "Count of edges incident to mapped vertex set S_f with other endpoint outside S_f",
+        "domain": "non_negative_integer",
+        "constraint": "x_out_t(f) <= epsilon_x"
+      },
+      "connectivity": {
+        "metric": "C(f)",
+        "definition": "Boolean indicator whether mapped induced subgraph G_t[S_f] is connected",
+        "default_requirement": true
+      }
+    }
+  },
+  "parameter_exploration_grids": {
+    "epsilon_m_candidates": [0, 1, 2],
+    "epsilon_x_candidates": [0, 1, 2, 5, 10, 30, null],
+    "epsilon_norm_candidates": [0.05, 0.10, 0.20, 0.35, 0.50],
+    "pilot_working_threshold": {
+      "epsilon_m": 1,
+      "epsilon_x": 2,
+      "status": "PILOT_UNVERIFIED_FOR_ORACLE_TESTING_ONLY"
+    }
+  },
+  "output_contracts": {
+    "supported_modes": [
+      "FULL_ENUMERATION",
+      "COUNT_ONLY",
+      "TOP_K",
+      "FIRST_K"
+    ],
+    "pilot_default_mode": "FIRST_K",
+    "witness_budget_limit": 1000
+  },
+  "datasets": {
+    "primary_target": {
+      "name": "NetFlow",
+      "format": "NewSP_release_edge_labeled",
+      "data_graph": "data/netflow/release_newsp/netflow/data_graph/Ndata.graph",
+      "insertion_stream": "data/netflow/release_newsp/netflow/data_graph/Ninsertion.graph",
+      "deletion_stream": "data/netflow/release_newsp/netflow/data_graph/Ndeletion10.graph"
+    }
+  }
+}
