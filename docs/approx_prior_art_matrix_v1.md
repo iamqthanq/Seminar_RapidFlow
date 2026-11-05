@@ -26,11 +26,11 @@ To maintain scientific integrity:
 | Dimension | SAPPER (PVLDB 2010) | NeMa (PVLDB 2013) | Fan et al. (SIGMOD 2011 / TODS 2013) | RapidFlow (PVLDB 2022) | NewSP (ICDE 2024) | Milo et al. (Science 2002) |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Full Reference** | Zhang, Yang, Jin, *PVLDB* 3(1):1185–1194, 2010. [Paper URL](https://www.vldb.org/pvldb/vol3/R105.pdf) | Khan et al., *PVLDB* 6(11):1009–1020, 2013. [Paper URL](https://sites.cs.ucsb.edu/~xyan/papers/vldb13_nema.pdf) | Fan et al., *SIGMOD* 2011 & *ACM TODS* 38(3):1–45, 2013. [Paper URL](https://www.research.ed.ac.uk/en/publications/incremental-graph-pattern-matching-2/) | Sun et al., *PVLDB* 15(11):3275–3287, 2022. [Code URL](https://github.com/shixuansun/RapidFlow) | Li et al., *ICDE* 2024. [Code URL](https://github.com/hnuGraph/NewSP) | Milo et al., *Science* 298(5594):824–827, 2002. [Pubmed URL](https://pubmed.ncbi.nlm.nih.gov/12399590/) |
-| **Problem Solved** | Approximate Subgraph Indexing & Querying | Fast Graph Search with Label Similarity | Incremental Graph Pattern Matching | Continuous Subgraph Matching (CSM) | Continuous Subgraph Matching (CSM) | Network Motifs (Statistical Superfamilies) |
-| **Exact vs. Approximate** | **Approximate** (Missing edges) | **Approximate** (Fuzzy neighborhood cost) | **Exact Simulation** (Bounded path distance) | **Exact** (Subgraph Monomorphism) | **Exact** (Subgraph Monomorphism) | **Exact Counts** vs. Random Null Model |
+| **Problem Solved** | Approximate Subgraph Indexing & Querying | Fast Graph Search with Label Similarity | Incremental Graph Pattern Matching (Simulation, Bounded Sim, Subgraph Iso) | Continuous Subgraph Matching (CSM) | Continuous Subgraph Matching (CSM) | Network Motifs (Statistical Superfamilies) |
+| **Exact vs. Approximate** | **Approximate** (Missing edges) | **Approximate** (Fuzzy neighborhood cost) | **Exact** (Subgraph Iso / Sim) & **Approximate** (Bounded Sim) | **Exact** (Subgraph Monomorphism) | **Exact** (Subgraph Monomorphism) | **Exact Counts** vs. Random Null Model |
 | **Graph Dynamics** | **Static Graph** (One-time query) | **Static Graph** (Offline index) | **Dynamic Graph** (Edge updates $\Delta G$) | **Dynamic Graph** (Sequential updates) | **Dynamic Graph** (Sequential updates) | **Static Snapshots** (Biological networks) |
-| **Injectivity Required?** | **Yes** (Subgraph isomorphism) | **No** (Many-to-one homomorphism) | **No** (Graph simulation relation) | **Yes** (Injective vertex mapping) | **Yes** (Injective vertex mapping) | **Yes** (Induced/non-induced subgraphs) |
-| **Deviation Function** | Missing edge count: $m(f) \le \varepsilon_m$ | Neighborhood label distance + weight | Edge mapped to path of length $\le k$ | **None** ($d=0$, strict edge presence) | **None** ($d=0$, strict edge presence) | Statistical $Z$-score against null model |
+| **Injectivity Required?** | **Yes** (Subgraph isomorphism) | **No** (Many-to-one homomorphism) | **Yes** (for Subgraph Iso); **No** (for Simulation) | **Yes** (Injective vertex mapping) | **Yes** (Injective vertex mapping) | **Yes** (Induced/non-induced subgraphs) |
+| **Deviation Function** | Missing edge count: $m(f) \le \varepsilon_m$ | Neighborhood label distance + weight | Edge mapped to path of length $\le k$ (Bounded Sim); None (Subgraph Iso) | **None** ($d=0$, strict edge presence) | **None** ($d=0$, strict edge presence) | Statistical $Z$-score against null model |
 | **Extraneous Edge Penalty?** | **No** (Ignores internal & external extra edges) | **No** (Permits arbitrary clustering) | **No** (Simulation ignores extra edges) | **No** (Non-induced allows extra edges) | **No** (Non-induced allows extra edges) | **Contextual** (Evaluates induced subgraphs) |
 | **Threshold Selection** | Parameter $\varepsilon \in [0, 4]$ chosen empirically | Parameter $K$ (Top-K) and distance radius | Bounded distance $k$ (hop count) | N/A ($\varepsilon = 0$) | N/A ($\varepsilon = 0$) | Statistical significance threshold ($Z > 2.0$) |
 | **Output Representation** | Full set of matching embeddings | Top-$K$ ranked embeddings | Graph relation (set of node pairs) | `COUNT_ONLY` ($\sum \Delta$) or `FULL_ENUM` | `COUNT_ONLY` ($\sum \Delta$) or `FULL_ENUM` | Motif concentration profile / $Z$-scores |
@@ -64,13 +64,14 @@ To maintain scientific integrity:
 
 ### 3.3. Fan et al. (SIGMOD 2011 / ACM TODS 2013)
 - **What it DOES Support:**
-  - Rigorous foundational theory for **incremental graph pattern matching** over dynamic graphs with edge insertions and deletions.
-  - Proves complexity bounds for incremental update tracking.
+  - Rigorous foundational theory and algorithms for **incremental graph pattern matching** over dynamic graphs under graph simulation, bounded simulation, AND subgraph isomorphism.
+  - Proves complexity bounds and analyzes incremental update tracking across edge insertions and deletions.
 - **What it DOES NOT Support:**
-  - Evaluates **graph simulation** and **bounded simulation**, NOT subgraph isomorphism. Simulation allows many-to-one relations and does not enforce one-to-one structural congruence.
-  - Does NOT solve missing-edge or extraneous-edge bounded subgraph matching.
-- **Inheritable Components for APX:** Formal state transition definitions for incremental graph maintenance.
-- **Incompatible Components:** The simulation matching relation itself cannot serve as an oracle for injective subgraph embeddings.
+  - Fan et al.'s approximate matching relaxation is **bounded simulation**, which maps query edges to paths of bounded length $k$ and drops vertex injectivity (allowing many-to-one node sharing).
+  - While Fan et al. covers incremental exact subgraph isomorphism, it does NOT support missing edges ($m > 0$) or external boundary noise tolerance ($x_{\mathrm{out}} \le \varepsilon_x$).
+  - Does NOT formulate or solve the decoupled two-threshold $(m, x_{\mathrm{out}})$ Approximate CSM model on injective matchings.
+- **Inheritable Components for APX:** Formal state transition definitions and algorithmic principles for incremental graph maintenance.
+- **Incompatible Components:** Bounded simulation relaxes structural congruence and injectivity; their subgraph isomorphism maintenance engine cannot be applied when patterns permit missing edges or external clutter.
 
 ### 3.4. RapidFlow (Sun et al. — PVLDB 2022) & NewSP (Li et al. — ICDE 2024)
 - **What they DO Support:**
@@ -99,9 +100,9 @@ To maintain scientific integrity:
 ## 4. Synthesis & Grounding Table for Seminar Project
 
 | Research Question | Supported by Literature? | Literature Source | Research Status in Seminar Project |
-| :--- | :---: | :--- | :--- |
+| :--- | :--- | :--- | :--- |
 | Can missing edges ($m \le \varepsilon_m$) be indexed efficiently? | **Yes** (Static) | SAPPER (PVLDB 2010) | Needs adaptation to dynamic streams (APX-04). |
 | Does literature define external boundary clutter ($x_{\mathrm{out}} \le \varepsilon_x$)? | **No** | **Original Team Proposal** | Defined in APX-01; must be verified on NetFlow. |
 | Is NetFlow an established benchmark for exact CSM? | **Yes** | NewSP (ICDE 2024), RapidFlow (PVLDB 2022) | Established for exact CSM; benchmark for approximate CSM must be constructed internally. |
-| Does an off-the-shelf approximate CSM oracle exist for NetFlow? | **No** | Verified Absence | Must be constructed independently in APX-02. |
-| Is $\varepsilon = 2$ a standard, verified threshold in literature? | **No** | Verified Absence | Reclassified as `FINAL_THRESHOLD_PENDING_VALIDATION`. |
+| Does an off-the-shelf approximate CSM oracle exist for NetFlow? | **No** | Not identified in surveyed literature within scope | Must be constructed independently in APX-02. |
+| Is $\varepsilon = 2$ a standard, verified threshold in literature? | **No** | Not identified in surveyed literature within scope | Reclassified as `FINAL_THRESHOLD_PENDING_VALIDATION`. |

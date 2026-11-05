@@ -32,7 +32,7 @@ $$\mathbf{RECOMMENDED\ MODEL:\ M_t^{(\varepsilon_m, \varepsilon_x)} \quad \text{
    - Allows independent empirical tuning along both structural axes.
 3. **Strict Backward Compatibility:**
    - Setting $\varepsilon_m = 0$ and $\varepsilon_x = \infty$ perfectly reproduces exact non-induced continuous subgraph matching (RapidFlow baseline).
-   - Setting $\varepsilon_m = 0$ and $\varepsilon_x = 0$ reproduces isolated induced subgraph matching.
+   - Setting $\varepsilon_m = 0$ and $\varepsilon_x = 0$ enforces exact edge presence and strict external boundary-free isolation ($x_{\mathrm{out}} = 0$). Note: extra internal chords $x_{\mathrm{in}} \ge 0$ remain unconstrained under Model C; isolated induced matching additionally requires $x_{\mathrm{in}} = 0$ (e.g. $Q=C_4, G=K_4$ accepts under Model C with $\varepsilon_x=0$ but rejects under induced matching).
 
 ---
 
@@ -61,6 +61,9 @@ The following architectural questions remain open and will be presented to the a
 3. **Output Granularity on Dense Streams:**
    *Question:* When $\varepsilon_m \ge 1$, the number of approximate matches can increase by orders of magnitude.
    Does the advisor require complete embedding enumeration (`FULL_ENUM`), or is a bounded witness contract (`FIRST_K` or `TOP_K`) acceptable for online stream processing?
+4. **TOP-K Tie-Breaking / Scalarization Policy:**
+   *Question:* In the two-threshold vector score $(m, x_{\mathrm{out}})$, candidate points form a partial order with Pareto incomparable points (e.g. $(1, 0)$ vs $(0, 2)$).
+   Should TOP-K ranking adopt lexicographic priority ($\langle m, x_{\mathrm{out}}\rangle$ vs $\langle x_{\mathrm{out}}, m\rangle$) or a weighted linear scalarization ($w_m m + w_x x_{\mathrm{out}}$)?
 
 ---
 
@@ -72,6 +75,8 @@ The following architectural questions remain open and will be presented to the a
 | **RISK-02** | **Combinatorial Explosion for $m \ge 1$:** Relaxing edge requirements on trees triggers millions of candidate branches in DFS. | High | Impose strict search visit budgets ($N_{\text{visited}} \le 10^7$) and enforce $\mathcal{C}(f) == \text{true}$. |
 | **RISK-03** | **Non-Local Update Overhead:** Invalidation of $x_{\mathrm{out}}$ triggered by external edge updates outside the mapped query. | Medium | Investigate boundary vertex index structures in APX-03; isolate update impacts. |
 | **RISK-04** | **Circular Evaluation Trap:** Selecting $\varepsilon = 2$ and claiming high precision without independent semantic ground truth. | Critical | Strict separation of Correctness Truth (oracle) from Relevance Truth (held-out perturbation). |
+| **RISK-05** | **Incremental Dual Matching Correctness:** RapidFlow relies on symmetric decomposition for exact CSM; under $m > 0$ or boundary constraints, its correctness is unproven. | High | Mandate formal proof or fallback to direct single-direction search before enabling Dual Matching in APX-03. |
+| **RISK-06** | **NetFlow Multigraph Deduplication:** NetFlow data naturally contains duplicate flows between IP pairs, but RapidFlow's CSR loader in `graph.cpp` deduplicates to a simple graph. | Low | Explicitly document that CSM algorithms operate on the simple graph projection of NetFlow. |
 
 ---
 

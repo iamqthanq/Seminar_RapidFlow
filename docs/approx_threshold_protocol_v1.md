@@ -38,8 +38,8 @@ flowchart TD
 
 ### Tier 1: Semantic Relevance Basis (Domain & Expert Intent)
 - **Definition:** Documented consensus on what structural deviations remain functionally equivalent to the query pattern in the target application domain (IP network flow monitoring).
-- **Target Cases:**
-  - *Positive Cases:* A communication motif (e.g. DNS client-server fanout) where one minor peripheral connection is missing or where the server has 1–2 background administrative connections.
+- **Target Cases [TEAM_PROPOSED - HYPOTHETICAL ILLUSTRATIONS]:**
+  - *Positive Cases:* A communication motif (e.g. hypothetical DNS client-server fanout or server cluster) where one minor peripheral connection is missing or where the server has 1–2 background administrative connections.
   - *Negative Cases:* A pattern where the central communication hub is disconnected, or where a node possesses dozens of unrelated external flows, completely obscuring the query motif.
 
 ### Tier 2: Theoretical & Structural Basis
@@ -93,6 +93,10 @@ classDiagram
   - $\text{Class } +$: Structurally relevant near-matches.
   - $\text{Class } -$: Spurious / irrelevant subgraphs.
   - $\text{Class } \sim$: Borderline subgraphs.
+- **Epistemic Status Tagging [F05]:** Every qualitative relevance judgment must be explicitly tagged as:
+  - `ADVISOR_CONFIRMED`: Directly instructed or confirmed by the research advisor.
+  - `TEAM_PROPOSED`: Proposed by the seminar research team based on structural reasoning.
+  - `UNVERIFIED`: Lacking empirical or domain validation.
 - **Anti-Circularity Axiom:**
   > [!CAUTION]
   > **THE CIRCULARITY TRAP:**
@@ -107,8 +111,14 @@ To avoid data leakage, datasets and query workloads are strictly split:
 
 | Partition | Data Source & Slices | Query Sets | Allowed Usage |
 | :--- | :--- | :--- | :--- |
-| **Calibration Set ($\mathcal{D}_{\mathrm{calib}}$)** | Initial graph $G_0$ + first 50 updates ($\Delta e_1 \dots \Delta e_{50}$) of NetFlow. | Calibration probes ($K_{1,3}$, path $P_4$, chordal $K_{2,3}$). | Exploratory distribution profiling, parameter grid search, tuning $\boldsymbol{\varepsilon}$. |
+| **Calibration Set ($\mathcal{D}_{\mathrm{calib}}$)** | Initial graph $G_0$ + first 50 updates ($\Delta e_1 \dots \Delta e_{50}$) of NetFlow. | Calibration probes ($K_{1,3}$, path $P_4$, bipartite, triangle-free, non-chordal $K_{2,3}$). | Exploratory distribution profiling, parameter grid search, tuning $\boldsymbol{\varepsilon}$. |
 | **Held-Out Test Set ($\mathcal{D}_{\mathrm{test}}$)** | Updates 51 through 200 ($\Delta e_{51} \dots \Delta e_{200}$) of NetFlow + synthetic perturb. | Benchmark queries (5–8 vertices, independent seeds). | **FROZEN EVALUATION ONLY.** Threshold $\boldsymbol{\varepsilon}$ cannot be altered based on test results. |
+
+> [!NOTE]
+> **Methodological Note on Data Partitioning [F07]:**
+> The split between $\mathcal{D}_{\mathrm{calib}}$ (updates 1–50) and $\mathcal{D}_{\mathrm{test}}$ (updates 51–200) operates over the **same shared initial snapshot $G_0$**. Therefore, this is strictly a **temporal split on a shared graph**, NOT an independent graph holdout.
+> - *Temporal Leakage Mitigation:* Generalization is evaluated specifically on newly arrived stream edges ($t > 50$) and the newly triggered matches ($\text{ENTERED}_{t}$) they produce.
+> - *Generalization Limits:* Because both partitions inherit identical vertex degree distributions and hub connectivity from $G_0$, this split validates temporal stability within the stream, not generalizability across radically different graph topologies.
 
 ---
 
@@ -124,7 +134,7 @@ $$\varepsilon_m \in \{0, 1, 2\}$$
 
 ### 5.2. External Boundary Clutter Grid ($\varepsilon_x$)
 $$\varepsilon_x \in \{0, 1, 2, 5, 10, 30, \infty\}$$
-- $\varepsilon_x = 0$: Strict isolated induced matching (no external boundary edges permitted).
+- $\varepsilon_x = 0$: Strict boundary-free matching (no external cut edges leaving $S_f$; extra internal chords $x_{\mathrm{in}} \ge 0$ remain unconstrained under Model C).
 - $\varepsilon_x \in \{1, 2\}$: Tight peripheral tolerance (matches advisor's "star with 1–2 extra tails" example).
 - $\varepsilon_x \in \{5, 10\}$: Moderate noise tolerance for low-degree hosts.
 - $\varepsilon_x = 30$: Permissive noise boundary.
@@ -158,4 +168,4 @@ $$\mathbf{CURRENT\ THRESHOLD\ STATUS:\ FINAL\_THRESHOLD\_PENDING\_VALIDATION}$$
 
 - **Pilot Benchmark Baseline:** For initial micrograph tests and APX-02 oracle verification, the pilot parameter tuple is provisionally set to:
   $$\boldsymbol{\varepsilon}_{\mathrm{pilot}} = (\varepsilon_m = 1, \varepsilon_x = 2)$$
-- **Strict Scientific Declaration:** This pilot value is **NOT** declared optimal, validated, or final. It is an initial operating point for testing the correctness of the oracle and the sensitivity of the search space. Final threshold recommendations will be determined only after calibration data collection in Gate A1.
+- **Strict Scientific Declaration:** This pilot value is **NOT** declared optimal, validated, or final. It is an initial operating point for testing the correctness of the oracle and the sensitivity of the search space. Dynamic approximate CSM benchmarks with ground-truth thresholds have not been identified in surveyed literature within scope; final threshold recommendations will be determined only after empirical calibration data collection in Gate A1.

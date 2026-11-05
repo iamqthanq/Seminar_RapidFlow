@@ -1,7 +1,7 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "schema_version": "1.0.0-draft",
-  "document_type": "approximate_csm_semantics_specification",
+  "document_type": "approximate_csm_semantics_configuration_instance",
+  "document_nature": "configuration_instance_not_schema",
+  "version": "1.0.0-draft",
   "status": "DRAFT_SPECIFICATION_PENDING_VALIDATION",
   "created_date": "2026-11-05",
   "parent_gate": "Gate A0 (APX-01)",
@@ -33,13 +33,18 @@
       "connectivity": {
         "metric": "C(f)",
         "definition": "Boolean indicator whether mapped induced subgraph G_t[S_f] is connected",
-        "default_requirement": true
+        "default_requirement": true,
+        "supported_modes": {
+          "strict": "components(G_t[S_f]) == 1 (disconnected mappings like Case 02/03 rejected)",
+          "relaxed": "components unconstrained or <= c_max (evaluated purely on m and x_out)"
+        }
       }
     }
   },
   "parameter_exploration_grids": {
     "epsilon_m_candidates": [0, 1, 2],
     "epsilon_x_candidates": [0, 1, 2, 5, 10, 30, null],
+    "epsilon_x_null_semantics": "null represents infinity (unbounded threshold, no external degree penalty)",
     "epsilon_norm_candidates": [0.05, 0.10, 0.20, 0.35, 0.50],
     "pilot_working_threshold": {
       "epsilon_m": 1,
@@ -54,6 +59,7 @@
       "TOP_K",
       "FIRST_K"
     ],
+    "top_k_status": "EXPLORATORY_PENDING_APPROVED_RANKING_POLICY",
     "pilot_default_mode": "FIRST_K",
     "witness_budget_limit": 1000
   },
@@ -61,6 +67,7 @@
     "primary_target": {
       "name": "NetFlow",
       "format": "NewSP_release_edge_labeled",
+      "graph_model": "simple_graph_projected_after_duplicate_removal",
       "data_graph": "data/netflow/release_newsp/netflow/data_graph/Ndata.graph",
       "insertion_stream": "data/netflow/release_newsp/netflow/data_graph/Ninsertion.graph",
       "deletion_stream": "data/netflow/release_newsp/netflow/data_graph/Ndeletion10.graph"
