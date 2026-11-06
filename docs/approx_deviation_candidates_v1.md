@@ -196,14 +196,15 @@ For any candidate injective mapping $f: V_Q \to V_t$, consider the composed mapp
 
 ---
 
-### 2.8. NetFlow Multigraph Semantics & Simple Graph Projection [AF-02]
+### 2.8. NetFlow Multigraph Semantics, Simple Graph Projection & Ingestion Scope [R4-04, AF4-01]
 
 In real-world network traffic logs, NetFlow records represent communication sessions, naturally forming a **directed multigraph** with multiple timestamped flows between the same IP pair.
 
 However, RapidFlow and NewSP benchmark protocols model network structure as an **undirected labeled simple graph**:
-- In RapidFlow's ingestion loader (`baselines/rapidflow/source/graph/graph.cpp:613–618,646–650,656–659,687–690`), incoming edges are normalized, sorted by endpoints, and deduplicated:
+- **Initial Static Graph Loading (`graph.cpp:613–618, 646–650, 656–659, 687–690`):**
+  When loading the initial static graph $G_0$, RapidFlow normalizes endpoints, sorts edges, and deduplicates consecutive duplicate endpoints into a CSR representation:
   ```cpp
-  // Remove self-loops (graph.cpp:613-615)
+  // Remove self-loops and normalize endpoints (graph.cpp:613-618)
   if (temp_edge.begin_ == temp_edge.end_) {
       continue;
   }
@@ -211,13 +212,24 @@ However, RapidFlow and NewSP benchmark protocols model network structure as an *
       std::swap(temp_edge.begin_, temp_edge.end_);
   }
 
+  // Sort edges by endpoints (graph.cpp:646-650)
+  std::sort(edges.begin(), edges.end(), [](const TempEdge& l, const TempEdge& r) {
+     if (l.begin_ == r.begin_)
+         return l.end_ < r.end_;
+     return l.begin_ < r.begin_;
+  });
+
   // Remove duplicate edge after sorting by endpoints (graph.cpp:657-659, 688-690)
   if (edge.begin_ == prev_begin && edge.end_ == prev_end) {
       continue;
   }
   ```
-- **Operational Model:** The operational graph model for CSM is strictly a **simple graph** ($|E_t[u, v]| \le 1$). Extraneous edge counts ($x_{\mathrm{in}}$ and $x_{\mathrm{out}}$) evaluate distinct topological neighbors in this simple graph projection, rather than multigraph flow frequency.
-- **Deduplication Policy Note:** We do not claim that NetFlow benchmark data has multigraph defects; rather, RapidFlow's ingestion pipeline by design normalizes and deduplicates all edge streams into an undirected labeled simple graph model. If raw input records contain multiple edges between identical endpoints with conflicting labels, RapidFlow's sorting and deduplication retains only the first edge. An explicit dataset ingestion policy should be documented if multi-label edge streams are introduced in future gates.
+- **Ingestion Deduplication Scope (R4-04):**
+  We strictly confine the verified deduplication assertion to **initial static CSR graph loading**. In the dynamic streaming update loader (`baselines/rapidflow/source/streaming/streaming_engine.cpp:420–489`), incoming updates are appended directly to `std::vector<Update> stream` without global offline sorting or stream-wide deduplication. While individual index view update methods inspect edge existence, online stream-level duplicate handling is not guaranteed or verified. We make no assertion that raw streaming updates are deduplicated prior to execution.
+- **Edge Label Tie-Breaking & Non-Stable Sort (AF4-01):**
+  In `graph.cpp:646–650`, the lambda comparator passed to `std::sort` inspects **only** vertex endpoints (`begin_` and `end_`), ignoring edge labels. Furthermore, `std::sort` is not a stable sort algorithm (`std::stable_sort`). Consequently, if raw input records contain multiple edges between identical endpoints with conflicting labels ($(u, v, A)$ and $(u, v, B)$), their relative order after sorting is non-deterministic, and it **cannot be asserted** that the edge appearing first in the input file is retained. A deterministic edge-label resolution policy must be formally specified before evaluating multi-label edge streams. We emphasize that this is an analytical data-handling boundary condition rather than an observed corruption in the NetFlow dataset.
+- **Operational Simple Graph Model:**
+  The operational graph model for CSM is strictly an **undirected simple graph** ($|E_t[u, v]| \le 1$). Extraneous edge counts ($x_{\mathrm{in}}$ and $x_{\mathrm{out}}$) evaluate distinct topological neighbors in this simple graph projection, rather than multigraph flow frequency.
 
 ---
 

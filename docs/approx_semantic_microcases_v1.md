@@ -15,11 +15,12 @@ This catalog establishes **canonical micrograph test cases** (15 original refere
 
 For every case, two strictly distinct conclusions are documented:
 1. **Mathematical Formula Acceptance:** Does the candidate mapping $f$ satisfy the objective criteria $m_t(f) \le \varepsilon_m \land x_{\mathrm{out},t}(f) \le \varepsilon_x$? Evaluated under both:
-   - **Strict Connectivity Mode ($\mathcal{C}(f) == \text{true}$):** Topological subgraph $G_t[S_f]$ must form a single connected component ($\text{components}(G_t[S_f]) == 1$).
-   - **Relaxed Connectivity Mode ($\mathcal{C}(f) \text{ unconstrained}$):** Connectivity is not enforced (both connected and disconnected mappings are evaluated solely on edge thresholds $m \le \varepsilon_m \land x_{\mathrm{out}} \le \varepsilon_x$).
+   - **Strict Connectivity Mode ($\operatorname{ConnOK}_{\mathrm{strict}}(f) \equiv \mathcal{C}(f) == \text{true}$):** Topological subgraph $G_t[S_f]$ must form a single connected component ($\text{components}(G_t[S_f]) == 1$).
+   - **Relaxed Connectivity Mode ($\operatorname{ConnOK}_{\mathrm{relaxed}}(f) \equiv \text{true}$):** Connectivity is unconstrained / not enforced (both connected and disconnected mappings are evaluated solely on edge thresholds $m \le \varepsilon_m \land x_{\mathrm{out}} \le \varepsilon_x$).
 2. **Semantic Relevance Judgment:** Qualitative classification of candidate near-matches. Every qualitative judgment is explicitly tagged (`TEAM_PROPOSED`, `UNVERIFIED`). Specific examples (such as port numbers, router interfaces, and hub roles) are designated as hypothetical illustrations.
 
 All graphs are undirected simple graphs. Unless explicitly noted, all vertex labels are $0$.
+Under the proposed APX-02 fixed vertex universe ($V_t = V_0, \forall t$), vertices appearing in dynamic edge updates (e.g. vertex 5 in Cases 13–15) pre-exist in $V_0$ (e.g. as initially isolated degree-0 nodes); "new" refers to being newly incident to the motif, not dynamic vertex instantiation.
 
 ---
 
@@ -218,7 +219,7 @@ All graphs are undirected simple graphs. Unless explicitly noted, all vertex lab
 - **Initial Graph $G_0$:** Edges $\{\{0, 1\}, \{0, 2\}, \{0, 4\}\}$.
   - $m_0(f) = 0$, $x_{\mathrm{out},0}(f) = 1$.
   - Under threshold $\varepsilon_m = 0, \varepsilon_x = 1$, $f \in \mathcal{M}_0$.
-- **Stream Update $\Delta e_1$:** `+ e 0 5 0` (External edge connecting center $0$ to new node $5$).
+- **Stream Update $\Delta e_1$:** `+ e 0 5 0` (External edge connecting center $0$ to external node $5 \in V_0 \setminus S_f$).
 - **Post-Update Graph $G_1$:** $x_{\mathrm{out},1}(f) = 2$.
 - **Dynamic Transition:**
   $$x_{\mathrm{out},1}(f) = 2 > \varepsilon_x = 1 \implies f \in \text{EXITED}_1 = \mathcal{M}_0 \setminus \mathcal{M}_1$$

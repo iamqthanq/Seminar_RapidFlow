@@ -57,15 +57,17 @@ The following architectural questions remain open and will be presented to the a
    Does the advisor intend for the boundary penalty $x_{\mathrm{out}} \le \varepsilon_x$ to disqualify all hub-associated embeddings, or should boundary penalties only apply to non-hub vertices?
 2. **Topological Connectivity Constraint vs. Unconstrained Evaluation:**
    *Question:* When $\varepsilon_m \ge 1$ is applied to a query whose removal of an edge disconnects the data image (e.g. tree query edges), the induced data subgraph $G_t[S_f]$ becomes disconnected into isolated components.
-   - Under **Strict Connectivity Mode**, we enforce $\mathcal{C}(f) \iff \text{components}(G_t[S_f]) == 1$, rejecting disconnected matches.
-   - Under **Relaxed Connectivity Mode**, connectivity is unconstrained (not enforced; evaluated purely on $m \le \varepsilon_m$ and $x_{\mathrm{out}} \le \varepsilon_x$, which accepts both connected and disconnected matches alike; it does not require disconnection).
-   Should Approximate CSM strictly enforce topological connectivity $\mathcal{C}(f) == \text{true}$ as default, or should relaxed mode be adopted? (Note: query-label-conforming connectivity is an unapproved alternate).
+   - Under **Strict Connectivity Mode** ($\operatorname{ConnOK}_{\mathrm{strict}}(f) \equiv \mathcal{C}_t(f)$), we enforce $\mathcal{C}_t(f) \iff \text{components}(G_t[S_f]) == 1$, rejecting disconnected matches.
+   - Under **Relaxed Connectivity Mode** ($\operatorname{ConnOK}_{\mathrm{relaxed}}(f) \equiv \text{true}$), connectivity is unconstrained (not enforced; evaluated purely on $m \le \varepsilon_m$ and $x_{\mathrm{out}} \le \varepsilon_x$, which accepts both connected and disconnected matches alike; it does not require disconnection).
+   Should Approximate CSM strictly enforce topological connectivity $\mathcal{C}_t(f) == \text{true}$ as default, or should relaxed mode be adopted? (Note: query-label-conforming connectivity is an unapproved alternate).
 3. **Output Granularity on Dense Streams:**
    *Question:* When $\varepsilon_m \ge 1$, the number of approximate matches can increase by orders of magnitude.
    Does the advisor require complete embedding enumeration (`FULL_ENUM`), or is a bounded witness contract (`FIRST_K` or `TOP_K`) acceptable for online stream processing?
 4. **TOP-K Tie-Breaking / Scalarization Policy:**
    *Question:* In the two-threshold vector score $(m, x_{\mathrm{out}})$, candidate points form a partial order with Pareto incomparable points (e.g. $(1, 0)$ vs $(0, 2)$).
    Should TOP-K ranking adopt lexicographic priority ($\langle m, x_{\mathrm{out}}\rangle$ vs $\langle x_{\mathrm{out}}, m\rangle$) or a weighted linear scalarization ($w_m m + w_x x_{\mathrm{out}}$)?
+5. **Vertex Universe & Stream Precondition Contract for APX-02 (`DECISION REQUIRED`):**
+   *Question:* For constructing the APX-02 independent oracle, the team proposes a **Fixed Vertex Universe** ($V_t = V_0, \forall t$) where vertex sets and vertex labels remain invariant, updates strictly insert/delete edges, and degree-0 nodes are not destroyed. Does the user/advisor approve this fixed universe scope for APX-02 v1, and should malformed stream updates (e.g. duplicate inserts or absent deletes) be rejected as out-of-spec inputs or treated as explicit no-ops?
 
 ---
 
@@ -78,7 +80,7 @@ The following architectural questions remain open and will be presented to the a
 | **RISK-03** | **Non-Local Update Overhead:** Invalidation of $x_{\mathrm{out}}$ triggered by external edge updates outside the mapped query. | Medium | Investigate boundary vertex index structures in APX-03; isolate update impacts. |
 | **RISK-04** | **Circular Evaluation Trap:** Selecting $\varepsilon = 2$ and claiming high precision without independent semantic ground truth. | Critical | Strict separation of Correctness Truth (oracle) from Relevance Truth (held-out perturbation). |
 | **RISK-05** | **Incremental Dual Matching Correctness:** RapidFlow relies on symmetric decomposition for exact CSM; under $m > 0$ or boundary constraints, its correctness is unproven. | High | Mandate formal proof or fallback to direct single-direction search before enabling Dual Matching in APX-03. |
-| **RISK-06** | **NetFlow Multigraph Deduplication:** NetFlow data streams may contain parallel flows between the same IP pairs. RapidFlow's graph loader (`baselines/rapidflow/source/graph/graph.cpp:613–618,646–650,656–659,687–690`) normalizes undirected endpoints via `std::swap` and skips consecutive duplicates (`edge.begin_ == prev_begin && edge.end_ == prev_end`), silently projecting streams to simple graphs. | Low | Explicitly document that CSM algorithms operate on the simple graph projection of NetFlow. |
+| **RISK-06** | **Static CSR Deduplication Scope & Multi-Label Sort:** RapidFlow's static graph loader (`graph.cpp:613–618, 646–650, 656–659`) deduplicates consecutive identical endpoints when building the initial CSR, but streaming updates in `streaming_engine.cpp` are not globally deduplicated. Additionally, `std::sort` in `graph.cpp` compares only endpoints without comparing edge labels, producing non-deterministic resolution if multi-label duplicate edges occur. | Low | Explicitly document simple graph CSR scope; formulate formal stream precondition contract before multi-label benchmarks. |
 
 ---
 

@@ -39,14 +39,31 @@ Let $\Sigma_V$ and $\Sigma_E$ denote finite sets of vertex labels and edge label
   $$Q = (V_Q, E_Q, \ell_Q)$$
   where $V_Q = \{u_1, u_2, \dots, u_k\}$ is the vertex set ($|V_Q| = k$), $E_Q \subseteq \{\{u, v\} \mid u, v \in V_Q, u \ne v\}$ is the undirected edge set, and $\ell_Q: V_Q \cup E_Q \to \Sigma_V \cup \Sigma_E$ is the labeling function assigning vertex labels $\ell_Q(u) \in \Sigma_V$ and edge labels $\ell_Q(e) \in \Sigma_E$.
 
-- **Dynamic Data Graph:**
+- **Dynamic Data Graph & Vertex Universe:**
   A dynamic, undirected, labeled simple graph at discrete time step $t \in \mathbb{N}$:
   $$G_t = (V_t, E_t, \ell_t)$$
-  evolving from an initial snapshot $G_0$ via a sequence of discrete edge update operations:
+  evolving from an initial snapshot $G_0 = (V_0, E_0, \ell_0)$ via a sequence of discrete edge update operations:
   $$\mathcal{S} = (\Delta e_1, \Delta e_2, \dots, \Delta e_t, \dots)$$
-  where each update is a tuple $\Delta e_t = (op_t, u_t, v_t, l_t)$ with $op_t \in \{+, -\}$, endpoints $u_t, v_t \in V_t$, and edge label $l_t \in \Sigma_E$.
+  where each update is a tuple $\Delta e_t = (op_t, u_t, v_t, l_t)$ with $op_t \in \{+, -\}$, endpoints $u_t, v_t$, and edge label $l_t \in \Sigma_E$.
   - Edge Insertion ($op = +$): $E_t = E_{t-1} \cup \{\{u_t, v_t\}\}$ with $\ell_t(\{u_t, v_t\}) = l_t$.
   - Edge Deletion ($op = -$): $E_t = E_{t-1} \setminus \{\{u_t, v_t\}\}$.
+
+  > [!IMPORTANT]
+  > **RapidFlow C++ Ingestion vs. Proposed Oracle Contract (R4-03):**
+  > - **RapidFlow C++ Baseline Ingestion Capability:** In `baselines/rapidflow/source/streaming/streaming_engine.cpp:21–34`, RapidFlow's stream reader parses vertex declarations (`v <id> <label>`) as well as edge insertions (`e <u> <v> <l>`) and deletions (`-e <u> <v> <l>`). RapidFlow C++ is **not** architecturally hard-coded in source to a fixed vertex set.
+  > - **Proposed APX-02 v1 Oracle Contract — Fixed Vertex Universe (`OPEN DECISION FOR USER CONFIRMATION`):**
+  >   To establish a well-defined ground truth oracle in APX-02 without requiring dynamic vertex schema evolution, we formally propose:
+  >   $$V_t = V_0, \quad \forall t \in \mathbb{N}$$
+  >   Under this proposed contract:
+  >   1. The vertex set $V_0$ and vertex labeling $\ell_t(v) = \ell_0(v)$ remain fixed for all $t$.
+  >   2. Edge updates $\Delta e_t$ only insert or delete edges between existing vertices ($u_t, v_t \in V_0$).
+  >   3. Vertices are **never destroyed** when all incident edges are removed; degree-0 (isolated) vertices remain valid members of $V_t$.
+  >   4. In microcases (e.g., Cases 13–15), reference to a "new node 5" denotes an external vertex pre-existing in $V_0 \setminus S_f$ that is newly connected to the pattern, not a dynamically instantiated vertex entity.
+  > - **Update Validity Preconditions (Proposed Contract):**
+  >   - **Valid Insertion ($+e = (u, v, l)$):** Requires $u, v \in V_0$, $u \ne v$, $\{u, v\} \notin E_{t-1}$, and $l \in \Sigma_E$.
+  >   - **Valid Deletion ($-e = (u, v, l)$):** Requires $\{u, v\} \in E_{t-1}$ and $\ell_{t-1}(\{u, v\}) = l$. Endpoints $u, v$ remain in $V_t$ after deletion.
+  > - **Invalid Stream Updates (`OPEN DECISION`):**
+  >   Handling of invalid operations (e.g. duplicate insertions of existing edges, deletions of absent edges, or label mismatches on deletion) is an open design decision: the APX-02 oracle contract may either (a) assume streams satisfy valid preconditions as a prerequisite, or (b) treat invalid updates as explicit no-ops / error signals. RapidFlow C++ behavior under malformed streams must be empirically characterized rather than assumed.
 
 - **Candidate Vertex Mapping:**
   A function mapping query vertices to data vertices at time step $t$:
@@ -108,9 +125,15 @@ flowchart TD
    - Extra edges connecting $S_f$ to the rest of $G_t$ ($x_{\mathrm{out}} \ge 0$) are unpenalized.
 
 2. **Exact Induced Subgraph Isomorphism:**
-   $$\forall \{u, v\} \subset V_Q, \quad \{u, v\} \in E_Q \iff \{f(u), f(v)\} \in E_t \quad \land \quad \ell_t(\{f(u), f(v)\}) = \ell_Q(\{u, v\})$$
-   - Characterized by $m(f) = 0 \land x_{\mathrm{in}}(f) = 0$.
-   - Absolutely no extra internal edges within $S_f$ are permitted ($x_{\mathrm{in}} = 0$). External edges outside $S_f$ ($x_{\mathrm{out}} \ge 0$) are unpenalized.
+   Defined by two decoupled conditions to avoid evaluating labels on non-edges:
+   - **Condition 1 (Edge Existence Preservation across All Vertex Pairs):**
+     $$\forall \{u, v\} \subseteq V_Q \text{ with } u \ne v: \quad \{u, v\} \in E_Q \iff \{f(u), f(v)\} \in E_t$$
+   - **Condition 2 (Label Preservation on Existing Query Edges):**
+     $$\forall \{u, v\} \in E_Q: \quad \ell_t(\{f(u), f(v)\}) = \ell_Q(\{u, v\})$$
+   - Combined with Injectivity ($\forall u \ne v, f(u) \ne f(v)$) and Hard Vertex Labels ($\forall u \in V_Q, \ell_t(f(u)) = \ell_Q(u)$).
+   - **Equivalent Algebraic Characterization:**
+     $$m_t(f) = 0 \quad \land \quad x_{\mathrm{in},t}(f) = 0$$
+   - Absolutely no extra internal edges within $S_f$ are permitted ($x_{\mathrm{in}} = 0$). Note that $\ell_Q(\{u, v\})$ is **only** evaluated for pairs that belong to $E_Q$; for $\{u, v\} \notin E_Q$, no edge label is ever referenced. External cut edges outside $S_f$ ($x_{\mathrm{out}} \ge 0$) are unpenalized.
 
 3. **External-Boundary-Free Matching:**
    $$x_{\mathrm{out}}(f) = 0$$
@@ -198,14 +221,22 @@ $$x_{\mathrm{norm},t}(f) = \frac{x_{\mathrm{out},t}(f)}{2|E_Q| + x_{\mathrm{out}
   - $x_{\mathrm{norm}}$ is an exploratory bounded rescaling into $[0, 1)$ for ranking experiments. It is **NOT** proposed as a formal metric space distance, and no claims of metric properties (such as triangle inequality) are asserted without a formally defined metric space.
 
 ### 4.5. Connectedness Constraint Options
-When $m_t(f) > 0$, the mapped graph $G_t[S_f]$ can decompose into disconnected components. We define the boolean topological connectivity predicate $\mathcal{C}(f)$:
+When $m_t(f) > 0$, the mapped graph $G_t[S_f]$ can decompose into disconnected components. We define the boolean topological connectivity property $\mathcal{C}_t(f)$:
 
-$$\mathcal{C}(f) \iff G_t[S_f] \text{ is a topologically connected graph } (\text{components}(G_t[S_f]) == 1)$$
+$$\mathcal{C}_t(f) \equiv G_t[S_f] \text{ is a topologically connected graph } (\text{components}(G_t[S_f]) == 1)$$
 
-The framework defines two explicit modes for evaluating connectivity:
-- **Option C1 (Strict Connectedness Mode):** Require $\mathcal{C}(f) == \text{true}$ ($\text{components}(G_t[S_f]) = 1$). Note that connectivity is evaluated on the topological subgraph $G_t[S_f]$ induced by $S_f$ in data graph $G_t$ (edges present in $G_t$ between mapped vertices provide topological connectivity, regardless of whether their edge labels match query labels). Under strict mode, any mapping where missing edges produce isolated vertices or disconnected fragments (such as Case 02 and Case 03 in the microcase catalog) is strictly **REJECTED**, even if $m_t(f) \le \varepsilon_m \land x_{\mathrm{out},t}(f) \le \varepsilon_x$.
-- **Option C2 (Relaxed Connectedness Mode):** Connectivity is **not required / not enforced** ($\mathcal{C}(f) \iff \text{true}$ or $\text{components}(G_t[S_f]) \le c_{\max}$). Crucially, "relaxed" means connectivity is unconstrained; it does **NOT** require mappings to be disconnected. Both connected mappings and disconnected mappings are accepted if they satisfy $m_t(f) \le \varepsilon_m \land x_{\mathrm{out},t}(f) \le \varepsilon_x$.
-- **Unapproved Alternate (Label-Preserving Connectivity):** Requiring connectivity strictly via edges that also satisfy query edge labels ($\mathcal{C}_{\mathrm{label}}(f)$) is an unapproved alternate model that would alter semantic acceptance. Under Gate A0 frozen semantics, $\mathcal{C}(f)$ strictly denotes topological connectivity of $G_t[S_f]$.
+To systematically evaluate connectivity within the composite matching filter, we define the constraint satisfaction predicate $\operatorname{ConnOK}(f)$:
+
+- **Option C1 (Strict Connectedness Mode — $\operatorname{ConnOK}_{\mathrm{strict}}(f)$):**
+  $$\operatorname{ConnOK}_{\mathrm{strict}}(f) \equiv \mathcal{C}_t(f)$$
+  Under strict mode, $G_t[S_f]$ must form a single connected component ($\text{components}(G_t[S_f]) == 1$). Note that connectivity is evaluated on the topological subgraph $G_t[S_f]$ induced by $S_f$ in data graph $G_t$ (edges present in $G_t$ between mapped vertices provide topological connectivity, regardless of whether their edge labels match query labels). Under strict mode, any mapping where missing edges produce isolated vertices or disconnected fragments (such as Case 02 and Case 03 in the microcase catalog) is strictly **REJECTED**, even if $m_t(f) \le \varepsilon_m \land x_{\mathrm{out},t}(f) \le \varepsilon_x$.
+- **Option C2 (Relaxed Unconstrained Mode — $\operatorname{ConnOK}_{\mathrm{relaxed}}(f)$):**
+  $$\operatorname{ConnOK}_{\mathrm{relaxed}}(f) \equiv \text{true}$$
+  Under relaxed unconstrained mode, connectivity is **not required / not enforced** (the predicate $\operatorname{ConnOK}_{\mathrm{relaxed}}(f)$ evaluates to $\text{true}$ unconditionally). Crucially, "relaxed" means connectivity is unconstrained; it does **NOT** require mappings to be disconnected. Both connected mappings and disconnected mappings are accepted if they satisfy $m_t(f) \le \varepsilon_m \land x_{\mathrm{out},t}(f) \le \varepsilon_x$.
+- **Option C3 (Relaxed Bounded Components — Exploratory Variant):**
+  $$\operatorname{ConnOK}_{\mathrm{bounded}}(f) \equiv (\text{components}(G_t[S_f]) \le c_{\max})$$
+  An intermediate relaxation where the number of disconnected components cannot exceed a finite budget $c_{\max}$. Note: this is a distinct variant (`RELAXED_BOUNDED_COMPONENTS`) and is not conflated with `RELAXED_UNCONSTRAINED`.
+- **Unapproved Alternate (Label-Preserving Connectivity):** Requiring connectivity strictly via edges that also satisfy query edge labels ($\mathcal{C}_{\mathrm{label}}(f)$) is an unapproved alternate model that would alter semantic acceptance. Under Gate A0 frozen semantics, $\mathcal{C}_t(f)$ strictly denotes topological connectivity of $G_t[S_f]$.
 
 ---
 
@@ -215,12 +246,14 @@ Rather than blending heterogeneous quantities ($m$ and $x$) into an arbitrary we
 
 ### The Decoupled Model $\mathcal{M}_t^{(\varepsilon_m, \varepsilon_x)}$
 
-$$f \in \mathcal{M}_t^{(\varepsilon_m, \varepsilon_x)} \iff \begin{cases}
+A candidate mapping $f: V_Q \to V_t$ is accepted at time $t$ if and only if:
+
+$$\operatorname{Accept}_t(f) \iff \begin{cases}
 f \text{ is injective on } V_Q \\
 \forall u \in V_Q, \ell_t(f(u)) = \ell_Q(u) \\
 m_t(f) \le \varepsilon_m \\
 x_{\mathrm{out},t}(f) \le \varepsilon_x \\
-\mathcal{C}(f) == \text{true} \quad (\text{if strict connectivity is active})
+\operatorname{ConnOK}(f) == \text{true}
 \end{cases}$$
 
 - **Parameter Space:** $\varepsilon_m \in \{0, 1, 2\}$, $\varepsilon_x \in \{0, 1, 2, 5, 10, 30, \infty\}$.

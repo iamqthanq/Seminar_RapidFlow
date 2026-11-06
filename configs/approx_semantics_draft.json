@@ -35,8 +35,9 @@
         "definition": "Boolean indicator whether mapped induced subgraph G_t[S_f] is connected",
         "default_requirement": true,
         "supported_modes": {
-          "strict": "components(G_t[S_f]) == 1 (disconnected mappings like Case 02/03 rejected)",
-          "relaxed": "connectivity unconstrained (evaluated purely on m_t(f) <= epsilon_m and x_out,t(f) <= epsilon_x; admits both connected and disconnected mappings)"
+          "strict": "components(G_t[S_f]) == 1 (ConnOK_strict == C_t(f); disconnected mappings like Case 02/03 rejected)",
+          "relaxed_unconstrained": "connectivity unconstrained (ConnOK_relaxed == true; evaluated purely on m_t(f) <= epsilon_m and x_out,t(f) <= epsilon_x; admits both connected and disconnected mappings)",
+          "relaxed_bounded_components": "components(G_t[S_f]) <= c_max (exploratory variant)"
         }
       }
     }
