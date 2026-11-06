@@ -39,14 +39,31 @@ Let $\Sigma_V$ and $\Sigma_E$ denote finite sets of vertex labels and edge label
   $$Q = (V_Q, E_Q, \ell_Q)$$
   where $V_Q = \{u_1, u_2, \dots, u_k\}$ is the vertex set ($|V_Q| = k$), $E_Q \subseteq \{\{u, v\} \mid u, v \in V_Q, u \ne v\}$ is the undirected edge set, and $\ell_Q: V_Q \cup E_Q \to \Sigma_V \cup \Sigma_E$ is the labeling function assigning vertex labels $\ell_Q(u) \in \Sigma_V$ and edge labels $\ell_Q(e) \in \Sigma_E$.
 
-- **Dynamic Data Graph:**
+- **Dynamic Data Graph & Vertex Universe:**
   A dynamic, undirected, labeled simple graph at discrete time step $t \in \mathbb{N}$:
   $$G_t = (V_t, E_t, \ell_t)$$
-  evolving from an initial snapshot $G_0$ via a sequence of discrete edge update operations:
+  evolving from an initial snapshot $G_0 = (V_0, E_0, \ell_0)$ via a sequence of discrete edge update operations:
   $$\mathcal{S} = (\Delta e_1, \Delta e_2, \dots, \Delta e_t, \dots)$$
-  where each update is a tuple $\Delta e_t = (op_t, u_t, v_t, l_t)$ with $op_t \in \{+, -\}$, endpoints $u_t, v_t \in V_t$, and edge label $l_t \in \Sigma_E$.
+  where each update is a tuple $\Delta e_t = (op_t, u_t, v_t, l_t)$ with $op_t \in \{+, -\}$, endpoints $u_t, v_t$, and edge label $l_t \in \Sigma_E$.
   - Edge Insertion ($op = +$): $E_t = E_{t-1} \cup \{\{u_t, v_t\}\}$ with $\ell_t(\{u_t, v_t\}) = l_t$.
   - Edge Deletion ($op = -$): $E_t = E_{t-1} \setminus \{\{u_t, v_t\}\}$.
+
+  > [!IMPORTANT]
+  > **RapidFlow C++ Ingestion vs. Proposed Oracle Contract (R4-03):**
+  > - **RapidFlow C++ Baseline Ingestion Capability:** In `baselines/rapidflow/source/streaming/streaming_engine.cpp:21–34`, RapidFlow's stream reader parses vertex declarations (`v <id> <label>`) as well as edge insertions (`e <u> <v> <l>`) and deletions (`-e <u> <v> <l>`). RapidFlow C++ is **not** architecturally hard-coded in source to a fixed vertex set.
+  > - **Proposed APX-02 v1 Oracle Contract — Fixed Vertex Universe (`OPEN DECISION FOR USER CONFIRMATION`):**
+  >   To establish a well-defined ground truth oracle in APX-02 without requiring dynamic vertex schema evolution, we formally propose:
+  >   $$V_t = V_0, \quad \forall t \in \mathbb{N}$$
+  >   Under this proposed contract:
+  >   1. The vertex set $V_0$ and vertex labeling $\ell_t(v) = \ell_0(v)$ remain fixed for all $t$.
+  >   2. Edge updates $\Delta e_t$ only insert or delete edges between existing vertices ($u_t, v_t \in V_0$).
+  >   3. Vertices are **never destroyed** when all incident edges are removed; degree-0 (isolated) vertices remain valid members of $V_t$.
+  >   4. In microcases (e.g., Cases 13–15), reference to a "new node 5" denotes an external vertex pre-existing in $V_0 \setminus S_f$ that is newly connected to the pattern, not a dynamically instantiated vertex entity.
+  > - **Update Validity Preconditions (Proposed Contract):**
+  >   - **Valid Insertion ($+e = (u, v, l)$):** Requires $u, v \in V_0$, $u \ne v$, $\{u, v\} \notin E_{t-1}$, and $l \in \Sigma_E$.
+  >   - **Valid Deletion ($-e = (u, v, l)$):** Requires $\{u, v\} \in E_{t-1}$ and $\ell_{t-1}(\{u, v\}) = l$. Endpoints $u, v$ remain in $V_t$ after deletion.
+  > - **Invalid Stream Updates (`OPEN DECISION`):**
+  >   Handling of invalid operations (e.g. duplicate insertions of existing edges, deletions of absent edges, or label mismatches on deletion) is an open design decision: the APX-02 oracle contract may either (a) assume streams satisfy valid preconditions as a prerequisite, or (b) treat invalid updates as explicit no-ops / error signals. RapidFlow C++ behavior under malformed streams must be empirically characterized rather than assumed.
 
 - **Candidate Vertex Mapping:**
   A function mapping query vertices to data vertices at time step $t$:
@@ -74,26 +91,32 @@ Vertex labels are treated as **hard filtering invariants**:
 
 $$\forall u \in V_Q, \quad \ell_t(f(u)) = \ell_Q(u)$$
 
-- **Rationale:** In IP network telemetry (NetFlow), vertex labels represent distinct entity types (e.g. host types, autonomous systems, router interfaces). Relaxing vertex labels introduces categorical semantics that obscure structural evaluation. Any mapping violating vertex labels is rejected immediately with cost $\infty$.
+- **Rationale:** In IP network telemetry (NetFlow), vertex labels represent distinct entity types (used in hypothetical domain illustrations such as host types, autonomous systems, router interfaces). Relaxing vertex labels introduces categorical semantics that obscure structural evaluation. Any mapping violating vertex labels is rejected immediately with cost $\infty$.
 
 ### 3.3. Rigorous Differentiation: Exact Non-Induced vs. Induced vs. Approximate
 
-A frequent source of confusion in graph querying literature is conflating non-induced matching, induced matching, and approximate matching:
+A frequent source of confusion in graph querying literature is conflating non-induced matching, induced matching, and approximate matching. Rather than a linear hierarchy or simple subset chain, these paradigms represent distinct configurations along three independent structural constraint axes:
+1. **Missing Query Edges ($m_t(f)$):** Tolerance for absent or mismatched query edges ($\varepsilon_m$).
+2. **Internal Extra Chords ($x_{\mathrm{in},t}(f)$):** Tolerance for extra edges strictly inside $S_f$ ($\varepsilon_{\mathrm{in}}$).
+3. **External Boundary Cut ($x_{\mathrm{out},t}(f)$):** Tolerance for cut edges leaving $S_f$ to $V_t \setminus S_f$ ($\varepsilon_x$).
 
 ```mermaid
 flowchart TD
-    subgraph Space["Graph Matching Hierarchy"]
-        EX_IND["Exact Induced Matching: m=0, x_in=0 (x_out unconstrained)"]
-        EX_NON["Exact Non-Induced Matching: m=0 (x_in >= 0, x_out >= 0)"]
-        EX_BOUND["External-Boundary-Free Matching: x_out=0 (m >= 0, x_in >= 0)"]
-        EX_ISO["Isolated Induced Matching: m=0, x_in=0, x_out=0"]
-        APX_TRUE["True Approximate Matching (Model C): m <= eps_m, x_out <= eps_x"]
+    subgraph ConstraintSpace["Orthogonal Matching Paradigms (Constraint Space)"]
+        EX_NON["Exact Non-Induced Baseline (RapidFlow)<br>m=0, x_in unconstrained, x_out unconstrained"]
+        EX_IND["Exact Induced Matching<br>m=0, x_in=0, x_out unconstrained"]
+        EX_BOUND["External-Boundary-Free Matching<br>m unconstrained, x_in unconstrained, x_out=0"]
+        EX_ISO["Isolated Induced Matching<br>m=0, x_in=0, x_out=0"]
+        APX_MODELC["Model C Two-Threshold Approximate CSM<br>m <= eps_m, x_in unconstrained, x_out <= eps_x"]
     end
-    EX_IND -->|Relax internal chords| EX_NON
-    EX_NON -->|Constrain external cut| APX_TRUE
-    EX_IND -->|Constrain external cut| EX_ISO
-    EX_BOUND -->|Enforce exact pattern| APX_TRUE
 ```
+
+> [!IMPORTANT]
+> **Absence of Universal Subset / Containment Ordering between Exact and Model C:**
+> There is **no universal subset or superset relationship** between Exact Non-Induced matching ($\mathcal{M}_t^{\mathrm{exact}}$) and Model C Approximate matching ($\mathcal{M}_t^{(\varepsilon_m, \varepsilon_x)}$) when $\varepsilon_m \ge 1$ and $\varepsilon_x < \infty$:
+> - When $\varepsilon_m \ge 1$, Model C **relaxes** edge requirements, admitting inexact mappings where query edges are missing ($m > 0$). Such mappings do not belong to $\mathcal{M}_t^{\mathrm{exact}}$.
+> - When $\varepsilon_x < \infty$, Model C **restricts** external cut edges, disqualifying exact mappings whose boundary degree exceeds $\varepsilon_x$. Such mappings belong to $\mathcal{M}_t^{\mathrm{exact}}$ but are excluded from $\mathcal{M}_t^{(\varepsilon_m, \varepsilon_x)}$.
+> - Consequently, $\mathcal{M}_t^{(\varepsilon_m, \varepsilon_x)}$ and $\mathcal{M}_t^{\mathrm{exact}}$ generally have non-empty symmetric differences ($A \setminus B \ne \emptyset$ and $B \setminus A \ne \emptyset$).
 
 1. **Exact Non-Induced Subgraph Isomorphism (RapidFlow Baseline):**
    $$\forall \{u, v\} \in E_Q, \quad \{f(u), f(v)\} \in E_t \quad \land \quad \ell_t(\{f(u), f(v)\}) = \ell_Q(\{u, v\})$$
@@ -102,13 +125,19 @@ flowchart TD
    - Extra edges connecting $S_f$ to the rest of $G_t$ ($x_{\mathrm{out}} \ge 0$) are unpenalized.
 
 2. **Exact Induced Subgraph Isomorphism:**
-   $$\forall \{u, v\} \subset V_Q, \quad \{u, v\} \in E_Q \iff \{f(u), f(v)\} \in E_t \quad \land \quad \ell_t(\{f(u), f(v)\}) = \ell_Q(\{u, v\})$$
-   - Characterized by $m(f) = 0 \land x_{\mathrm{in}}(f) = 0$.
-   - Absolutely no extra internal edges within $S_f$ are permitted ($x_{\mathrm{in}} = 0$). External edges outside $S_f$ ($x_{\mathrm{out}} \ge 0$) are unpenalized.
+   Defined by two decoupled conditions to avoid evaluating labels on non-edges:
+   - **Condition 1 (Edge Existence Preservation across All Vertex Pairs):**
+     $$\forall \{u, v\} \subseteq V_Q \text{ with } u \ne v: \quad \{u, v\} \in E_Q \iff \{f(u), f(v)\} \in E_t$$
+   - **Condition 2 (Label Preservation on Existing Query Edges):**
+     $$\forall \{u, v\} \in E_Q: \quad \ell_t(\{f(u), f(v)\}) = \ell_Q(\{u, v\})$$
+   - Combined with Injectivity ($\forall u \ne v, f(u) \ne f(v)$) and Hard Vertex Labels ($\forall u \in V_Q, \ell_t(f(u)) = \ell_Q(u)$).
+   - **Equivalent Algebraic Characterization:**
+     $$m_t(f) = 0 \quad \land \quad x_{\mathrm{in},t}(f) = 0$$
+   - Absolutely no extra internal edges within $S_f$ are permitted ($x_{\mathrm{in}} = 0$). Note that $\ell_Q(\{u, v\})$ is **only** evaluated for pairs that belong to $E_Q$; for $\{u, v\} \notin E_Q$, no edge label is ever referenced. External cut edges outside $S_f$ ($x_{\mathrm{out}} \ge 0$) are unpenalized.
 
 3. **External-Boundary-Free Matching:**
    $$x_{\mathrm{out}}(f) = 0$$
-   - Strictly forbids edges between $S_f$ and $V_t \setminus S_f$.
+   - Strictly forbids cut edges between $S_f$ and $V_t \setminus S_f$.
    - Does **not** constrain internal edges: $x_{\mathrm{in}}(f) \ge 0$ is unpenalized.
 
 4. **Isolated Induced Matching:**
@@ -128,12 +157,12 @@ flowchart TD
 5. **Exact Subgraph with Clutter Threshold (Pseudo-Approximate):**
    $$\text{Exact Non-Induced}(f) \quad \land \quad x_{\mathrm{out},t}(f) \le \varepsilon_x$$
    - All query edges must be present ($m(f) = 0$). Only external boundary edges are filtered.
-   - **Crucial Limitation:** This produces a strict subset of exact matches ($\mathcal{M}_t \subseteq \mathcal{M}_t^{\mathrm{exact}}$). It cannot discover patterns where an expected communication link is missing or dropped.
+   - **Crucial Limitation:** This produces a subset of exact matches ($\mathcal{M}_t \subseteq \mathcal{M}_t^{\mathrm{exact}}$); if all exact matches satisfy the clutter threshold, the subset is non-strict ($\mathcal{M}_t = \mathcal{M}_t^{\mathrm{exact}}$). It cannot discover patterns where an expected communication link is missing or dropped.
 
 6. **True Approximate Subgraph Matching (APX Research Target):**
    A mapping $f$ is accepted if its structural deviation satisfies Model C:
    $$\mathcal{M}_t^{(\varepsilon_m, \varepsilon_x)} = \{f: V_Q \to V_t \mid f \text{ is injective}, \text{labels satisfied}, m_t(f) \le \varepsilon_m \land x_{\mathrm{out},t}(f) \le \varepsilon_x\}$$
-   When $\varepsilon_m \ge 1$, the accepted set contains genuinely inexact mappings ($\mathcal{M}_t^{(\varepsilon_m, \varepsilon_x)} \not\subseteq \mathcal{M}_t^{\text{exact}}$).
+   When $\varepsilon_m \ge 1$, the model **can admit** genuinely inexact mappings ($\mathcal{M}_t^{(\varepsilon_m, \varepsilon_x)}$ is not guaranteed to be a subset of $\mathcal{M}_t^{\mathrm{exact}}$ if near-matches exist in the data graph).
 
 ### 3.4. Disambiguation: Network Motifs vs. Approximate CSM
 The term "network motif" (introduced by Milo et al., Science 2002) refers to a **statistical property** of network topology: subgraphs that appear at a significantly higher frequency in an empirical graph than in randomized null models (preserving degree sequence).
@@ -148,13 +177,19 @@ The term "network motif" (introduced by Milo et al., Science 2002) refers to a *
 To explore the advisor's intent rigorously, we formulate four structural deviation components:
 
 ### 4.1. Missing-Edge Deviation ($m_t(f)$)
-The count of edges required by query $Q$ that fail to appear with matching labels between the corresponding mapped data vertices:
+The count of edges required by query $Q$ that fail to appear with matching labels between the corresponding mapped data vertices.
 
-$$m_t(f) = \sum_{\{u, v\} \in E_Q} \mathbf{1}\left[\{f(u), f(v)\} \notin E_t \;\lor\; \ell_t(\{f(u), f(v)\}) \ne \ell_Q(\{u, v\})\right]$$
+To ensure the label predicate is well-defined and does not dereference a label on an absent edge, we define the boolean satisfaction predicate $\text{required\_edge\_matches}(u, v, f, t)$:
+
+$$\text{required\_edge\_matches}(u, v, f, t) \iff \Big(\{f(u), f(v)\} \in E_t \;\land\; \ell_t(\{f(u), f(v)\}) = \ell_Q(\{u, v\})\Big)$$
+
+The missing-edge deviation is then formally evaluated as:
+
+$$m_t(f) = \sum_{\{u, v\} \in E_Q} \mathbf{1}\left[\neg \text{required\_edge\_matches}(u, v, f, t)\right]$$
 
 - **Domain:** $m_t(f) \in \{0, 1, \dots, |E_Q|\}$.
 - **Semantics:** $\varepsilon_m = 0 \implies$ no missing edges (exact edge presence). $\varepsilon_m = 1 \implies$ allows at most 1 missing query edge.
-- **Edge Label Mismatch Convention:** If an edge $\{f(u), f(v)\} \in E_t$ exists between two mapped vertices $u, v \in V_Q$ but has $\ell_t(\{f(u), f(v)\}) \ne \ell_Q(\{u, v\})$, it increments $m_t(f)$ by 1. Such internal label mismatches NEVER contribute to $x_{\mathrm{out},t}(f)$.
+- **Edge Label Mismatch Convention:** If an edge $\{f(u), f(v)\} \in E_t$ exists between two mapped vertices $u, v \in V_Q$ but has $\ell_t(\{f(u), f(v)\}) \ne \ell_Q(\{u, v\})$, it increments $m_t(f)$ by 1. Because both endpoints lie within $S_f$, this is an internal structural violation; such internal mismatches NEVER contribute to external boundary clutter $x_{\mathrm{out},t}(f)$.
 - **Topological Risk (Graph Disconnection):** If $Q$ is a tree or cycle, setting $m_t(f) \ge 1$ can cause the mapped vertex set $S_f$ to become disconnected in $G_t$. A connectivity constraint can be added as an explicit parameter (Section 4.5).
 
 ### 4.2. Internal Extra-Edge Deviation ($x_{\mathrm{in},t}(f)$)
@@ -177,20 +212,31 @@ $$x_{\mathrm{out},t}(f) = \left|\left\{\{a, b\} \in E_t \mid a \in S_f \;\land\;
 - **Vulnerability on High-Degree Hubs:** In NetFlow, hubs reach degrees up to 49,014. If an internal query vertex binds to a hub, $x_{\mathrm{out},t}(f)$ can exceed $30{,}000$, rejecting the embedding unless $\varepsilon_x$ is configured with an enormous threshold.
 
 ### 4.4. Normalized External Structural Deviation ($x_{\mathrm{norm},t}(f)$)
-To prevent absolute degree inflation from overwhelming larger queries, an exploratory normalized metric is defined:
+To explore rescaling boundary clutter relative to query size:
 
 $$x_{\mathrm{norm},t}(f) = \frac{x_{\mathrm{out},t}(f)}{2|E_Q| + x_{\mathrm{out},t}(f)} \in [0, 1)$$
 
-- **Properties & Limits:** Measures the proportion of boundary cut edges relative to the total incident volume of the pattern. It is an exploratory heuristic non-linear rescaling into $[0, 1)$. It is **NOT** a formal metric and does not satisfy metric axioms such as the triangle inequality.
+- **Properties & Clarifications:**
+  - The denominator $2|E_Q| + x_{\mathrm{out},t}(f)$ is a **query-size-anchored heuristic scale**, not the actual total incident volume of $S_f$ in general. (The actual total volume of edges incident to $S_f$ is $\sum_{v \in S_f} \deg_{G_t}(v) = 2|E(G_t[S_f])| + x_{\mathrm{out},t}(f)$, which deviates from $2|E_Q| + x_{\mathrm{out}}$ whenever $m > 0$ or $x_{\mathrm{in}} > 0$).
+  - $x_{\mathrm{norm}}$ is an exploratory bounded rescaling into $[0, 1)$ for ranking experiments. It is **NOT** proposed as a formal metric space distance, and no claims of metric properties (such as triangle inequality) are asserted without a formally defined metric space.
 
 ### 4.5. Connectedness Constraint Options
-When $m_t(f) > 0$, the mapped graph $G_t[S_f]$ can decompose into disconnected components. We define the boolean connectivity predicate $\mathcal{C}(f)$:
+When $m_t(f) > 0$, the mapped graph $G_t[S_f]$ can decompose into disconnected components. We define the boolean topological connectivity property $\mathcal{C}_t(f)$:
 
-$$\mathcal{C}(f) = \begin{cases} \text{true} & \text{if } G_t[S_f] \text{ is a connected graph} \\ \text{false} & \text{otherwise} \end{cases}$$
+$$\mathcal{C}_t(f) \equiv G_t[S_f] \text{ is a topologically connected graph } (\text{components}(G_t[S_f]) == 1)$$
 
-The framework defines two explicit, orthogonal modes for evaluating connectivity:
-- **Option C1 (Strict Connectedness Mode):** Require $\mathcal{C}(f) == \text{true}$ ($\text{components}(G_t[S_f]) = 1$). Under strict mode, any mapping where missing edges produce isolated vertices or disconnected fragments (such as Case 02 and Case 03 in the microcase catalog) is strictly **REJECTED**, even if $m_t(f) \le \varepsilon_m \land x_{\mathrm{out},t}(f) \le \varepsilon_x$.
-- **Option C2 (Relaxed Connectedness Mode):** Permit disconnected components up to a maximum component count $c_{\max} \ge 2$ (or disable connectivity checks entirely, $\mathcal{C}(f) \iff \text{true}$). Under relaxed mode, candidate acceptance is governed solely by the numerical deviation thresholds $(m_t(f) \le \varepsilon_m \land x_{\mathrm{out},t}(f) \le \varepsilon_x)$.
+To systematically evaluate connectivity within the composite matching filter, we define the constraint satisfaction predicate $\operatorname{ConnOK}(f)$:
+
+- **Option C1 (Strict Connectedness Mode — $\operatorname{ConnOK}_{\mathrm{strict}}(f)$):**
+  $$\operatorname{ConnOK}_{\mathrm{strict}}(f) \equiv \mathcal{C}_t(f)$$
+  Under strict mode, $G_t[S_f]$ must form a single connected component ($\text{components}(G_t[S_f]) == 1$). Note that connectivity is evaluated on the topological subgraph $G_t[S_f]$ induced by $S_f$ in data graph $G_t$ (edges present in $G_t$ between mapped vertices provide topological connectivity, regardless of whether their edge labels match query labels). Under strict mode, any mapping where missing edges produce isolated vertices or disconnected fragments (such as Case 02 and Case 03 in the microcase catalog) is strictly **REJECTED**, even if $m_t(f) \le \varepsilon_m \land x_{\mathrm{out},t}(f) \le \varepsilon_x$.
+- **Option C2 (Relaxed Unconstrained Mode — $\operatorname{ConnOK}_{\mathrm{relaxed}}(f)$):**
+  $$\operatorname{ConnOK}_{\mathrm{relaxed}}(f) \equiv \text{true}$$
+  Under relaxed unconstrained mode, connectivity is **not required / not enforced** (the predicate $\operatorname{ConnOK}_{\mathrm{relaxed}}(f)$ evaluates to $\text{true}$ unconditionally). Crucially, "relaxed" means connectivity is unconstrained; it does **NOT** require mappings to be disconnected. Both connected mappings and disconnected mappings are accepted if they satisfy $m_t(f) \le \varepsilon_m \land x_{\mathrm{out},t}(f) \le \varepsilon_x$.
+- **Option C3 (Relaxed Bounded Components — Exploratory Variant):**
+  $$\operatorname{ConnOK}_{\mathrm{bounded}}(f) \equiv (\text{components}(G_t[S_f]) \le c_{\max})$$
+  An intermediate relaxation where the number of disconnected components cannot exceed a finite budget $c_{\max}$. Note: this is a distinct variant (`RELAXED_BOUNDED_COMPONENTS`) and is not conflated with `RELAXED_UNCONSTRAINED`.
+- **Unapproved Alternate (Label-Preserving Connectivity):** Requiring connectivity strictly via edges that also satisfy query edge labels ($\mathcal{C}_{\mathrm{label}}(f)$) is an unapproved alternate model that would alter semantic acceptance. Under Gate A0 frozen semantics, $\mathcal{C}_t(f)$ strictly denotes topological connectivity of $G_t[S_f]$.
 
 ---
 
@@ -200,16 +246,18 @@ Rather than blending heterogeneous quantities ($m$ and $x$) into an arbitrary we
 
 ### The Decoupled Model $\mathcal{M}_t^{(\varepsilon_m, \varepsilon_x)}$
 
-$$f \in \mathcal{M}_t^{(\varepsilon_m, \varepsilon_x)} \iff \begin{cases}
+A candidate mapping $f: V_Q \to V_t$ is accepted at time $t$ if and only if:
+
+$$\operatorname{Accept}_t(f) \iff \begin{cases}
 f \text{ is injective on } V_Q \\
 \forall u \in V_Q, \ell_t(f(u)) = \ell_Q(u) \\
 m_t(f) \le \varepsilon_m \\
 x_{\mathrm{out},t}(f) \le \varepsilon_x \\
-\mathcal{C}(f) == \text{true} \quad (\text{if strict connectivity is active})
+\operatorname{ConnOK}(f) == \text{true}
 \end{cases}$$
 
 - **Parameter Space:** $\varepsilon_m \in \{0, 1, 2\}$, $\varepsilon_x \in \{0, 1, 2, 5, 10, 30, \infty\}$.
-- **Exact Recovery:** When $\varepsilon_m = 0$ and $\varepsilon_x = \infty$, the mathematical set of accepted ordered mappings $\mathcal{M}_t^{(0, \infty)}$ is identical to the exact non-induced subgraph isomorphism set $\mathcal{M}_{\mathrm{exact}}(Q, G_t)$. Note that RapidFlow's internal `COUNT_ONLY` streaming accumulator computes $\sum_t \Delta_t \cdot |\text{Aut}(Q)|$ aggregating over delta events, whereas full enumeration yields explicit injective vertex mappings.
+- **Exact Recovery:** When $\varepsilon_m = 0$ and $\varepsilon_x = \infty$, the mathematical set of accepted ordered mappings $\mathcal{M}_t^{(0, \infty)}$ is identical to the exact non-induced subgraph isomorphism set $\mathcal{M}_{\mathrm{exact}}(Q, G_t)$. Note that in RapidFlow's exact streaming engine (`streaming_engine.cpp:119–143,157–181`), candidate search is executed on a reduced query anchored at the update edge, and the local count is multiplied by a per-query-edge orbit multiplier (`automorphism_size` from `om_.get_automorphism_meta()`) to accumulate matches triggered by each stream update. This stream event accumulator is distinct from enumerating the full set of explicit ordered vertex mappings at a static snapshot $\mathcal{M}_t$.
 
 ---
 
@@ -275,12 +323,13 @@ To eliminate ambiguity across research milestones, we formalize three distinct m
 > **Research Standard:** In APX-01 through APX-05, the canonical matching entity is the **concrete ordered injective mapping** $f = (f(u_1), \dots, f(u_k))$. Aggregated summaries may report count of unique occurrences or automorphism classes, but the algorithm contracts must produce concrete mappings.
 
 ### 7.2. Concrete Output Modes
+
 | Output Mode | Operational Contract | Completion Guarantee | Performance Trade-off |
 | :--- | :--- | :--- | :--- |
-| `FULL_ENUMERATION` | Returns the complete set $\mathcal{M}_t^{\boldsymbol{\varepsilon}}$ with concrete vertex IDs and deviation scores $(m, x)$. | Complete ($\text{Recall} = 1.0$) | High memory and serialization latency on large match sets. |
-| `COUNT_ONLY` | Returns the integer scalar $|\mathcal{M}_t^{\boldsymbol{\varepsilon}}|$ representing total valid mappings. | Exact count only | Fast execution; does not produce concrete embeddings. |
-| `TOP_K` | Returns $K$ mappings minimizing deviation score under a pre-approved ranking policy. | Optimal within $K$ under ranking policy | **Status: EXPLORATORY / PENDING RANKING POLICY APPROVAL.** Requires defining a deterministic tie-breaking / scalarization rule (e.g. lexicographic $\langle m, x_{\mathrm{out}}\rangle$ vs $\langle x_{\mathrm{out}}, m\rangle$). |
-| `FIRST_K` (Witnesses) | Returns the first $K$ valid mappings discovered during search traversal. | Non-optimal; witness only | Fast response; must output explicit `is_complete` boolean flag indicating whether the entire candidate space was exhausted. |
+| `FULL_ENUMERATION` | Returns the complete set $\mathcal{M}_t^{\boldsymbol{\varepsilon}}$ of concrete ordered mappings $f = (f(u_1), \dots, f(u_k))$ along with deviation score tuple $(m_t(f), x_{\mathrm{out},t}(f))$. Required for the APX-02 independent reference oracle to track full snapshots and lifecycle deltas ($\text{ENTERED}_t, \text{EXITED}_t, \text{SCORE\_CHANGED}_t$). | Complete ($\text{Recall} = 1.0$) | High memory and serialization latency on large match sets. |
+| `COUNT_ONLY` | Returns the integer scalar $|\mathcal{M}_t^{\boldsymbol{\varepsilon}}|$ representing total valid mappings at snapshot $t$. | Exact count only | Fast execution; does not produce concrete embeddings. |
+| `TOP_K` | Returns $K$ mappings minimizing deviation score under a pre-approved ranking policy. | Optimal within $K$ under ranking policy | **Status: EXPLORATORY / PENDING RANKING POLICY APPROVAL.** Requires defining a deterministic tie-breaking / scalarization rule (e.g. lexicographic $\langle m, x_{\mathrm{out}}\rangle$ vs $\langle x_{\mathrm{out}}, m\rangle$). Not implemented in APX-01. |
+| `FIRST_K` (Witnesses) | Returns the first $K$ valid mappings discovered during search traversal. Note: $K = 1000$ in configuration drafts is strictly an **exploratory pilot default** for test harnesses, not an approved production truncation. | Non-optimal; witness only | Fast response; must output explicit `is_complete` boolean flag indicating whether the entire candidate space was exhausted. |
 
 ---
 

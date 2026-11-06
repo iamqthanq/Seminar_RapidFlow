@@ -25,9 +25,13 @@ The central challenge is to translate the advisor's informal concepts ("patterns
 ### 2.1. Model M: Missing-Edge Deviation ($m_t(f)$)
 
 #### Mathematical Formula
-Let $Q = (V_Q, E_Q, \ell_Q)$ and $G_t = (V_t, E_t, \ell_t)$. For an injective mapping $f: V_Q \to V_t$:
+Let $Q = (V_Q, E_Q, \ell_Q)$ and $G_t = (V_t, E_t, \ell_t)$. For an injective mapping $f: V_Q \to V_t$, we define the edge satisfaction predicate:
 
-$$m_t(f) = \sum_{\{u, v\} \in E_Q} \mathbf{1}\left[\{f(u), f(v)\} \notin E_t \;\lor\; \ell_t(\{f(u), f(v)\}) \ne \ell_Q(\{u, v\})\right]$$
+$$\text{required\_edge\_matches}(u, v, f, t) \iff \Big(\{f(u), f(v)\} \in E_t \;\land\; \ell_t(\{f(u), f(v)\}) = \ell_Q(\{u, v\})\Big)$$
+
+The missing-edge deviation is then evaluated without dereferencing labels on absent edges:
+
+$$m_t(f) = \sum_{\{u, v\} \in E_Q} \mathbf{1}\left[\neg \text{required\_edge\_matches}(u, v, f, t)\right]$$
 
 - **Physical Units:** Integer count of missing or label-mismatched query edges.
 - **Cost Domain:** $m_t(f) \in \{0, 1, 2, \dots, |E_Q|\}$.
@@ -36,7 +40,7 @@ $$m_t(f) = \sum_{\{u, v\} \in E_Q} \mathbf{1}\left[\{f(u), f(v)\} \notin E_t \;\
 
 #### Structural & Algorithmic Analysis
 - **Exact Recovery:** For $\varepsilon_m = 0$, Model M requires all query edges to exist, matching exact non-induced subgraph isomorphism.
-- **True Inexact Matching:** For $\varepsilon_m \ge 1$, Model M generates genuinely inexact embeddings that are **not** present in the exact matching set ($\mathcal{M}_t^{\varepsilon_m} \not\subseteq \mathcal{M}_t^{\text{exact}}$).
+- **Inexact Matching Capability:** For $\varepsilon_m \ge 1$, Model M **can admit** genuinely inexact embeddings that are not present in the exact matching set ($\mathcal{M}_t^{\varepsilon_m}$ is not guaranteed to be a subset of $\mathcal{M}_t^{\text{exact}}$ if near-matches exist in the data graph).
 - **Disconnectivity Hazard:** If $Q$ is a tree ($|E_Q| = |V_Q| - 1$), the removal of any edge increases the number of connected components from 1 to 2. Without a secondary connectedness constraint $\mathcal{C}(f)$, setting $\varepsilon_m \ge 1$ causes the search space to explode with arbitrary pairs of disconnected components.
 - **Prior-Art Grounding:**
   - *SAPPER (Zhang et al., PVLDB 2010):* Directly utilizes missing edge count $m(f) \le \varepsilon$ for approximate subgraph indexing on large static graphs. SAPPER demonstrates that missing-edge indexing is mathematically coherent, but SAPPER does not penalize extraneous edges.
@@ -142,10 +146,10 @@ To account for query size and avoid unbounded integer growth:
 
 $$x_{\mathrm{norm},t}(f) = \frac{x_{\mathrm{out},t}(f)}{2|E_Q| + x_{\mathrm{out},t}(f)}$$
 
-- **Properties:** Continuous range $[0, 1)$.
-  - When $x_{\mathrm{out}} = 0 \implies x_{\mathrm{norm}} = 0$.
-  - When $x_{\mathrm{out}} \to \infty \implies x_{\mathrm{norm}} \to 1$.
-- **Limitations:** Continuous thresholds complicate branch-and-bound pruning in integer graph engines. In addition, $x_{\mathrm{norm}}$ is a heuristic non-linear rescaling into $[0, 1)$ of external cut volume; it is **NOT** a formal metric and does NOT satisfy metric axioms such as the triangle inequality.
+- **Properties & Clarifications:**
+  - Range $[0, 1)$ with $x_{\mathrm{norm}} = 0$ when $x_{\mathrm{out}} = 0$, approaching $1$ as $x_{\mathrm{out}} \to \infty$.
+  - The denominator $2|E_Q| + x_{\mathrm{out},t}(f)$ is a **query-size-anchored heuristic scale**, not the actual total incident volume of $S_f$ in general. (The actual total volume of edges incident to $S_f$ is $\sum_{v \in S_f} \deg_{G_t}(v) = 2|E(G_t[S_f])| + x_{\mathrm{out},t}(f)$, which deviates from $2|E_Q| + x_{\mathrm{out}}$ whenever $m > 0$ or $x_{\mathrm{in}} > 0$).
+  - $x_{\mathrm{norm}}$ is an exploratory bounded rescaling into $[0, 1)$ for ranking experiments; it is **NOT** proposed as a formal metric space distance, and no claims of metric properties (such as triangle inequality) are asserted without a formally defined metric space.
 
 ---
 
@@ -175,7 +179,7 @@ For any candidate injective mapping $f: V_Q \to V_t$, consider the composed mapp
    Because the set of mapped vertices is identical, the induced subgraph $G_t[S_{f'}] = G_t[S_f]$ and the external cut edges are identical:
    $$x_{\mathrm{out},t}(f \circ \pi) = x_{\mathrm{out},t}(f) \quad \text{and} \quad x_{\mathrm{in},t}(f \circ \pi) = x_{\mathrm{in},t}(f)$$
 2. **Missing Edge Invariance:**
-   $$m_t(f \circ \pi) = \sum_{\{u, v\} \in E_Q} \mathbf{1}\left[\{f(\pi(u)), f(\pi(v))\} \notin E_t \;\lor\; \ell_t(\{f(\pi(u)), f(\pi(v))\}) \ne \ell_Q(\{u, v\})\right]$$
+   $$m_t(f \circ \pi) = \sum_{\{u, v\} \in E_Q} \mathbf{1}\left[\neg \text{required\_edge\_matches}(\pi(u), \pi(v), f, t)\right]$$
    Because $\pi$ is an automorphism of $Q$, $\{\pi(u), \pi(v)\}$ bijectively permutes the edge set $E_Q$ while preserving edge labels $\ell_Q(\{\pi(u), \pi(v)\}) = \ell_Q(\{u, v\})$. Therefore:
    $$m_t(f \circ \pi) = m_t(f)$$
 3. **Conclusion:**
@@ -192,17 +196,40 @@ For any candidate injective mapping $f: V_Q \to V_t$, consider the composed mapp
 
 ---
 
-### 2.8. NetFlow Multigraph Semantics & Simple Graph Projection [AF-02]
+### 2.8. NetFlow Multigraph Semantics, Simple Graph Projection & Ingestion Scope [R4-04, AF4-01]
 
 In real-world network traffic logs, NetFlow records represent communication sessions, naturally forming a **directed multigraph** with multiple timestamped flows between the same IP pair.
 
 However, RapidFlow and NewSP benchmark protocols model network structure as an **undirected labeled simple graph**:
-- In RapidFlow's ingestion loader (`baselines/rapidflow/source/graph.cpp`), incoming edges are sorted and duplicate edges between identical endpoints are explicitly discarded:
+- **Initial Static Graph Loading (`graph.cpp:613–618, 646–650, 656–659, 687–690`):**
+  When loading the initial static graph $G_0$, RapidFlow normalizes endpoints, sorts edges, and deduplicates consecutive duplicate endpoints into a CSR representation:
   ```cpp
-  if (u == v || edge == prev_edge) continue;
+  // Remove self-loops and normalize endpoints (graph.cpp:613-618)
+  if (temp_edge.begin_ == temp_edge.end_) {
+      continue;
+  }
+  else if (temp_edge.begin_ > temp_edge.end_) {
+      std::swap(temp_edge.begin_, temp_edge.end_);
+  }
+
+  // Sort edges by endpoints (graph.cpp:646-650)
+  std::sort(edges.begin(), edges.end(), [](const TempEdge& l, const TempEdge& r) {
+     if (l.begin_ == r.begin_)
+         return l.end_ < r.end_;
+     return l.begin_ < r.begin_;
+  });
+
+  // Remove duplicate edge after sorting by endpoints (graph.cpp:657-659, 688-690)
+  if (edge.begin_ == prev_begin && edge.end_ == prev_end) {
+      continue;
+  }
   ```
-- Therefore, the operational graph model for CSM is strictly a **simple graph** ($|E_t[u, v]| \le 1$).
-- Extraneous edge counts ($x_{\mathrm{in}}$ and $x_{\mathrm{out}}$) evaluate distinct topological neighbors in this simple graph projection, rather than multigraph flow frequency.
+- **Ingestion Deduplication Scope (R4-04):**
+  We strictly confine the verified deduplication assertion to **initial static CSR graph loading**. In the dynamic streaming update loader (`baselines/rapidflow/source/streaming/streaming_engine.cpp:420–489`), incoming updates are appended directly to `std::vector<Update> stream` without global offline sorting or stream-wide deduplication. While individual index view update methods inspect edge existence, online stream-level duplicate handling is not guaranteed or verified. We make no assertion that raw streaming updates are deduplicated prior to execution.
+- **Edge Label Tie-Breaking & Non-Stable Sort (AF4-01):**
+  In `graph.cpp:646–650`, the lambda comparator passed to `std::sort` inspects **only** vertex endpoints (`begin_` and `end_`), ignoring edge labels. Furthermore, `std::sort` is not a stable sort algorithm (`std::stable_sort`). Consequently, if raw input records contain multiple edges between identical endpoints with conflicting labels ($(u, v, A)$ and $(u, v, B)$), their relative order after sorting is non-deterministic, and it **cannot be asserted** that the edge appearing first in the input file is retained. A deterministic edge-label resolution policy must be formally specified before evaluating multi-label edge streams. We emphasize that this is an analytical data-handling boundary condition rather than an observed corruption in the NetFlow dataset.
+- **Operational Simple Graph Model:**
+  The operational graph model for CSM is strictly an **undirected simple graph** ($|E_t[u, v]| \le 1$). Extraneous edge counts ($x_{\mathrm{in}}$ and $x_{\mathrm{out}}$) evaluate distinct topological neighbors in this simple graph projection, rather than multigraph flow frequency.
 
 ---
 
