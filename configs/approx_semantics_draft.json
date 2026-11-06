@@ -36,7 +36,7 @@
         "default_requirement": true,
         "supported_modes": {
           "strict": "components(G_t[S_f]) == 1 (disconnected mappings like Case 02/03 rejected)",
-          "relaxed": "components unconstrained or <= c_max (evaluated purely on m and x_out)"
+          "relaxed": "connectivity unconstrained (evaluated purely on m_t(f) <= epsilon_m and x_out,t(f) <= epsilon_x; admits both connected and disconnected mappings)"
         }
       }
     }

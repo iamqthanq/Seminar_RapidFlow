@@ -2,7 +2,7 @@
 
 - **Document Version:** `1.0.0-PROPOSAL`
 - **Gate:** Gate A0 (APX-01 — Semantics & Threshold Selection Protocol)
-- **Status:** DRAFT WORKING SPECIFICATION / FOR PEER & ADVISOR REVIEW
+- **Status:** REVIEW_READY / PENDING_USER_GATE_A0_ACCEPTANCE
 - **Parent Issue:** [#12 — [APX-01] Gate A0: Approximate CSM Semantics & Threshold Selection Protocol](https://github.com/iamqthanq/Seminar_RapidFlow/issues/12)
 - **Repository Target:** `iamqthanq/Seminar_RapidFlow` (Integration base: `QuangThang`)
 - **Author:** Senior Graph Algorithms Researcher & Research Software Engineer
@@ -53,11 +53,13 @@ $$\mathbf{RECOMMENDED\ MODEL:\ M_t^{(\varepsilon_m, \varepsilon_x)} \quad \text{
 The following architectural questions remain open and will be presented to the advisor during the next milestone review:
 
 1. **Hub vs. Peripheral Clutter:**
-   *Question:* In NetFlow, network hubs (e.g. DNS servers, gateway routers) naturally possess tens of thousands of external incident edges ($x_{\mathrm{out}} \approx 30{,}000$).
+   *Question:* In NetFlow, high-degree network entities (hypothetically illustrated by DNS servers or gateway routers) naturally possess tens of thousands of external incident edges ($x_{\mathrm{out}} \approx 30{,}000$).
    Does the advisor intend for the boundary penalty $x_{\mathrm{out}} \le \varepsilon_x$ to disqualify all hub-associated embeddings, or should boundary penalties only apply to non-hub vertices?
-2. **Tree Disconnection Acceptance:**
-   *Question:* When $\varepsilon_m \ge 1$ is applied to a tree query, the mapped data subgraph $G[S_f]$ becomes disconnected into isolated components.
-   Should Approximate CSM strictly enforce the connectivity constraint $\mathcal{C}(f) == \text{true}$?
+2. **Topological Connectivity Constraint vs. Unconstrained Evaluation:**
+   *Question:* When $\varepsilon_m \ge 1$ is applied to a query whose removal of an edge disconnects the data image (e.g. tree query edges), the induced data subgraph $G_t[S_f]$ becomes disconnected into isolated components.
+   - Under **Strict Connectivity Mode**, we enforce $\mathcal{C}(f) \iff \text{components}(G_t[S_f]) == 1$, rejecting disconnected matches.
+   - Under **Relaxed Connectivity Mode**, connectivity is unconstrained (not enforced; evaluated purely on $m \le \varepsilon_m$ and $x_{\mathrm{out}} \le \varepsilon_x$, which accepts both connected and disconnected matches alike; it does not require disconnection).
+   Should Approximate CSM strictly enforce topological connectivity $\mathcal{C}(f) == \text{true}$ as default, or should relaxed mode be adopted? (Note: query-label-conforming connectivity is an unapproved alternate).
 3. **Output Granularity on Dense Streams:**
    *Question:* When $\varepsilon_m \ge 1$, the number of approximate matches can increase by orders of magnitude.
    Does the advisor require complete embedding enumeration (`FULL_ENUM`), or is a bounded witness contract (`FIRST_K` or `TOP_K`) acceptable for online stream processing?
@@ -76,15 +78,15 @@ The following architectural questions remain open and will be presented to the a
 | **RISK-03** | **Non-Local Update Overhead:** Invalidation of $x_{\mathrm{out}}$ triggered by external edge updates outside the mapped query. | Medium | Investigate boundary vertex index structures in APX-03; isolate update impacts. |
 | **RISK-04** | **Circular Evaluation Trap:** Selecting $\varepsilon = 2$ and claiming high precision without independent semantic ground truth. | Critical | Strict separation of Correctness Truth (oracle) from Relevance Truth (held-out perturbation). |
 | **RISK-05** | **Incremental Dual Matching Correctness:** RapidFlow relies on symmetric decomposition for exact CSM; under $m > 0$ or boundary constraints, its correctness is unproven. | High | Mandate formal proof or fallback to direct single-direction search before enabling Dual Matching in APX-03. |
-| **RISK-06** | **NetFlow Multigraph Deduplication:** NetFlow data naturally contains duplicate flows between IP pairs, but RapidFlow's CSR loader in `graph.cpp` deduplicates to a simple graph. | Low | Explicitly document that CSM algorithms operate on the simple graph projection of NetFlow. |
+| **RISK-06** | **NetFlow Multigraph Deduplication:** NetFlow data streams may contain parallel flows between the same IP pairs. RapidFlow's graph loader (`baselines/rapidflow/source/graph/graph.cpp:613–618,646–650,656–659,687–690`) normalizes undirected endpoints via `std::swap` and skips consecutive duplicates (`edge.begin_ == prev_begin && edge.end_ == prev_end`), silently projecting streams to simple graphs. | Low | Explicitly document that CSM algorithms operate on the simple graph projection of NetFlow. |
 
 ---
 
-## 6. Gate A0 Recommendation & Verdict
+## 6. Gate A0 Status & Recommendation
 
-$$\mathbf{GATE\ A0\ VERDICT:\ GO\ (DOCUMENTATION\ READY\ FOR\ INDEPENDENT\ REVIEW)}$$
+$$\mathbf{GATE\ A0\ STATUS:\ REVIEW\_READY\ /\ PENDING\_USER\_GATE\_A0\_ACCEPTANCE}$$
 
-All required theoretical foundations, formal problem definitions, deviation models, candidate grids, and reference microcases for APX-01 are complete and mathematically reconciled.
+All required theoretical foundations, formal problem definitions, deviation models, candidate grids, and reference microcases for APX-01 are complete and mathematically reconciled. Gate A0 documentation is ready for independent review; formal acceptance is deferred to the user.
 
 ---
 

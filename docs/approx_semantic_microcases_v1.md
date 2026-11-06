@@ -14,8 +14,10 @@
 This catalog establishes **canonical micrograph test cases** (15 original reference cases plus Case 16) designed for manual verification, automated oracle validation (APX-02), and edge-case benchmarking.
 
 For every case, two strictly distinct conclusions are documented:
-1. **Mathematical Formula Acceptance:** Does the candidate mapping $f$ satisfy the objective criteria $m_t(f) \le \varepsilon_m \land x_{\mathrm{out},t}(f) \le \varepsilon_x$? Evaluated under both **Strict Connectivity Mode** ($\mathcal{C}(f) == \text{true}$) and **Relaxed Connectivity Mode** ($\mathcal{C}(f) == \text{false}$).
-2. **Semantic Relevance Judgment:** Does a domain specialist or research advisor consider this pattern structurally similar or relevant to query $Q$? Every qualitative judgment is explicitly tagged (`ADVISOR_CONFIRMED`, `TEAM_PROPOSED`, `UNVERIFIED`).
+1. **Mathematical Formula Acceptance:** Does the candidate mapping $f$ satisfy the objective criteria $m_t(f) \le \varepsilon_m \land x_{\mathrm{out},t}(f) \le \varepsilon_x$? Evaluated under both:
+   - **Strict Connectivity Mode ($\mathcal{C}(f) == \text{true}$):** Topological subgraph $G_t[S_f]$ must form a single connected component ($\text{components}(G_t[S_f]) == 1$).
+   - **Relaxed Connectivity Mode ($\mathcal{C}(f) \text{ unconstrained}$):** Connectivity is not enforced (both connected and disconnected mappings are evaluated solely on edge thresholds $m \le \varepsilon_m \land x_{\mathrm{out}} \le \varepsilon_x$).
+2. **Semantic Relevance Judgment:** Qualitative classification of candidate near-matches. Every qualitative judgment is explicitly tagged (`TEAM_PROPOSED`, `UNVERIFIED`). Specific examples (such as port numbers, router interfaces, and hub roles) are designated as hypothetical illustrations.
 
 All graphs are undirected simple graphs. Unless explicitly noted, all vertex labels are $0$.
 
@@ -35,8 +37,8 @@ All graphs are undirected simple graphs. Unless explicitly noted, all vertex lab
 - **Formula Acceptance:**
   - Strict Connectivity ($\mathcal{C}(f)=\text{true}, \varepsilon_m = 0, \varepsilon_x = 0$): **ACCEPTED**
   - Strict Connectivity ($\mathcal{C}(f)=\text{true}, \varepsilon_m = 1, \varepsilon_x = 2$): **ACCEPTED**
-  - Relaxed Connectivity ($\mathcal{C}(f)=\text{false}$): **ACCEPTED**
-- **Semantic Judgment:** `[ADVISOR_CONFIRMED]` Perfect structural match. Canonical positive ground truth.
+  - Relaxed Connectivity ($\mathcal{C}(f) \text{ unconstrained}$): **ACCEPTED**
+- **Semantic Judgment:** `[TEAM_PROPOSED]` Perfect structural match. Canonical positive exact baseline.
 
 ---
 
@@ -51,7 +53,7 @@ All graphs are undirected simple graphs. Unless explicitly noted, all vertex lab
 - **Formula Acceptance:**
   - Exact Non-Induced ($\varepsilon_m = 0, \varepsilon_x = \infty$): **REJECTED** ($m=1 > 0$, not in exact matching set).
   - **Strict Connectivity Mode ($\mathcal{C}(f) == \text{true}$):** **REJECTED** (mapped subgraph is disconnected; vertex 3 is an isolated node).
-  - **Relaxed Connectivity Mode ($\mathcal{C}(f) == \text{false}, \varepsilon_m = 1, \varepsilon_x = 2$):** **ACCEPTED** ($m=1 \le 1, x_{\mathrm{out}}=0 \le 2$).
+  - **Relaxed Connectivity Mode ($\mathcal{C}(f) \text{ unconstrained}, \varepsilon_m = 1, \varepsilon_x = 2$):** **ACCEPTED** ($m=1 \le 1, x_{\mathrm{out}}=0 \le 2$).
 - **Semantic Judgment:** `[TEAM_PROPOSED]` Near-match under relaxed connectivity. Two out of three communication links exist; candidate entity 3 is present but passive.
 
 ---
@@ -67,9 +69,10 @@ All graphs are undirected simple graphs. Unless explicitly noted, all vertex lab
 - **Formula Acceptance:**
   - Exact Non-Induced: **REJECTED** ($m=2 > 0$).
   - **Strict Connectivity Mode ($\mathcal{C}(f) == \text{true}$):** **REJECTED** across all thresholds (mapped subgraph has 3 disconnected components).
-  - **Relaxed Connectivity Mode ($\mathcal{C}(f) == \text{false}$):**
+  - **Relaxed Connectivity Mode ($\mathcal{C}(f) \text{ unconstrained}$):**
     - Under $\varepsilon_m = 1, \varepsilon_x = 2$: **REJECTED** ($m=2 > 1$).
     - Under $\varepsilon_m = 2, \varepsilon_x = 2$: **ACCEPTED** ($m=2 \le 2, x_{\mathrm{out}}=0 \le 2$).
+- **Methodological Note (AF3-02):** Case 03 is an **analytical toy stress-test / boundary fixture** to test oracle behavior under severe edge loss ($66.7\%$ missing query edges). In the operational benchmark grid (`docs/approx_threshold_protocol_v1.md`), $\varepsilon_m = 2$ is restricted to queries with $|E_Q| \ge 6$ to prevent candidate space explosion.
 - **Semantic Judgment:** `[TEAM_PROPOSED]` Structurally defective. Pattern has lost $66.7\%$ of its required connectivity; only a single edge remains.
 
 ---
@@ -104,7 +107,7 @@ All graphs are undirected simple graphs. Unless explicitly noted, all vertex lab
   - Exact Non-Induced: **ACCEPTED** ($m=0$).
   - Boundary-Free Isolation ($\varepsilon_x = 0$): **REJECTED** ($x_{\mathrm{out}} = 1 > 0$).
   - Clutter-Tolerant ($\varepsilon_m = 0, \varepsilon_x = 1$): **ACCEPTED** ($x_{\mathrm{out}} = 1 \le 1$).
-- **Semantic Judgment:** `[ADVISOR_CONFIRMED]` Highly relevant. This is the exact primary positive example cited by the advisor: a star motif with one extra background tail.
+- **Semantic Judgment:** `[TEAM_PROPOSED]` Highly relevant near-match. Conceptual motivation directly inspired by advisor's Week-9 discussion of star motifs with an extra background tail; specific case label and threshold are team-formulated.
 
 ---
 
@@ -142,7 +145,7 @@ All graphs are undirected simple graphs. Unless explicitly noted, all vertex lab
 
 ### Case 08: High-Degree NetFlow Hub
 - **Query $Q$:** Star $K_{1,2}$. Center $u_0$, leaves $u_1, u_2$.
-- **Data Graph $G$:** Vertex $0$ is a NetFlow core router interface with $\deg(0) = 1{,}000$, including edges to $1$ and $2$.
+- **Data Graph $G$:** Vertex $0$ is a synthetic degree-1,000 fixture `[HYPOTHETICAL STRUCTURAL PROBE]` (illustrating high-degree hub behavior, not an observed dataset router interface), including edges to $1$ and $2$.
 - **Mapping $f$:** $f(u_0) = 0, f(u_1) = 1, f(u_2) = 2$.
 - **Deviation Scores:**
   - $m(f) = 0$.
@@ -151,7 +154,7 @@ All graphs are undirected simple graphs. Unless explicitly noted, all vertex lab
 - **Formula Acceptance:**
   - Boundary-Tolerant ($\varepsilon_x \le 30$): **REJECTED** ($x_{\mathrm{out}} = 998$).
   - Unbounded Boundary Clutter ($\varepsilon_x = \infty$): **ACCEPTED**.
-- **Semantic Judgment:** `[TEAM_PROPOSED]` Contextual conflict. Under exact non-induced semantics, this is a valid embedding. Under external degree penalty, hubs are completely disqualified.
+- **Semantic Judgment:** `[TEAM_PROPOSED - HYPOTHETICAL PROBE]` Contextual conflict. Under exact non-induced semantics, this is a valid embedding. Under external degree penalty, hubs are completely disqualified.
 
 ---
 
@@ -162,11 +165,12 @@ All graphs are undirected simple graphs. Unless explicitly noted, all vertex lab
 - **Deviation Scores:**
   - $m(f) = 1$ (edge $\{2, 3\}$ exists in topology but label $2 \ne 1$).
   - $x_{\mathrm{in}}(f) = 0, x_{\mathrm{out}}(f) = 0$. (Internal edge label mismatch never increments $x_{\mathrm{out}}$).
-  - Connectivity: $\mathcal{C}(f) = \text{false}$ under label-strict matching (no matching edge between 2 and 3).
+  - Connectivity: $\mathcal{C}(f) = \text{true}$ (1 component; data edges $\{1, 2\}$ and $\{2, 3\}$ are both topologically present in $G_t[S_f]$).
 - **Formula Acceptance:**
-  - Exact matching: **REJECTED**.
-  - Strict Connectivity Mode ($\mathcal{C}(f) == \text{true}$): **REJECTED** (under label-strict connectivity).
-  - Relaxed Connectivity Mode ($\mathcal{C}(f) == \text{false}, \varepsilon_m = 1, \varepsilon_x = 2$): **ACCEPTED** ($m=1 \le 1, x_{\mathrm{out}}=0 \le 2$).
+  - Exact Non-Induced: **REJECTED** ($m=1 > 0$, label mismatch on edge $\{2, 3\}$).
+  - **Strict Connectivity Mode ($\mathcal{C}(f) == \text{true}, \varepsilon_m = 1, \varepsilon_x = 2$):** **ACCEPTED** ($m=1 \le 1, x_{\mathrm{out}}=0 \le 2, \mathcal{C}(f)=\text{true}$).
+  - **Relaxed Connectivity Mode ($\mathcal{C}(f) \text{ unconstrained}, \varepsilon_m = 1, \varepsilon_x = 2$):** **ACCEPTED** ($m=1 \le 1, x_{\mathrm{out}}=0 \le 2$).
+- **Methodological Note (R3-F1):** Under the frozen Gate A0 topological connectivity definition $\mathcal{C}(f) = \text{connected}(G_t[S_f])$, $G_t[S_f]$ is a single connected path on vertices $\{1, 2, 3\}$. Hence Strict Connectivity evaluates to ACCEPTED. An alternative label-strict connectivity predicate ($\mathcal{C}_{\mathrm{label}}(f)$) would reject, but is an unapproved alternate.
 - **Semantic Judgment:** `[TEAM_PROPOSED - HYPOTHETICAL ILLUSTRATION]` Near-match. Protocol mismatch on one connection (e.g. hypothetical TCP port 80 vs 8080).
 
 ---
@@ -189,7 +193,7 @@ All graphs are undirected simple graphs. Unless explicitly noted, all vertex lab
   - $m(f) = 1$ (missing middle edge).
   - Connectivity $\mathcal{C}(f) = \text{false}$ (2 disconnected components).
 - **Formula Acceptance:**
-  - Unconstrained / Relaxed Mode ($\mathcal{C}(f) == \text{false}, \varepsilon_m = 1, \varepsilon_x = 2$): **ACCEPTED** ($m=1 \le 1, x_{\mathrm{out}}=0 \le 2$).
+  - **Relaxed Connectivity Mode ($\mathcal{C}(f) \text{ unconstrained}, \varepsilon_m = 1, \varepsilon_x = 2$):** **ACCEPTED** ($m=1 \le 1, x_{\mathrm{out}}=0 \le 2$).
   - Strict Connectedness Model ($\mathcal{C}(f) == \text{true}$): **REJECTED** (mapped graph is disconnected into 2 fragments).
 - **Semantic Judgment:** `[TEAM_PROPOSED]` Structurally fragmented. Two disconnected pairwise flows do not form an end-to-end multi-hop communication trace.
 
@@ -261,6 +265,6 @@ All graphs are undirected simple graphs. Unless explicitly noted, all vertex lab
   - **Strict Connectivity Mode ($\mathcal{C}(f) == \text{true}$):**
     - Under $(\varepsilon_m = 0, \varepsilon_x = 0)$: **REJECTED** ($m=1 > 0$).
     - Under $(\varepsilon_m = 1, \varepsilon_x = 0)$: **ACCEPTED** ($m=1 \le 1, x_{\mathrm{out}}=0 \le 0, \mathcal{C}(f)=\text{true}$).
-  - **Relaxed Connectivity Mode ($\mathcal{C}(f) == \text{false}$):**
+  - **Relaxed Connectivity Mode ($\mathcal{C}(f) \text{ unconstrained}$):**
     - Under $(\varepsilon_m = 1, \varepsilon_x = 0)$: **ACCEPTED** ($m=1 \le 1, x_{\mathrm{out}}=0 \le 0$).
 - **Semantic Judgment:** `[TEAM_PROPOSED]` High-relevance connected near-match. Candidate entity 3 is connected via neighbor 2 instead of center 0 (e.g. alternate network routing / path rerouting), preserving global component connectivity while missing the exact star center link. Conclusively proves that near-only matches ($m > 0, x_{\mathrm{out}} = 0$) CAN be strictly connected.

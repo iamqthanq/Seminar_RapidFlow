@@ -130,7 +130,12 @@ During Gate A0 planning and Gate A1 benchmarking, the following parameter grid i
 $$\varepsilon_m \in \{0, 1, 2\}$$
 - $\varepsilon_m = 0$: Strict edge presence (exact non-induced baseline).
 - $\varepsilon_m = 1$: Single missing query edge permitted.
-- $\varepsilon_m = 2$: Two missing query edges permitted (evaluated only for queries with $|E_Q| \ge 6$).
+- $\varepsilon_m = 2$: Two missing query edges permitted (restricted in empirical stream benchmarking to queries with $|E_Q| \ge 6$).
+
+> [!NOTE]
+> **Protocol Reconciliation for Microcase Fixtures (AF3-02):**
+> In the streaming benchmark exploration grid, $\varepsilon_m = 2$ is restricted to larger queries ($|E_Q| \ge 6$) to prevent candidate space explosion and structural over-dilation (where omitting 2 edges from a 3-edge query would discard $66.7\%$ of required connectivity).
+> In contrast, Case 03 in `docs/approx_semantic_microcases_v1.md` evaluates $\varepsilon_m = 2$ on the 3-edge star $K_{1,3}$ strictly as an **analytical toy stress-test / boundary fixture** to test oracle logic under extreme omission, outside the operational streaming benchmark grid.
 
 ### 5.2. External Boundary Clutter Grid ($\varepsilon_x$)
 $$\varepsilon_x \in \{0, 1, 2, 5, 10, 30, \infty\}$$
@@ -142,6 +147,7 @@ $$\varepsilon_x \in \{0, 1, 2, 5, 10, 30, \infty\}$$
 
 ### 5.3. Normalized Clutter Grid ($\varepsilon_{\mathrm{norm}}$)
 $$\varepsilon_{\mathrm{norm}} \in \{0.05, 0.10, 0.20, 0.35, 0.50\}$$
+Evaluated using the heuristic query-size-anchored rescaling $x_{\mathrm{norm}} = x_{\mathrm{out}} / (2|E_Q| + x_{\mathrm{out}})$. Note that this is an exploratory heuristic rescaling, not a metric space distance.
 
 ---
 
@@ -153,7 +159,7 @@ When evaluating candidate thresholds against labeled calibration sets, the follo
    $$N(\boldsymbol{\varepsilon}) = |\mathcal{M}_t^{\boldsymbol{\varepsilon}}|$$
 2. **Near-Only Yield ($N_{\mathrm{approx}}(\boldsymbol{\varepsilon})$):**
    $$N_{\mathrm{approx}}(\boldsymbol{\varepsilon}) = |\mathcal{M}_t^{\boldsymbol{\varepsilon}} \setminus \mathcal{M}_t^{\mathrm{exact}}|$$
-   Measures the volume of genuinely inexact mappings discovered that exact matching misses entirely. If $N_{\mathrm{approx}} == 0$, the approximate matcher is discovering zero novel structures.
+   Measures the volume of genuinely inexact mappings admitted by Model C that exact matching excludes. $N_{\mathrm{approx}} > 0$ when near-matches exist in the graph; if $N_{\mathrm{approx}} == 0$, the approximate matcher discovers zero novel structures on that snapshot.
 3. **Hub Exclusion Ratio ($H(\boldsymbol{\varepsilon})$):**
    $$H(\boldsymbol{\varepsilon}) = \frac{|\{f \in \mathcal{M}_t^{\mathrm{exact}} \mid \exists u \in V_Q, \deg(f(u)) \ge 1000 \land f \notin \mathcal{M}_t^{\boldsymbol{\varepsilon}}\}|}{|\{f \in \mathcal{M}_t^{\mathrm{exact}} \mid \exists u \in V_Q, \deg(f(u)) \ge 1000\}|}$$
    Measures the proportion of exact hub embeddings rejected purely due to the boundary clutter threshold $\varepsilon_x$.
@@ -164,7 +170,7 @@ When evaluating candidate thresholds against labeled calibration sets, the follo
 
 ## 7. Formal Threshold Decision Status
 
-$$\mathbf{CURRENT\ THRESHOLD\ STATUS:\ FINAL\_THRESHOLD\_PENDING\_VALIDATION}$$
+$$\mathbf{CURRENT\ THRESHOLD\ STATUS:\ REVIEW\_READY\ /\ PENDING\_USER\_GATE\_A0\_ACCEPTANCE}$$
 
 - **Pilot Benchmark Baseline:** For initial micrograph tests and APX-02 oracle verification, the pilot parameter tuple is provisionally set to:
   $$\boldsymbol{\varepsilon}_{\mathrm{pilot}} = (\varepsilon_m = 1, \varepsilon_x = 2)$$
