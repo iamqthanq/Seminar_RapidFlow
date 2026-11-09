@@ -39,6 +39,8 @@ rapidflow_apx03_baseline [OPTIONS]
 | `--max-candidates <int>` | Positive int | `10000000` | Safety budget cap on complete candidate evaluations. |
 | `--max-search-steps <int>` | Positive int | `10000000` | Safety budget cap on intermediate search exploration steps. |
 | `--output <path>` | Path | `None` | Path to serialize structured JSON output. |
+| `--verify-csr` | Flag | - | Verify native CSR structural equivalence against RapidFlow. |
+| `--test-csr` | Flag | - | Run internal C++ CSR equivalence test suite and exit. |
 | `--help` | Flag | - | Display usage information and exit. |
 
 ---

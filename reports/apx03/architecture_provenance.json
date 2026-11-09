@@ -30,7 +30,7 @@
     "root_dir": "extensions/apx03",
     "binary_target": "rapidflow_apx03_baseline",
     "binary_path": "extensions/apx03/build/rapidflow_apx03_baseline",
-    "binary_sha256": "26acfc290dce01c34df649cc1f5857ebf0d778e003f9a38c41850dc11f417b80",
+    "binary_sha256": "608927c21ee3e5ea46f9b3f98b019b721b9134cce7c9191bc099a5ed262addee",
     "sources": [
       "extensions/apx03/include/apx03_types.h",
       "extensions/apx03/include/apx03_graph.h",

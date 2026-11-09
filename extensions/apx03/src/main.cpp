@@ -47,7 +47,7 @@ bool parse_uint64_strict(const std::string& str, uint64_t& out_val) {
 void print_usage(const char* prog) {
     std::cout << "Usage: " << prog << " [options]\n"
               << "Options:\n"
-              << "  --query <file>              Query graph path (required)\n"
+              << "  --query <file>              Query graph path (required for matching)\n"
               << "  --data <file>               Data graph path (required)\n"
               << "  --eps-m <int>               Missing edge threshold (>= 0)\n"
               << "  --eps-x <int|inf|None>      External boundary threshold (>= 0 or inf/None)\n"
@@ -57,7 +57,103 @@ void print_usage(const char* prog) {
               << "  --max-candidates <int>      Candidate search budget (default: 10000000)\n"
               << "  --max-search-steps <int>    Search exploration steps budget (default: 10000000)\n"
               << "  --output <file>             Output JSON file path (optional)\n"
+              << "  --verify-csr                Verify native CSR structural equivalence\n"
+              << "  --test-csr                  Run internal C++ CSR equivalence test suite\n"
               << "  --help                      Show this help message\n";
+}
+
+std::string json_escape(const std::string& s) {
+    std::ostringstream o;
+    for (char c : s) {
+        switch (c) {
+            case '"': o << "\\\""; break;
+            case '\\': o << "\\\\"; break;
+            case '\b': o << "\\b"; break;
+            case '\f': o << "\\f"; break;
+            case '\n': o << "\\n"; break;
+            case '\r': o << "\\r"; break;
+            case '\t': o << "\\t"; break;
+            default:
+                if (static_cast<unsigned char>(c) <= 0x1f) {
+                    char buf[8];
+                    std::snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned char>(c));
+                    o << buf;
+                } else {
+                    o << c;
+                }
+        }
+    }
+    return o.str();
+}
+
+bool run_internal_csr_tests(std::string& out_report) {
+    // Test 1: Graph with vertex labels and edge labels
+    {
+        ApxGraph g;
+        std::string text = "v 0 10\nv 1 20\nv 2 30\ne 0 1 100\ne 1 2 200\n";
+        g.load_from_text(text);
+        if (!g.verify_against_native_csr()) {
+            out_report = "Failed CSR verification on labeled graph";
+            return false;
+        }
+    }
+
+    // Test 2: Graph with isolated vertices
+    {
+        ApxGraph g;
+        std::string text = "v 0 1\nv 1 1\nv 2 2\nv 3 2\ne 0 1 5\n";
+        g.load_from_text(text);
+        if (!g.verify_against_native_csr()) {
+            out_report = "Failed CSR verification on graph with isolated vertices";
+            return false;
+        }
+        if (g.get_degree(2) != 0 || g.get_degree(3) != 0) {
+            out_report = "Isolated vertices degree mismatch";
+            return false;
+        }
+    }
+
+    // Test 3: Graph with sparse non-contiguous IDs
+    {
+        ApxGraph g;
+        std::string text = "v 10 1\nv 500 2\nv 99999 3\ne 10 99999 42\n";
+        g.load_from_text(text);
+        if (!g.verify_against_native_csr()) {
+            out_report = "Failed CSR verification on graph with sparse IDs";
+            return false;
+        }
+    }
+
+    // Test 4: G0 CSR vs Gt mutable graph separation
+    {
+        ApxGraph g0;
+        std::string text = "v 0 0\nv 1 0\nv 2 0\ne 0 1 0\n";
+        g0.load_from_text(text);
+        if (!g0.verify_against_native_csr()) {
+            out_report = "Failed initial CSR verification on G0";
+            return false;
+        }
+        const Graph* native_rf = g0.get_native_rf_graph();
+        if (!native_rf || native_rf->getVerticesCount() != 3 || native_rf->getEdgesCount() != 1) {
+            out_report = "Native RF CSR initial size mismatch";
+            return false;
+        }
+
+        ApxGraph gt;
+        gt.load_from_text(text);
+        gt.apply_update({'+', 1, 2, 0});
+        if (gt.num_edges() != 2) {
+            out_report = "Mutable Gt failed to update edge count";
+            return false;
+        }
+        if (native_rf->getEdgesCount() != 1) {
+            out_report = "G0 native CSR was unexpectedly mutated by Gt update";
+            return false;
+        }
+    }
+
+    out_report = "Verified vertex labels, edge labels, isolated vertices, sparse IDs, and G0 CSR vs Gt mutable graph separation";
+    return true;
 }
 
 std::vector<Update> parse_stream_file(const std::string& path) {
@@ -101,19 +197,80 @@ std::vector<Update> parse_stream_file(const std::string& path) {
     return updates;
 }
 
-std::vector<uint32_t> parse_mapping_string(const std::string& str) {
-    std::vector<uint32_t> mapping;
-    std::string clean = str;
-    for (char& c : clean) {
-        if (c == '(' || c == ')' || c == '[' || c == ']' || c == ',') {
-            c = ' ';
+std::vector<uint32_t> parse_mapping_string(const std::string& raw_str) {
+    size_t first = raw_str.find_first_not_of(" \t\n\r");
+    if (first == std::string::npos) {
+        throw ApxException("Malformed mapping string: input is empty");
+    }
+    size_t last = raw_str.find_last_not_of(" \t\n\r");
+    std::string str = raw_str.substr(first, last - first + 1);
+
+    if ((str.front() == '(' && str.back() == ')') ||
+        (str.front() == '[' && str.back() == ']')) {
+        str = str.substr(1, str.size() - 2);
+        first = str.find_first_not_of(" \t\n\r");
+        if (first == std::string::npos) {
+            throw ApxException("Malformed mapping string: empty bracketed expression");
+        }
+        last = str.find_last_not_of(" \t\n\r");
+        str = str.substr(first, last - first + 1);
+    } else if (str.front() == '(' || str.front() == '[' ||
+               str.back() == ')' || str.back() == ']') {
+        throw ApxException("Malformed mapping string: mismatched enclosing brackets in '" + raw_str + "'");
+    }
+
+    if (str.find_first_of("()[]") != std::string::npos) {
+        throw ApxException("Malformed mapping string: unexpected bracket in '" + raw_str + "'");
+    }
+
+    std::vector<std::string> tokens;
+    size_t start = 0;
+    while (true) {
+        size_t comma = str.find(',', start);
+        if (comma == std::string::npos) {
+            tokens.push_back(str.substr(start));
+            break;
+        } else {
+            tokens.push_back(str.substr(start, comma - start));
+            start = comma + 1;
         }
     }
-    std::istringstream iss(clean);
-    uint32_t val = 0;
-    while (iss >> val) {
-        mapping.push_back(val);
+
+    if (tokens.empty()) {
+        throw ApxException("Malformed mapping string: no tokens in '" + raw_str + "'");
     }
+
+    std::vector<uint32_t> mapping;
+    for (const auto& tok : tokens) {
+        size_t t_first = tok.find_first_not_of(" \t\n\r");
+        if (t_first == std::string::npos) {
+            throw ApxException("Malformed mapping string: empty element (e.g. trailing/consecutive commas) in '" + raw_str + "'");
+        }
+        size_t t_last = tok.find_last_not_of(" \t\n\r");
+        std::string clean_tok = tok.substr(t_first, t_last - t_first + 1);
+
+        for (char c : clean_tok) {
+            if (!std::isdigit(static_cast<unsigned char>(c))) {
+                throw ApxException("Malformed mapping string: invalid character '" + std::string(1, c) + "' in token '" + clean_tok + "' of '" + raw_str + "'");
+            }
+        }
+
+        try {
+            size_t idx = 0;
+            unsigned long long val = std::stoull(clean_tok, &idx);
+            if (idx != clean_tok.size() || val > 4294967295ULL) {
+                throw ApxException("Malformed mapping string: integer overflow in token '" + clean_tok + "'");
+            }
+            mapping.push_back(static_cast<uint32_t>(val));
+        } catch (const std::exception& e) {
+            throw ApxException("Malformed mapping string: failed to parse integer in token '" + clean_tok + "': " + e.what());
+        }
+    }
+
+    if (mapping.empty()) {
+        throw ApxException("Malformed mapping string: empty mapping");
+    }
+
     return mapping;
 }
 
@@ -142,6 +299,8 @@ int main(int argc, char* argv[]) {
     ConnectivityMode mode = ConnectivityMode::STRICT;
     uint64_t max_candidates = 10000000ULL;
     uint64_t max_search_steps = 10000000ULL;
+    bool verify_csr_flag = false;
+    bool test_csr_flag = false;
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -195,9 +354,63 @@ int main(int argc, char* argv[]) {
             }
         } else if (arg == "--output" && i + 1 < argc) {
             output_path = argv[++i];
+        } else if (arg == "--verify-csr") {
+            verify_csr_flag = true;
+        } else if (arg == "--test-csr") {
+            test_csr_flag = true;
         } else {
             std::cerr << "[ERROR] Unknown option or missing argument: " << arg << "\n";
             print_usage(argv[0]);
+            return 1;
+        }
+    }
+
+    if (test_csr_flag) {
+        std::string report;
+        bool ok = run_internal_csr_tests(report);
+        if (ok) {
+            std::cout << "{\n"
+                      << "  \"test_csr\": \"PASS\",\n"
+                      << "  \"details\": \"" << json_escape(report) << "\"\n"
+                      << "}\n";
+            return 0;
+        } else {
+            std::cerr << "[ERROR] CSR internal tests failed: " << report << "\n";
+            std::cout << "{\n"
+                      << "  \"test_csr\": \"FAIL\",\n"
+                      << "  \"error\": \"" << json_escape(report) << "\"\n"
+                      << "}\n";
+            return 1;
+        }
+    }
+
+    if (verify_csr_flag && query_path.empty()) {
+        if (data_path.empty()) {
+            std::cerr << "[ERROR] --verify-csr requires --data <file>.\n";
+            return 1;
+        }
+        try {
+            ApxGraph G0;
+            G0.load_from_file(data_path);
+            bool ok = G0.verify_against_native_csr();
+            if (ok) {
+                std::cout << "{\n"
+                          << "  \"data\": \"" << json_escape(data_path) << "\",\n"
+                          << "  \"csr_verified\": true,\n"
+                          << "  \"num_vertices\": " << G0.num_vertices() << ",\n"
+                          << "  \"num_edges\": " << G0.num_edges() << "\n"
+                          << "}\n";
+                return 0;
+            } else {
+                std::cerr << "[ERROR] Native CSR verification failed for data graph: " << data_path << "\n";
+                std::cout << "{\n"
+                          << "  \"data\": \"" << json_escape(data_path) << "\",\n"
+                          << "  \"csr_verified\": false\n"
+                          << "}\n";
+                return 1;
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "[ERROR] " << e.what() << "\n";
             return 1;
         }
     }
@@ -220,6 +433,17 @@ int main(int argc, char* argv[]) {
         ApxGraph G0;
         G0.load_from_file(data_path);
 
+        if (verify_csr_flag) {
+            if (!Q.verify_against_native_csr()) {
+                std::cerr << "[ERROR] Native CSR verification failed for query graph: " << query_path << "\n";
+                return 1;
+            }
+            if (!G0.verify_against_native_csr()) {
+                std::cerr << "[ERROR] Native CSR verification failed for data graph: " << data_path << "\n";
+                return 1;
+            }
+        }
+
         if (!eval_mapping_str.empty()) {
             // Direct Mapping Evaluation Mode
             auto target_mapping = parse_mapping_string(eval_mapping_str);
@@ -228,11 +452,11 @@ int main(int argc, char* argv[]) {
 
             std::ostringstream json_out;
             json_out << "{\n"
-                     << "  \"query\": \"" << query_path << "\",\n"
-                     << "  \"data\": \"" << data_path << "\",\n"
+                     << "  \"query\": \"" << json_escape(query_path) << "\",\n"
+                     << "  \"data\": \"" << json_escape(data_path) << "\",\n"
                      << "  \"eps_m\": " << eps_m << ",\n"
                      << "  \"eps_x\": " << (eps_x_unbounded ? "null" : std::to_string(eps_x_val)) << ",\n"
-                     << "  \"mode\": \"" << to_string(mode) << "\",\n"
+                     << "  \"mode\": \"" << json_escape(to_string(mode)) << "\",\n"
                      << "  \"evaluation_type\": \"DIRECT_MAPPING_EVALUATION\",\n"
                      << "  \"target_mapping\": [";
             for (size_t i = 0; i < target_mapping.size(); ++i) {
@@ -259,11 +483,11 @@ int main(int argc, char* argv[]) {
 
             std::ostringstream json_out;
             json_out << "{\n"
-                     << "  \"query\": \"" << query_path << "\",\n"
-                     << "  \"data\": \"" << data_path << "\",\n"
+                     << "  \"query\": \"" << json_escape(query_path) << "\",\n"
+                     << "  \"data\": \"" << json_escape(data_path) << "\",\n"
                      << "  \"eps_m\": " << eps_m << ",\n"
                      << "  \"eps_x\": " << (eps_x_unbounded ? "null" : std::to_string(eps_x_val)) << ",\n"
-                     << "  \"mode\": \"" << to_string(mode) << "\",\n"
+                     << "  \"mode\": \"" << json_escape(to_string(mode)) << "\",\n"
                      << "  \"total_accepted\": " << matches.size() << ",\n"
                      << "  \"matches\": [\n";
 
@@ -298,12 +522,12 @@ int main(int argc, char* argv[]) {
 
             std::ostringstream json_out;
             json_out << "{\n"
-                     << "  \"query\": \"" << query_path << "\",\n"
-                     << "  \"initial_data\": \"" << data_path << "\",\n"
-                     << "  \"stream\": \"" << stream_path << "\",\n"
+                     << "  \"query\": \"" << json_escape(query_path) << "\",\n"
+                     << "  \"initial_data\": \"" << json_escape(data_path) << "\",\n"
+                     << "  \"stream\": \"" << json_escape(stream_path) << "\",\n"
                      << "  \"eps_m\": " << eps_m << ",\n"
                      << "  \"eps_x\": " << (eps_x_unbounded ? "null" : std::to_string(eps_x_val)) << ",\n"
-                     << "  \"mode\": \"" << to_string(mode) << "\",\n"
+                     << "  \"mode\": \"" << json_escape(to_string(mode)) << "\",\n"
                      << "  \"total_steps\": " << updates.size() << ",\n"
                      << "  \"history\": [\n";
 

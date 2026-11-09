@@ -155,6 +155,69 @@ class TestAPX03NativeIntegration(unittest.TestCase):
         except FileNotFoundError:
             self.skipTest("nm command not available")
 
+    def test_native_csr_internal_suite(self):
+        # R2-F01: Truly executes C++ internal test suite for CSR verification
+        proc = subprocess.run([str(BINARY_PATH), "--test-csr"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        self.assertEqual(proc.returncode, 0, f"Internal CSR test failed: {proc.stderr}")
+        res = json.loads(proc.stdout)
+        self.assertEqual(res.get("test_csr"), "PASS")
+        self.assertIn("Verified", res.get("details", ""))
+
+    def test_native_csr_verification_isolated_vertices_and_sparse_ids(self):
+        # R2-F01: Verifies CSR equivalence with vertex/edge labels, isolated vertices, sparse IDs
+        # 1. Graph with vertex labels and edge labels
+        g_labeled = "v 0 10\nv 1 20\nv 2 30\ne 0 1 100\ne 1 2 200\n"
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            f.write(g_labeled)
+            f_labeled = f.name
+        try:
+            proc = subprocess.run([str(BINARY_PATH), "--verify-csr", "--data", f_labeled], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            res = json.loads(proc.stdout)
+            self.assertTrue(res.get("csr_verified"))
+            self.assertEqual(res.get("num_vertices"), 3)
+            self.assertEqual(res.get("num_edges"), 2)
+        finally:
+            os.unlink(f_labeled)
+
+        # 2. Graph with isolated vertices (degree 0)
+        g_isolated = "v 0 1\nv 1 1\nv 2 2\nv 3 2\ne 0 1 5\n"
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            f.write(g_isolated)
+            f_isolated = f.name
+        try:
+            proc = subprocess.run([str(BINARY_PATH), "--verify-csr", "--data", f_isolated], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            res = json.loads(proc.stdout)
+            self.assertTrue(res.get("csr_verified"))
+            self.assertEqual(res.get("num_vertices"), 4)
+            self.assertEqual(res.get("num_edges"), 1)
+        finally:
+            os.unlink(f_isolated)
+
+        # 3. Graph with sparse non-contiguous IDs
+        g_sparse = "v 10 1\nv 500 2\nv 99999 3\ne 10 99999 42\n"
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            f.write(g_sparse)
+            f_sparse = f.name
+        try:
+            proc = subprocess.run([str(BINARY_PATH), "--verify-csr", "--data", f_sparse], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            res = json.loads(proc.stdout)
+            self.assertTrue(res.get("csr_verified"))
+            self.assertEqual(res.get("num_vertices"), 3)
+            self.assertEqual(res.get("num_edges"), 1)
+        finally:
+            os.unlink(f_sparse)
+
+    def test_native_csr_g0_vs_gt_mutable_separation(self):
+        # R2-F01: Distinguishes G0 CSR from mutable Gt, without requiring post-update CSR sync
+        g0 = "v 0 0\nv 1 0\nv 2 0\ne 0 1 0\n"
+        stream = "e 1 2 0\n"
+        ret, res, err = run_apx03_cli("v 0 0\nv 1 0\ne 0 1 0\n", g0, eps_m=0, eps_x=None, mode="STRICT", stream_text=stream)
+        self.assertEqual(ret, 0, err)
+        self.assertEqual(res.get("total_steps"), 1)
+
 
 # =============================================================================
 # 2. Canonical Microcases 01 - 16 (FIX-04)
@@ -506,6 +569,98 @@ class TestAPX03ThresholdValidationAndAliases(unittest.TestCase):
         self.assertEqual(res.get("eps_m"), 4294967295)
         self.assertEqual(res.get("eps_x"), 4294967295)
 
+    def test_strict_mapping_parser_negative_cases(self):
+        # R2-F03: Malformed mapping strings must exit non-zero and produce clear error messages
+        invalid_mappings = [
+            "10,20,BOGUS",
+            "10,20junk",
+            "10,20,",
+            ",10,20",
+            "10,,20",
+            "-1,20",
+            "10,20,4294967296",
+            "()",
+            "[10, 20",
+            "(10, 20, BOGUS)",
+            "abc",
+        ]
+        q = "v 0 0\nv 1 0\n"
+        d = "v 0 0\nv 1 0\n"
+        for m in invalid_mappings:
+            with tempfile.NamedTemporaryFile("w", delete=False) as qf, \
+                 tempfile.NamedTemporaryFile("w", delete=False) as df:
+                qf.write(q)
+                df.write(d)
+                qf.flush()
+                df.flush()
+                cmd = [
+                    str(BINARY_PATH),
+                    "--query", qf.name,
+                    "--data", df.name,
+                    "--eps-m", "0",
+                    "--evaluate-mapping", m,
+                ]
+                proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                os.unlink(qf.name)
+                os.unlink(df.name)
+                self.assertNotEqual(proc.returncode, 0, f"Expected non-zero exit code for malformed mapping '{m}'")
+                self.assertIn("Malformed mapping string", proc.stderr, f"Expected 'Malformed mapping string' in stderr for '{m}'")
+
+    def test_strict_mapping_parser_positive_cases(self):
+        # R2-F03: Valid mapping strings in standard formats
+        valid_mappings = [
+            ("0", [0]),
+            ("0, 1", [0, 1]),
+            ("(0, 1)", [0, 1]),
+            ("[0, 1]", [0, 1]),
+            ("  (0, 1)  ", [0, 1]),
+        ]
+        q = "v 0 0\nv 1 0\ne 0 1 0\n"
+        d = "v 0 0\nv 1 0\ne 0 1 0\n"
+        for m_str, expected in valid_mappings:
+            with tempfile.NamedTemporaryFile("w", delete=False) as qf, \
+                 tempfile.NamedTemporaryFile("w", delete=False) as df:
+                qf.write(q)
+                df.write(d)
+                qf.flush()
+                df.flush()
+                cmd = [
+                    str(BINARY_PATH),
+                    "--query", qf.name,
+                    "--data", df.name,
+                    "--eps-m", "0",
+                    "--evaluate-mapping", m_str,
+                ]
+                proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                os.unlink(qf.name)
+                os.unlink(df.name)
+                self.assertEqual(proc.returncode, 0, f"Valid mapping '{m_str}' failed: {proc.stderr}")
+                res = json.loads(proc.stdout)
+                self.assertEqual(res["target_mapping"], expected)
+
+    def test_json_escaping_with_special_characters(self):
+        # R2-F04: File paths with quotes, backslashes, spaces must be JSON-escaped properly
+        with tempfile.TemporaryDirectory() as td:
+            q_name = os.path.join(td, "q\"quote\\backslash.graph")
+            d_name = os.path.join(td, "d\"quote\\backslash.graph")
+            with open(q_name, "w") as f:
+                f.write("v 0 0\n")
+            with open(d_name, "w") as f:
+                f.write("v 0 0\n")
+
+            cmd = [
+                str(BINARY_PATH),
+                "--query", q_name,
+                "--data", d_name,
+                "--eps-m", "0",
+            ]
+            proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            # Verify JSON parseability
+            data = json.loads(proc.stdout)
+            self.assertEqual(data["query"], q_name)
+            self.assertEqual(data["data"], d_name)
+
 
 # =============================================================================
 # 5. Resource Guard Correctness & Adversarial Pruning (FIX-03)
@@ -605,15 +760,18 @@ class TestAPX03DynamicDeterministicDifferential(unittest.TestCase):
             cpp_entered = {parse_mapping_tuple(k): v for k, v in cpp_delta["entered"].items()}
             cpp_exited = {parse_mapping_tuple(k): v for k, v in cpp_delta["exited"].items()}
             cpp_score_changed = {parse_mapping_tuple(k): v for k, v in cpp_delta["score_changed"].items()}
+            cpp_unchanged = {parse_mapping_tuple(k): v for k, v in cpp_delta["unchanged"].items()}
 
             py_entered = py_d.entered
             py_exited = py_d.exited
             py_score_changed = py_d.score_changed
+            py_unchanged = py_d.unchanged
 
             # Assert mapping identities match 100%
             self.assertEqual(set(cpp_entered.keys()), set(py_entered.keys()), f"ENTERED keys mismatch at step {s_idx}")
             self.assertEqual(set(cpp_exited.keys()), set(py_exited.keys()), f"EXITED keys mismatch at step {s_idx}")
             self.assertEqual(set(cpp_score_changed.keys()), set(py_score_changed.keys()), f"SCORE_CHANGED keys mismatch at step {s_idx}")
+            self.assertEqual(set(cpp_unchanged.keys()), set(py_unchanged.keys()), f"UNCHANGED keys mismatch at step {s_idx}")
 
             # Assert metrics for ENTERED
             for m, cpp_sc in cpp_entered.items():
@@ -631,13 +789,26 @@ class TestAPX03DynamicDeterministicDifferential(unittest.TestCase):
                 self.assertEqual(cpp_sc["x_out"], py_sc.x_out, f"x_out mismatch in EXITED at step {s_idx}")
                 self.assertEqual(cpp_sc["connected"], py_sc.connected, f"connected mismatch in EXITED at step {s_idx}")
 
-            # Assert old and new metrics for SCORE_CHANGED
+            # Assert all 4 old and new metrics for SCORE_CHANGED (R2-F02)
             for m, (cpp_old, cpp_new) in cpp_score_changed.items():
                 py_old, py_new = py_score_changed[m]
                 self.assertEqual(cpp_old["m"], py_old.m, f"old m mismatch in SCORE_CHANGED at step {s_idx}")
+                self.assertEqual(cpp_old["x_in"], py_old.x_in, f"old x_in mismatch in SCORE_CHANGED at step {s_idx}")
                 self.assertEqual(cpp_old["x_out"], py_old.x_out, f"old x_out mismatch in SCORE_CHANGED at step {s_idx}")
+                self.assertEqual(cpp_old["connected"], py_old.connected, f"old connected mismatch in SCORE_CHANGED at step {s_idx}")
+
                 self.assertEqual(cpp_new["m"], py_new.m, f"new m mismatch in SCORE_CHANGED at step {s_idx}")
+                self.assertEqual(cpp_new["x_in"], py_new.x_in, f"new x_in mismatch in SCORE_CHANGED at step {s_idx}")
                 self.assertEqual(cpp_new["x_out"], py_new.x_out, f"new x_out mismatch in SCORE_CHANGED at step {s_idx}")
+                self.assertEqual(cpp_new["connected"], py_new.connected, f"new connected mismatch in SCORE_CHANGED at step {s_idx}")
+
+            # Assert all 4 metrics for UNCHANGED (R2-F02)
+            for m, cpp_sc in cpp_unchanged.items():
+                py_sc = py_unchanged[m]
+                self.assertEqual(cpp_sc["m"], py_sc.m, f"m mismatch in UNCHANGED at step {s_idx}")
+                self.assertEqual(cpp_sc["x_in"], py_sc.x_in, f"x_in mismatch in UNCHANGED at step {s_idx}")
+                self.assertEqual(cpp_sc["x_out"], py_sc.x_out, f"x_out mismatch in UNCHANGED at step {s_idx}")
+                self.assertEqual(cpp_sc["connected"], py_sc.connected, f"connected mismatch in UNCHANGED at step {s_idx}")
 
         # Step 4 specifically: adding internal chord {0,2} did NOT trigger SCORE_CHANGED
         step4_delta = cpp_history[3]["delta"]
