@@ -5,10 +5,10 @@
     "issue": 18,
     "branch": "feature/rf18-apx03-baseline",
     "base": "QuangThang",
-    "generator_invocation_commit_sha": "dc0a67124c0f1682ce657d894592bcbd24585d35",
-    "working_tree_dirty": true,
+    "generator_invocation_commit_sha": "09b0cda4bfe6e9318e0e0e82d2f4c18e2a97bee1",
+    "working_tree_dirty": false,
     "author": "Antigravity \u2014 Research Implementation Engineer",
-    "timestamp_iso": "2026-11-09T17:07:55.122249+00:00",
+    "timestamp_iso": "2026-11-09T17:08:44.439238+00:00",
     "generator_command": "python3 scripts/generate_apx03_correctness_report.py",
     "provenance_notes": "The generator_invocation_commit_sha records the repository HEAD when this report was executed. Cryptographic source and binary integrity is independently anchored by source_files_sha256.",
     "environment": {
@@ -42,7 +42,7 @@
       "passed": 40,
       "failures": 0,
       "errors": 0,
-      "duration_seconds": 0.4754,
+      "duration_seconds": 0.5648,
       "status": "PASS"
     },
     "exact_recovery_status": "PASS",
