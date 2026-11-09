@@ -1,0 +1,33 @@
+{
+  "document_type": "apx02_oracle_configuration",
+  "version": "1.0.0",
+  "parent_issue": 16,
+  "oracle_module": "scripts/apx02_oracle.py",
+  "test_module": "tests/test_apx02_oracle.py",
+  "scope_contracts": {
+    "scope_a_vertex_universe": "fixed_vertex_universe_v0",
+    "scope_b_update_validity": "strict_atomic_validation_explicit_exceptions",
+    "scope_c_connectivity_modes": {
+      "default_mode": "STRICT",
+      "supported_modes": [
+        "STRICT",
+        "RELAXED_UNCONSTRAINED"
+      ]
+    }
+  },
+  "combinatorial_guard": {
+    "max_candidates_limit": 10000000,
+    "probe_graph_strategy": "evaluate_mapping_direct"
+  },
+  "default_thresholds": {
+    "pilot_epsilon_m": 1,
+    "pilot_epsilon_x": 2,
+    "exact_recovery_epsilon_m": 0,
+    "exact_recovery_epsilon_x": null
+  },
+  "verification_targets": {
+    "microcases_catalog": "docs/approx_semantic_microcases_v1.md",
+    "total_reference_microcases": 16,
+    "independent_exact_matcher": "tests/test_apx02_oracle.py:TestAPX02ExactRecovery._independent_exact_matcher"
+  }
+}
