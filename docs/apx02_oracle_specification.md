@@ -80,16 +80,28 @@ x_{\mathrm{out},t}(f) \le \varepsilon_x \quad (\text{if } \varepsilon_x \ne \inf
 2. **RELAXED_UNCONSTRAINED Mode:**
    $$\operatorname{ConnOK}_{\mathrm{relaxed}}(f) \equiv \text{true}$$
 
+### 2.5. Parameter Domain Validation
+The Oracle strictly validates all public configuration parameters:
+- $\varepsilon_m \in \mathbb{N}_0$: Non-negative integer (negative values raise `ValueError`).
+- $\varepsilon_x \in \mathbb{N}_0 \cup \{\text{None}\}$: Non-negative integer or `None` (representing $\infty$; negative values raise `ValueError`).
+- `max_candidates` $\in \mathbb{N}^+$: Strictly positive integer guard against combinatorial explosion (values $\le 0$ raise `ValueError`).
+- Public CLI commands fail closed with non-zero exit codes (exit code 2) upon receiving invalid threshold values.
+
 ---
 
-## 3. Scope Preconditions (APX-02 v1)
+## 3. Scope Preconditions & Parser Contract (APX-02 v1)
 
-1. **Fixed Vertex Universe (Scope A):**
+1. **Explicit Vertex Declarations & Parser Fail-Closed Behavior:**
+   - In APX-02 canonical format, all vertices must be explicitly declared via `v <vid> <vlabel>` prior to being referenced in edge records.
+   - `SimpleGraph.from_text()` rejects any edge referencing an undeclared vertex by raising `UnknownVertexError`.
+   - The parser never silently fabricates missing vertices or assumes default labels.
+   - Isolated vertices (`v <vid> <label>` with no incident edges) are preserved in $V_0$.
+2. **Fixed Vertex Universe (Scope A):**
    $$V_t = V_0, \quad \forall t \in \mathbb{N}$$
    - Vertex IDs and vertex labels remain invariant across stream processing.
    - Stream updates only insert or delete edges among existing vertices in $V_0$.
    - Degree-0 (isolated) vertices remain members of $V_t$.
-2. **Valid Updates Only (Scope B):**
+3. **Valid Updates Only (Scope B):**
    - **Valid Insertion ($+e = (u, v, l)$):** Requires $u, v \in V_0, u \ne v, \{u, v\} \notin E_{t-1}, l \in \Sigma_E$.
    - **Valid Deletion ($-e = (u, v, l)$):** Requires $\{u, v\} \in E_{t-1}, \ell_{t-1}(\{u, v\}) = l$.
    - **Atomic Error Handling:** Any invalid update raises an explicit exception (`UnknownVertexError`, `DuplicateEdgeInsertionError`, `NonexistentEdgeDeletionError`, `EdgeLabelMismatchDeletionError`, `SelfLoopError`) without mutating graph state or oracle cache.
@@ -157,3 +169,12 @@ python3 scripts/apx02_oracle.py \
   --stream tests/fixtures/rf02/c01_path3_insert/stream.update \
   --output /tmp/c01_output.json
 ```
+
+---
+
+## 6. Independent Verification Architecture & Scientific Provenance
+
+To guarantee scientific independence and avoid self-referential test circularity:
+1. **Independent Reference Scorer:** `IndependentReferenceScorer` in `tests/test_apx02_oracle.py` computes all metrics ($m, x_{\mathrm{in}}, x_{\mathrm{out}}$) and topological connectivity (via `IndependentDisjointSetUnion`) from first principles without calling production oracle methods.
+2. **RF-02 Cross-Checks:** APX-02 Exact Recovery ($M(0, \infty)$) is programmatically cross-checked against both exact matchers (`find_all_embeddings` and `find_all_embeddings_brute_force`) in `scripts/rf02_oracle.py`.
+3. **Reproducible Evidence Generator:** `scripts/generate_apx02_correctness_report.py` executes live microcase assertions and the unit test suite, outputting machine-verifiable results to `reports/apx02/correctness_summary.json`.

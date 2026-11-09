@@ -243,11 +243,14 @@ class SimpleGraph:
                 u = int(tokens[1])
                 v = int(tokens[2])
                 label = int(tokens[3])
-                # Ensure vertices are present
                 if u not in g.vertices:
-                    g.add_vertex(u, 0)
+                    raise UnknownVertexError(
+                        f"Endpoint {u} not declared prior to edge record at line {line_num}: '{line}'"
+                    )
                 if v not in g.vertices:
-                    g.add_vertex(v, 0)
+                    raise UnknownVertexError(
+                        f"Endpoint {v} not declared prior to edge record at line {line_num}: '{line}'"
+                    )
                 g.add_edge(u, v, label)
             elif tag == "t":
                 # Header tag in some graph formats, ignore or log
@@ -298,6 +301,27 @@ def parse_stream_file(path: str) -> List[Update]:
 # Core Scoring & Evaluation Logic
 # ============================================================================
 
+def validate_thresholds(
+    eps_m: int,
+    eps_x: Optional[int],
+    max_candidates: Optional[int] = None,
+) -> None:
+    """
+    Validates parameter domain according to APX-01 / APX-02 specifications:
+    - eps_m in N_0 (non-negative integer)
+    - eps_x in N_0 union {None} (non-negative integer or None for infinity)
+    - max_candidates in N^+ (strictly positive integer)
+    """
+    if isinstance(eps_m, bool) or not isinstance(eps_m, int) or eps_m < 0:
+        raise ValueError(f"eps_m must be a non-negative integer, got {eps_m!r}")
+    if eps_x is not None:
+        if isinstance(eps_x, bool) or not isinstance(eps_x, int) or eps_x < 0:
+            raise ValueError(f"eps_x must be None or a non-negative integer, got {eps_x!r}")
+    if max_candidates is not None:
+        if isinstance(max_candidates, bool) or not isinstance(max_candidates, int) or max_candidates <= 0:
+            raise ValueError(f"max_candidates must be a positive integer, got {max_candidates!r}")
+
+
 def evaluate_mapping(
     Q: SimpleGraph,
     G: SimpleGraph,
@@ -324,6 +348,7 @@ def evaluate_mapping(
                     and (eps_x is None or x_out_t(f) <= eps_x)
                     and ConnOK(f)
     """
+    validate_thresholds(eps_m, eps_x)
     q_nodes = sorted(Q.vertices.keys())
     k = len(q_nodes)
 
@@ -473,6 +498,7 @@ def find_approximate_matches(
     Returns a dictionary mapping candidate tuple (f(q_0), ..., f(q_{k-1})) -> MappingEvaluation.
     Only accepted mappings are included in the return dict (sorted deterministically).
     """
+    validate_thresholds(eps_m, eps_x, max_candidates)
     q_nodes = sorted(Q.vertices.keys())
     k = len(q_nodes)
 
@@ -573,6 +599,7 @@ class DynamicOracle:
         mode: ConnectivityMode = ConnectivityMode.STRICT,
         max_candidates: int = 10_000_000,
     ):
+        validate_thresholds(eps_m, eps_x, max_candidates)
         self.Q = Q
         self.G = G0.clone()
         self.eps_m = eps_m
@@ -708,87 +735,111 @@ def parse_eps_x(val_str: str) -> Optional[int]:
     val = val_str.strip().lower()
     if val in ("none", "null", "inf", "infinity"):
         return None
-    return int(val)
+    try:
+        res = int(val)
+    except ValueError:
+        raise ValueError(f"Invalid eps_x value: '{val_str}'. Expected integer or 'none'/'inf'")
+    if res < 0:
+        raise ValueError(f"eps_x must be non-negative, got {res}")
+    return res
 
 
 def main():
     parser = build_cli_parser()
     args = parser.parse_args()
 
-    eps_x = parse_eps_x(args.eps_x)
-    mode = ConnectivityMode(args.mode)
+    try:
+        eps_x = parse_eps_x(args.eps_x)
+        validate_thresholds(args.eps_m, eps_x, args.max_candidates)
+    except ValueError as ex:
+        sys.stderr.write(f"Parameter Error: {ex}\n")
+        sys.exit(2)
 
-    print(f"[APX-02 ORACLE] Loading Query from {args.query}...")
-    Q = SimpleGraph.from_file(args.query)
-    print(f"[APX-02 ORACLE] Loading Data Graph from {args.data}...")
-    G0 = SimpleGraph.from_file(args.data)
+    try:
+        mode = ConnectivityMode(args.mode)
+    except ValueError as ex:
+        sys.stderr.write(f"Invalid mode: {ex}\n")
+        sys.exit(2)
+
+    try:
+        print(f"[APX-02 ORACLE] Loading Query from {args.query}...")
+        Q = SimpleGraph.from_file(args.query)
+        print(f"[APX-02 ORACLE] Loading Data Graph from {args.data}...")
+        G0 = SimpleGraph.from_file(args.data)
+    except Exception as ex:
+        sys.stderr.write(f"Graph Load Error: {ex}\n")
+        sys.exit(1)
 
     print(
         f"[APX-02 ORACLE] Configuration: eps_m={args.eps_m}, eps_x={eps_x}, mode={mode.value}"
     )
 
-    if not args.stream:
-        # Static Oracle evaluation
-        matches = find_approximate_matches(
-            Q, G0, args.eps_m, eps_x, mode, args.max_candidates
-        )
-        print(f"[APX-02 ORACLE] Static Evaluation Complete: {len(matches)} accepted matches found.")
-        for mapping, eval_res in matches.items():
-            print(f"  Mapping {mapping} -> m={eval_res.score.m}, x_in={eval_res.score.x_in}, x_out={eval_res.score.x_out}, conn={eval_res.score.connected}")
-
-        if args.output:
-            out_data = {
-                "query": args.query,
-                "data": args.data,
-                "eps_m": args.eps_m,
-                "eps_x": eps_x,
-                "mode": mode.value,
-                "total_accepted": len(matches),
-                "matches": [eval_res.to_dict() for eval_res in matches.values()],
-            }
-            with open(args.output, "w", encoding="utf-8") as f:
-                json.dump(out_data, f, indent=2)
-            print(f"[APX-02 ORACLE] Output serialized to {args.output}")
-
-    else:
-        # Dynamic Oracle evaluation
-        print(f"[APX-02 ORACLE] Loading Stream from {args.stream}...")
-        stream_updates = parse_stream_file(args.stream)
-        dyn_oracle = DynamicOracle(
-            Q, G0, args.eps_m, eps_x, mode, args.max_candidates
-        )
-        print(f"[APX-02 ORACLE] Step 0 (Initial Snapshot): {len(dyn_oracle.current_matches)} matches.")
-
-        history = []
-        for step_idx, update in enumerate(stream_updates, start=1):
-            delta = dyn_oracle.apply_update(update)
-            print(
-                f"[Step {step_idx}] {update.op} ({update.u}, {update.v}, L={update.label}) -> "
-                f"ENTERED={len(delta.entered)}, EXITED={len(delta.exited)}, "
-                f"SCORE_CHANGED={len(delta.score_changed)}, TOTAL={len(dyn_oracle.current_matches)}"
+    try:
+        if not args.stream:
+            # Static Oracle evaluation
+            matches = find_approximate_matches(
+                Q, G0, args.eps_m, eps_x, mode, args.max_candidates
             )
-            history.append({
-                "step": step_idx,
-                "update": asdict(update),
-                "delta": delta.to_dict(),
-                "total_active": len(dyn_oracle.current_matches),
-            })
+            print(f"[APX-02 ORACLE] Static Evaluation Complete: {len(matches)} accepted matches found.")
+            for mapping, eval_res in matches.items():
+                print(f"  Mapping {mapping} -> m={eval_res.score.m}, x_in={eval_res.score.x_in}, x_out={eval_res.score.x_out}, conn={eval_res.score.connected}")
 
-        if args.output:
-            out_data = {
-                "query": args.query,
-                "initial_data": args.data,
-                "stream": args.stream,
-                "eps_m": args.eps_m,
-                "eps_x": eps_x,
-                "mode": mode.value,
-                "total_steps": len(stream_updates),
-                "final_active_matches": len(dyn_oracle.current_matches),
-                "history": history,
-            }
-            with open(args.output, "w", encoding="utf-8") as f:
-                json.dump(out_data, f, indent=2)
-            print(f"[APX-02 ORACLE] Dynamic history serialized to {args.output}")
+            if args.output:
+                out_data = {
+                    "query": args.query,
+                    "data": args.data,
+                    "eps_m": args.eps_m,
+                    "eps_x": eps_x,
+                    "mode": mode.value,
+                    "total_accepted": len(matches),
+                    "matches": [eval_res.to_dict() for eval_res in matches.values()],
+                }
+                with open(args.output, "w", encoding="utf-8") as f:
+                    json.dump(out_data, f, indent=2)
+                print(f"[APX-02 ORACLE] Output serialized to {args.output}")
+
+        else:
+            # Dynamic Oracle evaluation
+            print(f"[APX-02 ORACLE] Loading Stream from {args.stream}...")
+            stream_updates = parse_stream_file(args.stream)
+            dyn_oracle = DynamicOracle(
+                Q, G0, args.eps_m, eps_x, mode, args.max_candidates
+            )
+            print(f"[APX-02 ORACLE] Step 0 (Initial Snapshot): {len(dyn_oracle.current_matches)} matches.")
+
+            history = []
+            for step_idx, update in enumerate(stream_updates, start=1):
+                delta = dyn_oracle.apply_update(update)
+                print(
+                    f"[Step {step_idx}] {update.op} ({update.u}, {update.v}, L={update.label}) -> "
+                    f"ENTERED={len(delta.entered)}, EXITED={len(delta.exited)}, "
+                    f"SCORE_CHANGED={len(delta.score_changed)}, TOTAL={len(dyn_oracle.current_matches)}"
+                )
+                history.append({
+                    "step": step_idx,
+                    "update": asdict(update),
+                    "delta": delta.to_dict(),
+                    "total_active": len(dyn_oracle.current_matches),
+                })
+
+            if args.output:
+                out_data = {
+                    "query": args.query,
+                    "initial_data": args.data,
+                    "stream": args.stream,
+                    "eps_m": args.eps_m,
+                    "eps_x": eps_x,
+                    "mode": mode.value,
+                    "total_steps": len(stream_updates),
+                    "final_active_matches": len(dyn_oracle.current_matches),
+                    "history": history,
+                }
+                with open(args.output, "w", encoding="utf-8") as f:
+                    json.dump(out_data, f, indent=2)
+                print(f"[APX-02 ORACLE] Dynamic history serialized to {args.output}")
+    except OracleError as ex:
+        sys.stderr.write(f"Oracle Execution Error: {ex}\n")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

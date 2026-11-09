@@ -1,206 +1,518 @@
 {
   "report_metadata": {
+    "document_type": "apx02_correctness_summary",
     "gate": "APX-02 (Gate A1)",
     "issue": 16,
     "branch": "feature/rf16-apx02-oracle",
     "base": "QuangThang",
-    "author": "Antigravity — Research Implementation Engineer",
-    "timestamp_iso": "2026-11-09T19:35:00+07:00",
+    "commit_sha": "15589d49f9a579b4235d414ea42b4286016740e3",
+    "working_tree_dirty": false,
+    "author": "Antigravity \u2014 Research Implementation Engineer",
+    "timestamp_iso": "2026-11-09T14:14:42.711417+00:00",
     "environment": {
-      "os": "Linux 6.6.137+rpt-rpi-2712",
-      "architecture": "aarch64",
-      "python_version": "3.11.2"
+      "os": "Linux-7.0.0-42-generic-x86_64-with-glibc2.39",
+      "architecture": "x86_64",
+      "python_version": "3.12.3"
     }
   },
   "overall_verdict": {
     "status": "PASS",
-    "total_apx02_tests": 32,
-    "passed": 32,
-    "failed": 0,
-    "errors": 0,
-    "total_repo_regression_tests": 129,
-    "repo_tests_passed": 129
+    "total_microcases": 16,
+    "microcases_passed": 16,
+    "microcases_failed": 0,
+    "apx02_unit_tests": {
+      "total_tests": 46,
+      "passed": 46,
+      "failures": 0,
+      "errors": 0,
+      "duration_seconds": 0.3973,
+      "status": "PASS"
+    }
   },
-  "microcase_results": [
+  "combinatorial_guard": {
+    "max_candidates_limit": 10000000,
+    "scale_probe_strategy": "DIRECT_MAPPING_EVALUATION"
+  },
+  "canonical_microcase_results": [
     {
       "case_id": "Case 01",
       "name": "Exact Isomorphic Match",
-      "query": "Path P3",
-      "data": "Path P3",
-      "thresholds": "(0, 0), (1, 2)",
-      "expected": "Strict ACCEPT (m=0, x_in=0, x_out=0, conn=True)",
-      "actual": "Strict ACCEPT (m=0, x_in=0, x_out=0, conn=True)",
+      "query_desc": "Path P3 (0-1-2)",
+      "data_desc": "Path P3 (1-2-3)",
+      "evaluation_type": "FULL_ENUMERATION",
+      "thresholds": {
+        "eps_m": 0,
+        "eps_x": 0
+      },
+      "target_mapping": [
+        1,
+        2,
+        3
+      ],
+      "expected": {
+        "m": 0,
+        "x_in": 0,
+        "x_out": 0,
+        "connected": true,
+        "strict_accepted": true,
+        "relaxed_accepted": true
+      },
+      "actual": {
+        "m": 0,
+        "x_in": 0,
+        "x_out": 0,
+        "connected": true,
+        "strict_accepted": true,
+        "relaxed_accepted": true
+      },
       "verdict": "PASS"
     },
     {
       "case_id": "Case 02",
       "name": "Missing One Leaf Edge",
-      "query": "Star K1,3",
-      "data": "Star K1,2 (node 3 isolated)",
-      "thresholds": "(1, 2)",
-      "expected": "Strict REJECT, Relaxed ACCEPT (m=1, x_in=0, x_out=0, conn=False)",
-      "actual": "Strict REJECT, Relaxed ACCEPT (m=1, x_in=0, x_out=0, conn=False)",
+      "query_desc": "Star K1,3",
+      "data_desc": "Star K1,2 (vertex 3 isolated)",
+      "evaluation_type": "FULL_ENUMERATION",
+      "thresholds": {
+        "eps_m": 1,
+        "eps_x": 2
+      },
+      "target_mapping": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "expected": {
+        "m": 1,
+        "x_in": 0,
+        "x_out": 0,
+        "connected": false,
+        "strict_accepted": false,
+        "relaxed_accepted": true
+      },
+      "actual": {
+        "m": 1,
+        "x_in": 0,
+        "x_out": 0,
+        "connected": false,
+        "strict_accepted": false,
+        "relaxed_accepted": true
+      },
       "verdict": "PASS"
     },
     {
       "case_id": "Case 03",
       "name": "Missing Two Edges (Severe Omission)",
-      "query": "Star K1,3",
-      "data": "Single edge {0, 1}",
-      "thresholds": "(1, 2), (2, 2)",
-      "expected": "Strict REJECT across all; Relaxed REJECT at (1,2), ACCEPT at (2,2) (m=2, x_in=0, x_out=0, conn=False)",
-      "actual": "Strict REJECT across all; Relaxed REJECT at (1,2), ACCEPT at (2,2) (m=2, x_in=0, x_out=0, conn=False)",
+      "query_desc": "Star K1,3",
+      "data_desc": "Single edge {0, 1}",
+      "evaluation_type": "FULL_ENUMERATION",
+      "thresholds": {
+        "eps_m_values": [
+          1,
+          2
+        ],
+        "eps_x": 2
+      },
+      "target_mapping": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "expected": {
+        "m": 2,
+        "x_in": 0,
+        "x_out": 0,
+        "connected": false,
+        "relaxed_at_12": false,
+        "relaxed_at_22": true
+      },
+      "actual": {
+        "m": 2,
+        "x_in": 0,
+        "x_out": 0,
+        "connected": false,
+        "relaxed_at_12": false,
+        "relaxed_at_22": true
+      },
       "verdict": "PASS"
     },
     {
       "case_id": "Case 04",
       "name": "Extra Internal Chords (Non-Induced)",
-      "query": "Cycle C4",
-      "data": "Clique K4",
-      "thresholds": "(0, 2)",
-      "expected": "Model C ACCEPT (m=0, x_in=2, x_out=0, conn=True); Exact Induced REJECT",
-      "actual": "Model C ACCEPT (m=0, x_in=2, x_out=0, conn=True); Exact Induced REJECT",
+      "query_desc": "Cycle C4",
+      "data_desc": "Clique K4",
+      "evaluation_type": "FULL_ENUMERATION",
+      "thresholds": {
+        "eps_m": 0,
+        "eps_x": 2
+      },
+      "target_mapping": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "expected": {
+        "m": 0,
+        "x_in": 2,
+        "x_out": 0,
+        "connected": true,
+        "accepted": true
+      },
+      "actual": {
+        "m": 0,
+        "x_in": 2,
+        "x_out": 0,
+        "connected": true,
+        "accepted": true
+      },
       "verdict": "PASS"
     },
     {
       "case_id": "Case 05",
       "name": "One Extra External Tail",
-      "query": "Star K1,2",
-      "data": "Star K1,3",
-      "thresholds": "(0, 0), (0, 1)",
-      "expected": "eps_x=0 REJECT; eps_x=1 ACCEPT (m=0, x_in=0, x_out=1, conn=True)",
-      "actual": "eps_x=0 REJECT; eps_x=1 ACCEPT (m=0, x_in=0, x_out=1, conn=True)",
+      "query_desc": "Star K1,2",
+      "data_desc": "Star K1,3",
+      "evaluation_type": "FULL_ENUMERATION",
+      "thresholds": {
+        "eps_m": 0,
+        "eps_x_values": [
+          0,
+          1
+        ]
+      },
+      "target_mapping": [
+        0,
+        1,
+        2
+      ],
+      "expected": {
+        "m": 0,
+        "x_in": 0,
+        "x_out": 1,
+        "connected": true,
+        "accepted_at_00": false,
+        "accepted_at_01": true
+      },
+      "actual": {
+        "m": 0,
+        "x_in": 0,
+        "x_out": 1,
+        "connected": true,
+        "accepted_at_00": false,
+        "accepted_at_01": true
+      },
       "verdict": "PASS"
     },
     {
       "case_id": "Case 06",
       "name": "Two Extra External Tails",
-      "query": "Star K1,2",
-      "data": "Star K1,4",
-      "thresholds": "(0, 1), (0, 2)",
-      "expected": "eps_x=1 REJECT; eps_x=2 ACCEPT (m=0, x_in=0, x_out=2, conn=True)",
-      "actual": "eps_x=1 REJECT; eps_x=2 ACCEPT (m=0, x_in=0, x_out=2, conn=True)",
+      "query_desc": "Star K1,2",
+      "data_desc": "Star K1,4",
+      "evaluation_type": "FULL_ENUMERATION",
+      "thresholds": {
+        "eps_m": 0,
+        "eps_x_values": [
+          1,
+          2
+        ]
+      },
+      "target_mapping": [
+        0,
+        1,
+        2
+      ],
+      "expected": {
+        "m": 0,
+        "x_in": 0,
+        "x_out": 2,
+        "connected": true,
+        "accepted_at_01": false,
+        "accepted_at_02": true
+      },
+      "actual": {
+        "m": 0,
+        "x_in": 0,
+        "x_out": 2,
+        "connected": true,
+        "accepted_at_01": false,
+        "accepted_at_02": true
+      },
       "verdict": "PASS"
     },
     {
       "case_id": "Case 07",
       "name": "Thirty Extra External Tails",
-      "query": "Star K1,2",
-      "data": "Star K1,32 (degree 32)",
-      "thresholds": "(0, 2), (0, 30)",
-      "expected": "eps_x=2 REJECT; eps_x=30 ACCEPT (m=0, x_in=0, x_out=30, conn=True)",
-      "actual": "eps_x=2 REJECT; eps_x=30 ACCEPT (m=0, x_in=0, x_out=30, conn=True)",
+      "query_desc": "Star K1,2",
+      "data_desc": "Star K1,32",
+      "evaluation_type": "FULL_ENUMERATION",
+      "thresholds": {
+        "eps_m": 0,
+        "eps_x": 30
+      },
+      "target_mapping": [
+        0,
+        1,
+        2
+      ],
+      "expected": {
+        "m": 0,
+        "x_in": 0,
+        "x_out": 30,
+        "connected": true,
+        "accepted": true
+      },
+      "actual": {
+        "m": 0,
+        "x_in": 0,
+        "x_out": 30,
+        "connected": true,
+        "accepted": true
+      },
       "verdict": "PASS"
     },
     {
       "case_id": "Case 08",
-      "name": "Synthetic High-Degree Hub (1,000 degree)",
-      "query": "Star K1,2",
-      "data": "Degree-1000 Hub fixture",
-      "thresholds": "(0, 30), (0, inf)",
-      "expected": "Direct evaluate_mapping: eps_x<=30 REJECT; eps_x=inf ACCEPT (m=0, x_out=998, conn=True)",
-      "actual": "Direct evaluate_mapping: eps_x<=30 REJECT; eps_x=inf ACCEPT (m=0, x_out=998, conn=True)",
+      "name": "Synthetic High-Degree Hub (Scalability Probe)",
+      "query_desc": "Triangle K3",
+      "data_desc": "Hub degree 1000 with edge {1, 2}",
+      "evaluation_type": "DIRECT_MAPPING_EVALUATION",
+      "thresholds": {
+        "eps_m": 0,
+        "eps_x": 1000
+      },
+      "target_mapping": [
+        0,
+        1,
+        2
+      ],
+      "expected": {
+        "m": 0,
+        "x_in": 0,
+        "x_out": 998,
+        "connected": true,
+        "accepted": true
+      },
+      "actual": {
+        "m": 0,
+        "x_in": 0,
+        "x_out": 998,
+        "connected": true,
+        "accepted": true
+      },
       "verdict": "PASS"
     },
     {
       "case_id": "Case 09",
-      "name": "Edge Label Mismatch with Topological Connectivity",
-      "query": "Path P3 (labels 1)",
-      "data": "Path P3 (edge 1-2 label 1, edge 2-3 label 2)",
-      "thresholds": "(1, 2)",
-      "expected": "Strict ACCEPT, Relaxed ACCEPT (m=1, x_in=0, x_out=0, conn=True)",
-      "actual": "Strict ACCEPT, Relaxed ACCEPT (m=1, x_in=0, x_out=0, conn=True)",
+      "name": "Edge Label Mismatch Topological Connectivity",
+      "query_desc": "Path P3 (L=1)",
+      "data_desc": "Path P3 with edge {2,3} labeled L=2",
+      "evaluation_type": "FULL_ENUMERATION",
+      "thresholds": {
+        "eps_m": 1,
+        "eps_x": 0
+      },
+      "target_mapping": [
+        1,
+        2,
+        3
+      ],
+      "expected": {
+        "m": 1,
+        "x_in": 0,
+        "x_out": 0,
+        "connected": true,
+        "accepted": true
+      },
+      "actual": {
+        "m": 1,
+        "x_in": 0,
+        "x_out": 0,
+        "connected": true,
+        "accepted": true
+      },
       "verdict": "PASS"
     },
     {
       "case_id": "Case 10",
-      "name": "Injectivity Violation",
-      "query": "Path P3",
-      "data": "Edge {1, 2}",
-      "thresholds": "all",
-      "expected": "Hard REJECT (is_injective=False)",
-      "actual": "Hard REJECT (is_injective=False)",
+      "name": "Injectivity Violation Detection",
+      "query_desc": "Path P3",
+      "data_desc": "Edge (1-2)",
+      "evaluation_type": "DIRECT_MAPPING_EVALUATION",
+      "thresholds": {
+        "eps_m": 0,
+        "eps_x": 0
+      },
+      "target_mapping": [
+        1,
+        2,
+        1
+      ],
+      "expected": {
+        "injective": false,
+        "accepted": false
+      },
+      "actual": {
+        "injective": false,
+        "accepted": false
+      },
       "verdict": "PASS"
     },
     {
       "case_id": "Case 11",
       "name": "Tree Query Disconnected by Missing Edge",
-      "query": "Path P4",
-      "data": "Two disjoint edges {1, 2} and {3, 4}",
-      "thresholds": "(1, 2)",
-      "expected": "Strict REJECT, Relaxed ACCEPT (m=1, x_in=0, x_out=0, conn=False)",
-      "actual": "Strict REJECT, Relaxed ACCEPT (m=1, x_in=0, x_out=0, conn=False)",
+      "query_desc": "Path P4 (tree)",
+      "data_desc": "Two disjoint edges {1,2} and {3,4}",
+      "evaluation_type": "FULL_ENUMERATION",
+      "thresholds": {
+        "eps_m": 1,
+        "eps_x": 0
+      },
+      "target_mapping": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "expected": {
+        "m": 1,
+        "x_in": 0,
+        "x_out": 0,
+        "connected": false,
+        "strict_accepted": false,
+        "relaxed_accepted": true
+      },
+      "actual": {
+        "m": 1,
+        "x_in": 0,
+        "x_out": 0,
+        "connected": false,
+        "strict_accepted": false,
+        "relaxed_accepted": true
+      },
       "verdict": "PASS"
     },
     {
       "case_id": "Case 12",
-      "name": "Dynamic Stream Insertion Pattern Enters",
-      "query": "Star K1,2",
-      "data": "Insert +e 0 2 0",
-      "thresholds": "(0, 0)",
-      "expected": "ENTERED (m=0, x_out=0, conn=True)",
-      "actual": "ENTERED (m=0, x_out=0, conn=True)",
+      "name": "Dynamic Insertion: Non-match -> Match",
+      "query_desc": "Star K1,2",
+      "data_desc": "Edge {0,1} -> adding {0,2}",
+      "evaluation_type": "DYNAMIC_STREAM",
+      "thresholds": {
+        "eps_m": 0,
+        "eps_x": 0
+      },
+      "expected": {
+        "target_entered": true,
+        "m": 0,
+        "x_out": 0
+      },
+      "actual": {
+        "target_entered": true,
+        "m": 0,
+        "x_out": 0
+      },
       "verdict": "PASS"
     },
     {
       "case_id": "Case 13",
-      "name": "Dynamic Stream Insertion Boundary Clutter Evicts",
-      "query": "Star K1,2",
-      "data": "Insert +e 0 5 0",
-      "thresholds": "(0, 1)",
-      "expected": "EXITED (x_out increases 1 -> 2 > 1)",
-      "actual": "EXITED (x_out increases 1 -> 2 > 1)",
+      "name": "Dynamic Insertion: Boundary Clutter Exceeded",
+      "query_desc": "Star K1,2",
+      "data_desc": "Star with 1 tail -> 2 tails (+ 0 5 0)",
+      "evaluation_type": "DYNAMIC_STREAM",
+      "thresholds": {
+        "eps_m": 0,
+        "eps_x": 1
+      },
+      "expected": {
+        "target_exited": true,
+        "old_x_out": 1
+      },
+      "actual": {
+        "target_exited": true,
+        "old_x_out": 1
+      },
       "verdict": "PASS"
     },
     {
       "case_id": "Case 14",
-      "name": "Dynamic Stream Deletion Boundary Clutter Removal Restores",
-      "query": "Star K1,2",
-      "data": "Delete -e 0 5 0",
-      "thresholds": "(0, 1)",
-      "expected": "ENTERED (x_out decreases 2 -> 1 <= 1)",
-      "actual": "ENTERED (x_out decreases 2 -> 1 <= 1)",
+      "name": "Dynamic Deletion: Boundary Clutter Recovered",
+      "query_desc": "Star K1,2",
+      "data_desc": "Star with 2 tails -> 1 tail (- 0 5 0)",
+      "evaluation_type": "DYNAMIC_STREAM",
+      "thresholds": {
+        "eps_m": 0,
+        "eps_x": 1
+      },
+      "expected": {
+        "target_entered": true,
+        "new_x_out": 1
+      },
+      "actual": {
+        "target_entered": true,
+        "new_x_out": 1
+      },
       "verdict": "PASS"
     },
     {
       "case_id": "Case 15",
-      "name": "Dynamic Update Score Changed",
-      "query": "Star K1,2",
-      "data": "Insert +e 0 5 0",
-      "thresholds": "(0, 3)",
-      "expected": "SCORE_CHANGED (x_out increases 1 -> 2 <= 3)",
-      "actual": "SCORE_CHANGED (x_out increases 1 -> 2 <= 3)",
+      "name": "Dynamic Update: Score Modification",
+      "query_desc": "Star K1,2",
+      "data_desc": "Star with eps_x=3, adding 2nd boundary tail (+ 0 5 0)",
+      "evaluation_type": "DYNAMIC_STREAM",
+      "thresholds": {
+        "eps_m": 0,
+        "eps_x": 3
+      },
+      "expected": {
+        "target_score_changed": true,
+        "old_m": 0,
+        "old_x_out": 1,
+        "new_m": 0,
+        "new_x_out": 2
+      },
+      "actual": {
+        "target_score_changed": true,
+        "old_m": 0,
+        "old_x_out": 1,
+        "new_m": 0,
+        "new_x_out": 2
+      },
       "verdict": "PASS"
     },
     {
       "case_id": "Case 16",
       "name": "Connected Near-Only Match",
-      "query": "Star K1,3",
-      "data": "Edges {0, 1}, {0, 2}, {2, 3}",
-      "thresholds": "(1, 0)",
-      "expected": "Model C Strict ACCEPT (m=1, x_in=1, x_out=0, conn=True); Exact Non-Induced REJECT",
-      "actual": "Model C Strict ACCEPT (m=1, x_in=1, x_out=0, conn=True); Exact Non-Induced REJECT",
+      "query_desc": "Star K1,3 (0-1, 0-2, 0-3)",
+      "data_desc": "Leaf 3 connected to leaf 2 ({0,1}, {0,2}, {2,3})",
+      "evaluation_type": "FULL_ENUMERATION",
+      "thresholds": {
+        "eps_m": 1,
+        "eps_x": 0
+      },
+      "target_mapping": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "expected": {
+        "m": 1,
+        "x_in": 1,
+        "x_out": 0,
+        "connected": true,
+        "accepted": true
+      },
+      "actual": {
+        "m": 1,
+        "x_in": 1,
+        "x_out": 0,
+        "connected": true,
+        "accepted": true
+      },
       "verdict": "PASS"
     }
-  ],
-  "scope_b_exception_results": {
-    "unknown_vertex_insertion": "PASS (UnknownVertexError, state unmutated)",
-    "unknown_vertex_deletion": "PASS (UnknownVertexError, state unmutated)",
-    "duplicate_edge_insertion": "PASS (DuplicateEdgeInsertionError, state unmutated)",
-    "nonexistent_edge_deletion": "PASS (NonexistentEdgeDeletionError, state unmutated)",
-    "edge_label_mismatch_deletion": "PASS (EdgeLabelMismatchDeletionError, state unmutated)",
-    "self_loop_error": "PASS (SelfLoopError, state unmutated)",
-    "atomic_recovery": "PASS (Subsequent valid update succeeds after rejected invalid update)"
-  },
-  "independent_correctness_results": {
-    "exact_recovery_relaxed": "PASS (Identical mapping-by-mapping to independent exact DFS monomorphism)",
-    "exact_recovery_strict_connected": "PASS (Identical to exact matcher for connected queries)",
-    "disconnected_query_refutation": "PASS (Q=2K2, G=2K2: Exact accepts, Strict rejects)",
-    "threshold_monotonicity": "PASS (eps <= eps' ==> M(eps) subseteq M(eps'))",
-    "strict_relaxed_inclusion": "PASS (M_strict subseteq M_relaxed)",
-    "automorphism_distinct_mappings": "PASS (Q=P4, G=C4: yields all 8 distinct ordered mappings)",
-    "dynamic_reversibility": "PASS (+e then -e ==> G2 == G0 and M2 == M0)",
-    "score_changed_regression": "PASS (Internal chord x_in mutation alone does NOT trigger SCORE_CHANGED)",
-    "randomized_differential_trials": "PASS (9/9 randomized trials match independent brute-force across seeds 42, 1337, 2026)"
-  }
+  ]
 }
