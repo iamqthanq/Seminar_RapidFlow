@@ -10,6 +10,7 @@ Executes:
 5. Deterministic JSON output generation to reports/apx02/correctness_summary.json.
 """
 
+import argparse
 import hashlib
 import io
 import itertools
@@ -22,7 +23,7 @@ import time
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 # Ensure repository root is on sys.path
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -750,10 +751,42 @@ def evaluate_microcases() -> List[Dict[str, Any]]:
     return results
 
 
+STATIC_DIFF_TEST_ID = (
+    "tests.test_apx02_oracle.TestAPX02IndependentStaticDifferential.test_independent_static_differential_trials"
+)
+DYNAMIC_DIFF_TEST_ID = (
+    "tests.test_apx02_oracle.TestAPX02IndependentDynamicDifferential.test_dynamic_streaming_differential"
+)
+
+
+class APX02DetailedTestResult(unittest.TextTestResult):
+    """Custom TestResult collecting granular status per test ID for provenance recording."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.test_outcomes: Dict[str, str] = {}
+
+    def addSuccess(self, test):
+        super().addSuccess(test)
+        self.test_outcomes[test.id()] = "PASS"
+
+    def addFailure(self, test, err):
+        super().addFailure(test, err)
+        self.test_outcomes[test.id()] = "FAIL"
+
+    def addError(self, test, err):
+        super().addError(test, err)
+        self.test_outcomes[test.id()] = "ERROR"
+
+    def addSkip(self, test, reason):
+        super().addSkip(test, reason)
+        self.test_outcomes[test.id()] = "SKIPPED"
+
+
 def run_apx02_tests() -> Dict[str, Any]:
     suite = unittest.TestLoader().loadTestsFromModule(test_module)
     stream = io.StringIO()
-    runner = unittest.TextTestRunner(stream=stream, verbosity=1)
+    runner = unittest.TextTestRunner(stream=stream, resultclass=APX02DetailedTestResult, verbosity=1)
     start_time = time.time()
     result = runner.run(suite)
     duration = time.time() - start_time
@@ -765,31 +798,85 @@ def run_apx02_tests() -> Dict[str, Any]:
         "errors": len(result.errors),
         "duration_seconds": round(duration, 4),
         "status": "PASS" if result.wasSuccessful() else "FAIL",
+        "test_outcomes": result.test_outcomes,
     }
 
 
-def main():
-    print("[APX-02 REPORT GENERATOR] Collecting Git and Platform metadata...")
-    git_info = get_git_info()
-    source_hashes = compute_source_hashes()
-    env_info = {
-        "os": platform.platform(),
-        "architecture": platform.machine(),
-        "python_version": platform.python_version(),
+def build_differential_verification(test_metrics: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Constructs differential verification report section by inspecting actual runtime
+    outcomes of differential test executions (E1: removes hardcoded PASS constants).
+    """
+    outcomes = test_metrics.get("test_outcomes", {})
+    static_status = outcomes.get(STATIC_DIFF_TEST_ID, "NOT_RUN")
+    dynamic_status = outcomes.get(DYNAMIC_DIFF_TEST_ID, "NOT_RUN")
+
+    if static_status == "PASS" and dynamic_status == "PASS":
+        diff_status = "PASS"
+    elif static_status in ("FAIL", "ERROR") or dynamic_status in ("FAIL", "ERROR"):
+        diff_status = "FAIL"
+    else:
+        diff_status = "NOT_RUN"
+
+    return {
+        "status": diff_status,
+        "method": "FULL_ENUMERATION_AND_DYNAMIC_SNAPSHOT_DIFFERENTIAL",
+        "executed_tests": [
+            {
+                "test_id": STATIC_DIFF_TEST_ID,
+                "name": "Static Independent Differential (25 Randomized Trials)",
+                "description": "Cross-checks find_approximate_matches against IndependentReferenceScorer with DSU across seeds 42, 1337, 2026, 7777, 9999",
+                "trials_executed": 25,
+                "status": static_status,
+            },
+            {
+                "test_id": DYNAMIC_DIFF_TEST_ID,
+                "name": "Dynamic Streaming Differential (State Machine Delta Verification)",
+                "description": "Verifies dynamic deltas (ENTERED, EXITED, SCORE_CHANGED, UNCHANGED) against IndependentReferenceScorer snapshot diffs",
+                "status": dynamic_status,
+            },
+        ],
+        "verification_scope": {
+            "static_randomized_trials": 25,
+            "seeds": [42, 1337, 2026, 7777, 9999],
+            "query_sizes": [2, 3, 4],
+            "data_graph_sizes": [4, 5, 6, 7],
+            "all_differential_tests_passed": (diff_status == "PASS"),
+        },
     }
 
-    print("[APX-02 REPORT GENERATOR] Evaluating 16 Canonical Microcases...")
-    microcases = evaluate_microcases()
+
+def generate_report_data(
+    microcases: Optional[List[Dict[str, Any]]] = None,
+    test_metrics: Optional[Dict[str, Any]] = None,
+    git_info: Optional[Dict[str, Any]] = None,
+    source_hashes: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
+    if microcases is None:
+        microcases = evaluate_microcases()
+    if test_metrics is None:
+        test_metrics = run_apx02_tests()
+    if git_info is None:
+        git_info = get_git_info()
+    if source_hashes is None:
+        source_hashes = compute_source_hashes()
+
     all_microcases_pass = all(c["verdict"] == "PASS" for c in microcases)
-    print(f"  Microcases evaluated: {len(microcases)} (All PASS: {all_microcases_pass})")
+    diff_verification = build_differential_verification(test_metrics)
+    diff_pass = (diff_verification["status"] == "PASS")
 
-    print("[APX-02 REPORT GENERATOR] Running APX-02 Test Suite...")
-    test_metrics = run_apx02_tests()
-    print(f"  Tests run: {test_metrics['total_tests']}, Passed: {test_metrics['passed']}, Failures: {test_metrics['failures']}, Errors: {test_metrics['errors']}")
+    unit_test_summary = {
+        "total_tests": test_metrics["total_tests"],
+        "passed": test_metrics["passed"],
+        "failures": test_metrics["failures"],
+        "errors": test_metrics["errors"],
+        "duration_seconds": test_metrics["duration_seconds"],
+        "status": test_metrics["status"],
+    }
 
-    overall_status = "PASS" if (all_microcases_pass and test_metrics["status"] == "PASS") else "FAIL"
+    overall_status = "PASS" if (all_microcases_pass and test_metrics["status"] == "PASS" and diff_pass) else "FAIL"
 
-    report = {
+    return {
         "report_metadata": {
             "document_type": "apx02_correctness_summary",
             "gate": "APX-02 (Gate A1)",
@@ -806,7 +893,11 @@ def main():
                 "Because committing this report updates the git commit SHA, cryptographic source integrity is "
                 "independently anchored by the source_files_sha256 digest map below."
             ),
-            "environment": env_info,
+            "environment": {
+                "os": platform.platform(),
+                "architecture": platform.machine(),
+                "python_version": platform.python_version(),
+            },
             "source_files_sha256": source_hashes,
         },
         "overall_verdict": {
@@ -814,36 +905,79 @@ def main():
             "total_microcases": len(microcases),
             "microcases_passed": sum(1 for c in microcases if c["verdict"] == "PASS"),
             "microcases_failed": sum(1 for c in microcases if c["verdict"] == "FAIL"),
-            "apx02_unit_tests": test_metrics,
+            "apx02_unit_tests": unit_test_summary,
         },
         "combinatorial_guard": {
             "max_candidates_limit": 10_000_000,
             "scale_probe_strategy": "DIRECT_MAPPING_EVALUATION",
         },
-        "independent_differential_verification": {
-            "method": "FULL_ENUMERATION",
-            "total_randomized_trials": 25,
-            "seeds": [42, 1337, 2026, 7777, 9999],
-            "query_sizes": [2, 3, 4],
-            "data_graph_sizes": [4, 5, 6, 7],
-            "reference_matcher": "IndependentReferenceScorer with DSU",
-            "all_mapping_sets_equal": True,
-            "all_scores_equal": True,
-            "status": "PASS",
-        },
+        "independent_differential_verification": diff_verification,
         "canonical_microcase_results": microcases,
     }
 
-    output_path = REPO_ROOT / "reports" / "apx02" / "correctness_summary.json"
+
+def write_report_and_exit_code(report: Dict[str, Any], output_path: Optional[Path] = None) -> int:
+    if output_path is None:
+        output_path = REPO_ROOT / "reports" / "apx02" / "correctness_summary.json"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
         f.write("\n")
 
     print(f"[APX-02 REPORT GENERATOR] Report written successfully to {output_path}")
-    if overall_status != "PASS":
-        sys.exit(1)
+    return 0 if report["overall_verdict"]["status"] == "PASS" else 1
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    parser = argparse.ArgumentParser(description="APX-02 Correctness Report Generator")
+    parser.add_argument("--output", type=str, default=None, help="Custom output JSON path")
+    parser.add_argument("--inject-mutation", type=str, default=None, help="Microcase ID to mutate (e.g. 'Case 01')")
+    args = parser.parse_args(argv)
+
+    print("[APX-02 REPORT GENERATOR] Collecting Git and Platform metadata...")
+    git_info = get_git_info()
+    source_hashes = compute_source_hashes()
+
+    print("[APX-02 REPORT GENERATOR] Evaluating 16 Canonical Microcases...")
+    microcases = evaluate_microcases()
+
+    if args.inject_mutation:
+        found = False
+        for c in microcases:
+            if c["case_id"] == args.inject_mutation:
+                found = True
+                c["expected"] = dict(c["expected"])
+                if "m" in c["expected"]:
+                    c["expected"]["m"] = 999
+                elif "injective" in c["expected"]:
+                    c["expected"]["injective"] = not c["expected"]["injective"]
+                else:
+                    c["expected"]["corrupted_field"] = "INTENTIONAL_MUTATION"
+                c["verdict"] = "PASS" if c["actual"] == c["expected"] else "FAIL"
+                print(f"[MUTATION INJECTED] Corrupted {c['case_id']}: verdict is now {c['verdict']}")
+                break
+        if not found:
+            print(f"[ERROR] Mutation target {args.inject_mutation} not found in microcases", file=sys.stderr)
+            return 2
+
+    all_microcases_pass = all(c["verdict"] == "PASS" for c in microcases)
+    print(f"  Microcases evaluated: {len(microcases)} (All PASS: {all_microcases_pass})")
+
+    print("[APX-02 REPORT GENERATOR] Running APX-02 Test Suite...")
+    test_metrics = run_apx02_tests()
+    print(f"  Tests run: {test_metrics['total_tests']}, Passed: {test_metrics['passed']}, Failures: {test_metrics['failures']}, Errors: {test_metrics['errors']}")
+
+    report = generate_report_data(
+        microcases=microcases,
+        test_metrics=test_metrics,
+        git_info=git_info,
+        source_hashes=source_hashes,
+    )
+
+    out_path = Path(args.output) if args.output else None
+    exit_code = write_report_and_exit_code(report, output_path=out_path)
+    return exit_code
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

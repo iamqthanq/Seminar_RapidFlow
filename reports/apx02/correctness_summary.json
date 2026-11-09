@@ -5,10 +5,10 @@
     "issue": 16,
     "branch": "feature/rf16-apx02-oracle",
     "base": "QuangThang",
-    "generator_invocation_commit_sha": "b45feb64bb4bc38525e74702d7caf7efd799393d",
+    "generator_invocation_commit_sha": "91419f4f2a34566f563425dffdc75e737c792c79",
     "working_tree_dirty": true,
     "author": "Antigravity \u2014 Research Implementation Engineer",
-    "timestamp_iso": "2026-11-09T15:10:02.762981+00:00",
+    "timestamp_iso": "2026-11-09T15:27:19.025727+00:00",
     "generator_command": "python3 scripts/generate_apx02_correctness_report.py",
     "provenance_notes": "The generator_invocation_commit_sha records the repository HEAD when this report was executed. Because committing this report updates the git commit SHA, cryptographic source integrity is independently anchored by the source_files_sha256 digest map below.",
     "environment": {
@@ -18,8 +18,8 @@
     },
     "source_files_sha256": {
       "scripts/apx02_oracle.py": "f78720353322eb0938cc4ff02597008f8502b7104437fefd7f05c85eacb58327",
-      "tests/test_apx02_oracle.py": "8efa0e6f6fa0c244a7fca0c1e19404b1915ce2539c1c40a6a02d279af7026771",
-      "scripts/generate_apx02_correctness_report.py": "d764d55f685a708a351ad41752f3766fd7eb55a30a16fa5536ce3532a3833af2",
+      "tests/test_apx02_oracle.py": "a0a7c0bb90399ddef24dcb8411c9a80b872d9e287c3c8b395d206f8e1cf148c0",
+      "scripts/generate_apx02_correctness_report.py": "8510858749370408263ac2b3c4c3ed1c1d927b46474df29d04fffb7b833571ba",
       "docs/approx_semantic_microcases_v1.md": "2302b7921f5e37ff32a2cd848a091e98a4b37dcb8d868239d3d2579f41f0d348"
     }
   },
@@ -29,11 +29,11 @@
     "microcases_passed": 16,
     "microcases_failed": 0,
     "apx02_unit_tests": {
-      "total_tests": 55,
-      "passed": 55,
+      "total_tests": 56,
+      "passed": 56,
       "failures": 0,
       "errors": 0,
-      "duration_seconds": 0.4079,
+      "duration_seconds": 0.8905,
       "status": "PASS"
     }
   },
@@ -42,30 +42,45 @@
     "scale_probe_strategy": "DIRECT_MAPPING_EVALUATION"
   },
   "independent_differential_verification": {
-    "method": "FULL_ENUMERATION",
-    "total_randomized_trials": 25,
-    "seeds": [
-      42,
-      1337,
-      2026,
-      7777,
-      9999
+    "status": "PASS",
+    "method": "FULL_ENUMERATION_AND_DYNAMIC_SNAPSHOT_DIFFERENTIAL",
+    "executed_tests": [
+      {
+        "test_id": "tests.test_apx02_oracle.TestAPX02IndependentStaticDifferential.test_independent_static_differential_trials",
+        "name": "Static Independent Differential (25 Randomized Trials)",
+        "description": "Cross-checks find_approximate_matches against IndependentReferenceScorer with DSU across seeds 42, 1337, 2026, 7777, 9999",
+        "trials_executed": 25,
+        "status": "PASS"
+      },
+      {
+        "test_id": "tests.test_apx02_oracle.TestAPX02IndependentDynamicDifferential.test_dynamic_streaming_differential",
+        "name": "Dynamic Streaming Differential (State Machine Delta Verification)",
+        "description": "Verifies dynamic deltas (ENTERED, EXITED, SCORE_CHANGED, UNCHANGED) against IndependentReferenceScorer snapshot diffs",
+        "status": "PASS"
+      }
     ],
-    "query_sizes": [
-      2,
-      3,
-      4
-    ],
-    "data_graph_sizes": [
-      4,
-      5,
-      6,
-      7
-    ],
-    "reference_matcher": "IndependentReferenceScorer with DSU",
-    "all_mapping_sets_equal": true,
-    "all_scores_equal": true,
-    "status": "PASS"
+    "verification_scope": {
+      "static_randomized_trials": 25,
+      "seeds": [
+        42,
+        1337,
+        2026,
+        7777,
+        9999
+      ],
+      "query_sizes": [
+        2,
+        3,
+        4
+      ],
+      "data_graph_sizes": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "all_differential_tests_passed": true
+    }
   },
   "canonical_microcase_results": [
     {

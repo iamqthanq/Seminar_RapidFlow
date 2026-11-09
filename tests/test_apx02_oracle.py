@@ -19,13 +19,16 @@ Covers:
 9. F03 Independent Dynamic Differential Tests (Independent snapshot-difference reference).
 """
 
+import hashlib
 import itertools
+import json
 import os
 import random
 import subprocess
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
 from scripts.apx02_oracle import (
@@ -1444,13 +1447,138 @@ class TestAPX02F04EvidenceGenerator(unittest.TestCase):
             self.assertEqual(len(hashes[f]), 64, f"Invalid SHA-256 for {f}")
             self.assertNotEqual(hashes[f], "FILE_NOT_FOUND")
 
-    def test_intentional_mismatch_fails_report(self):
-        # Mutating an expectation must flip verdict to FAIL
-        c01 = dict(self.case_by_id["Case 01"])
-        c01_mutated_exp = dict(c01["expected"])
-        c01_mutated_exp["m"] = 999  # Corrupt expectation
-        verdict = "PASS" if c01["actual"] == c01_mutated_exp else "FAIL"
-        self.assertEqual(verdict, "FAIL")
+    def test_e1_differential_status_derived_from_actual_test_outcomes(self):
+        """
+        E1 Verification: Ensure differential status is dynamically derived from
+        actual executed test results rather than hard-coded constants.
+        """
+        from scripts.generate_apx02_correctness_report import (
+            build_differential_verification,
+            STATIC_DIFF_TEST_ID,
+            DYNAMIC_DIFF_TEST_ID,
+        )
+
+        # 1. When tests pass, status is PASS
+        mock_metrics_pass = {
+            "test_outcomes": {
+                STATIC_DIFF_TEST_ID: "PASS",
+                DYNAMIC_DIFF_TEST_ID: "PASS",
+            }
+        }
+        diff_pass = build_differential_verification(mock_metrics_pass)
+        self.assertEqual(diff_pass["status"], "PASS")
+        self.assertTrue(diff_pass["verification_scope"]["all_differential_tests_passed"])
+        self.assertEqual(len(diff_pass["executed_tests"]), 2)
+        self.assertEqual(diff_pass["executed_tests"][0]["status"], "PASS")
+        self.assertEqual(diff_pass["executed_tests"][1]["status"], "PASS")
+
+        # 2. When a test fails, status reflects FAIL
+        mock_metrics_fail = {
+            "test_outcomes": {
+                STATIC_DIFF_TEST_ID: "FAIL",
+                DYNAMIC_DIFF_TEST_ID: "PASS",
+            }
+        }
+        diff_fail = build_differential_verification(mock_metrics_fail)
+        self.assertEqual(diff_fail["status"], "FAIL")
+        self.assertFalse(diff_fail["verification_scope"]["all_differential_tests_passed"])
+        self.assertEqual(diff_fail["executed_tests"][0]["status"], "FAIL")
+
+        # 3. When a test is not run, status reflects NOT_RUN
+        mock_metrics_not_run = {"test_outcomes": {}}
+        diff_not_run = build_differential_verification(mock_metrics_not_run)
+        self.assertEqual(diff_not_run["status"], "NOT_RUN")
+        self.assertFalse(diff_not_run["verification_scope"]["all_differential_tests_passed"])
+        self.assertEqual(diff_not_run["executed_tests"][0]["status"], "NOT_RUN")
+
+    def test_e2_isolated_mutation_causes_report_failure_and_nonzero_exit(self):
+        """
+        E2 Verification: End-to-end isolated mutation testing.
+        1. Creates an isolated mutation where expected is corrupted.
+        2. Feeds corrupted case through actual report generation logic.
+        3. Verifies mutated case verdict is FAIL.
+        4. Verifies overall report verdict is FAIL.
+        5. Verifies report generation process returns non-zero exit code.
+        6. Verifies APX-01 fixtures and official report file are completely untouched.
+        """
+        if os.environ.get("APX02_MUTATION_TEST_SUBPROCESS") == "1":
+            # Guard against recursive invocation when report generator runs unit tests in child process
+            return
+
+        from scripts.generate_apx02_correctness_report import (
+            evaluate_microcases,
+            generate_report_data,
+            write_report_and_exit_code,
+            REPO_ROOT,
+        )
+
+        official_report_path = REPO_ROOT / "reports" / "apx02" / "correctness_summary.json"
+        official_sha_before = None
+        if official_report_path.exists():
+            with open(official_report_path, "rb") as f:
+                official_sha_before = hashlib.sha256(f.read()).hexdigest()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_report_path = Path(tmp_dir) / "corrupted_summary.json"
+
+            # Level 1: In-memory pipeline test with intentional corruption
+            microcases = evaluate_microcases()
+            c01 = microcases[0]
+            self.assertEqual(c01["case_id"], "Case 01")
+            c01["expected"] = dict(c01["expected"])
+            c01["expected"]["m"] = 999  # Corrupt expectation intentionally
+            c01["verdict"] = "PASS" if c01["actual"] == c01["expected"] else "FAIL"
+            self.assertEqual(c01["verdict"], "FAIL")
+
+            dummy_test_metrics = {
+                "total_tests": 1,
+                "passed": 1,
+                "failures": 0,
+                "errors": 0,
+                "duration_seconds": 0.01,
+                "status": "PASS",
+                "test_outcomes": {
+                    "tests.test_apx02_oracle.TestAPX02IndependentStaticDifferential.test_independent_static_differential_trials": "PASS",
+                    "tests.test_apx02_oracle.TestAPX02IndependentDynamicDifferential.test_dynamic_streaming_differential": "PASS",
+                },
+            }
+            report = generate_report_data(microcases=microcases, test_metrics=dummy_test_metrics)
+            self.assertEqual(report["overall_verdict"]["status"], "FAIL")
+            self.assertEqual(report["overall_verdict"]["microcases_failed"], 1)
+
+            exit_code = write_report_and_exit_code(report, output_path=tmp_report_path)
+            self.assertEqual(exit_code, 1)
+
+            # Level 2: End-to-end CLI subprocess execution with --inject-mutation
+            env = {**os.environ, "APX02_MUTATION_TEST_SUBPROCESS": "1"}
+            cmd = [
+                sys.executable,
+                str(REPO_ROOT / "scripts" / "generate_apx02_correctness_report.py"),
+                "--output",
+                str(tmp_report_path),
+                "--inject-mutation",
+                "Case 01",
+            ]
+            proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+            self.assertNotEqual(proc.returncode, 0, f"Expected non-zero exit code, got {proc.returncode}")
+            self.assertEqual(proc.returncode, 1)
+
+            # Verify contents of generated mutated report JSON
+            with open(tmp_report_path, "r", encoding="utf-8") as f:
+                mutated_data = json.load(f)
+            self.assertEqual(mutated_data["overall_verdict"]["status"], "FAIL")
+            self.assertEqual(mutated_data["overall_verdict"]["microcases_failed"], 1)
+            c01_reported = mutated_data["canonical_microcase_results"][0]
+            self.assertEqual(c01_reported["case_id"], "Case 01")
+            self.assertEqual(c01_reported["verdict"], "FAIL")
+
+        # Post-condition: official report file was never modified or overwritten
+        if official_sha_before and official_report_path.exists():
+            with open(official_report_path, "rb") as f:
+                official_sha_after = hashlib.sha256(f.read()).hexdigest()
+            self.assertEqual(official_sha_before, official_sha_after, "Official report was corrupted by mutation test!")
+
+
 
 
 if __name__ == "__main__":
