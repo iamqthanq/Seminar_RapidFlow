@@ -5,10 +5,10 @@
     "issue": 18,
     "branch": "feature/rf18-apx03-baseline",
     "base": "QuangThang",
-    "generator_invocation_commit_sha": "09b0cda4bfe6e9318e0e0e82d2f4c18e2a97bee1",
+    "generator_invocation_commit_sha": "6c9fd4a1a52ffa46bf3e09933b3a41aa4d732a62",
     "working_tree_dirty": false,
     "author": "Antigravity \u2014 Research Implementation Engineer",
-    "timestamp_iso": "2026-11-09T17:08:44.439238+00:00",
+    "timestamp_iso": "2026-11-09T17:41:14.799717+00:00",
     "generator_command": "python3 scripts/generate_apx03_correctness_report.py",
     "provenance_notes": "The generator_invocation_commit_sha records the repository HEAD when this report was executed. Cryptographic source and binary integrity is independently anchored by source_files_sha256.",
     "environment": {
@@ -17,7 +17,7 @@
       "python_version": "3.12.3"
     },
     "source_files_sha256": {
-      "extensions/apx03/src/main.cpp": "54bc295e43889b992a1156c8012b121573d5ebad38c783fdf9adf70646b4c5e5",
+      "extensions/apx03/src/main.cpp": "e8c90e0ca2351a1ac5c0db8fdd406ec648f3e7563ad7fb26c518f44f9a13dfaa",
       "extensions/apx03/src/apx03_graph.cpp": "10aa9ec49f5503d47842c096fd7171103715678e74bc39a1bf51227596ce6694",
       "extensions/apx03/src/apx03_matcher.cpp": "9b932cc7e4a144880871350ff1a867ec3a7dd0b30e05b0ce8ba7e80cd9eb79be",
       "extensions/apx03/src/apx03_dynamic_engine.cpp": "a1ae5b9adb478734543dc4fd4708c549c8b33011ee320bdd143320a8844183a8",
@@ -26,10 +26,10 @@
       "extensions/apx03/include/apx03_matcher.h": "3beefef41006aa2665d57e4163e32b44c2858a2d1373af21a734861d4287e09b",
       "extensions/apx03/include/apx03_dynamic_engine.h": "d6925d9260d0f82e290184cbd1334985cfb813498ee7a7ea422809bd685170f9",
       "extensions/apx03/CMakeLists.txt": "640d99244f63f8411a757068b4a2389f524097634dd10d12779f454de42c9c4c",
-      "tests/test_apx03_baseline.py": "6fa40e45063cbc9904a788c23407904dca02b31993bd8d6f8c5019e4fdfbb62c",
+      "tests/test_apx03_baseline.py": "5b32b96a8ab52f96933fe2c904140d27ae2c8d827b635e7405d4d4ed58de3797",
       "scripts/run_apx03_baseline.py": "b5903e3b28196669ea25d7bd3b937b6ec17ce426b0dd73af92c0513c499eef0d",
       "docs/apx03_rapidflow_integration_audit.md": "d28d6a29e534daa1cb2f1a420f59f446de20ad14b31597b0ee836794df2f07c3",
-      "docs/apx03_baseline_contract.md": "b6eb085f2b39fe0fcb1b19dd8bb326d3d1e009779ec7b529a96a402f69dba36d"
+      "docs/apx03_baseline_contract.md": "4a26151b4c063cef75ce9ffdf6f146f94acee055f3d05c7d58e09e05148d5ef4"
     }
   },
   "overall_verdict": {
@@ -38,11 +38,11 @@
     "microcases_passed": 16,
     "microcases_failed": 0,
     "apx03_unit_tests": {
-      "total_tests": 40,
-      "passed": 40,
+      "total_tests": 46,
+      "passed": 46,
       "failures": 0,
       "errors": 0,
-      "duration_seconds": 0.5648,
+      "duration_seconds": 0.6753,
       "status": "PASS"
     },
     "exact_recovery_status": "PASS",
