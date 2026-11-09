@@ -55,7 +55,8 @@ ApxMatcher::ApxMatcher(
     bool eps_x_unbounded,
     uint32_t eps_x,
     ConnectivityMode mode,
-    uint64_t max_candidates
+    uint64_t max_candidates,
+    uint64_t max_search_steps
 ) : Q_(Q),
     G_(G),
     eps_m_(eps_m),
@@ -63,9 +64,14 @@ ApxMatcher::ApxMatcher(
     eps_x_(eps_x),
     mode_(mode),
     max_candidates_(max_candidates),
-    candidates_evaluated_(0)
+    max_search_steps_(max_search_steps),
+    candidates_evaluated_(0),
+    search_steps_(0)
 {
     query_vertices_ = Q_.get_all_vertices();
+    std::sort(query_vertices_.begin(), query_vertices_.end());
+    data_vertices_ = G_.get_all_vertices();
+    std::sort(data_vertices_.begin(), data_vertices_.end());
 }
 
 bool ApxMatcher::check_connectivity_and_score(
@@ -179,6 +185,7 @@ std::map<std::vector<uint32_t>, EvaluationResult> ApxMatcher::find_all_matches()
     std::vector<uint32_t> current_mapping(k, 0);
     std::unordered_set<uint32_t> used_data_nodes;
     candidates_evaluated_ = 0;
+    search_steps_ = 0;
 
     backtrack(0, current_mapping, used_data_nodes, 0, matches);
     return matches;
@@ -191,6 +198,13 @@ void ApxMatcher::backtrack(
     uint32_t current_m_partial,
     std::map<std::vector<uint32_t>, EvaluationResult>& matches
 ) {
+    search_steps_++;
+    if (search_steps_ > max_search_steps_) {
+        throw ResourceLimitExceededException(
+            "Search step budget exceeded limit (" + std::to_string(max_search_steps_) + ")"
+        );
+    }
+
     size_t k = query_vertices_.size();
     if (depth == k) {
         candidates_evaluated_++;
@@ -211,7 +225,7 @@ void ApxMatcher::backtrack(
     uint32_t q_vertex = query_vertices_[depth];
     uint32_t q_label = Q_.get_vertex_label(q_vertex);
 
-    for (uint32_t data_v : G_.get_all_vertices()) {
+    for (uint32_t data_v : data_vertices_) {
         // Injective check
         if (used_data_nodes.find(data_v) != used_data_nodes.end()) {
             continue;

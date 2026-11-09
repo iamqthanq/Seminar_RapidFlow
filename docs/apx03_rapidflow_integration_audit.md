@@ -1,9 +1,9 @@
 # APX-03 — RapidFlow Integration & Architecture Audit (Gate A2)
 
-**Document ID:** `docs/apx03_rapidflow_integration_audit.md`  
-**Status:** Approved Architectural Specification  
-**Associated Issue:** #18  
-**Target Integration Branch:** `QuangThang`  
+**Document ID:** `docs/apx03_rapidflow_integration_audit.md`
+**Status:** Approved Architectural Specification
+**Associated Issue:** #18
+**Target Integration Branch:** `QuangThang`
 **RapidFlow Pinned Commit:** `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1`
 
 ---

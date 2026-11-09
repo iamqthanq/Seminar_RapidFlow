@@ -5,10 +5,10 @@
     "issue": 18,
     "branch": "feature/rf18-apx03-baseline",
     "base": "QuangThang",
-    "generator_invocation_commit_sha": "07e1cb3915bceebd72dc5c00fef6d534d1ad3e6d",
-    "working_tree_dirty": false,
+    "generator_invocation_commit_sha": "dc0a67124c0f1682ce657d894592bcbd24585d35",
+    "working_tree_dirty": true,
     "author": "Antigravity \u2014 Research Implementation Engineer",
-    "timestamp_iso": "2026-11-09T16:06:46.863667+00:00",
+    "timestamp_iso": "2026-11-09T17:07:55.122249+00:00",
     "generator_command": "python3 scripts/generate_apx03_correctness_report.py",
     "provenance_notes": "The generator_invocation_commit_sha records the repository HEAD when this report was executed. Cryptographic source and binary integrity is independently anchored by source_files_sha256.",
     "environment": {
@@ -17,19 +17,19 @@
       "python_version": "3.12.3"
     },
     "source_files_sha256": {
-      "extensions/apx03/src/main.cpp": "3572694424aaebe664e2b26cc7805daee7ddd7f1a7cddb44717dc5c93bb2eb8e",
-      "extensions/apx03/src/apx03_graph.cpp": "9a20f7b11b41b5a367b667b5112b04e3177052302cef4c0b2c1cebab1d6c53d9",
-      "extensions/apx03/src/apx03_matcher.cpp": "06f489274b475a6289ec17cc5cb123ace1902c2a25a5dc0b42bb2b4b44857a05",
-      "extensions/apx03/src/apx03_dynamic_engine.cpp": "bea20006a8ad0a3c0b7eacddcd76378ce6b35cc9698dda99089274ebd5263556",
-      "extensions/apx03/include/apx03_types.h": "d4510b6f987db064865848941a6dd2a821f358fb5514a26b5953b27d9f26537b",
-      "extensions/apx03/include/apx03_graph.h": "12dd0cb61aed243a7d1505fbc294a9484da5e26a0c3943f9c4e45717d95ffceb",
-      "extensions/apx03/include/apx03_matcher.h": "5c151758a3acb9692c5e37b62b83aa792aab84b60c1ccd21f3965b70e3d2672b",
-      "extensions/apx03/include/apx03_dynamic_engine.h": "80f3a07b596758c547423c9472f5828e4adcd5583e3b7b655bd68c0c16c0ce9d",
+      "extensions/apx03/src/main.cpp": "54bc295e43889b992a1156c8012b121573d5ebad38c783fdf9adf70646b4c5e5",
+      "extensions/apx03/src/apx03_graph.cpp": "10aa9ec49f5503d47842c096fd7171103715678e74bc39a1bf51227596ce6694",
+      "extensions/apx03/src/apx03_matcher.cpp": "9b932cc7e4a144880871350ff1a867ec3a7dd0b30e05b0ce8ba7e80cd9eb79be",
+      "extensions/apx03/src/apx03_dynamic_engine.cpp": "a1ae5b9adb478734543dc4fd4708c549c8b33011ee320bdd143320a8844183a8",
+      "extensions/apx03/include/apx03_types.h": "76f8fa64ac9619b4302757438010d3a93175862ad54e22037e287d36416de8ca",
+      "extensions/apx03/include/apx03_graph.h": "efe5c1af76c9a169bc11ea0afdfe6fd3d35b84d14971bbba07ad25398e96dcb3",
+      "extensions/apx03/include/apx03_matcher.h": "3beefef41006aa2665d57e4163e32b44c2858a2d1373af21a734861d4287e09b",
+      "extensions/apx03/include/apx03_dynamic_engine.h": "d6925d9260d0f82e290184cbd1334985cfb813498ee7a7ea422809bd685170f9",
       "extensions/apx03/CMakeLists.txt": "640d99244f63f8411a757068b4a2389f524097634dd10d12779f454de42c9c4c",
-      "tests/test_apx03_baseline.py": "b923de26e25feff34f986874196f86f66430e84361f004501ee9191f292005a4",
+      "tests/test_apx03_baseline.py": "6fa40e45063cbc9904a788c23407904dca02b31993bd8d6f8c5019e4fdfbb62c",
       "scripts/run_apx03_baseline.py": "b5903e3b28196669ea25d7bd3b937b6ec17ce426b0dd73af92c0513c499eef0d",
-      "docs/apx03_rapidflow_integration_audit.md": "e246dcb268bad98b4c9e486088ce244b7778a9c0dc0b2eb20c36ca76c1041bb1",
-      "docs/apx03_baseline_contract.md": "0981b93bf437947e237a62fdc648c53b8869a18f2fe766bc0411a9a8f14bc7ba"
+      "docs/apx03_rapidflow_integration_audit.md": "d28d6a29e534daa1cb2f1a420f59f446de20ad14b31597b0ee836794df2f07c3",
+      "docs/apx03_baseline_contract.md": "b6eb085f2b39fe0fcb1b19dd8bb326d3d1e009779ec7b529a96a402f69dba36d"
     }
   },
   "overall_verdict": {
@@ -38,11 +38,11 @@
     "microcases_passed": 16,
     "microcases_failed": 0,
     "apx03_unit_tests": {
-      "total_tests": 28,
-      "passed": 28,
+      "total_tests": 40,
+      "passed": 40,
       "failures": 0,
       "errors": 0,
-      "duration_seconds": 0.1501,
+      "duration_seconds": 0.4754,
       "status": "PASS"
     },
     "exact_recovery_status": "PASS",
@@ -64,7 +64,7 @@
         "status": "PASS"
       },
       {
-        "test_id": "tests.test_apx03_baseline.TestAPX03RandomizedDifferential.test_dynamic_streaming_differential_against_apx02_oracle",
+        "test_id": "tests.test_apx03_baseline.TestAPX03DynamicDeterministicDifferential.test_fifteen_step_deterministic_differential",
         "name": "Dynamic Streaming Differential (State Machine Delta Verification)",
         "description": "Cross-checks C++ RECOMPUTE_BASELINE deltas (ENTERED, EXITED, SCORE_CHANGED) against Python DynamicOracle",
         "status": "PASS"

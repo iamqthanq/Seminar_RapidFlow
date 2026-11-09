@@ -45,6 +45,7 @@ public:
 
     // Direct access to native RapidFlow Graph
     const Graph* get_native_rf_graph() const { return rf_graph_.get(); }
+    bool verify_against_native_csr() const;
 
 private:
     uint64_t edge_key(uint32_t u, uint32_t v) const {

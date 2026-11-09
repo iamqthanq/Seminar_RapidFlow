@@ -75,8 +75,13 @@ void ApxGraph::load_from_text(const std::string& text) {
                 adj_[vid] = {};
                 degrees_[vid] = 0;
             } else {
-                raw_labels_[vid] = label;
-                dense_labels_[raw_to_dense_[vid]] = label;
+                if (raw_labels_[vid] != label) {
+                    throw ConflictingVertexRedefinitionException(
+                        "Conflicting label redefinition for vertex " + std::to_string(vid) +
+                        " (existing=" + std::to_string(raw_labels_[vid]) +
+                        ", new=" + std::to_string(label) + ") at line " + std::to_string(line_num)
+                    );
+                }
             }
         } else if (tag == "e") {
             uint32_t u = 0, v = 0, label = 0;
@@ -229,6 +234,44 @@ const std::unordered_map<uint32_t, uint32_t>& ApxGraph::get_neighbors(uint32_t v
         return empty_neighbors_;
     }
     return it->second;
+}
+
+bool ApxGraph::verify_against_native_csr() const {
+    if (!rf_graph_) {
+        return false;
+    }
+    if (rf_graph_->getVerticesCount() != dense_to_raw_.size()) {
+        return false;
+    }
+    if (rf_graph_->getEdgesCount() != edges_list_.size()) {
+        return false;
+    }
+    for (size_t du = 0; du < dense_to_raw_.size(); ++du) {
+        uint32_t raw_u = dense_to_raw_[du];
+        if (rf_graph_->getVertexLabel(static_cast<VertexID>(du)) != dense_labels_[du]) {
+            return false;
+        }
+        ui count = 0;
+        const VertexID* neighbors = rf_graph_->getVertexNeighbors(static_cast<VertexID>(du), count);
+        auto it = adj_.find(raw_u);
+        size_t expected_count = (it == adj_.end()) ? 0 : it->second.size();
+        if (static_cast<size_t>(count) != expected_count) {
+            return false;
+        }
+        for (ui i = 0; i < count; ++i) {
+            uint32_t dv = neighbors[i];
+            uint32_t raw_v = dense_to_raw_[dv];
+            if (it->second.find(raw_v) == it->second.end()) {
+                return false;
+            }
+            uint32_t expected_label = it->second.at(raw_v);
+            uint32_t rf_label = rf_graph_->getEdgeLabelByVertex(static_cast<uint32_t>(du), dv);
+            if (rf_label != expected_label) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 } // namespace apx03

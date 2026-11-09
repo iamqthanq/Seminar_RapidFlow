@@ -78,6 +78,16 @@ public:
     explicit InvalidParameterException(const std::string& msg) : ApxException(msg) {}
 };
 
+class EngineTerminalErrorException : public ApxException {
+public:
+    explicit EngineTerminalErrorException(const std::string& msg) : ApxException(msg) {}
+};
+
+class ConflictingVertexRedefinitionException : public ApxException {
+public:
+    explicit ConflictingVertexRedefinitionException(const std::string& msg) : ApxException(msg) {}
+};
+
 // ============================================================================
 // Data Structs
 // ============================================================================
@@ -108,6 +118,10 @@ struct Update {
     uint32_t u = 0;
     uint32_t v = 0;
     uint32_t label = 0;
+
+    Update() = default;
+    Update(char o, uint32_t u_in, uint32_t v_in, uint32_t l_in)
+        : op(o), u(u_in), v(v_in), label(l_in) {}
 };
 
 struct StepDelta {

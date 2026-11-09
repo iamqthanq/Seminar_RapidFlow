@@ -1,9 +1,9 @@
 # APX-03 — Baseline Contract & Operational Specification (Gate A2)
 
-**Document ID:** `docs/apx03_baseline_contract.md`  
-**Status:** Approved Operational Specification  
-**Associated Issue:** #18  
-**Target Integration Branch:** `QuangThang`  
+**Document ID:** `docs/apx03_baseline_contract.md`
+**Status:** Approved Operational Specification
+**Associated Issue:** #18
+**Target Integration Branch:** `QuangThang`
 **Target Executable:** `rapidflow_apx03_baseline`
 
 ---
@@ -36,7 +36,8 @@ rapidflow_apx03_baseline [OPTIONS]
 | `--mode <STRICT\|RELAXED>` | Enum | `STRICT` | Connectivity requirement mode (`STRICT` or `RELAXED_UNCONSTRAINED`). |
 | `--stream <path>` | Path | `None` | Update stream file for dynamic streaming evaluation. |
 | `--evaluate-mapping <tuple>` | String | `None` | Direct evaluation of a specific mapping (e.g. `--evaluate-mapping 0,1,2`). |
-| `--max-candidates <int>` | Positive int | `10000000` | Safety budget cap on explored candidate mappings. |
+| `--max-candidates <int>` | Positive int | `10000000` | Safety budget cap on complete candidate evaluations. |
+| `--max-search-steps <int>` | Positive int | `10000000` | Safety budget cap on intermediate search exploration steps. |
 | `--output <path>` | Path | `None` | Path to serialize structured JSON output. |
 | `--help` | Flag | - | Display usage information and exit. |
 
@@ -172,7 +173,7 @@ Implements **RECOMPUTE_BASELINE**:
 | :---: | :--- | :--- |
 | `0` | Success | Normal execution; full results serialized to stdout or `--output`. |
 | `1` | Parameter / Format / Graph Exception | Invalid arguments, syntax error, unknown vertex, duplicate edge, etc. |
-| `2` | Resource Limit Exceeded | Number of explored candidates exceeded `--max-candidates`. Fails closed. |
+| `2` | Resource Limit Exceeded | Number of explored candidates or search steps exceeded `--max-candidates` or `--max-search-steps`. Fails closed. |
 
 ---
 

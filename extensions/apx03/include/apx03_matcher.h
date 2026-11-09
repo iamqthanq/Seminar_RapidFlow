@@ -19,7 +19,8 @@ public:
         bool eps_x_unbounded,
         uint32_t eps_x,
         ConnectivityMode mode,
-        uint64_t max_candidates = 10000000ULL
+        uint64_t max_candidates = 10000000ULL,
+        uint64_t max_search_steps = 10000000ULL
     );
 
     // Direct Evaluation Mode (single prescribed mapping)
@@ -29,6 +30,7 @@ public:
     std::map<std::vector<uint32_t>, EvaluationResult> find_all_matches();
 
     uint64_t get_candidates_evaluated() const { return candidates_evaluated_; }
+    uint64_t get_search_steps() const { return search_steps_; }
 
 private:
     void backtrack(
@@ -52,9 +54,12 @@ private:
     uint32_t eps_x_;
     ConnectivityMode mode_;
     uint64_t max_candidates_;
+    uint64_t max_search_steps_;
 
     std::vector<uint32_t> query_vertices_;
+    std::vector<uint32_t> data_vertices_;
     uint64_t candidates_evaluated_ = 0;
+    uint64_t search_steps_ = 0;
 };
 
 } // namespace apx03

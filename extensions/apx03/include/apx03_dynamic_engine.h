@@ -18,7 +18,8 @@ public:
         bool eps_x_unbounded,
         uint32_t eps_x,
         ConnectivityMode mode,
-        uint64_t max_candidates = 10000000ULL
+        uint64_t max_candidates = 10000000ULL,
+        uint64_t max_search_steps = 10000000ULL
     );
 
     // Dynamic step execution
@@ -32,6 +33,9 @@ public:
     const ApxGraph& get_current_data_graph() const { return G_; }
     const ApxGraph& get_query_graph() const { return Q_; }
 
+    bool is_terminal_error() const { return is_terminal_error_; }
+    const std::string& get_terminal_error_msg() const { return terminal_error_msg_; }
+
 private:
     ApxGraph Q_;
     ApxGraph G_;
@@ -40,6 +44,10 @@ private:
     uint32_t eps_x_;
     ConnectivityMode mode_;
     uint64_t max_candidates_;
+    uint64_t max_search_steps_;
+
+    bool is_terminal_error_ = false;
+    std::string terminal_error_msg_;
 
     std::map<std::vector<uint32_t>, EvaluationResult> current_matches_;
 };

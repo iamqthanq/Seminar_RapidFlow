@@ -14,6 +14,36 @@ using namespace apx03;
 
 namespace {
 
+bool parse_uint32_strict(const std::string& str, uint32_t& out_val) {
+    if (str.empty()) return false;
+    for (char c : str) {
+        if (!std::isdigit(static_cast<unsigned char>(c))) return false;
+    }
+    try {
+        unsigned long long val = std::stoull(str);
+        if (val > static_cast<unsigned long long>(std::numeric_limits<uint32_t>::max())) {
+            return false;
+        }
+        out_val = static_cast<uint32_t>(val);
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+bool parse_uint64_strict(const std::string& str, uint64_t& out_val) {
+    if (str.empty()) return false;
+    for (char c : str) {
+        if (!std::isdigit(static_cast<unsigned char>(c))) return false;
+    }
+    try {
+        out_val = std::stoull(str);
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
 void print_usage(const char* prog) {
     std::cout << "Usage: " << prog << " [options]\n"
               << "Options:\n"
@@ -25,6 +55,7 @@ void print_usage(const char* prog) {
               << "  --stream <file>             Dynamic update stream path (optional)\n"
               << "  --evaluate-mapping <m>      Direct mapping evaluation (e.g. '0,1,2')\n"
               << "  --max-candidates <int>      Candidate search budget (default: 10000000)\n"
+              << "  --max-search-steps <int>    Search exploration steps budget (default: 10000000)\n"
               << "  --output <file>             Output JSON file path (optional)\n"
               << "  --help                      Show this help message\n";
 }
@@ -104,12 +135,13 @@ int main(int argc, char* argv[]) {
     std::string eval_mapping_str;
     std::string output_path;
 
-    int64_t eps_m_in = 0;
+    uint32_t eps_m = 0;
     bool eps_m_set = false;
     bool eps_x_unbounded = true;
     uint32_t eps_x_val = 0;
     ConnectivityMode mode = ConnectivityMode::STRICT;
     uint64_t max_candidates = 10000000ULL;
+    uint64_t max_search_steps = 10000000ULL;
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -122,30 +154,20 @@ int main(int argc, char* argv[]) {
             data_path = argv[++i];
         } else if (arg == "--eps-m" && i + 1 < argc) {
             std::string val = argv[++i];
-            try {
-                eps_m_in = std::stoll(val);
-                eps_m_set = true;
-            } catch (...) {
-                std::cerr << "[ERROR] Invalid eps-m argument: " << val << "\n";
+            if (!parse_uint32_strict(val, eps_m)) {
+                std::cerr << "[ERROR] Invalid eps-m argument: '" << val << "'. Must be a non-negative 32-bit integer.\n";
                 return 1;
             }
+            eps_m_set = true;
         } else if (arg == "--eps-x" && i + 1 < argc) {
             std::string val = argv[++i];
-            if (val == "inf" || val == "None" || val == "-1" || val == "null") {
+            if (val == "inf" || val == "None" || val == "null") {
                 eps_x_unbounded = true;
+            } else if (parse_uint32_strict(val, eps_x_val)) {
+                eps_x_unbounded = false;
             } else {
-                try {
-                    int64_t v = std::stoll(val);
-                    if (v < 0) {
-                        std::cerr << "[ERROR] Negative eps-x argument: " << val << "\n";
-                        return 1;
-                    }
-                    eps_x_unbounded = false;
-                    eps_x_val = static_cast<uint32_t>(v);
-                } catch (...) {
-                    std::cerr << "[ERROR] Invalid eps-x argument: " << val << "\n";
-                    return 1;
-                }
+                std::cerr << "[ERROR] Invalid eps-x argument: '" << val << "'. Must be a non-negative 32-bit integer, 'inf', or 'None'.\n";
+                return 1;
             }
         } else if (arg == "--mode" && i + 1 < argc) {
             std::string val = argv[++i];
@@ -161,15 +183,14 @@ int main(int argc, char* argv[]) {
             eval_mapping_str = argv[++i];
         } else if (arg == "--max-candidates" && i + 1 < argc) {
             std::string val = argv[++i];
-            try {
-                int64_t v = std::stoll(val);
-                if (v <= 0) {
-                    std::cerr << "[ERROR] max-candidates must be strictly positive: " << val << "\n";
-                    return 1;
-                }
-                max_candidates = static_cast<uint64_t>(v);
-            } catch (...) {
-                std::cerr << "[ERROR] Invalid max-candidates: " << val << "\n";
+            if (!parse_uint64_strict(val, max_candidates) || max_candidates == 0) {
+                std::cerr << "[ERROR] Invalid max-candidates: '" << val << "'. Must be a strictly positive integer.\n";
+                return 1;
+            }
+        } else if (arg == "--max-search-steps" && i + 1 < argc) {
+            std::string val = argv[++i];
+            if (!parse_uint64_strict(val, max_search_steps) || max_search_steps == 0) {
+                std::cerr << "[ERROR] Invalid max-search-steps: '" << val << "'. Must be a strictly positive integer.\n";
                 return 1;
             }
         } else if (arg == "--output" && i + 1 < argc) {
@@ -187,11 +208,10 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    if (!eps_m_set || eps_m_in < 0) {
+    if (!eps_m_set) {
         std::cerr << "[ERROR] --eps-m must be specified as a non-negative integer.\n";
         return 1;
     }
-    uint32_t eps_m = static_cast<uint32_t>(eps_m_in);
 
     try {
         ApxGraph Q;
@@ -203,7 +223,7 @@ int main(int argc, char* argv[]) {
         if (!eval_mapping_str.empty()) {
             // Direct Mapping Evaluation Mode
             auto target_mapping = parse_mapping_string(eval_mapping_str);
-            ApxMatcher matcher(Q, G0, eps_m, eps_x_unbounded, eps_x_val, mode, max_candidates);
+            ApxMatcher matcher(Q, G0, eps_m, eps_x_unbounded, eps_x_val, mode, max_candidates, max_search_steps);
             auto res = matcher.evaluate_single_mapping(target_mapping);
 
             std::ostringstream json_out;
@@ -234,7 +254,7 @@ int main(int argc, char* argv[]) {
 
         if (stream_path.empty()) {
             // Static Full Enumeration Mode
-            ApxMatcher matcher(Q, G0, eps_m, eps_x_unbounded, eps_x_val, mode, max_candidates);
+            ApxMatcher matcher(Q, G0, eps_m, eps_x_unbounded, eps_x_val, mode, max_candidates, max_search_steps);
             auto matches = matcher.find_all_matches();
 
             std::ostringstream json_out;
@@ -274,7 +294,7 @@ int main(int argc, char* argv[]) {
         } else {
             // Dynamic Stream Mode (RECOMPUTE_BASELINE)
             auto updates = parse_stream_file(stream_path);
-            ApxDynamicEngine engine(std::move(Q), std::move(G0), eps_m, eps_x_unbounded, eps_x_val, mode, max_candidates);
+            ApxDynamicEngine engine(std::move(Q), std::move(G0), eps_m, eps_x_unbounded, eps_x_val, mode, max_candidates, max_search_steps);
 
             std::ostringstream json_out;
             json_out << "{\n"

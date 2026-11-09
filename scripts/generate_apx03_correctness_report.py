@@ -36,13 +36,22 @@ STATIC_DIFF_TEST_ID = (
     "tests.test_apx03_baseline.TestAPX03RandomizedDifferential.test_static_randomized_trials_against_apx02_oracle"
 )
 DYNAMIC_DIFF_TEST_ID = (
-    "tests.test_apx03_baseline.TestAPX03RandomizedDifferential.test_dynamic_streaming_differential_against_apx02_oracle"
+    "tests.test_apx03_baseline.TestAPX03DynamicDeterministicDifferential.test_fifteen_step_deterministic_differential"
 )
 EXACT_RECOVERY_TEST_ID = (
     "tests.test_apx03_baseline.TestAPX03ExactRecoveryAndNearOnly.test_exact_recovery_against_rf02"
 )
 NEAR_ONLY_TEST_ID = (
     "tests.test_apx03_baseline.TestAPX03ExactRecoveryAndNearOnly.test_near_only_recovery_proof"
+)
+ORDERED_IDENTITY_TEST_ID = (
+    "tests.test_apx03_baseline.TestAPX03OrderedMappingIdentity.test_mandatory_permutation_regression"
+)
+THRESHOLD_VALIDATION_TEST_ID = (
+    "tests.test_apx03_baseline.TestAPX03ThresholdValidationAndAliases.test_mandatory_negative_cli_cases"
+)
+ADVERSARIAL_RESOURCE_TEST_ID = (
+    "tests.test_apx03_baseline.TestAPX03ResourceGuardCorrectness.test_mandatory_adversarial_regression"
 )
 
 
@@ -115,7 +124,7 @@ def get_git_info() -> Dict[str, Any]:
             cwd=REPO_ROOT, text=True
         ).strip()
         status = subprocess.check_output(
-            ["git", "status", "--porcelain"],
+            ["git", "status", "--porcelain", "--", ":(exclude)reports/apx03/correctness_summary.json"],
             cwd=REPO_ROOT, text=True
         ).strip()
         dirty = bool(status)
@@ -156,12 +165,12 @@ def evaluate_microcases() -> List[Dict[str, Any]]:
         "verdict": "PASS" if act01 == exp01 else "FAIL",
     })
 
-    # Case 02: Missing One Leaf Edge
-    q02 = "v 0 0\nv 1 0\nv 2 0\ne 0 1 0\ne 1 2 0\n"
-    g02 = "v 1 0\nv 2 0\nv 3 0\ne 1 2 0\n"
-    _, r02_s, _ = run_apx03_cli(q02, g02, eps_m=1, eps_x=0, mode="STRICT", evaluate_mapping=[1, 2, 3])
-    _, r02_r, _ = run_apx03_cli(q02, g02, eps_m=1, eps_x=0, mode="RELAXED", evaluate_mapping=[1, 2, 3])
-    _, r02_ex, _ = run_apx03_cli(q02, g02, eps_m=0, eps_x=None, mode="STRICT", evaluate_mapping=[1, 2, 3])
+    # Case 02: Missing One Leaf Edge (Star K1,3)
+    q02 = "v 0 0\nv 1 0\nv 2 0\nv 3 0\ne 0 1 0\ne 0 2 0\ne 0 3 0\n"
+    g02 = "v 0 0\nv 1 0\nv 2 0\nv 3 0\ne 0 1 0\ne 0 2 0\n"
+    _, r02_s, _ = run_apx03_cli(q02, g02, eps_m=1, eps_x=0, mode="STRICT", evaluate_mapping=[0, 1, 2, 3])
+    _, r02_r, _ = run_apx03_cli(q02, g02, eps_m=1, eps_x=0, mode="RELAXED", evaluate_mapping=[0, 1, 2, 3])
+    _, r02_ex, _ = run_apx03_cli(q02, g02, eps_m=0, eps_x=None, mode="STRICT", evaluate_mapping=[0, 1, 2, 3])
     exp02 = {"m": 1, "x_in": 0, "x_out": 0, "connected": False, "exact_accepted": False, "strict_accepted": False, "relaxed_accepted": True}
     act02 = {
         "m": r02_s["score"]["m"], "x_in": r02_s["score"]["x_in"], "x_out": r02_s["score"]["x_out"],
@@ -174,9 +183,9 @@ def evaluate_microcases() -> List[Dict[str, Any]]:
         "verdict": "PASS" if act02 == exp02 else "FAIL",
     })
 
-    # Case 03: Missing Two Edges
-    q03 = "v 0 0\nv 1 0\nv 2 0\nv 3 0\ne 0 1 0\ne 1 2 0\ne 2 3 0\n"
-    g03 = "v 0 0\nv 1 0\nv 2 0\nv 3 0\ne 1 2 0\n"
+    # Case 03: Missing Two Edges (Star K1,3 severe omission)
+    q03 = "v 0 0\nv 1 0\nv 2 0\nv 3 0\ne 0 1 0\ne 0 2 0\ne 0 3 0\n"
+    g03 = "v 0 0\nv 1 0\nv 2 0\nv 3 0\ne 0 1 0\n"
     _, r03_s22, _ = run_apx03_cli(q03, g03, eps_m=2, eps_x=2, mode="STRICT", evaluate_mapping=[0, 1, 2, 3])
     _, r03_r12, _ = run_apx03_cli(q03, g03, eps_m=1, eps_x=2, mode="RELAXED", evaluate_mapping=[0, 1, 2, 3])
     _, r03_r22, _ = run_apx03_cli(q03, g03, eps_m=2, eps_x=2, mode="RELAXED", evaluate_mapping=[0, 1, 2, 3])
@@ -207,9 +216,9 @@ def evaluate_microcases() -> List[Dict[str, Any]]:
         "verdict": "PASS" if act04 == exp04 else "FAIL",
     })
 
-    # Case 05: One Extra External Tail
-    q05 = "v 0 0\nv 1 0\nv 2 0\ne 0 1 0\ne 1 2 0\n"
-    g05 = "v 0 0\nv 1 0\nv 2 0\nv 3 0\ne 0 1 0\ne 1 2 0\ne 1 3 0\n"
+    # Case 05: One Extra External Tail (Star K1,2)
+    q05 = "v 0 0\nv 1 0\nv 2 0\ne 0 1 0\ne 0 2 0\n"
+    g05 = "v 0 0\nv 1 0\nv 2 0\nv 4 0\ne 0 1 0\ne 0 2 0\ne 0 4 0\n"
     _, r05_00, _ = run_apx03_cli(q05, g05, eps_m=0, eps_x=0, mode="STRICT", evaluate_mapping=[0, 1, 2])
     _, r05_01, _ = run_apx03_cli(q05, g05, eps_m=0, eps_x=1, mode="STRICT", evaluate_mapping=[0, 1, 2])
     exp05 = {"m": 0, "x_in": 0, "x_out": 1, "connected": True, "strict_accepted_at_00": False, "strict_accepted_at_01": True}
@@ -223,9 +232,9 @@ def evaluate_microcases() -> List[Dict[str, Any]]:
         "verdict": "PASS" if act05 == exp05 else "FAIL",
     })
 
-    # Case 06: Two Extra External Tails
-    q06 = "v 0 0\nv 1 0\nv 2 0\ne 0 1 0\ne 1 2 0\n"
-    g06 = "v 0 0\nv 1 0\nv 2 0\nv 3 0\nv 4 0\ne 0 1 0\ne 1 2 0\ne 1 3 0\ne 1 4 0\n"
+    # Case 06: Two Extra External Tails (Star K1,2)
+    q06 = "v 0 0\nv 1 0\nv 2 0\ne 0 1 0\ne 0 2 0\n"
+    g06 = "v 0 0\nv 1 0\nv 2 0\nv 4 0\nv 5 0\ne 0 1 0\ne 0 2 0\ne 0 4 0\ne 0 5 0\n"
     _, r06_01, _ = run_apx03_cli(q06, g06, eps_m=0, eps_x=1, mode="STRICT", evaluate_mapping=[0, 1, 2])
     _, r06_02, _ = run_apx03_cli(q06, g06, eps_m=0, eps_x=2, mode="STRICT", evaluate_mapping=[0, 1, 2])
     exp06 = {"m": 0, "x_in": 0, "x_out": 2, "connected": True, "strict_accepted_at_01": False, "strict_accepted_at_02": True}
@@ -239,12 +248,12 @@ def evaluate_microcases() -> List[Dict[str, Any]]:
         "verdict": "PASS" if act06 == exp06 else "FAIL",
     })
 
-    # Case 07: Thirty Extra External Tails
-    q07 = "v 0 0\nv 1 0\nv 2 0\ne 0 1 0\ne 1 2 0\n"
+    # Case 07: Thirty Extra External Tails (Star K1,2)
+    q07 = "v 0 0\nv 1 0\nv 2 0\ne 0 1 0\ne 0 2 0\n"
     lines07 = ["v 0 0", "v 1 0", "v 2 0"]
     for i in range(4, 34): lines07.append(f"v {i} 0")
-    lines07.extend(["e 0 1 0", "e 1 2 0"])
-    for i in range(4, 34): lines07.append(f"e 1 {i} 0")
+    lines07.extend(["e 0 1 0", "e 0 2 0"])
+    for i in range(4, 34): lines07.append(f"e 0 {i} 0")
     g07 = "\n".join(lines07) + "\n"
     _, r07_02, _ = run_apx03_cli(q07, g07, eps_m=0, eps_x=2, mode="STRICT", evaluate_mapping=[0, 1, 2])
     _, r07_30, _ = run_apx03_cli(q07, g07, eps_m=0, eps_x=30, mode="STRICT", evaluate_mapping=[0, 1, 2])
@@ -259,7 +268,7 @@ def evaluate_microcases() -> List[Dict[str, Any]]:
         "verdict": "PASS" if act07 == exp07 else "FAIL",
     })
 
-    # Case 08: High-Degree NetFlow Hub (Scalability Probe)
+    # Case 08: High-Degree NetFlow Hub (Star K1,2 Scalability Probe)
     q08 = "v 0 0\nv 1 0\nv 2 0\ne 0 1 0\ne 0 2 0\n"
     lines08 = ["v 0 0", "v 1 0", "v 2 0"]
     for i in range(3, 1001): lines08.append(f"v {i} 0")
@@ -279,9 +288,9 @@ def evaluate_microcases() -> List[Dict[str, Any]]:
         "verdict": "PASS" if act08 == exp08 else "FAIL",
     })
 
-    # Case 09: Edge Label Mismatch
-    q09 = "v 0 0\nv 1 0\nv 2 0\ne 0 1 0\ne 1 2 0\n"
-    g09 = "v 1 0\nv 2 0\nv 3 0\ne 1 2 0\ne 2 3 1\n"
+    # Case 09: Edge Label Mismatch (Path P3)
+    q09 = "v 0 0\nv 1 0\nv 2 0\ne 0 1 1\ne 1 2 1\n"
+    g09 = "v 1 0\nv 2 0\nv 3 0\ne 1 2 1\ne 2 3 2\n"
     _, r09_ex, _ = run_apx03_cli(q09, g09, eps_m=0, eps_x=None, mode="STRICT", evaluate_mapping=[1, 2, 3])
     _, r09_s12, _ = run_apx03_cli(q09, g09, eps_m=1, eps_x=2, mode="STRICT", evaluate_mapping=[1, 2, 3])
     _, r09_r12, _ = run_apx03_cli(q09, g09, eps_m=1, eps_x=2, mode="RELAXED", evaluate_mapping=[1, 2, 3])
@@ -299,8 +308,8 @@ def evaluate_microcases() -> List[Dict[str, Any]]:
 
     # Case 10: Injectivity Violation
     q10 = "v 0 0\nv 1 0\nv 2 0\ne 0 1 0\ne 1 2 0\n"
-    g10 = "v 0 0\nv 1 0\ne 0 1 0\n"
-    _, r10, _ = run_apx03_cli(q10, g10, eps_m=1, eps_x=1, mode="STRICT", evaluate_mapping=[0, 1, 0])
+    g10 = "v 1 0\nv 2 0\ne 1 2 0\n"
+    _, r10, _ = run_apx03_cli(q10, g10, eps_m=1, eps_x=1, mode="STRICT", evaluate_mapping=[1, 2, 1])
     exp10 = {"injective": False, "accepted": False}
     act10 = {"injective": False, "accepted": r10["accepted"]}
     results.append({
@@ -309,11 +318,11 @@ def evaluate_microcases() -> List[Dict[str, Any]]:
         "verdict": "PASS" if act10 == exp10 else "FAIL",
     })
 
-    # Case 11: Tree Query Disconnected by Missing Edge
-    q11 = "v 0 0\nv 1 0\nv 2 0\ne 0 1 0\ne 1 2 0\n"
-    g11 = "v 0 0\nv 1 0\nv 2 0\ne 0 1 0\n"
-    _, r11_s, _ = run_apx03_cli(q11, g11, eps_m=1, eps_x=2, mode="STRICT", evaluate_mapping=[0, 1, 2])
-    _, r11_r, _ = run_apx03_cli(q11, g11, eps_m=1, eps_x=2, mode="RELAXED", evaluate_mapping=[0, 1, 2])
+    # Case 11: Tree Query Disconnected by Missing Edge (Path P4)
+    q11 = "v 0 0\nv 1 0\nv 2 0\nv 3 0\ne 0 1 0\ne 1 2 0\ne 2 3 0\n"
+    g11 = "v 0 0\nv 1 0\nv 2 0\nv 3 0\ne 0 1 0\ne 2 3 0\n"
+    _, r11_s, _ = run_apx03_cli(q11, g11, eps_m=1, eps_x=2, mode="STRICT", evaluate_mapping=[0, 1, 2, 3])
+    _, r11_r, _ = run_apx03_cli(q11, g11, eps_m=1, eps_x=2, mode="RELAXED", evaluate_mapping=[0, 1, 2, 3])
     exp11 = {"m": 1, "x_in": 0, "x_out": 0, "connected": False, "strict_accepted_at_12": False, "relaxed_accepted_at_12": True}
     act11 = {
         "m": r11_s["score"]["m"], "x_in": r11_s["score"]["x_in"], "x_out": r11_s["score"]["x_out"],
@@ -344,9 +353,11 @@ def evaluate_microcases() -> List[Dict[str, Any]]:
         "verdict": "PASS" if act12 == exp12 else "FAIL",
     })
 
-    # Case 13: Dynamic Stream Insertion (EXITED)
+    # Case 13: Dynamic Stream Insertion (EXITED) — Non-hardcoded live verification
     q13 = "v 0 0\nv 1 0\nv 2 0\ne 0 1 0\ne 0 2 0\n"
     g13 = "v 0 0\nv 1 0\nv 2 0\nv 4 0\nv 5 0\ne 0 1 0\ne 0 2 0\ne 0 4 0\n"
+    g13_post = g13 + "e 0 5 0\n"
+    _, r13_g1, _ = run_apx03_cli(q13, g13_post, eps_m=0, eps_x=1, mode="STRICT", evaluate_mapping=[0, 1, 2])
     _, r13, _ = run_apx03_cli(q13, g13, eps_m=0, eps_x=1, mode="STRICT", stream_text="e 0 5 0\n")
     s13 = r13["history"][0]
     t13_str = "(0, 1, 2)"
@@ -354,7 +365,7 @@ def evaluate_microcases() -> List[Dict[str, Any]]:
     act13 = {
         "target_exited": t13_str in s13["delta"]["exited"],
         "old_x_out": s13["delta"]["exited"][t13_str]["x_out"] if t13_str in s13["delta"]["exited"] else -1,
-        "new_x_out": 2,
+        "new_x_out": r13_g1["score"]["x_out"],
     }
     results.append({
         "case_id": "Case 13", "name": "Dynamic Stream Insertion (EXITED)",
@@ -362,16 +373,17 @@ def evaluate_microcases() -> List[Dict[str, Any]]:
         "verdict": "PASS" if act13 == exp13 else "FAIL",
     })
 
-    # Case 14: Dynamic Stream Deletion (ENTERED)
+    # Case 14: Dynamic Stream Deletion (ENTERED) — Non-hardcoded live verification
     q14 = "v 0 0\nv 1 0\nv 2 0\ne 0 1 0\ne 0 2 0\n"
     g14 = "v 0 0\nv 1 0\nv 2 0\nv 4 0\nv 5 0\ne 0 1 0\ne 0 2 0\ne 0 4 0\ne 0 5 0\n"
+    _, r14_g0, _ = run_apx03_cli(q14, g14, eps_m=0, eps_x=1, mode="STRICT", evaluate_mapping=[0, 1, 2])
     _, r14, _ = run_apx03_cli(q14, g14, eps_m=0, eps_x=1, mode="STRICT", stream_text="-e 0 5 0\n")
     s14 = r14["history"][0]
     t14_str = "(0, 1, 2)"
     exp14 = {"target_entered": True, "old_x_out": 2, "new_x_out": 1}
     act14 = {
         "target_entered": t14_str in s14["delta"]["entered"],
-        "old_x_out": 2,
+        "old_x_out": r14_g0["score"]["x_out"],
         "new_x_out": s14["delta"]["entered"][t14_str]["x_out"] if t14_str in s14["delta"]["entered"] else -1,
     }
     results.append({
@@ -380,7 +392,7 @@ def evaluate_microcases() -> List[Dict[str, Any]]:
         "verdict": "PASS" if act14 == exp14 else "FAIL",
     })
 
-    # Case 15: Dynamic Update Score Modification
+    # Case 15: Dynamic Update Score Modification (SCORE_CHANGED)
     q15 = "v 0 0\nv 1 0\nv 2 0\ne 0 1 0\ne 0 2 0\n"
     g15 = "v 0 0\nv 1 0\nv 2 0\nv 4 0\nv 5 0\ne 0 1 0\ne 0 2 0\ne 0 4 0\n"
     _, r15, _ = run_apx03_cli(q15, g15, eps_m=0, eps_x=3, mode="STRICT", stream_text="e 0 5 0\n")
@@ -420,6 +432,8 @@ def evaluate_microcases() -> List[Dict[str, Any]]:
         "evaluation_type": "DIRECT_MAPPING_EVALUATION", "expected": exp16, "actual": act16,
         "verdict": "PASS" if act16 == exp16 else "FAIL",
     })
+
+
 
     return results
 

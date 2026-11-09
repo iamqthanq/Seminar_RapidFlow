@@ -9,26 +9,45 @@ ApxDynamicEngine::ApxDynamicEngine(
     bool eps_x_unbounded,
     uint32_t eps_x,
     ConnectivityMode mode,
-    uint64_t max_candidates
+    uint64_t max_candidates,
+    uint64_t max_search_steps
 ) : Q_(std::move(Q)),
     G_(std::move(G0)),
     eps_m_(eps_m),
     eps_x_unbounded_(eps_x_unbounded),
     eps_x_(eps_x),
     mode_(mode),
-    max_candidates_(max_candidates)
+    max_candidates_(max_candidates),
+    max_search_steps_(max_search_steps)
 {
-    ApxMatcher initial_matcher(Q_, G_, eps_m_, eps_x_unbounded_, eps_x_, mode_, max_candidates_);
+    ApxMatcher initial_matcher(Q_, G_, eps_m_, eps_x_unbounded_, eps_x_, mode_, max_candidates_, max_search_steps_);
     current_matches_ = initial_matcher.find_all_matches();
 }
 
 StepDelta ApxDynamicEngine::apply_update(const Update& update) {
+    if (is_terminal_error_) {
+        throw EngineTerminalErrorException("Engine in terminal error state: " + terminal_error_msg_);
+    }
+
     // 1. Mutate data graph with atomic rollback/exception safety
     G_.apply_update(update);
 
     // 2. Recompute all matches from scratch under RECOMPUTE_BASELINE
-    ApxMatcher step_matcher(Q_, G_, eps_m_, eps_x_unbounded_, eps_x_, mode_, max_candidates_);
-    auto new_matches = step_matcher.find_all_matches();
+    std::map<std::vector<uint32_t>, EvaluationResult> new_matches;
+    try {
+        ApxMatcher step_matcher(Q_, G_, eps_m_, eps_x_unbounded_, eps_x_, mode_, max_candidates_, max_search_steps_);
+        new_matches = step_matcher.find_all_matches();
+    } catch (const std::exception& ex) {
+        // Rollback graph update to preserve previous state snapshot
+        Update rollback_up = (update.op == '+') ? Update('-', update.u, update.v, update.label)
+                                                : Update('+', update.u, update.v, update.label);
+        try {
+            G_.apply_update(rollback_up);
+        } catch (...) {}
+        is_terminal_error_ = true;
+        terminal_error_msg_ = ex.what();
+        throw;
+    }
 
     // 3. Compute delta partitions
     StepDelta delta;
