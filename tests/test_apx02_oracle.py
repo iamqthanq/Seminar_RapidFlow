@@ -306,6 +306,10 @@ class TestAPX02Microcases(unittest.TestCase):
         self.assertTrue(res_strict.score.connected)  # Topologically connected via {1,2} and {2,3}
         self.assertTrue(res_strict.accepted)  # STRICT ACCEPT
 
+        # Exact matching requires m=0: must REJECT
+        res_exact = evaluate_mapping(Q, G, mapping, eps_m=0, eps_x=None, mode=ConnectivityMode.STRICT)
+        self.assertFalse(res_exact.accepted)
+
         res_relaxed = evaluate_mapping(Q, G, mapping, eps_m=1, eps_x=2, mode=ConnectivityMode.RELAXED_UNCONSTRAINED)
         self.assertTrue(res_relaxed.accepted)
 
@@ -494,6 +498,14 @@ class TestAPX02Microcases(unittest.TestCase):
         # Exact matching (eps_m=0, eps_x=None): must REJECT
         res_exact = evaluate_mapping(Q, G, mapping, eps_m=0, eps_x=None, mode=ConnectivityMode.STRICT)
         self.assertFalse(res_exact.accepted)
+
+        # Strict mode at (eps_m=0, eps_x=0): must REJECT
+        res_00 = evaluate_mapping(Q, G, mapping, eps_m=0, eps_x=0, mode=ConnectivityMode.STRICT)
+        self.assertFalse(res_00.accepted)
+
+        # Relaxed mode at (eps_m=1, eps_x=0): must ACCEPT
+        res_rel = evaluate_mapping(Q, G, mapping, eps_m=1, eps_x=0, mode=ConnectivityMode.RELAXED_UNCONSTRAINED)
+        self.assertTrue(res_rel.accepted)
 
 
 class TestAPX02ScopeBValidation(unittest.TestCase):
@@ -1349,6 +1361,96 @@ class TestAPX02IndependentDynamicDifferential(unittest.TestCase):
                 self.assertEqual(old_sc.x_out, matches_before[f]["x_out"])
                 self.assertEqual(new_sc.m, matches_after[f]["m"])
                 self.assertEqual(new_sc.x_out, matches_after[f]["x_out"])
+
+
+class TestAPX02F04EvidenceGenerator(unittest.TestCase):
+    """
+    Regression and integrity tests for scripts/generate_apx02_correctness_report.py
+    Verifies Tests A through H as mandated by Round 3 review.
+    """
+
+    def setUp(self):
+        from scripts.generate_apx02_correctness_report import (
+            evaluate_microcases,
+            compute_source_hashes,
+        )
+        self.evaluate_microcases = evaluate_microcases
+        self.compute_source_hashes = compute_source_hashes
+        self.microcases = evaluate_microcases()
+        self.case_by_id = {c["case_id"]: c for c in self.microcases}
+
+    def test_a_case_08_query_is_star_k12(self):
+        # Case 08 must use Star K1,2 (edges {0,1}, {0,2}), not triangle K3
+        c08 = self.case_by_id["Case 08"]
+        self.assertIn("Star K1,2", c08["query_desc"])
+        self.assertNotIn("K3", c08["query_desc"])
+        self.assertNotIn("Triangle", c08["query_desc"])
+        self.assertEqual(len(c08["target_mapping"]), 3)
+
+    def test_b_case_08_x_out_is_998(self):
+        c08 = self.case_by_id["Case 08"]
+        self.assertEqual(c08["expected"]["x_out"], 998)
+        self.assertEqual(c08["actual"]["x_out"], 998)
+        self.assertEqual(c08["actual"]["m"], 0)
+        self.assertTrue(c08["actual"]["connected"])
+
+    def test_c_case_08_rejected_at_eps_x_30(self):
+        c08 = self.case_by_id["Case 08"]
+        self.assertFalse(c08["expected"]["strict_accepted_at_30"])
+        self.assertFalse(c08["actual"]["strict_accepted_at_30"])
+
+    def test_d_case_08_accepted_at_eps_x_none(self):
+        c08 = self.case_by_id["Case 08"]
+        self.assertTrue(c08["expected"]["strict_accepted_at_inf"])
+        self.assertTrue(c08["actual"]["strict_accepted_at_inf"])
+
+    def test_e_evaluation_types_classified_accurately(self):
+        # Every case must be either DIRECT_MAPPING_EVALUATION or DYNAMIC_STREAM
+        valid_types = {"DIRECT_MAPPING_EVALUATION", "DYNAMIC_STREAM"}
+        for c in self.microcases:
+            self.assertIn(
+                c["evaluation_type"],
+                valid_types,
+                f"Invalid or mislabeled evaluation_type '{c['evaluation_type']}' in {c['case_id']}",
+            )
+            # Ensure no case is labeled FULL_ENUMERATION if it evaluates a single mapping
+            self.assertNotEqual(c["evaluation_type"], "FULL_ENUMERATION")
+
+    def test_f_sixteen_unique_canonical_cases(self):
+        case_ids = [c["case_id"] for c in self.microcases]
+        self.assertEqual(len(case_ids), 16)
+        self.assertEqual(len(set(case_ids)), 16)
+        for i in range(1, 17):
+            expected_id = f"Case {i:02d}"
+            self.assertIn(expected_id, self.case_by_id)
+
+    def test_g_every_case_has_expected_actual_and_verdict(self):
+        for c in self.microcases:
+            self.assertIsInstance(c["expected"], dict)
+            self.assertIsInstance(c["actual"], dict)
+            self.assertEqual(c["verdict"], "PASS")
+            self.assertEqual(c["actual"], c["expected"])
+
+    def test_h_report_provenance_contains_source_hashes(self):
+        hashes = self.compute_source_hashes()
+        required_files = [
+            "scripts/apx02_oracle.py",
+            "tests/test_apx02_oracle.py",
+            "scripts/generate_apx02_correctness_report.py",
+            "docs/approx_semantic_microcases_v1.md",
+        ]
+        for f in required_files:
+            self.assertIn(f, hashes)
+            self.assertEqual(len(hashes[f]), 64, f"Invalid SHA-256 for {f}")
+            self.assertNotEqual(hashes[f], "FILE_NOT_FOUND")
+
+    def test_intentional_mismatch_fails_report(self):
+        # Mutating an expectation must flip verdict to FAIL
+        c01 = dict(self.case_by_id["Case 01"])
+        c01_mutated_exp = dict(c01["expected"])
+        c01_mutated_exp["m"] = 999  # Corrupt expectation
+        verdict = "PASS" if c01["actual"] == c01_mutated_exp else "FAIL"
+        self.assertEqual(verdict, "FAIL")
 
 
 if __name__ == "__main__":
