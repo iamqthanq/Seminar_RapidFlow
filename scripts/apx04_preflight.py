@@ -27,7 +27,7 @@ import shutil
 import sys
 from collections import deque
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 
 def compute_sha256(file_path: Path) -> str:
@@ -436,8 +436,84 @@ def parse_stream_prefix_file(file_path: Path) -> Dict[str, Any]:
     }
 
 
-# Module-level cache for G0 edge lookups to accelerate repeated audits during testing
+def parse_pilot_graph_file(file_path: Path) -> Dict[str, Any]:
+    """
+    Parses a pilot data graph file and strictly verifies simple-graph properties:
+    - No negative vertex or edge IDs/labels
+    - No duplicate vertex declarations
+    - No self-loops (u == v)
+    - No duplicate undirected edges
+    - All edge endpoints must be previously declared vertices
+    """
+    vertices: Dict[int, int] = {}
+    edges: List[Tuple[int, int, int]] = []
+    seen_undirected_edges: Set[Tuple[int, int]] = set()
+
+    with open(file_path, "r", encoding="utf-8") as f:
+        for line_num, line in enumerate(f, start=1):
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            tokens = line.split()
+            tag = tokens[0]
+            if tag == "t":
+                continue
+            elif tag == "v":
+                if len(tokens) != 3:
+                    raise ValueError(f"Line {line_num}: malformed vertex record (expected 3 tokens): '{line}'")
+                try:
+                    vid = int(tokens[1])
+                    vlabel = int(tokens[2])
+                except ValueError as e:
+                    raise ValueError(f"Line {line_num}: non-integer token in vertex record: {e}")
+                if vid < 0:
+                    raise ValueError(f"Line {line_num}: negative vertex ID {vid}")
+                if vlabel < 0:
+                    raise ValueError(f"Line {line_num}: negative vertex label {vlabel}")
+                if vid in vertices:
+                    raise ValueError(f"Line {line_num}: duplicate vertex declaration for vertex {vid}")
+                vertices[vid] = vlabel
+            elif tag == "e":
+                if len(tokens) != 4:
+                    raise ValueError(f"Line {line_num}: malformed edge record (expected 4 tokens): '{line}'")
+                try:
+                    u = int(tokens[1])
+                    v = int(tokens[2])
+                    elabel = int(tokens[3])
+                except ValueError as e:
+                    raise ValueError(f"Line {line_num}: non-integer token in edge record: {e}")
+                if u < 0 or v < 0:
+                    raise ValueError(f"Line {line_num}: negative vertex ID in edge ({u}, {v})")
+                if elabel < 0:
+                    raise ValueError(f"Line {line_num}: negative edge label {elabel}")
+                if u == v:
+                    raise ValueError(f"Line {line_num}: self-loop detected on vertex {u}")
+                if u not in vertices or v not in vertices:
+                    missing = u if u not in vertices else v
+                    raise ValueError(f"Line {line_num}: edge ({u}, {v}) references undeclared vertex {missing}")
+                edge_key = (min(u, v), max(u, v))
+                if edge_key in seen_undirected_edges:
+                    raise ValueError(f"Line {line_num}: duplicate undirected edge detected between {u} and {v}")
+                seen_undirected_edges.add(edge_key)
+                edges.append((u, v, elabel))
+            else:
+                raise ValueError(f"Line {line_num}: unrecognized tag '{tag}'")
+
+    if not vertices:
+        raise ValueError(f"Pilot graph file {file_path} contains 0 vertices.")
+
+    return {
+        "num_vertices": len(vertices),
+        "num_edges": len(edges),
+        "vertex_labels": sorted(list(set(vertices.values()))),
+        "edge_labels": sorted(list(set(e[2] for e in edges))),
+        "vertex_ids": set(vertices.keys()),
+    }
+
+
+# Module-level caches to accelerate repeated audits during testing
 _G0_EDGE_CACHE: Dict[Tuple[str, int, Tuple[Tuple[int, int], ...]], Dict[Tuple[int, int], int]] = {}
+_G0_VERTEX_CACHE: Dict[Tuple[str, int], Union[range, Set[int]]] = {}
 
 
 class PreflightChecker:
@@ -635,14 +711,48 @@ class PreflightChecker:
                     f"Pilot data graph '{pg_id}' SHA-256 mismatch for {rel_path}: "
                     f"expected {expected_hash}, got {actual_hash}"
                 )
-            else:
-                verified_pilots[pg_id] = {
-                    "name": pg_info.get("name", pg_id),
-                    "path": rel_path,
-                    "sha256": actual_hash,
-                    "vertices": pg_info.get("vertices"),
-                    "edges": pg_info.get("edges"),
-                }
+                continue
+
+            # Independent parsing and metadata validation (FIX R4-02)
+            try:
+                parsed = parse_pilot_graph_file(full_path)
+            except Exception as e:
+                self.errors.append(f"Pilot data graph '{pg_id}' parse failure ({rel_path}): {e}")
+                continue
+
+            expected_v = pg_info.get("vertices")
+            if parsed["num_vertices"] != expected_v:
+                self.errors.append(
+                    f"Pilot data graph '{pg_id}' vertex count mismatch: expected {expected_v}, found {parsed['num_vertices']}"
+                )
+
+            expected_e = pg_info.get("edges")
+            if parsed["num_edges"] != expected_e:
+                self.errors.append(
+                    f"Pilot data graph '{pg_id}' edge count mismatch: expected {expected_e}, found {parsed['num_edges']}"
+                )
+
+            expected_vlabels = sorted(pg_info.get("vertex_labels", []))
+            if parsed["vertex_labels"] != expected_vlabels:
+                self.errors.append(
+                    f"Pilot data graph '{pg_id}' vertex labels mismatch: expected {expected_vlabels}, found {parsed['vertex_labels']}"
+                )
+
+            expected_elabels = sorted(pg_info.get("edge_labels", []))
+            if parsed["edge_labels"] != expected_elabels:
+                self.errors.append(
+                    f"Pilot data graph '{pg_id}' edge labels mismatch: expected {expected_elabels}, found {parsed['edge_labels']}"
+                )
+
+            verified_pilots[pg_id] = {
+                "name": pg_info.get("name", pg_id),
+                "path": rel_path,
+                "sha256": actual_hash,
+                "vertices": parsed["num_vertices"],
+                "edges": parsed["num_edges"],
+                "vertex_labels": parsed["vertex_labels"],
+                "edge_labels": parsed["edge_labels"],
+            }
 
         self.audit_log["pilot_data_graphs_verified"] = verified_pilots
 
@@ -805,7 +915,8 @@ class PreflightChecker:
             # Prefix SHA-256 check
             expected_hash = s_info.get("sha256")
             actual_hash = compute_sha256(full_path)
-            if actual_hash != expected_hash:
+            prefix_hash_ok = (actual_hash == expected_hash)
+            if not prefix_hash_ok:
                 self.errors.append(
                     f"Stream {s_id} SHA-256 mismatch: expected {expected_hash}, got {actual_hash}"
                 )
@@ -871,7 +982,7 @@ class PreflightChecker:
                     )
 
             # Cryptographic Lineage Verification
-            source_lineage_ok = source_hash_ok
+            content_lineage_ok = True
             is_projected = (s_info.get("projection_type") == "PROJECTED_STREAM")
 
             try:
@@ -887,21 +998,21 @@ class PreflightChecker:
                                 f"Stream {s_id} projection error: declared positions count ({len(declared_positions)}) "
                                 f"!= operation count ({len(prefix_lines)})"
                             )
-                            source_lineage_ok = False
+                            content_lineage_ok = False
                         else:
                             for p_op, pos in zip(prefix_lines, declared_positions):
                                 if pos < 1 or pos > len(source_lines):
                                     self.errors.append(
                                         f"Stream {s_id} invalid source position {pos} (source has {len(source_lines)} lines)"
                                     )
-                                    source_lineage_ok = False
+                                    content_lineage_ok = False
                                     break
                                 s_op = source_lines[pos - 1]
                                 if p_op != s_op:
                                     self.errors.append(
                                         f"Stream {s_id} projected operation mismatch at pos {pos}: '{p_op}' != source '{s_op}'"
                                     )
-                                    source_lineage_ok = False
+                                    content_lineage_ok = False
                                     break
                     else:
                         # Standard prefix: verify first N records match source stream
@@ -910,27 +1021,56 @@ class PreflightChecker:
                                 f"Stream {s_id} lineage failure: source stream contains fewer records ({len(source_lines)}) "
                                 f"than required prefix length ({len(prefix_lines)})"
                             )
-                            source_lineage_ok = False
+                            content_lineage_ok = False
                         else:
                             for idx, (p_line, s_line) in enumerate(zip(prefix_lines, source_lines[:len(prefix_lines)]), start=1):
                                 if p_line != s_line:
                                     self.errors.append(
                                         f"Stream {s_id} lineage mismatch at record {idx}: prefix '{p_line}' != source '{s_line}'"
                                     )
-                                    source_lineage_ok = False
+                                    content_lineage_ok = False
                                     break
             except Exception as e:
                 self.errors.append(f"Stream {s_id} lineage check failed: {e}")
-                source_lineage_ok = False
+                content_lineage_ok = False
 
-            # Categorize stream target graph for sequential update replay
+            # Source lineage verified strictly requires prefix SHA-256 match, source stream SHA-256 match, and content match
+            source_lineage_ok = prefix_hash_ok and source_hash_ok and content_lineage_ok
+
+            # Categorize stream target graph for sequential update replay (FIX R4-04: fail-closed validation)
+            valid_target_graphs = {manifest.get("data_graph", {}).get("name")} | set(pilot_graphs_info.keys())
             target_pilot_id = s_info.get("target_graph")
-            if target_pilot_id and target_pilot_id in pilot_graphs_info:
-                pg_rel = pilot_graphs_info[target_pilot_id]["path"]
-                pg_path = self.repo_root / pg_rel
-                pilot_stream_ops[s_id] = (pg_path, pilot_graphs_info[target_pilot_id].get("vertices", 0), parsed["operations"])
+            if target_pilot_id is not None:
+                if target_pilot_id not in valid_target_graphs:
+                    self.errors.append(
+                        f"Stream {s_id} references unknown target_graph: '{target_pilot_id}' (valid: {sorted(valid_target_graphs)})"
+                    )
+                    verified_streams[s_id] = {
+                        "path": rel_path,
+                        "source_stream": src_rel_path,
+                        "sha256": actual_hash,
+                        "total_operations": parsed["total_operations"],
+                        "insertions": parsed["insertions"],
+                        "deletions": parsed["deletions"],
+                        "source_lineage_verified": False,
+                        "sequential_updates_verified": False,
+                        "error": f"Unknown target_graph: '{target_pilot_id}'",
+                    }
+                    continue
+                elif target_pilot_id in pilot_graphs_info:
+                    pg_rel = pilot_graphs_info[target_pilot_id]["path"]
+                    pg_path = self.repo_root / pg_rel
+                    pilot_stream_ops[s_id] = (pg_path, pilot_graphs_info[target_pilot_id].get("vertices", 0), parsed["operations"])
+                else:
+                    # Explicitly targets primary NetFlow data graph
+                    netflow_stream_ops[s_id] = parsed["operations"]
+                    for op_info in parsed["operations"]:
+                        u, v = op_info["u"], op_info["v"]
+                        candidate_edge_pairs_netflow.add((min(u, v), max(u, v)))
+                        candidate_vertices_netflow.add(u)
+                        candidate_vertices_netflow.add(v)
             else:
-                # Defaults to NetFlow data graph
+                # Target graph omitted: defaults to primary NetFlow data graph
                 netflow_stream_ops[s_id] = parsed["operations"]
                 for op_info in parsed["operations"]:
                     u, v = op_info["u"], op_info["v"]
@@ -995,9 +1135,54 @@ class PreflightChecker:
         then replays sequential operations to verify validity.
         Sets sequential_updates_verified flag per stream.
         """
-        # Universe check (if vertex count declared and contiguous universe expected)
-        # Note: Pilot C uses raw vertex IDs from NetFlow induced subgraph, so declared_vertices is count
+        # Fixed vertex universe check (Model C: endpoints must exist in initial V_0, Vt = V0)
+        cache_key_v = (str(data_graph_path), data_graph_path.stat().st_mtime_ns)
+        if cache_key_v in _G0_VERTEX_CACHE:
+            v0_vertices = _G0_VERTEX_CACHE[cache_key_v]
+        else:
+            is_canonical_netflow = (
+                data_graph_path.name == "Ndata.graph"
+                and total_declared_vertices == 3114895
+            )
+            if is_canonical_netflow:
+                v0_vertices = range(3114895)
+            else:
+                v_set: Set[int] = set()
+                try:
+                    with open(data_graph_path, "r", encoding="utf-8") as gf:
+                        for line in gf:
+                            line = line.strip()
+                            if not line or line.startswith("#"):
+                                continue
+                            if line.startswith("v "):
+                                parts = line.split()
+                                if len(parts) >= 2:
+                                    v_set.add(int(parts[1]))
+                            elif line.startswith("e "):
+                                break
+                    v0_vertices = v_set
+                except Exception as e:
+                    self.errors.append(f"G0 vertex scan failed for {data_graph_path}: {e}")
+                    return
+            _G0_VERTEX_CACHE[cache_key_v] = v0_vertices
+
         universe_errors: Dict[str, bool] = {s_id: False for s_id in stream_parsed_ops}
+        for s_id, ops in stream_parsed_ops.items():
+            missing_v: Set[int] = set()
+            for op_info in ops:
+                u, v = op_info["u"], op_info["v"]
+                if u not in v0_vertices:
+                    missing_v.add(u)
+                if v not in v0_vertices:
+                    missing_v.add(v)
+            if missing_v:
+                missing_sorted = sorted(missing_v)
+                self.errors.append(
+                    f"Stream {s_id} endpoint(s) {missing_sorted} do not exist in initial vertex universe V_0 of {data_graph_path.name}"
+                )
+                universe_errors[s_id] = True
+                if s_id in verified_streams_dict:
+                    verified_streams_dict[s_id]["sequential_updates_verified"] = False
 
         # Read initial edges for candidate edge pairs
         cache_key = (
@@ -1062,7 +1247,8 @@ class PreflightChecker:
                         del active_edges[pair]
 
             if stream_valid and s_id in verified_streams_dict:
-                verified_streams_dict[s_id]["sequential_updates_verified"] = True
+                if verified_streams_dict[s_id].get("source_lineage_verified", False):
+                    verified_streams_dict[s_id]["sequential_updates_verified"] = True
 
     def audit_pilot_cases(self, manifest: Dict[str, Any]) -> None:
         """
@@ -1077,7 +1263,8 @@ class PreflightChecker:
         known_queries = manifest.get("queries", {})
         known_streams = set(manifest.get("streams", {}).keys())
         expected_graph = manifest.get("data_graph", {}).get("name")
-        pilot_graphs = set(manifest.get("pilot_data_graphs", {}).keys())
+        pilot_graphs_info = manifest.get("pilot_data_graphs", {})
+        pilot_graphs = set(pilot_graphs_info.keys())
         valid_graph_sources = {expected_graph} | pilot_graphs
 
         valid_categories = {
@@ -1126,6 +1313,51 @@ class PreflightChecker:
             gs = c.get("graph_source")
             if gs not in valid_graph_sources:
                 self.errors.append(f"Case {cid} references unknown graph_source: {gs} (valid: {valid_graph_sources})")
+
+            # Stream binding: If stream s_id has declared target_graph, check case.graph_source (FIX R4-01)
+            if sid in manifest.get("streams", {}):
+                stream_decl = manifest["streams"][sid]
+                s_target = stream_decl.get("target_graph")
+                if s_target is not None:
+                    if gs != s_target:
+                        self.errors.append(
+                            f"Case {cid} graph_source '{gs}' does not match stream {sid} declared target_graph '{s_target}'"
+                        )
+                else:
+                    if gs != expected_graph:
+                        self.errors.append(
+                            f"Case {cid} graph_source '{gs}' does not match stream {sid} default target_graph '{expected_graph}'"
+                        )
+
+            # Query binding: Check vertex/edge labels and vertex count against target graph (FIX R4-01)
+            if qid in known_queries and gs in valid_graph_sources:
+                if gs in pilot_graphs_info:
+                    target_vlabels = set(pilot_graphs_info[gs].get("vertex_labels", []))
+                    target_elabels = set(pilot_graphs_info[gs].get("edge_labels", []))
+                    target_vcount = pilot_graphs_info[gs].get("vertices", 0)
+                else:
+                    target_vlabels = set(manifest.get("data_graph", {}).get("vertex_labels", [0]))
+                    target_elabels = set(manifest.get("data_graph", {}).get("edge_labels", list(range(8))))
+                    target_vcount = manifest.get("data_graph", {}).get("vertices", 0)
+
+                q_vlabels = set(known_queries[qid].get("vertex_labels", []))
+                q_elabels = set(known_queries[qid].get("edge_labels", []))
+                q_vcount = known_queries[qid].get("vertices", 0)
+
+                if not q_vlabels.issubset(target_vlabels):
+                    diff_vl = sorted(q_vlabels - target_vlabels)
+                    self.errors.append(
+                        f"Case {cid} query {qid} vertex labels {diff_vl} not contained in target graph {gs} vertex labels {sorted(target_vlabels)}"
+                    )
+                if not q_elabels.issubset(target_elabels):
+                    diff_el = sorted(q_elabels - target_elabels)
+                    self.errors.append(
+                        f"Case {cid} query {qid} edge labels {diff_el} not contained in target graph {gs} edge labels {sorted(target_elabels)}"
+                    )
+                if q_vcount > target_vcount:
+                    self.errors.append(
+                        f"Case {cid} query {qid} has more vertices ({q_vcount}) than target graph {gs} ({target_vcount})"
+                    )
 
             # Strict threshold type and range validation
             eps_m = c.get("eps_m")
@@ -1177,11 +1409,15 @@ class PreflightChecker:
                 )
             elif p_stage == "INITIAL_SAFE_PILOT":
                 initial_safe_pilot_count += 1
-                # Guard: INITIAL_SAFE_PILOT must be bounded, not FULL_GRAPH on 3.11M node graph
-                if sem_class == "FULL_GRAPH":
+                # Guard: INITIAL_SAFE_PILOT must use a pilot micrograph/subgraph from pilot_data_graphs, NEVER NetFlow full
+                if gs not in pilot_graphs:
                     self.errors.append(
-                        f"Case {cid} declared in INITIAL_SAFE_PILOT but uses FULL_GRAPH; "
-                        f"INITIAL_SAFE_PILOT must be strictly bounded (micrograph or induced subgraph)"
+                        f"Case {cid} declared in INITIAL_SAFE_PILOT must use a pilot micrograph/subgraph from pilot_data_graphs, not full dataset '{gs}'"
+                    )
+                # Guard: INITIAL_SAFE_PILOT must use INDUCED_SUBGRAPH_RELATIVE
+                if sem_class != "INDUCED_SUBGRAPH_RELATIVE":
+                    self.errors.append(
+                        f"Case {cid} declared in INITIAL_SAFE_PILOT must use semantic_class INDUCED_SUBGRAPH_RELATIVE, found '{sem_class}'"
                     )
 
             # Safety and approval locks

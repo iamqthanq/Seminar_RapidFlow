@@ -1134,5 +1134,240 @@ class TestOracleScientificVerification(unittest.TestCase):
         self.assertLessEqual(eval_sampled.score.x_out, eval_full.score.x_out)
 
 
+class TestRound4AdjudicationRemediation(unittest.TestCase):
+    """
+    Adversarial verification suite for Gate A3-00 Round 4 remediation:
+    - FIX R4-01: Pilot graph-query-stream binding & INITIAL_SAFE_PILOT constraints
+    - FIX R4-02: Pilot graph independent metadata validation
+    - FIX R4-03: Prefix SHA-256 failure sets source_lineage_verified and sequential_updates_verified to False
+    - FIX R4-04: Unknown stream target_graph fails closed without silent fallback
+    - FIX R4-05: Model C fixed vertex universe Vt = V0 validation
+    """
+
+    def setUp(self) -> None:
+        self.repo_root = Path(__file__).resolve().parent.parent
+        self.manifest_path = self.repo_root / "configs" / "apx04_workload_manifest.json"
+
+    def test_pilot_case_stream_binding_mismatch_rejected(self) -> None:
+        """R4-01: Cross-wiring a pilot case with a stream declared for another target must be rejected."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_manifest = Path(tmpdir) / "manifest.json"
+            with open(self.manifest_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            # Cross-wire: Case 1 (Pilot A) given stream_pilot_b_nearonly
+            data["proposed_pilot_cases_a3_01"][0]["stream_id"] = "stream_pilot_b_nearonly"
+
+            with open(tmp_manifest, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+
+            checker = PreflightChecker(manifest_path=tmp_manifest, repo_root=self.repo_root)
+            self.assertFalse(checker.run_all())
+            self.assertTrue(
+                any("does not match stream stream_pilot_b_nearonly declared target_graph" in e for e in checker.errors),
+                f"Expected stream binding error, got: {checker.errors}",
+            )
+
+    def test_pilot_case_full_graph_in_initial_safe_pilot_rejected(self) -> None:
+        """R4-01: INITIAL_SAFE_PILOT cannot use NetFlow_NewSP_Full, regardless of semantic_class."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_manifest = Path(tmpdir) / "manifest.json"
+            with open(self.manifest_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            # Masquerade: Set graph_source of an INITIAL_SAFE_PILOT to NetFlow_NewSP_Full
+            data["proposed_pilot_cases_a3_01"][0]["graph_source"] = "NetFlow_NewSP_Full"
+
+            with open(tmp_manifest, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+
+            checker = PreflightChecker(manifest_path=tmp_manifest, repo_root=self.repo_root)
+            self.assertFalse(checker.run_all())
+            self.assertTrue(
+                any("must use a pilot micrograph/subgraph from pilot_data_graphs, not full dataset" in e for e in checker.errors),
+                f"Expected safe pilot guard error, got: {checker.errors}",
+            )
+
+    def test_pilot_case_semantic_class_must_be_induced_subgraph_relative(self) -> None:
+        """R4-01: INITIAL_SAFE_PILOT strictly requires INDUCED_SUBGRAPH_RELATIVE."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_manifest = Path(tmpdir) / "manifest.json"
+            with open(self.manifest_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            data["proposed_pilot_cases_a3_01"][0]["semantic_class"] = "FULL_GRAPH"
+
+            with open(tmp_manifest, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+
+            checker = PreflightChecker(manifest_path=tmp_manifest, repo_root=self.repo_root)
+            self.assertFalse(checker.run_all())
+            self.assertTrue(
+                any("must use semantic_class INDUCED_SUBGRAPH_RELATIVE" in e for e in checker.errors),
+                f"Expected semantic_class error, got: {checker.errors}",
+            )
+
+    def test_pilot_case_query_label_not_contained_in_target_rejected(self) -> None:
+        """R4-01: Query with labels outside target graph label domain must be rejected."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_manifest = Path(tmpdir) / "manifest.json"
+            with open(self.manifest_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            # Pair Pilot A query (edges with label 0 and 1) with Pilot B graph (edges with label 0 only)
+            data["proposed_pilot_cases_a3_01"][1]["query_id"] = "Q_pilot_a_exact"
+            data["proposed_pilot_cases_a3_01"][1]["query_source"] = "PILOT_FIXTURE"
+
+            with open(tmp_manifest, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+
+            checker = PreflightChecker(manifest_path=tmp_manifest, repo_root=self.repo_root)
+            self.assertFalse(checker.run_all())
+            self.assertTrue(
+                any("edge labels [1] not contained in target graph" in e for e in checker.errors),
+                f"Expected label containment error, got: {checker.errors}",
+            )
+
+    def test_pilot_case_query_vertices_exceed_target_rejected(self) -> None:
+        """R4-01: Query with more vertices than target graph must be rejected."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_manifest = Path(tmpdir) / "manifest.json"
+            with open(self.manifest_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            # Q03_auth_6v_l2 has 6 vertices, Pilot B has 5 vertices
+            data["proposed_pilot_cases_a3_01"][1]["query_id"] = "Q03_auth_6v_l2"
+            data["proposed_pilot_cases_a3_01"][1]["query_source"] = "AUTHOR_NEWSP"
+
+            with open(tmp_manifest, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+
+            checker = PreflightChecker(manifest_path=tmp_manifest, repo_root=self.repo_root)
+            self.assertFalse(checker.run_all())
+            self.assertTrue(
+                any("has more vertices (6) than target graph Pilot_B_NearOnly_Micrograph (5)" in e for e in checker.errors),
+                f"Expected vertex count bound error, got: {checker.errors}",
+            )
+
+    def test_pilot_graph_metadata_tampering_rejected(self) -> None:
+        """R4-02: Preflight independently parses pilot graphs and catches tampered declared metadata."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_manifest = Path(tmpdir) / "manifest.json"
+            with open(self.manifest_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            # Tamper declared vertex count
+            data["pilot_data_graphs"]["Pilot_A_Exact_Micrograph"]["vertices"] = 999999
+
+            with open(tmp_manifest, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+
+            checker = PreflightChecker(manifest_path=tmp_manifest, repo_root=self.repo_root)
+            self.assertFalse(checker.run_all())
+            self.assertTrue(
+                any("vertex count mismatch: expected 999999, found 6" in e for e in checker.errors),
+                f"Expected vertex mismatch error, got: {checker.errors}",
+            )
+
+    def test_stream_prefix_hash_mismatch_sets_lineage_and_sequential_false(self) -> None:
+        """R4-03: Prefix SHA-256 mismatch must set source_lineage_verified and sequential_updates_verified to False."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_manifest = Path(tmpdir) / "manifest.json"
+            with open(self.manifest_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            # Tamper prefix sha256 of stream_pilot_a_exact
+            data["streams"]["stream_pilot_a_exact"]["sha256"] = "0" * 64
+
+            with open(tmp_manifest, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+
+            checker = PreflightChecker(manifest_path=tmp_manifest, repo_root=self.repo_root)
+            self.assertFalse(checker.run_all())
+            stream_res = checker.audit_log["streams_verified"]["stream_pilot_a_exact"]
+            self.assertFalse(stream_res["source_lineage_verified"])
+            self.assertFalse(stream_res["sequential_updates_verified"])
+
+    def test_stream_unknown_target_graph_fails_closed(self) -> None:
+        """R4-04: Stream referencing an unknown or misspelled target_graph fails closed without fallback."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_manifest = Path(tmpdir) / "manifest.json"
+            with open(self.manifest_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            # Misspell target_graph
+            data["streams"]["stream_pilot_a_exact"]["target_graph"] = "Pilot_A_Typo"
+
+            with open(tmp_manifest, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+
+            checker = PreflightChecker(manifest_path=tmp_manifest, repo_root=self.repo_root)
+            self.assertFalse(checker.run_all())
+            self.assertTrue(
+                any("references unknown target_graph: 'Pilot_A_Typo'" in e for e in checker.errors),
+                f"Expected unknown target_graph error, got: {checker.errors}",
+            )
+            stream_res = checker.audit_log["streams_verified"]["stream_pilot_a_exact"]
+            self.assertFalse(stream_res["source_lineage_verified"])
+            self.assertFalse(stream_res["sequential_updates_verified"])
+
+    def test_stream_update_endpoint_not_in_v0_fails_sequential_verification(self) -> None:
+        """R4-05: Stream update containing vertex endpoint outside V0 must fail fixed universe validation."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_root = Path(tmpdir)
+            # Create a small valid data graph: 3 vertices (0, 1, 2)
+            dg_file = tmp_root / "data.graph"
+            with open(dg_file, "w", encoding="utf-8") as f:
+                f.write("v 0 0\nv 1 0\nv 2 0\ne 0 1 0\n")
+            dg_hash = compute_sha256(dg_file)
+
+            # Create a stream inserting edge (0, 9999, 0) where 9999 is not in V0
+            str_file = tmp_root / "stream.graph"
+            with open(str_file, "w", encoding="utf-8") as f:
+                f.write("e 0 9999 0\n")
+            str_hash = compute_sha256(str_file)
+
+            data = {
+                "schema_version": "1.2.0",
+                "document_type": "apx04_workload_manifest",
+                "status": "DRAFT_PENDING_USER_APPROVAL",
+                "execution_authorization": False,
+                "data_graph": {
+                    "name": "TestGraph",
+                    "path": str(dg_file),
+                    "sha256": dg_hash,
+                    "vertices": 3,
+                    "edges": 1,
+                    "vertex_labels": [0],
+                    "edge_labels": [0],
+                },
+                "queries": {},
+                "streams": {
+                    "test_stream": {
+                        "path": str(str_file),
+                        "source_stream": str(str_file),
+                        "source_stream_sha256": str_hash,
+                        "prefix_length": 1,
+                        "sha256": str_hash,
+                        "target_graph": "TestGraph",
+                    }
+                },
+                "proposed_pilot_cases_a3_01": [],
+                "exclusions": [],
+            }
+            tmp_manifest = tmp_root / "manifest.json"
+            with open(tmp_manifest, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+
+            checker = PreflightChecker(manifest_path=tmp_manifest, repo_root=tmp_root)
+            self.assertFalse(checker.run_all())
+            self.assertTrue(
+                any("endpoint(s) [9999] do not exist in initial vertex universe V_0" in e for e in checker.errors),
+                f"Expected vertex universe error, got: {checker.errors}",
+            )
+            stream_res = checker.audit_log["streams_verified"]["test_stream"]
+            self.assertFalse(stream_res["sequential_updates_verified"])
+
+
 if __name__ == "__main__":
     unittest.main()

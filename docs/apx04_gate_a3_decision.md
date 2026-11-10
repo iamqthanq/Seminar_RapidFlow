@@ -1,7 +1,7 @@
 # APX-04 — Gate A3 Decision Framework & Prior-Art Synthesis
 
 **Document ID:** `docs/apx04_gate_a3_decision.md`
-**Current Gate Status:** `A3_00_READY_FOR_INDEPENDENT_REVIEW_ROUND_2`
+**Current Gate Status:** `A3_00_READY_FOR_INDEPENDENT_REVIEW_ROUND_4`
 **Associated Issue:** [#20](https://github.com/iamqthanq/Seminar_RapidFlow/issues/20)
 **Parent Roadmap:** [#1](https://github.com/iamqthanq/Seminar_RapidFlow/issues/1)
 **Deliverable State:** Preflight & Feasibility Audit Complete (No Optimizer Implemented)
@@ -17,7 +17,7 @@ To contextualize Approximate Continuous Subgraph Matching (Model C), prior liter
 | Paper & Venue | Bibliographic Reference | Core Problem Solved | Semantics & Deviation Model | Injective Mapping? | Dynamic Streaming? | Output Contract | Relevance to Model C | Differences from Model C | Verification Status |
 | :--- | :--- | :--- | :--- | :---: | :---: | :---: | :--- | :--- | :---: |
 | **RapidFlow**<br>(PVLDB 2022) | Shixuan Sun, Xibo Sun, Bingsheng He, Qiong Luo.<br>*RapidFlow: An Efficient Approach to Continuous Subgraph Matching*.<br>PVLDB 15(11): 2415–2427 (2022).<br>DOI: [10.14778/3551793.3551803](https://doi.org/10.14778/3551793.3551803) | Exact Continuous Subgraph Matching | Exact non-induced ($m=0, x_{\text{in}} \ge 0, x_{\text{out}}=\text{None}$) | Yes | Yes (edge insertions & deletions) | Count-only (`EXECUTION_MODE=0`) or partial mappings | Streaming CSM architecture; native CSR graph representation reused in APX-03 baseline | RapidFlow uses NLF and degree pruning that unsoundly eliminates approximate matches; outputs scalar counts rather than concrete ordered mappings; non-induced semantics permit internal chords ($x_{\text{in}} \ge 0$). | `VERIFIED` (Audited in APX-03) |
-| **NewSP**<br>(ICDE 2024) | Ziming Li, Yanyan Shen, Lei Chen.<br>*NewSP: A New Search Process for Continuous Subgraph Matching over Dynamic Graphs*.<br>IEEE ICDE 2024, pp. 1221–1234.<br>DOI: [10.1109/ICDE60146.2024.00257](https://doi.org/10.1109/ICDE60146.2024.00257) | Exact Continuous Subgraph Matching with Non-backtracking Edge Joins | Exact non-induced ($m=0, x_{\text{in}} \ge 0, x_{\text{out}}=\text{None}$) | Yes | Yes (multi-label NetFlow streams) | Match counts | Evaluated on the same NetFlow dataset release; uses path-based incremental joins | Focuses strictly on exact matching; candidate lists rely on edge existence; no boundary cut or missing edge support. | `VERIFIED` (Audited in RF-03) |
+| **NewSP**<br>(ICDE 2024) | Ziming Li, Youhuan Li, Xinhuan Chen, Lei Zou, Yang Li, Xiaofeng Yang, Hongbo Jiang.<br>*NewSP: A New Search Process for Continuous Subgraph Matching over Dynamic Graphs*.<br>IEEE ICDE 2024, pp. 3324–3337.<br>DOI: [10.1109/ICDE60146.2024.00257](https://doi.org/10.1109/ICDE60146.2024.00257) | Exact Continuous Subgraph Matching with Non-backtracking Edge Joins | Exact non-induced ($m=0, x_{\text{in}} \ge 0, x_{\text{out}}=\text{None}$) | Yes | Yes (multi-label NetFlow streams) | Match counts | Evaluated on the same NetFlow dataset release; uses path-based incremental joins | Focuses strictly on exact matching; candidate lists rely on edge existence; no boundary cut or missing edge support. | `VERIFIED` (Audited in RF-03) |
 | **SJ-Tree / TurboFlux**<br>(SIGMOD 2014, TKDE 2018) | Hyoungmin Kim et al.<br>SIGMOD 2014; IEEE TKDE 30(5): 915–928 (2018) | Exact Subgraph Matching on Streaming Graphs | Exact non-induced ($m=0, x_{\text{in}} \ge 0$) | Yes | Yes (edge streams) | Enumeration or count | Streaming edge-triggered candidate propagation | Exact structural isomorphism only; lacks tolerance for missing edges or external clutter bounds. | `KNOWN` (Literature audited) |
 
 ### 1.2. Static Approximate Subgraph Matching
@@ -30,7 +30,7 @@ To contextualize Approximate Continuous Subgraph Matching (Model C), prior liter
 
 | Paper & Venue | Bibliographic Reference | Core Problem Solved | Semantics & Deviation Model | Injective Mapping? | Dynamic Streaming? | Output Contract | Relevance to Model C | Differences from Model C | Verification Status |
 | :--- | :--- | :--- | :--- | :---: | :---: | :---: | :--- | :--- | :---: |
-| **IncGM+**<br>(TKDE 2017) | Ehab Abdelhamid, Mustafa Canim, Mohammad Sadoghi, Yuan-Chi Chang, Mansurul Bhuiyan.<br>*IncGM+: Incremental Frequent Subgraph Mining with Efficient History-based Verification*.<br>IEEE TKDE 29(7): 1500–1513 (2017) / ICDE 2018 | Incremental Frequent Subgraph Mining (FSM) | Frequent subgraph pattern mining over dynamic graphs | Injective subgraph isomorphism | Yes (dynamic graphs) | Frequent subgraph support counts & patterns | Evaluates dynamic updates over streaming graph modifications using pattern verification trees | Solves frequent pattern discovery (mining) rather than continuous query matching; does not support $(\varepsilon_m, \varepsilon_x)$ bi-criteria error models. Not an exact CSM baseline. | `KNOWN` (Literature audited) |
+| **IncGM+**<br>(TKDE 2017) | Ehab Abdelhamid, Mustafa Canim, Mohammad Sadoghi, Bishwaranjan Bhattacharjee, Yuan-Chi Chang, Panos Kalnis.<br>*Incremental Frequent Subgraph Mining on Large Evolving Graphs*.<br>IEEE TKDE 29(12): 2710–2723 (2017).<br>DOI: [10.1109/TKDE.2017.2743075](https://doi.org/10.1109/TKDE.2017.2743075) | Incremental Frequent Subgraph Mining (FSM) | Frequent subgraph pattern mining over dynamic graphs | Injective subgraph isomorphism | Yes (dynamic graphs) | Frequent subgraph support counts & patterns | Evaluates dynamic updates over streaming graph modifications using pattern verification trees | Solves frequent pattern discovery (mining) rather than continuous query matching; does not support $(\varepsilon_m, \varepsilon_x)$ bi-criteria error models. Categorized strictly as Incremental Frequent Subgraph Mining (FSM), NOT exact CSM. | `KNOWN` (Literature audited) |
 
 ### 1.4. Dynamic Graph Processing & Extraction / Visualization
 
@@ -97,8 +97,8 @@ Execution MUST HALT with a scientific verdict of `STOP` or `INCONCLUSIVE` if any
 
 ## 5. Current Gate A3-00 Verdict
 
-$$\mathbf{VERDICT:}\quad \text{\textbf{A3\_00\_READY\_FOR\_INDEPENDENT\_REVIEW\_ROUND\_2}}$$
+$$\mathbf{VERDICT:}\quad \text{\textbf{A3\_00\_READY\_FOR\_INDEPENDENT\_REVIEW\_ROUND\_4}}$$
 $$\mathbf{EXECUTION\_READINESS:}\quad \text{\textbf{SAFETY\_BLOCKED}}$$
 
-- **Summary of Achievement:** Feasibility protocol, mathematical proofs of hub exclusion and boundary cut identities, internal chord counterexample, dynamic event non-monotonicity analysis, query corpus census, initial safe pilot design with deferred full-graph cases, stream provenance verification, sequential G0 replay verification, and resource safety plan have been fully established.
-- **Recommended Next Action:** Antigravity commits and pushes Round 2 remediation on branch `feature/rf20-apx04-feasibility`, updates Draft PR #21, and awaits independent review.
+- **Summary of Achievement:** Feasibility protocol, mathematical proofs of hub exclusion and boundary cut identities, internal chord counterexample, dynamic event non-monotonicity analysis, query corpus census, initial safe pilot design with deferred full-graph cases, stream provenance verification, sequential G0 replay verification, independent pilot graph metadata validation, strict case binding, fail-closed stream dispatch, fixed vertex universe enforcement, and resource safety plan have been fully established.
+- **Recommended Next Action:** Antigravity commits and pushes Round 4 remediation on branch `feature/rf20-apx04-feasibility`, updates Draft PR #21, and awaits independent review.

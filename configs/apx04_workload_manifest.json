@@ -47,7 +47,7 @@
       "vertices": 34,
       "edges": 32,
       "vertex_labels": [0],
-      "edge_labels": [0, 1, 2],
+      "edge_labels": [1, 2],
       "extraction_metadata": {
         "source_graph": "data/netflow/release_newsp/netflow/data_graph/Ndata.graph",
         "source_graph_sha256": "bfedd2cab6d2c460141da945e77b0be39ae24c74d9a28b9394a38ee35b652fc6",
