@@ -16,7 +16,7 @@ The baseline employs **`RECOMPUTE_BASELINE`**: upon each streaming update, it ap
 
 The critical computational insights identified at Gate A3-00 are:
 1. **Initial Match Set Bottleneck ($M_0$):** The cost of enumerating $M_0$ on a graph with $3.11\text{M}$ vertices with uniform vertex labels threatens to overwhelm runtime before the first streaming update is even processed.
-2. **Output Cardinality Dominance Hypothesis:** Full concrete mapping materialization produces $O(|M_t| \cdot k)$ bytes. If $|M_t| = 10^6$, serialization and memory overhead inherently dominate search time, regardless of indexing algorithms. This is an empirical hypothesis to be quantified in profiling.
+2. **Output Cardinality Dominance Hypothesis (`EMPIRICAL_HYPOTHESIS — NOT_MEASURED`):** Full concrete mapping materialization produces an information-theoretic lower bound of $\Omega(|M_t| \cdot k)$ bytes. If $|M_t| = 10^6$, serialization and memory overhead could consume significant execution time. However, the exact proportion of wall-clock time spent on serialization versus candidate exploration remains an empirical hypothesis to be quantified in future profiling rather than an established universal fact.
 3. **Recompute Redundancy:** For updates with localized impact, recomputing the entire match set recalculates matches that did not change, suggesting a theoretical target for future incrementalization (Gate A4).
 
 ---
@@ -93,7 +93,7 @@ The following telemetry framework is specified for future execution gates:
 - In Model C (APX-01/03), the output contract requires **full enumeration of concrete ordered mapping tuples** $(f(u_0), \dots, f(u_{k-1}))$ along with full 4-element score records $(m, x_{\text{in}}, x_{\text{out}}, \text{connected})$.
 - For $10^6$ matches, serializing concrete JSON tuples requires:
   $$\approx 10^6 \times 120\,\text{bytes/mapping} \approx 120\,\text{MB of text}$$
-- While the output lower bound is $\Omega(k |M_t|)$, whether serialization dominates total wall-clock execution time is an empirical hypothesis that depends heavily on candidate search depth and will be evaluated through telemetry measurements.
+- While the mandatory output lower bound is $\Omega(k |M_t|)$, whether serialization dominates total wall-clock execution time is classified strictly as `EMPIRICAL_HYPOTHESIS — NOT_MEASURED`. It depends heavily on candidate search depth, early pruning efficiency, and query selectivity, and must be empirically measured under instrumented telemetry in future benchmarking rather than asserted as fact.
 
 ### 4.2. Avoidable Search Overhead
 Avoidable overhead consists of:
@@ -115,12 +115,13 @@ Avoidable overhead consists of:
 
 ### 5.2. Active Memory Enforcement & Safety Architecture
 A rigorous distinction is maintained between:
-1. **Audit Validity (`AUDIT_PASS`):** Verifies that the workload manifest, hashes, query simple-graph properties, stream provenance, and syntax are cryptographically and syntactically sound.
+1. **Audit Validity (`AUDIT_PASS`):** Verifies that the workload manifest, hashes, query simple-graph properties, stream provenance, cgroup headroom, and syntax are cryptographically and syntactically sound.
 2. **Execution Readiness (`EXECUTION_READINESS = SAFETY_BLOCKED`):** Authorizing process execution of benchmarks is strictly blocked until an enforceable active memory containment harness and safe available RAM conditions are proven.
-3. **Memory Concepts Distinction:**
+3. **Memory Concepts & Containment Distinction:**
    - **Virtual Address Space (`RLIMIT_AS`):** Capping `RLIMIT_AS` limits the virtual address space (`VIRT`), which includes memory-mapped files and uncommitted pages. It does **NOT** cap physical resident memory (`RSS`). Claiming that `RLIMIT_AS` guarantees a resident memory cap is technically false.
-   - **Resident Set Size (RSS):** The actual physical memory consumed by process pages. Polling `/proc/[pid]/statm` or `getrusage` periodically does NOT provide a hard guarantee because memory spikes occurring between polling intervals can trigger kernel thrashing or system freeze.
-   - **Active Enforceable Containment:** Requires kernel-level enforcement such as a delegated Linux `cgroup v2` controller (`memory.max = 3GiB`) with fail-closed kernel out-of-memory killing, or an external rootless supervisor with sub-millisecond polling and immediate `SIGKILL` traps.
+   - **Resident Set Size (RSS) Polling:** Polling `/proc/[pid]/statm` or `getrusage` periodically is an observational and reactive mechanism, **NOT** hard memory containment. Memory spikes occurring between polling intervals can trigger kernel thrashing or system freeze before the monitoring thread can intervene.
+   - **cgroup Headroom Inspection:** Preflight implements read-only inspection of cgroup v2 (`memory.max`, `memory.current`, and ancestor slices) to compute effective available headroom ($\text{headroom} = \max(0, \text{memory.max} - \text{memory.current})$). When constrained, $\text{effective\_ram} = \min(\text{host\_available}, \text{headroom})$.
+   - **Active Enforceable Containment:** Requires kernel-level enforcement such as a dedicated Linux `cgroup v2` slice with fail-closed kernel out-of-memory killing (`memory.max = 3GiB`), or an external supervisor with sub-millisecond hardware-level traps.
    - **Current Implementation State:** In Gate A3-00, no active benchmark runner has been implemented or executed. Therefore, active memory containment is classified as:
      $$\text{MEMORY\_ENFORCEMENT} = \text{NOT\_VERIFIED}$$
      $$\text{EXECUTION\_READINESS} = \text{SAFETY\_BLOCKED}$$

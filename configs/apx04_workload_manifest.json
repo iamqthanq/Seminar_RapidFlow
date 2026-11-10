@@ -1,11 +1,11 @@
 {
-  "schema_version": "1.1.0",
+  "schema_version": "1.2.0",
   "document_type": "apx04_workload_manifest",
   "status": "DRAFT_PENDING_USER_APPROVAL",
   "issue": 20,
   "branch": "feature/rf20-apx04-feasibility",
   "base": "QuangThang",
-  "author": "Antigravity — Research Implementation Engineer",
+  "author": "Antigravity — Senior Research Implementation Engineer",
   "created_date": "2026-11-10",
   "execution_authorization": false,
   "notice": "THIS MANIFEST IS A FORMAL PLANNING DRAFT ONLY. NO EXECUTION OF NETFLOW BENCHMARKS IS AUTHORIZED UNTIL USER APPROVES GATE A3-01. EXECUTION READINESS IS STRICTLY SAFETY_BLOCKED.",
@@ -18,6 +18,54 @@
     "vertex_labels": [0],
     "edge_labels": [0, 1, 2, 3, 4, 5, 6, 7],
     "max_degree": 49014
+  },
+  "pilot_data_graphs": {
+    "Pilot_A_Exact_Micrograph": {
+      "name": "Pilot_A_Exact_Micrograph",
+      "path": "data/pilots/pilot_a_exact_data.graph",
+      "sha256": "90218eeed817f160e2b33bfad69c13b21e23fb926bbfa3b5e7281857f199aa2f",
+      "vertices": 6,
+      "edges": 6,
+      "vertex_labels": [0],
+      "edge_labels": [0, 1],
+      "description": "Small 6-vertex fixture graph with independent APX-02 Oracle ground truth for exact matching verification."
+    },
+    "Pilot_B_NearOnly_Micrograph": {
+      "name": "Pilot_B_NearOnly_Micrograph",
+      "path": "data/pilots/pilot_b_nearonly_data.graph",
+      "sha256": "f1f849e2f414d687d4bb9e324d0016b16164da42cc19db5f64deb12027c23364",
+      "vertices": 5,
+      "edges": 5,
+      "vertex_labels": [0],
+      "edge_labels": [0],
+      "description": "Small 5-vertex cycle C5 with independent APX-02 Oracle ground truth: M_exact(0, None) is empty, while M_near-only (eps_m=1) has 30 verified matches."
+    },
+    "Pilot_C_Tiny_NetFlow": {
+      "name": "Pilot_C_Tiny_NetFlow",
+      "path": "data/pilots/pilot_c_tiny_netflow_data.graph",
+      "sha256": "7b8a305dfdbfaab3566958bb8e0dcfe683a8f3a1105a8f5ee4a5713d5516bd0f",
+      "vertices": 34,
+      "edges": 32,
+      "vertex_labels": [0],
+      "edge_labels": [0, 1, 2],
+      "extraction_metadata": {
+        "source_graph": "data/netflow/release_newsp/netflow/data_graph/Ndata.graph",
+        "source_graph_sha256": "bfedd2cab6d2c460141da945e77b0be39ae24c74d9a28b9394a38ee35b652fc6",
+        "selection_method": "2-hop induced subgraph around seed vertex 1590515 and stream partner 2940315",
+        "random_seed": 20261110,
+        "selected_vertices": [
+          1590514, 1590515, 1590530, 1590564, 1592956, 1606375, 1610074, 1788734,
+          1788735, 1869104, 1946990, 2008564, 2042381, 2077291, 2079227, 2095936,
+          2126963, 2197871, 2371226, 2393942, 2491447, 2526560, 2535782, 2763372,
+          2773669, 2892826, 2940315, 2950803, 2959413, 2974037, 2987568, 2989573,
+          3007779, 3086536
+        ],
+        "source_stream": "data/netflow/release_newsp/netflow/data_graph/Ninsertion.graph",
+        "source_operation_positions": [15],
+        "semantic_class": "INDUCED_SUBGRAPH_RELATIVE",
+        "completeness_limitation": "Matches are relative to induced subuniverse V' (34 vertices) and do NOT claim global completeness over full NetFlow graph."
+      }
+    }
   },
   "queries": {
     "Q01_auth_5v_l1": {
@@ -110,6 +158,45 @@
       "edge_labels": [0],
       "degree_sequence": [3, 2, 1, 1, 1],
       "structure": "Branching tree on 5 vertices without cycles"
+    },
+    "Q_pilot_a_exact": {
+      "query_id": "Q_pilot_a_exact",
+      "category": "PILOT_FIXTURE",
+      "family": "Triangle",
+      "path": "data/pilots/pilot_a_exact_query.graph",
+      "sha256": "cbd1e62b36bdbe7c7131a42a24c78223599f38b358141b5775b13153cb4d4a5e",
+      "vertices": 3,
+      "edges": 3,
+      "vertex_labels": [0],
+      "edge_labels": [0, 1],
+      "degree_sequence": [2, 2, 2],
+      "structure": "3-vertex triangle with edges (0,1,0), (1,2,0), (0,2,1) for Pilot A exact match cross-check"
+    },
+    "Q_pilot_b_nearonly": {
+      "query_id": "Q_pilot_b_nearonly",
+      "category": "PILOT_FIXTURE",
+      "family": "Triangle",
+      "path": "data/pilots/pilot_b_nearonly_query.graph",
+      "sha256": "dfa195935044fe0f789219dcf572c1d58b36c605d57c5f480df49b6ad75dc786",
+      "vertices": 3,
+      "edges": 3,
+      "vertex_labels": [0],
+      "edge_labels": [0],
+      "degree_sequence": [2, 2, 2],
+      "structure": "Homogeneous 3-vertex triangle K3 for Pilot B near-only (missing chord) cross-check"
+    },
+    "Q_pilot_c_tiny": {
+      "query_id": "Q_pilot_c_tiny",
+      "category": "PILOT_DERIVED",
+      "family": "Path",
+      "path": "data/pilots/pilot_c_tiny_netflow_query.graph",
+      "sha256": "194c00df591eb0a894863d12d56daa8ce010034f9dc338d203b42fdef8eee0c6",
+      "vertices": 3,
+      "edges": 2,
+      "vertex_labels": [0],
+      "edge_labels": [2],
+      "degree_sequence": [2, 1, 1],
+      "structure": "3-vertex path P3 with edge label 2 matching NetFlow cluster around node 1590515"
     }
   },
   "streams": {
@@ -152,59 +239,94 @@
       "sha256": "5516319644e94aad0c8d3c53952d5ab9f5bafd16b9757942d7c363f8cf37a4fa",
       "stream_type": "mixed_deletion",
       "description": "First 100 mixed updates (10 deletions, 90 insertions) from Ndeletion10.graph (Extended pilot prefix)"
+    },
+    "stream_pilot_a_exact": {
+      "stream_id": "stream_pilot_a_exact",
+      "path": "data/pilots/pilot_a_exact_stream.graph",
+      "source_stream": "data/pilots/pilot_a_exact_stream.graph",
+      "source_stream_sha256": "cef199c23ff4c50a27863b31bc383f8c40e8c1ef6f170131a434d872b6320c5a",
+      "prefix_length": 2,
+      "sha256": "cef199c23ff4c50a27863b31bc383f8c40e8c1ef6f170131a434d872b6320c5a",
+      "stream_type": "insertion",
+      "target_graph": "Pilot_A_Exact_Micrograph",
+      "description": "Deterministic 2-insertion stream for Pilot A exact match transition evaluation"
+    },
+    "stream_pilot_b_nearonly": {
+      "stream_id": "stream_pilot_b_nearonly",
+      "path": "data/pilots/pilot_b_nearonly_stream.graph",
+      "source_stream": "data/pilots/pilot_b_nearonly_stream.graph",
+      "source_stream_sha256": "55130778380865755793d6a5f20778d8bde0667a367d3da5bad67d98618a03ab",
+      "prefix_length": 2,
+      "sha256": "55130778380865755793d6a5f20778d8bde0667a367d3da5bad67d98618a03ab",
+      "stream_type": "mixed_deletion",
+      "target_graph": "Pilot_B_NearOnly_Micrograph",
+      "description": "Deterministic 2-update stream (1 insertion, 1 deletion) for Pilot B chord addition and transition evaluation"
+    },
+    "stream_pilot_c_projected": {
+      "stream_id": "stream_pilot_c_projected",
+      "path": "data/pilots/pilot_c_tiny_netflow_stream.graph",
+      "source_stream": "data/netflow/release_newsp/netflow/data_graph/Ninsertion.graph",
+      "source_stream_sha256": "e45f2d908eaed5098653d4635076bef0152438014ad6e3aa03df522cef85ab05",
+      "prefix_length": 1,
+      "sha256": "837c10d35dbdc3f41e6b5d877d3a0f043eaeffd79a535fc3a70a7def64e8488a",
+      "stream_type": "insertion",
+      "projection_type": "PROJECTED_STREAM",
+      "source_operation_positions": [15],
+      "target_graph": "Pilot_C_Tiny_NetFlow",
+      "description": "Projected update stream for Pilot C retaining strictly operations with endpoints in V' (operation #15 from Ninsertion.graph)"
     }
   },
   "proposed_pilot_cases_a3_01": [
     {
-      "case_id": "pilot_safe_01_star4_exact_insert10",
-      "query_id": "Q05_probe_star4_l0",
-      "query_source": "SYNTHETIC_PROBE",
-      "graph_source": "NetFlow_NewSP_Full",
-      "stream_id": "insert_p10",
+      "case_id": "pilot_safe_01_micro_exact",
+      "query_id": "Q_pilot_a_exact",
+      "query_source": "PILOT_FIXTURE",
+      "graph_source": "Pilot_A_Exact_Micrograph",
+      "stream_id": "stream_pilot_a_exact",
       "eps_m": 0,
-      "eps_x": 0,
+      "eps_x": 10,
       "mode": "STRICT",
       "workload_category": "EXACT_MATCH",
-      "semantic_class": "ORIGINAL_GRAPH_SCORE_RESTRICTED_SEARCH",
+      "semantic_class": "INDUCED_SUBGRAPH_RELATIVE",
       "pilot_stage": "INITIAL_SAFE_PILOT",
       "random_seed": 20261110,
       "approval_state": "DRAFT_PENDING_USER_APPROVAL",
       "execution_status": "NOT_RUN",
-      "rationale": "Initial safe pilot #1: Exact star motif match on initial 10 edge insertions for independent Oracle cross-check under bounded candidate exploration."
+      "rationale": "Initial safe pilot #1 (Pilot A): Exact match verification on small 6-vertex micrograph with independent APX-02 Oracle ground truth."
     },
     {
-      "case_id": "pilot_safe_02_star4_nearonly_insert10",
-      "query_id": "Q05_probe_star4_l0",
-      "query_source": "SYNTHETIC_PROBE",
-      "graph_source": "NetFlow_NewSP_Full",
-      "stream_id": "insert_p10",
+      "case_id": "pilot_safe_02_micro_nearonly",
+      "query_id": "Q_pilot_b_nearonly",
+      "query_source": "PILOT_FIXTURE",
+      "graph_source": "Pilot_B_NearOnly_Micrograph",
+      "stream_id": "stream_pilot_b_nearonly",
       "eps_m": 1,
       "eps_x": 10,
       "mode": "STRICT",
       "workload_category": "NEAR_ONLY_MATCH",
-      "semantic_class": "ORIGINAL_GRAPH_SCORE_RESTRICTED_SEARCH",
+      "semantic_class": "INDUCED_SUBGRAPH_RELATIVE",
       "pilot_stage": "INITIAL_SAFE_PILOT",
       "random_seed": 20261110,
       "approval_state": "DRAFT_PENDING_USER_APPROVAL",
       "execution_status": "NOT_RUN",
-      "rationale": "Initial safe pilot #2: Genuine near-only match with m(f)=1 missing edge under finite boundary cut eps_x=10."
+      "rationale": "Initial safe pilot #2 (Pilot B): Verified near-only match on 5-vertex C5 fixture where M_exact is empty and eps_m=1 yields m(f)=1 matches."
     },
     {
-      "case_id": "pilot_safe_03_auth5v_cycle_delete10",
-      "query_id": "Q01_auth_5v_l1",
-      "query_source": "AUTHOR_NEWSP",
-      "graph_source": "NetFlow_NewSP_Full",
-      "stream_id": "delete10_p10",
+      "case_id": "pilot_safe_03_tiny_netflow_induced",
+      "query_id": "Q_pilot_c_tiny",
+      "query_source": "PILOT_DERIVED",
+      "graph_source": "Pilot_C_Tiny_NetFlow",
+      "stream_id": "stream_pilot_c_projected",
       "eps_m": 0,
       "eps_x": 10,
       "mode": "STRICT",
-      "workload_category": "DELETE_EDGE",
-      "semantic_class": "ORIGINAL_GRAPH_SCORE_RESTRICTED_SEARCH",
+      "workload_category": "EXACT_MATCH",
+      "semantic_class": "INDUCED_SUBGRAPH_RELATIVE",
       "pilot_stage": "INITIAL_SAFE_PILOT",
       "random_seed": 20261110,
       "approval_state": "DRAFT_PENDING_USER_APPROVAL",
       "execution_status": "NOT_RUN",
-      "rationale": "Initial safe pilot #3: Dynamic edge deletion transition evaluation (EXITED events) on 5-vertex author query on mixed stream prefix."
+      "rationale": "Initial safe pilot #3 (Pilot C): Tiny 34-vertex NetFlow-derived induced subgraph with projected stream operation #15 and bounded candidate space."
     },
     {
       "case_id": "pilot_def_01_star4_clutter_filter_insert10",

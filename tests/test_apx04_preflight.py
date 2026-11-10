@@ -38,6 +38,7 @@ from scripts.apx02_oracle import (
 from scripts.apx04_preflight import (
     PreflightChecker,
     compute_sha256,
+    get_cgroup_memory_info,
     get_system_resources,
     is_strict_int,
     parse_query_file,
@@ -226,6 +227,103 @@ class TestQueryValidationAdversarial(unittest.TestCase):
         finally:
             f_path.unlink()
 
+    def test_query_out_of_domain_vertex_label_rejected(self) -> None:
+        """Query with out-of-domain vertex label (e.g. 99 on NetFlow where domain is {0}) must fail preflight."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_root = Path(tmpdir)
+            q_file = tmp_root / "q_invalid_vl.graph"
+            with open(q_file, "w", encoding="utf-8") as f:
+                f.write("v 0 99\nv 1 0\ne 0 1 0\n")
+            q_hash = compute_sha256(q_file)
+
+            repo_root = Path(__file__).resolve().parent.parent
+            with open(repo_root / "configs" / "apx04_workload_manifest.json", "r", encoding="utf-8") as f:
+                data = json.load(f)
+            data["queries"]["q_bad_vl"] = {
+                "query_id": "q_bad_vl",
+                "category": "SYNTHETIC_PROBE",
+                "path": str(q_file.relative_to(tmp_root)),
+                "sha256": q_hash,
+                "vertices": 2,
+                "edges": 1,
+                "vertex_labels": [0, 99],
+                "edge_labels": [0],
+            }
+            tmp_manifest = tmp_root / "manifest.json"
+            with open(tmp_manifest, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+
+            checker = PreflightChecker(manifest_path=tmp_manifest, repo_root=tmp_root)
+            passed = checker.run_all()
+            self.assertFalse(passed)
+            self.assertTrue(any("out-of-domain vertex label" in e.lower() for e in checker.errors))
+
+    def test_query_out_of_domain_edge_label_rejected(self) -> None:
+        """Query with out-of-domain edge label (e.g. 32513 in Q_136) must fail preflight."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_root = Path(tmpdir)
+            q_file = tmp_root / "q_invalid_el.graph"
+            with open(q_file, "w", encoding="utf-8") as f:
+                f.write("v 0 0\nv 1 0\ne 0 1 32513\n")
+            q_hash = compute_sha256(q_file)
+
+            repo_root = Path(__file__).resolve().parent.parent
+            with open(repo_root / "configs" / "apx04_workload_manifest.json", "r", encoding="utf-8") as f:
+                data = json.load(f)
+            data["queries"]["q_bad_el"] = {
+                "query_id": "q_bad_el",
+                "category": "SYNTHETIC_PROBE",
+                "path": str(q_file.relative_to(tmp_root)),
+                "sha256": q_hash,
+                "vertices": 2,
+                "edges": 1,
+                "vertex_labels": [0],
+                "edge_labels": [32513],
+            }
+            tmp_manifest = tmp_root / "manifest.json"
+            with open(tmp_manifest, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+
+            checker = PreflightChecker(manifest_path=tmp_manifest, repo_root=tmp_root)
+            passed = checker.run_all()
+            self.assertFalse(passed)
+            self.assertTrue(any("out-of-domain edge label" in e.lower() for e in checker.errors))
+
+    def test_query_valid_edge_label_7_accepted(self) -> None:
+        """Query containing valid NetFlow edge label 7 must NOT be rejected by preflight."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_root = Path(tmpdir)
+            q_file = tmp_root / "q_valid_el7.graph"
+            with open(q_file, "w", encoding="utf-8") as f:
+                f.write("v 0 0\nv 1 0\ne 0 1 7\n")
+            q_hash = compute_sha256(q_file)
+
+            repo_root = Path(__file__).resolve().parent.parent
+            with open(repo_root / "configs" / "apx04_workload_manifest.json", "r", encoding="utf-8") as f:
+                data = json.load(f)
+            data["queries"] = {
+                "q_el7": {
+                    "query_id": "q_el7",
+                    "category": "SYNTHETIC_PROBE",
+                    "path": str(q_file),
+                    "sha256": q_hash,
+                    "vertices": 2,
+                    "edges": 1,
+                    "vertex_labels": [0],
+                    "edge_labels": [7],
+                    "degree_sequence": [1, 1],
+                }
+            }
+            data["proposed_pilot_cases_a3_01"] = []
+            tmp_manifest = tmp_root / "manifest.json"
+            with open(tmp_manifest, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+
+            checker = PreflightChecker(manifest_path=tmp_manifest, repo_root=repo_root)
+            checker.audit_queries(data)
+            query_errors = [e for e in checker.errors if "q_el7" in e]
+            self.assertEqual(len(query_errors), 0, f"Unexpected query error on valid label 7: {query_errors}")
+
 
 class TestStreamValidationAdversarial(unittest.TestCase):
     """Adversarial negative tests for stream prefix file parsing."""
@@ -280,6 +378,37 @@ class TestStreamValidationAdversarial(unittest.TestCase):
                 parse_stream_prefix_file(f_path)
         finally:
             f_path.unlink()
+
+    def test_stream_out_of_domain_edge_label_rejected(self) -> None:
+        """Stream update with out-of-domain edge label (e.g. 99) must fail preflight."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_root = Path(tmpdir)
+            s_file = tmp_root / "bad_stream.graph"
+            with open(s_file, "w", encoding="utf-8") as f:
+                f.write("e 0 1 99\n")
+            s_hash = compute_sha256(s_file)
+
+            repo_root = Path(__file__).resolve().parent.parent
+            with open(repo_root / "configs" / "apx04_workload_manifest.json", "r", encoding="utf-8") as f:
+                data = json.load(f)
+            data["streams"] = {
+                "s_bad": {
+                    "stream_id": "s_bad",
+                    "path": str(s_file),
+                    "source_stream": str(s_file),
+                    "source_stream_sha256": s_hash,
+                    "prefix_length": 1,
+                    "sha256": s_hash,
+                }
+            }
+            data["proposed_pilot_cases_a3_01"] = []
+            tmp_manifest = tmp_root / "manifest.json"
+            with open(tmp_manifest, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+
+            checker = PreflightChecker(manifest_path=tmp_manifest, repo_root=repo_root)
+            checker.audit_streams(data)
+            self.assertTrue(any("out-of-domain edge label" in e.lower() for e in checker.errors))
 
 
 class TestStreamProvenanceAndLineage(unittest.TestCase):
@@ -368,6 +497,139 @@ class TestStreamProvenanceAndLineage(unittest.TestCase):
             passed = checker.run_all()
             self.assertFalse(passed)
             self.assertTrue(any("lineage mismatch" in e.lower() for e in checker.errors))
+
+    def test_lineage_failure_sets_flags_false(self) -> None:
+        """When lineage check fails, source_lineage_verified must be False, not True."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_root = Path(tmpdir)
+            src_file = tmp_root / "src.graph"
+            with open(src_file, "w", encoding="utf-8") as f:
+                f.write("e 0 1 0\ne 1 2 0\n")
+            src_hash = compute_sha256(src_file)
+
+            prefix_file = tmp_root / "pfx.graph"
+            with open(prefix_file, "w", encoding="utf-8") as f:
+                f.write("e 0 1 0\ne 9 8 0\n")  # Mismatch with source (valid edge, but line 2 differs from source)
+            pfx_hash = compute_sha256(prefix_file)
+
+            data = {
+                "schema_version": "1.2.0",
+                "document_type": "apx04_workload_manifest",
+                "status": "DRAFT_PENDING_USER_APPROVAL",
+                "execution_authorization": False,
+                "data_graph": {"name": "D", "path": str(src_file), "sha256": src_hash, "vertices": 10},
+                "queries": {},
+                "streams": {
+                    "mismatched_pfx": {
+                        "path": str(prefix_file),
+                        "source_stream": str(src_file),
+                        "source_stream_sha256": src_hash,
+                        "prefix_length": 2,
+                        "sha256": pfx_hash,
+                    }
+                },
+                "proposed_pilot_cases_a3_01": [],
+                "exclusions": [],
+            }
+            tmp_manifest = tmp_root / "manifest.json"
+            with open(tmp_manifest, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+
+            checker = PreflightChecker(manifest_path=tmp_manifest, repo_root=tmp_root)
+            passed = checker.run_all()
+            self.assertFalse(passed)
+            stream_res = checker.audit_log["streams_verified"]["mismatched_pfx"]
+            self.assertFalse(stream_res["source_lineage_verified"])
+            self.assertFalse(stream_res["sequential_updates_verified"])
+
+    def test_sequential_replay_duplicate_insertion_fails(self) -> None:
+        """Inserting an edge that already exists in G0 must set sequential_updates_verified=False."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_root = Path(tmpdir)
+            dg_file = tmp_root / "g0.graph"
+            with open(dg_file, "w", encoding="utf-8") as f:
+                f.write("v 0 0\nv 1 0\ne 0 1 0\n")
+            dg_hash = compute_sha256(dg_file)
+
+            src_file = tmp_root / "stream.graph"
+            with open(src_file, "w", encoding="utf-8") as f:
+                f.write("e 0 1 0\n")  # Duplicate insertion!
+            src_hash = compute_sha256(src_file)
+
+            data = {
+                "schema_version": "1.2.0",
+                "document_type": "apx04_workload_manifest",
+                "status": "DRAFT_PENDING_USER_APPROVAL",
+                "execution_authorization": False,
+                "data_graph": {"name": "D", "path": str(dg_file), "sha256": dg_hash, "vertices": 2},
+                "queries": {},
+                "streams": {
+                    "dup_stream": {
+                        "path": str(src_file),
+                        "source_stream": str(src_file),
+                        "source_stream_sha256": src_hash,
+                        "prefix_length": 1,
+                        "sha256": src_hash,
+                    }
+                },
+                "proposed_pilot_cases_a3_01": [],
+                "exclusions": [],
+            }
+            tmp_manifest = tmp_root / "manifest.json"
+            with open(tmp_manifest, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+
+            checker = PreflightChecker(manifest_path=tmp_manifest, repo_root=tmp_root)
+            passed = checker.run_all()
+            self.assertFalse(passed)
+            self.assertTrue(any("duplicate edge insertion" in e.lower() for e in checker.errors))
+            stream_res = checker.audit_log["streams_verified"]["dup_stream"]
+            self.assertTrue(stream_res["source_lineage_verified"])
+            self.assertFalse(stream_res["sequential_updates_verified"])
+
+    def test_sequential_replay_delete_nonexistent_edge_fails(self) -> None:
+        """Deleting an absent edge must fail sequential verification."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_root = Path(tmpdir)
+            dg_file = tmp_root / "g0.graph"
+            with open(dg_file, "w", encoding="utf-8") as f:
+                f.write("v 0 0\nv 1 0\n")
+            dg_hash = compute_sha256(dg_file)
+
+            src_file = tmp_root / "del_stream.graph"
+            with open(src_file, "w", encoding="utf-8") as f:
+                f.write("-e 0 1 0\n")  # Edge does not exist in G0
+            src_hash = compute_sha256(src_file)
+
+            data = {
+                "schema_version": "1.2.0",
+                "document_type": "apx04_workload_manifest",
+                "status": "DRAFT_PENDING_USER_APPROVAL",
+                "execution_authorization": False,
+                "data_graph": {"name": "D", "path": str(dg_file), "sha256": dg_hash, "vertices": 2},
+                "queries": {},
+                "streams": {
+                    "del_stream": {
+                        "path": str(src_file),
+                        "source_stream": str(src_file),
+                        "source_stream_sha256": src_hash,
+                        "prefix_length": 1,
+                        "sha256": src_hash,
+                    }
+                },
+                "proposed_pilot_cases_a3_01": [],
+                "exclusions": [],
+            }
+            tmp_manifest = tmp_root / "manifest.json"
+            with open(tmp_manifest, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+
+            checker = PreflightChecker(manifest_path=tmp_manifest, repo_root=tmp_root)
+            passed = checker.run_all()
+            self.assertFalse(passed)
+            self.assertTrue(any("deletion of absent edge" in e.lower() for e in checker.errors))
+            stream_res = checker.audit_log["streams_verified"]["del_stream"]
+            self.assertFalse(stream_res["sequential_updates_verified"])
 
 
 class TestManifestValidationStrict(unittest.TestCase):
@@ -516,6 +778,153 @@ class TestSystemResourceAudits(unittest.TestCase):
         self.assertTrue(passed)
         self.assertEqual(checker.audit_log["audit_verdict"], "AUDIT_PASS_WITH_WARNINGS")
         self.assertEqual(checker.audit_log["execution_readiness"], "SAFETY_BLOCKED")
+
+    def test_cgroup_v2_unconstrained_inspection(self) -> None:
+        """cgroup v2 with memory.max=max reports UNCONSTRAINED and no headroom limit."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_p = Path(tmpdir)
+            proc_cg = tmp_p / "proc_cgroup"
+            proc_cg.write_text("0::/my_slice\n", encoding="utf-8")
+
+            cg_base = tmp_p / "sys_cgroup"
+            slice_dir = cg_base / "my_slice"
+            slice_dir.mkdir(parents=True)
+            (slice_dir / "memory.max").write_text("max\n", encoding="utf-8")
+            (slice_dir / "memory.current").write_text("500000000\n", encoding="utf-8")
+
+            info = get_cgroup_memory_info(str(proc_cg), str(cg_base))
+            self.assertEqual(info["cgroup_version"], "v2")
+            self.assertEqual(info["status"], "UNCONSTRAINED")
+            self.assertFalse(info["is_constrained"])
+            self.assertIsNone(info["headroom_gib"])
+
+    def test_cgroup_v2_constrained_headroom(self) -> None:
+        """cgroup v2 with memory.max=2GiB and usage=1.5GiB reports CONSTRAINED and headroom=0.5GiB."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_p = Path(tmpdir)
+            proc_cg = tmp_p / "proc_cgroup"
+            proc_cg.write_text("0::/test_slice\n", encoding="utf-8")
+
+            cg_base = tmp_p / "sys_cgroup"
+            slice_dir = cg_base / "test_slice"
+            slice_dir.mkdir(parents=True)
+            # Limit = 2 GiB = 2147483648 bytes, Usage = 1.5 GiB = 1610612736 bytes -> Headroom = 0.5 GiB
+            (slice_dir / "memory.max").write_text("2147483648\n", encoding="utf-8")
+            (slice_dir / "memory.current").write_text("1610612736\n", encoding="utf-8")
+
+            info = get_cgroup_memory_info(str(proc_cg), str(cg_base))
+            self.assertEqual(info["cgroup_version"], "v2")
+            self.assertEqual(info["status"], "CONSTRAINED")
+            self.assertTrue(info["is_constrained"])
+            self.assertEqual(info["headroom_gib"], 0.5)
+
+    def test_cgroup_inaccessible_safe_fallback(self) -> None:
+        """When cgroup file is missing or inaccessible, inspector falls back safely."""
+        info = get_cgroup_memory_info("/non_existent/proc/cgroup", "/non_existent/sys")
+        self.assertEqual(info["status"], "NO_CGROUP_FILE")
+        self.assertFalse(info["is_constrained"])
+        self.assertIsNone(info["headroom_gib"])
+
+
+class TestPilotWorkloadVerification(unittest.TestCase):
+    """
+    Direct verification of materialized pilot workload artifacts:
+    - Pilot A (Exact Micrograph)
+    - Pilot B (Near-Only Micrograph)
+    - Pilot C (Tiny NetFlow-Derived Workload)
+    """
+
+    def setUp(self) -> None:
+        self.repo_root = Path(__file__).resolve().parent.parent
+        self.manifest_path = self.repo_root / "configs" / "apx04_workload_manifest.json"
+
+    def test_all_three_materialized_pilots_exist_and_pass(self) -> None:
+        """All three pilot data graphs, queries, and streams exist and pass preflight checks."""
+        for pilot_id in ("pilot_a_exact", "pilot_b_nearonly", "pilot_c_tiny_netflow"):
+            data_file = self.repo_root / f"data/pilots/{pilot_id}_data.graph"
+            query_file = self.repo_root / f"data/pilots/{pilot_id}_query.graph"
+            stream_file = self.repo_root / f"data/pilots/{pilot_id}_stream.graph"
+            self.assertTrue(data_file.exists(), f"Missing {data_file}")
+            self.assertTrue(query_file.exists(), f"Missing {query_file}")
+            self.assertTrue(stream_file.exists(), f"Missing {stream_file}")
+
+    def test_pilot_a_exact_ground_truth(self) -> None:
+        """Pilot A: APX-02 Oracle confirms exact matches on 6-vertex graph."""
+        g = SimpleGraph()
+        for v in range(6):
+            g.add_vertex(v, 0)
+        edges = [(0, 1, 0), (1, 2, 0), (2, 3, 0), (3, 4, 0), (4, 5, 0), (0, 2, 1)]
+        for u, v, l in edges:
+            g.add_edge(u, v, l)
+
+        q = SimpleGraph()
+        for v in range(3):
+            q.add_vertex(v, 0)
+        q.add_edge(0, 1, 0)
+        q.add_edge(1, 2, 0)
+        q.add_edge(0, 2, 1)
+
+        exact_res = find_approximate_matches(q, g, eps_m=0, eps_x=10, mode=ConnectivityMode.STRICT)
+        self.assertGreater(len(exact_res), 0)
+        for m, eval_res in exact_res.items():
+            self.assertEqual(eval_res.score.m, 0)
+            self.assertTrue(eval_res.score.connected)
+
+    def test_pilot_b_nearonly_ground_truth(self) -> None:
+        """Pilot B: APX-02 Oracle confirms M_exact(0, None) is empty, but eps_m=1 produces m(f)=1 matches."""
+        g = SimpleGraph()
+        for v in range(5):
+            g.add_vertex(v, 0)
+        for u, v in [(0, 1), (1, 2), (2, 3), (3, 4), (4, 0)]:
+            g.add_edge(u, v, 0)
+
+        q = SimpleGraph()
+        for v in range(3):
+            q.add_vertex(v, 0)
+        q.add_edge(0, 1, 0)
+        q.add_edge(1, 2, 0)
+        q.add_edge(0, 2, 0)
+
+        exact_res = find_approximate_matches(q, g, eps_m=0, eps_x=None, mode=ConnectivityMode.STRICT)
+        self.assertEqual(len(exact_res), 0, "Pilot B C5 graph must contain zero exact triangles")
+
+        near_res = find_approximate_matches(q, g, eps_m=1, eps_x=None, mode=ConnectivityMode.STRICT)
+        self.assertGreater(len(near_res), 0, "Pilot B must produce near-only matches with eps_m=1")
+        for m, eval_res in near_res.items():
+            self.assertEqual(eval_res.score.m, 1)
+            self.assertTrue(eval_res.score.connected)
+
+    def test_pilot_c_tiny_netflow_ground_truth(self) -> None:
+        """Pilot C: 34 vertices, 32 edges, and projected update #15 verified with APX-02 DynamicOracle."""
+        q = SimpleGraph()
+        for v in range(3):
+            q.add_vertex(v, 0)
+        q.add_edge(0, 1, 2)
+        q.add_edge(0, 2, 2)
+
+        # Load pilot C data graph
+        g = SimpleGraph()
+        with open(self.repo_root / "data/pilots/pilot_c_tiny_netflow_data.graph", "r", encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("v "):
+                    parts = line.strip().split()
+                    g.add_vertex(int(parts[1]), int(parts[2]))
+                elif line.startswith("e "):
+                    parts = line.strip().split()
+                    g.add_edge(int(parts[1]), int(parts[2]), int(parts[3]))
+
+        self.assertEqual(len(g.vertices), 34)
+        self.assertEqual(len(g.edges), 32)
+
+        dyn = DynamicOracle(q, g, eps_m=0, eps_x=10, mode=ConnectivityMode.STRICT)
+        initial_count = len(dyn.current_matches)
+        self.assertEqual(initial_count, 30)
+
+        # Apply projected update #15
+        delta = dyn.apply_update(Update("+", 1590515, 2940315, 2))
+        self.assertEqual(len(delta.entered), 12)
+        self.assertEqual(len(delta.exited), 0)
+        self.assertEqual(len(delta.score_changed), 30)
 
 
 class TestOracleScientificVerification(unittest.TestCase):
