@@ -1,9 +1,9 @@
 # APX-04 — Runtime Feasibility & Computational Bottleneck Audit
 
-**Document ID:** `docs/apx04_runtime_feasibility.md`  
-**Status:** Analytical Runtime Specification (`A3_00_READY_FOR_INDEPENDENT_REVIEW`)  
-**Associated Issue:** [#20](https://github.com/iamqthanq/Seminar_RapidFlow/issues/20)  
-**Evaluated Target:** APX-03 C++ Baseline (`rapidflow_apx03_baseline`)  
+**Document ID:** `docs/apx04_runtime_feasibility.md`
+**Status:** Analytical Runtime Specification (`A3_00_READY_FOR_INDEPENDENT_REVIEW_ROUND_2`)
+**Associated Issue:** [#20](https://github.com/iamqthanq/Seminar_RapidFlow/issues/20)
+**Evaluated Target:** APX-03 C++ Baseline (`rapidflow_apx03_baseline`)
 **Commit:** `1eabd3d82e59d29f168cd99f9c5da2bbdc6710f0`
 
 ---
@@ -16,7 +16,7 @@ The baseline employs **`RECOMPUTE_BASELINE`**: upon each streaming update, it ap
 
 The critical computational insights identified at Gate A3-00 are:
 1. **Initial Match Set Bottleneck ($M_0$):** The cost of enumerating $M_0$ on a graph with $3.11\text{M}$ vertices with uniform vertex labels threatens to overwhelm runtime before the first streaming update is even processed.
-2. **Output Cardinality Dominance:** Full concrete mapping materialization produces $O(|M_t| \cdot k)$ bytes. If $|M_t| = 10^6$, serialization and memory overhead inherently dominate search time, regardless of indexing algorithms.
+2. **Output Cardinality Dominance Hypothesis:** Full concrete mapping materialization produces $O(|M_t| \cdot k)$ bytes. If $|M_t| = 10^6$, serialization and memory overhead inherently dominate search time, regardless of indexing algorithms. This is an empirical hypothesis to be quantified in profiling.
 3. **Recompute Redundancy:** For updates with localized impact, recomputing the entire match set recalculates matches that did not change, suggesting a theoretical target for future incrementalization (Gate A4).
 
 ---
@@ -43,7 +43,7 @@ The baseline execution pipeline consists of 13 distinct computational stages:
 ```
 
 ### Stage Cost Breakdown & Bottleneck Hypotheses:
-1. **Graph Loading (`graph_load_ms`):** Ingesting `Ndata.graph` ($84\,\text{MB}$, $3.11\text{M}$ vertices, $2.85\text{M}$ edges) into RAM.
+1. **Graph Loading (`graph_load_ms`):** Ingesting `Ndata.graph` ($87.5\,\text{MB}$, $3.11\text{M}$ vertices, $2.85\text{M}$ edges) into RAM.
 2. **CSR Initialization (`csr_init_ms`):** RapidFlow native CSR construction.
 3. **Mutable Adjacency Initialization (`adj_init_ms`):** Constructing hash maps `std::unordered_map<uint32_t, std::unordered_map<uint32_t, uint32_t>>` for $O(1)$ dynamic edge insertions/deletions. Hash map allocation on $3.11\text{M}$ vertices represents a primary memory driver.
 4. **Initial Matching $M_0$ (`initial_matching_ms`):** Backtracking search on $G_0$.
@@ -60,7 +60,7 @@ The baseline execution pipeline consists of 13 distinct computational stages:
 
 ## 3. Telemetry Specification & Metric Measurement Plan
 
-The following telemetry framework is specified for instrumentation and collection in future execution gates:
+The following telemetry framework is specified for future execution gates:
 
 | Metric ID | Description | Unit | Source | Collection Method | Implementation Status |
 | :--- | :--- | :---: | :---: | :---: | :---: |
@@ -86,16 +86,14 @@ The following telemetry framework is specified for instrumentation and collectio
 
 ---
 
-## 4. Output Explosion vs. Avoidable Search Overhead
-
-A foundational distinction in CSM research is separating **intrinsic output complexity** from **avoidable search overhead**:
+## 4. Output Cardinality vs. Avoidable Search Overhead
 
 ### 4.1. Intrinsic Output Complexity
 - In exact COUNT-ONLY matching (such as RapidFlow `EXECUTION_MODE=0` in RF-03), a query may match $16.5 \times 10^6$ times, but the algorithm merely increments a 64-bit scalar counter (`sizeof(uint64_t) = 8` bytes).
 - In Model C (APX-01/03), the output contract requires **full enumeration of concrete ordered mapping tuples** $(f(u_0), \dots, f(u_{k-1}))$ along with full 4-element score records $(m, x_{\text{in}}, x_{\text{out}}, \text{connected})$.
 - For $10^6$ matches, serializing concrete JSON tuples requires:
   $$\approx 10^6 \times 120\,\text{bytes/mapping} \approx 120\,\text{MB of text}$$
-- **Key Insight:** Even an theoretically optimal "oracle" matcher that takes 0.000s to find matches must spend hundreds of milliseconds writing and formatting $120\,\text{MB}$ of data. This cost is **intrinsic to the enumeration contract**, not a deficiency in the graph search algorithm.
+- While the output lower bound is $\Omega(k |M_t|)$, whether serialization dominates total wall-clock execution time is an empirical hypothesis that depends heavily on candidate search depth and will be evaluated through telemetry measurements.
 
 ### 4.2. Avoidable Search Overhead
 Avoidable overhead consists of:
@@ -104,25 +102,38 @@ Avoidable overhead consists of:
 
 ---
 
-## 5. Resource Safety & Failure Classification
+## 5. Resource Safety & Execution Readiness
 
 ### 5.1. Workstation Hardware Profile
 - **Host OS:** Ubuntu 24.04.1 LTS (Linux Kernel 7.0.0-42-generic x86_64)
 - **CPU:** Intel Core i5-8265U @ 1.60GHz (4 physical cores, 8 threads, max 3.90GHz)
-- **Total RAM:** $11.5\,\text{GiB}$
-- **Current Available RAM:** $\approx 3.3\,\text{GiB}$ (Free: $326\,\text{MB}$, Buffers/Cache: $3.2\,\text{GiB}$)
-- **Swap:** $4.0\,\text{GiB}$ ($1.0\,\text{GiB}$ available)
-- **Disk:** $112\,\text{GiB}$ available on NVMe SSD
-- **Compilers:** GCC 13.3.0, CMake 3.28.3
+- **Total RAM:** $11.53\,\text{GiB}$
+- **Host Floor Requirement:** Available RAM $\ge 4.0\,\text{GiB}$ required prior to benchmark launch
+- **Swap:** $4.0\,\text{GiB}$
+- **Disk:** $111\,\text{GiB}$ free on NVMe SSD
+- **Compilers & Build Tools:** GCC 13.3.0, CMake 3.28.3
 
-### 5.2. Active Memory Enforcement Analysis
-Because available RAM is $\approx 3.3\,\text{GiB}$, unconstrained graph matching poses severe OOM risks. To ensure workstation safety without root permissions:
-1. **Preflight Memory Floor:** The preflight tool verifies $\ge 4.0\,\text{GiB}$ available RAM before authorizing any execution. If available memory is below the floor, the preflight fails closed with status `SAFETY_BLOCKED`.
-2. **Process-Level Resource Limits:** The test harness utilizes `ulimit -v` (virtual memory cap of $3.5\,\text{GiB}$) via `resource.setrlimit(resource.RLIMIT_AS, ...)` in spawned worker processes. If memory consumption exceeds this ceiling, allocations fail immediately via `std::bad_alloc`, preventing OS kernel freezing or system thrashing.
-3. **External Watchdog Timer:** Subprocesses are wrapped with Python `subprocess.run(timeout=60.0)` sending `SIGKILL` if wall time exceeds 60 seconds.
+### 5.2. Active Memory Enforcement & Safety Architecture
+A rigorous distinction is maintained between:
+1. **Audit Validity (`AUDIT_PASS`):** Verifies that the workload manifest, hashes, query simple-graph properties, stream provenance, and syntax are cryptographically and syntactically sound.
+2. **Execution Readiness (`EXECUTION_READINESS = SAFETY_BLOCKED`):** Authorizing process execution of benchmarks is strictly blocked until an enforceable active memory containment harness and safe available RAM conditions are proven.
+3. **Memory Concepts Distinction:**
+   - **Virtual Address Space (`RLIMIT_AS`):** Capping `RLIMIT_AS` limits the virtual address space (`VIRT`), which includes memory-mapped files and uncommitted pages. It does **NOT** cap physical resident memory (`RSS`). Claiming that `RLIMIT_AS` guarantees a resident memory cap is technically false.
+   - **Resident Set Size (RSS):** The actual physical memory consumed by process pages. Polling `/proc/[pid]/statm` or `getrusage` periodically does NOT provide a hard guarantee because memory spikes occurring between polling intervals can trigger kernel thrashing or system freeze.
+   - **Active Enforceable Containment:** Requires kernel-level enforcement such as a delegated Linux `cgroup v2` controller (`memory.max = 3GiB`) with fail-closed kernel out-of-memory killing, or an external rootless supervisor with sub-millisecond polling and immediate `SIGKILL` traps.
+   - **Current Implementation State:** In Gate A3-00, no active benchmark runner has been implemented or executed. Therefore, active memory containment is classified as:
+     $$\text{MEMORY\_ENFORCEMENT} = \text{NOT\_VERIFIED}$$
+     $$\text{EXECUTION\_READINESS} = \text{SAFETY\_BLOCKED}$$
 
-### 5.3. Formal Failure Classification Rubric
-To eliminate ambiguity, every benchmark attempt is mapped to exactly one terminal state:
+### 5.3. Mandatory Operational Safeguards for Future Execution
+- **Wall-Clock Timeout:** $\le 60.0\,\text{s}$ hard cutoff per case.
+- **Active Memory Budget:** $\le 3.0\,\text{GiB}$ resident budget.
+- **Available RAM Floor:** $\ge 4.0\,\text{GiB}$ available memory required before starting any run.
+- **Single Process Execution:** No concurrent benchmark execution.
+- **Combinatorial Budget:** $\le 10^7$ candidate evaluations, $\le 10^7$ search exploration steps.
+
+### 5.4. Formal Failure Classification Rubric
+To eliminate ambiguity, every future benchmark attempt is mapped to exactly one terminal state:
 
 | State Code | Meaning | Handling & Provenance Action |
 | :--- | :--- | :--- |
@@ -130,7 +141,7 @@ To eliminate ambiguity, every benchmark attempt is mapped to exactly one termina
 | `ZERO_RESULT_COMPLETE` | Execution completed, but accepted matches = 0 | Valid result; record as true negative |
 | `TIMEOUT` | Subprocess exceeded 60s wall clock | Record timeout; do NOT treat as zero-match |
 | `RESOURCE_LIMIT` | Exceeded candidate or search-step budget (exit 2) | Record bound exhaustion; fail closed |
-| `OOM` | Process killed by OS or `RLIMIT_AS` exceeded | Record out-of-memory failure; preserve logs |
+| `OOM` | Process killed by OS or memory ceiling exceeded | Record out-of-memory failure; preserve logs |
 | `ERROR` | Non-zero exit code (exit 1), syntax, graph exception | Record error details from stderr |
 | `INCOMPLETE` | Stream updates partially processed before abort | Reject run; do NOT include partial counts |
 | `INVALID_INPUT` | Input graph or query malformed | Preflight rejection; never execute |

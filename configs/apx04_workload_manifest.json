@@ -1,14 +1,14 @@
 {
-  "schema_version": "1.0.0",
+  "schema_version": "1.1.0",
   "document_type": "apx04_workload_manifest",
   "status": "DRAFT_PENDING_USER_APPROVAL",
   "issue": 20,
   "branch": "feature/rf20-apx04-feasibility",
   "base": "QuangThang",
-  "author": "Antigravity — Senior Graph Algorithms Researcher & Research Implementation Engineer",
+  "author": "Antigravity — Research Implementation Engineer",
   "created_date": "2026-11-10",
   "execution_authorization": false,
-  "notice": "THIS MANIFEST IS A FORMAL PLANNING DRAFT ONLY. NO EXECUTION OF NETFLOW BENCHMARKS IS AUTHORIZED UNTIL USER APPROVES GATE A3-01.",
+  "notice": "THIS MANIFEST IS A FORMAL PLANNING DRAFT ONLY. NO EXECUTION OF NETFLOW BENCHMARKS IS AUTHORIZED UNTIL USER APPROVES GATE A3-01. EXECUTION READINESS IS STRICTLY SAFETY_BLOCKED.",
   "data_graph": {
     "name": "NetFlow_NewSP_Full",
     "path": "data/netflow/release_newsp/netflow/data_graph/Ndata.graph",
@@ -156,7 +156,7 @@
   },
   "proposed_pilot_cases_a3_01": [
     {
-      "case_id": "pilot_01_exact_star4_insert10",
+      "case_id": "pilot_safe_01_star4_exact_insert10",
       "query_id": "Q05_probe_star4_l0",
       "query_source": "SYNTHETIC_PROBE",
       "graph_source": "NetFlow_NewSP_Full",
@@ -165,14 +165,49 @@
       "eps_x": 0,
       "mode": "STRICT",
       "workload_category": "EXACT_MATCH",
-      "semantic_class": "FULL_GRAPH",
+      "semantic_class": "ORIGINAL_GRAPH_SCORE_RESTRICTED_SEARCH",
+      "pilot_stage": "INITIAL_SAFE_PILOT",
       "random_seed": 20261110,
       "approval_state": "DRAFT_PENDING_USER_APPROVAL",
       "execution_status": "NOT_RUN",
-      "rationale": "Baseline exact star match on initial 10 edge insertions"
+      "rationale": "Initial safe pilot #1: Exact star motif match on initial 10 edge insertions for independent Oracle cross-check under bounded candidate exploration."
     },
     {
-      "case_id": "pilot_02_near_star4_epsx2_insert10",
+      "case_id": "pilot_safe_02_star4_nearonly_insert10",
+      "query_id": "Q05_probe_star4_l0",
+      "query_source": "SYNTHETIC_PROBE",
+      "graph_source": "NetFlow_NewSP_Full",
+      "stream_id": "insert_p10",
+      "eps_m": 1,
+      "eps_x": 10,
+      "mode": "STRICT",
+      "workload_category": "NEAR_ONLY_MATCH",
+      "semantic_class": "ORIGINAL_GRAPH_SCORE_RESTRICTED_SEARCH",
+      "pilot_stage": "INITIAL_SAFE_PILOT",
+      "random_seed": 20261110,
+      "approval_state": "DRAFT_PENDING_USER_APPROVAL",
+      "execution_status": "NOT_RUN",
+      "rationale": "Initial safe pilot #2: Genuine near-only match with m(f)=1 missing edge under finite boundary cut eps_x=10."
+    },
+    {
+      "case_id": "pilot_safe_03_auth5v_cycle_delete10",
+      "query_id": "Q01_auth_5v_l1",
+      "query_source": "AUTHOR_NEWSP",
+      "graph_source": "NetFlow_NewSP_Full",
+      "stream_id": "delete10_p10",
+      "eps_m": 0,
+      "eps_x": 10,
+      "mode": "STRICT",
+      "workload_category": "DELETE_EDGE",
+      "semantic_class": "ORIGINAL_GRAPH_SCORE_RESTRICTED_SEARCH",
+      "pilot_stage": "INITIAL_SAFE_PILOT",
+      "random_seed": 20261110,
+      "approval_state": "DRAFT_PENDING_USER_APPROVAL",
+      "execution_status": "NOT_RUN",
+      "rationale": "Initial safe pilot #3: Dynamic edge deletion transition evaluation (EXITED events) on 5-vertex author query on mixed stream prefix."
+    },
+    {
+      "case_id": "pilot_def_01_star4_clutter_filter_insert10",
       "query_id": "Q05_probe_star4_l0",
       "query_source": "SYNTHETIC_PROBE",
       "graph_source": "NetFlow_NewSP_Full",
@@ -180,15 +215,16 @@
       "eps_m": 0,
       "eps_x": 2,
       "mode": "STRICT",
-      "workload_category": "NEAR_ONLY_MATCH",
+      "workload_category": "EXACT_MATCH",
       "semantic_class": "FULL_GRAPH",
+      "pilot_stage": "DEFERRED_UNTIL_FEASIBLE",
       "random_seed": 20261110,
       "approval_state": "DRAFT_PENDING_USER_APPROVAL",
       "execution_status": "NOT_RUN",
-      "rationale": "Evaluates clutter threshold eps_x=2 (degree cap <= 5) on star motif"
+      "rationale": "Deferred: Clutter threshold eps_x=2 (degree cap <= 5) exact match on full graph. Reclassified from near-only to exact_match because eps_m=0."
     },
     {
-      "case_id": "pilot_03_hub_star4_epsx30_insert10",
+      "case_id": "pilot_def_02_star4_hub_epsx30_insert10",
       "query_id": "Q05_probe_star4_l0",
       "query_source": "SYNTHETIC_PROBE",
       "graph_source": "NetFlow_NewSP_Full",
@@ -198,13 +234,14 @@
       "mode": "STRICT",
       "workload_category": "HUB_SENSITIVE_MAPPING",
       "semantic_class": "FULL_GRAPH",
+      "pilot_stage": "DEFERRED_UNTIL_FEASIBLE",
       "random_seed": 20261110,
       "approval_state": "DRAFT_PENDING_USER_APPROVAL",
       "execution_status": "NOT_RUN",
-      "rationale": "Evaluates broad clutter eps_x=30 (degree cap <= 33) against NetFlow hubs"
+      "rationale": "Deferred: Evaluates broad clutter eps_x=30 (degree cap <= 33) against NetFlow hubs on full graph."
     },
     {
-      "case_id": "pilot_04_control_star4_unbounded_insert10",
+      "case_id": "pilot_def_03_star4_unbounded_insert10",
       "query_id": "Q05_probe_star4_l0",
       "query_source": "SYNTHETIC_PROBE",
       "graph_source": "NetFlow_NewSP_Full",
@@ -214,29 +251,14 @@
       "mode": "STRICT",
       "workload_category": "EXACT_MATCH",
       "semantic_class": "FULL_GRAPH",
+      "pilot_stage": "DEFERRED_UNTIL_FEASIBLE",
       "random_seed": 20261110,
       "approval_state": "DRAFT_PENDING_USER_APPROVAL",
       "execution_status": "NOT_RUN",
-      "rationale": "Unbounded boundary cut control: recovers all embeddings regardless of hub degree"
+      "rationale": "Deferred: Unbounded boundary cut control on full graph. Recovers all embeddings regardless of hub degree."
     },
     {
-      "case_id": "pilot_05_missing1_star4_epsx10_insert10",
-      "query_id": "Q05_probe_star4_l0",
-      "query_source": "SYNTHETIC_PROBE",
-      "graph_source": "NetFlow_NewSP_Full",
-      "stream_id": "insert_p10",
-      "eps_m": 1,
-      "eps_x": 10,
-      "mode": "STRICT",
-      "workload_category": "NEAR_ONLY_MATCH",
-      "semantic_class": "FULL_GRAPH",
-      "random_seed": 20261110,
-      "approval_state": "DRAFT_PENDING_USER_APPROVAL",
-      "execution_status": "NOT_RUN",
-      "rationale": "Tests combined deviation (m=1 missing leaf edge, eps_x=10 boundary)"
-    },
-    {
-      "case_id": "pilot_06_auth5v_cycle_insert10",
+      "case_id": "pilot_def_04_auth5v_cycle_insert10",
       "query_id": "Q01_auth_5v_l1",
       "query_source": "AUTHOR_NEWSP",
       "graph_source": "NetFlow_NewSP_Full",
@@ -246,29 +268,14 @@
       "mode": "STRICT",
       "workload_category": "EXACT_MATCH",
       "semantic_class": "FULL_GRAPH",
+      "pilot_stage": "DEFERRED_UNTIL_FEASIBLE",
       "random_seed": 20261110,
       "approval_state": "DRAFT_PENDING_USER_APPROVAL",
       "execution_status": "NOT_RUN",
-      "rationale": "Evaluates 5-vertex author query with chordal cycle structure on insertion stream"
+      "rationale": "Deferred: Full graph evaluation of 5-vertex author chordal cycle on insertion stream."
     },
     {
-      "case_id": "pilot_07_auth5v_cycle_delete10",
-      "query_id": "Q01_auth_5v_l1",
-      "query_source": "AUTHOR_NEWSP",
-      "graph_source": "NetFlow_NewSP_Full",
-      "stream_id": "delete10_p10",
-      "eps_m": 0,
-      "eps_x": 10,
-      "mode": "STRICT",
-      "workload_category": "DELETE_EDGE",
-      "semantic_class": "FULL_GRAPH",
-      "random_seed": 20261110,
-      "approval_state": "DRAFT_PENDING_USER_APPROVAL",
-      "execution_status": "NOT_RUN",
-      "rationale": "Evaluates 5-vertex author query on mixed insertion/deletion stream (EXITED transitions)"
-    },
-    {
-      "case_id": "pilot_08_auth6v_dense_insert10",
+      "case_id": "pilot_def_05_auth6v_dense_insert10",
       "query_id": "Q03_auth_6v_l2",
       "query_source": "AUTHOR_NEWSP",
       "graph_source": "NetFlow_NewSP_Full",
@@ -278,13 +285,14 @@
       "mode": "STRICT",
       "workload_category": "EXACT_MATCH",
       "semantic_class": "FULL_GRAPH",
+      "pilot_stage": "DEFERRED_UNTIL_FEASIBLE",
       "random_seed": 20261110,
       "approval_state": "DRAFT_PENDING_USER_APPROVAL",
       "execution_status": "NOT_RUN",
-      "rationale": "Evaluates 6-vertex author query (|E|=8) with label 2 (most frequent stream updates)"
+      "rationale": "Deferred: Full graph evaluation of 6-vertex dense query with edge label 2."
     },
     {
-      "case_id": "pilot_09_probe_path4_missing1_insert10",
+      "case_id": "pilot_def_06_probe_path4_missing1_insert10",
       "query_id": "Q06_probe_path4_l0",
       "query_source": "SYNTHETIC_PROBE",
       "graph_source": "NetFlow_NewSP_Full",
@@ -294,13 +302,14 @@
       "mode": "STRICT",
       "workload_category": "POTENTIAL_SEARCH_EXPLOSION",
       "semantic_class": "FULL_GRAPH",
+      "pilot_stage": "DEFERRED_UNTIL_FEASIBLE",
       "random_seed": 20261110,
       "approval_state": "DRAFT_PENDING_USER_APPROVAL",
       "execution_status": "NOT_RUN",
-      "rationale": "Stress-tests missing-edge search expansion on linear chain query"
+      "rationale": "Deferred: Missing-edge search expansion on linear chain query on full graph."
     },
     {
-      "case_id": "pilot_10_probe_tree5_epsx10_relaxed_insert10",
+      "case_id": "pilot_def_07_probe_tree5_relaxed_insert10",
       "query_id": "Q07_probe_tree5_l0",
       "query_source": "SYNTHETIC_PROBE",
       "graph_source": "NetFlow_NewSP_Full",
@@ -310,10 +319,11 @@
       "mode": "RELAXED_UNCONSTRAINED",
       "workload_category": "NEAR_ONLY_MATCH",
       "semantic_class": "FULL_GRAPH",
+      "pilot_stage": "DEFERRED_UNTIL_FEASIBLE",
       "random_seed": 20261110,
       "approval_state": "DRAFT_PENDING_USER_APPROVAL",
       "execution_status": "NOT_RUN",
-      "rationale": "Evaluates relaxed connectivity mode on 5-vertex tree query"
+      "rationale": "Deferred: Relaxed connectivity mode on 5-vertex tree query on full graph."
     }
   ],
   "exclusions": [

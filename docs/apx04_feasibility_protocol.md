@@ -1,11 +1,11 @@
 # APX-04 — Gate A3 Feasibility Protocol & Preflight Specification
 
-**Document ID:** `docs/apx04_feasibility_protocol.md`  
-**Status:** Approved Preflight Specification (`A3_00_READY_FOR_INDEPENDENT_REVIEW`)  
-**Parent Roadmap:** [#1 — ROADMAP](https://github.com/iamqthanq/Seminar_RapidFlow/issues/1)  
-**Associated Issue:** [#20 — [APX-04] Gate A3 Feasibility & Workload Audit](https://github.com/iamqthanq/Seminar_RapidFlow/issues/20)  
-**Worktree / Branch:** `feature/rf20-apx04-feasibility` (forked from `origin/QuangThang` at `46a5640`)  
-**Reviewed Implementation Baseline:** APX-03 (PR #19 merged at `46a5640`, commit `1eabd3d82e59d29f168cd99f9c5da2bbdc6710f0`)  
+**Document ID:** `docs/apx04_feasibility_protocol.md`
+**Status:** Approved Preflight Specification (`A3_00_READY_FOR_INDEPENDENT_REVIEW_ROUND_2`)
+**Parent Roadmap:** [#1 — ROADMAP](https://github.com/iamqthanq/Seminar_RapidFlow/issues/1)
+**Associated Issue:** [#20 — [APX-04] Gate A3 Feasibility & Workload Audit](https://github.com/iamqthanq/Seminar_RapidFlow/issues/20)
+**Worktree / Branch:** `feature/rf20-apx04-feasibility` (forked from `origin/QuangThang` at `46a5640`)
+**Reviewed Implementation Baseline:** APX-03 (PR #19 merged at `46a5640`, commit `1eabd3d82e59d29f168cd99f9c5da2bbdc6710f0`)
 **Upstream Source Baseline:** `baselines/rapidflow/source/` pinned at `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` (pristine read-only)
 
 ---
@@ -44,14 +44,14 @@ The mathematical problem formulation is frozen from APX-01 (`docs/approx_problem
    Each undirected boundary edge connecting $S_f$ to the background graph is counted exactly once.
 3. **Internal Extraneous Chords $x_{\text{in}}(f)$ (Diagnostic Only):**
    $$x_{\text{in}}(f) = |\{ \{a, b\} \in E_t : a, b \in S_f, \{f^{-1}(a), f^{-1}(b)\} \notin E_Q \}|$$
-   Under Model C, internal chords are purely diagnostic; they do **NOT** penalize acceptance.
+   Under Model C, internal chords are purely diagnostic; they do **NOT** penalize acceptance. Exact non-induced matching permits internal chords ($x_{\text{in}} \ge 0$).
 4. **Topological Connectivity $\mathcal{C}(f)$:**
    $\mathcal{C}(f) = \text{true}$ if the induced subgraph $G_t[S_f]$ contains a single connected component; $\text{false}$ otherwise.
 
 ### 2.3. Acceptance Criteria
 $$Accept(f) \iff Injective(f) \land LabelsOK(f) \land m(f) \le \varepsilon_m \land x_{\text{out}}(f) \le \varepsilon_x \land ConnOK(f)$$
 - **`STRICT` Mode:** $ConnOK(f) \iff \mathcal{C}(f) == \text{true}$.
-- **`RELAXED_UNCONSTRAINED` Mode:** $ConnOK(f) \iff \text{true}$ (unconstrained).
+- **`RELAXED_UNCONSTRAINED` Mode:** $ConnOK(f) \iff \text{true}$ (unconstrained; disconnected components permitted).
 
 ### 2.4. Dynamic State Delta
 For active match set $M_t = \{ f : Accept_{G_t}(f) == \text{true} \}$:
@@ -65,11 +65,11 @@ For active match set $M_t = \{ f : Accept_{G_t}(f) == \text{true} \}$:
 ## 3. Mathematical Feasibility Theorems & Bounds
 
 ### 3.1. External Boundary Lower Bound Theorem
-**Theorem 1 (Vertex-Level Boundary Lower Bound):**  
+**Theorem 1 (Vertex-Level Boundary Lower Bound):**
 Let $Q$ be a query with $k = |V_Q|$ vertices. For any injective mapping $f: V_Q \to V_G$ with image $S_f = f(V_Q)$ on a simple undirected graph $G$:
 $$x_{\text{out}}(f) \ge \max_{v \in S_f} \max\big(0, \deg_G(v) - (k - 1)\big)$$
 
-*Proof:*  
+*Proof:*
 Let $v \in S_f$. In a simple graph without multi-edges or self-loops, $v$ can share an edge with at most each of the other $k-1$ vertices in $S_f \setminus \{v\}$. Thus, the induced internal degree satisfies:
 $$\deg_{G[S_f]}(v) \le k - 1$$
 Every edge incident to $v$ in $G$ connects either to another vertex in $S_f \setminus \{v\}$ or to a background vertex in $V_G \setminus S_f$. Therefore:
@@ -79,12 +79,12 @@ $$x_{\text{out}}(f) \ge |\{ (v, w) \in E_G : w \notin S_f \}| = \deg_G(v) - \deg
 Since $x_{\text{out}}(f) \ge 0$, $x_{\text{out}}(f) \ge \max(0, \deg_G(v) - (k-1))$. Taking the maximum over all $v \in S_f$ establishes the theorem. $\blacksquare$
 
 ### 3.2. Universal Hub-Exclusion Corollary
-**Corollary 1 (Maximum Permissible Degree for Accepted Mappings):**  
+**Corollary 1 (Maximum Permissible Degree for Accepted Mappings):**
 Under external boundary threshold $\varepsilon_x < \infty$, any vertex $v \in V_G$ whose degree satisfies:
 $$\deg_G(v) > \varepsilon_x + k - 1$$
 is mathematically disqualified from appearing in **ANY** accepted Model C embedding $f$.
 
-*Proof:*  
+*Proof:*
 Assume for contradiction that $v \in S_f$ for an accepted mapping $f$. Then $x_{\text{out}}(f) \le \varepsilon_x$. By Theorem 1, $\deg_G(v) - (k - 1) \le x_{\text{out}}(f) \le \varepsilon_x \implies \deg_G(v) \le \varepsilon_x + k - 1$, contradicting the assumption. $\blacksquare$
 
 **Degree Cutoff Table Across Operational Grid:**
@@ -94,75 +94,50 @@ Assume for contradiction that $v \in S_f$ for an accepted mapping $f$. Then $x_{
 | **$k = 5$** | **$\deg(v) \le 4$** | **$\deg(v) \le 6$** | **$\deg(v) \le 14$** | **$\deg(v) \le 34$** | No constraint ($\infty$) |
 | **$k = 6$** | **$\deg(v) \le 5$** | **$\deg(v) \le 7$** | **$\deg(v) \le 15$** | **$\deg(v) \le 35$** | No constraint ($\infty$) |
 
-### 3.3. Boundary Cut Degree-Sum Identity
-**Theorem 2 (Exact Boundary Cut Identity):**  
+### 3.3. Boundary Cut Degree-Sum Identity & Internal Chord Nuance
+**Theorem 2 (Exact Boundary Cut Identity):**
 For any subset $S \subseteq V_G$ in a simple undirected graph $G$:
 $$x_{\text{out}}(S) = \sum_{v \in S} \deg_G(v) - 2 |E_G[S]|$$
 
-*Proof:*  
-In the summation $\sum_{v \in S} \deg_G(v) = \sum_{v \in S} |\{ e \in E_G : v \in e \}|$, every edge in $E_G$ is counted:
-1. Twice if both endpoints belong to $S$ ($e \in E_G[S]$).
-2. Exactly once if one endpoint belongs to $S$ and one outside ($e \in \partial(S)$).
-3. Zero times if neither endpoint belongs to $S$.
-Thus, $\sum_{v \in S} \deg_G(v) = 2 |E_G[S]| + x_{\text{out}}(S)$, which rearranges to the identity. $\blacksquare$
+*Proof:*
+Summing vertex degrees over $S$ counts each internal edge $\{u, w\} \subseteq S$ twice and each cut edge $\{u, z\}$ ($u \in S, z \notin S$) once:
+$$\sum_{v \in S} \deg_G(v) = 2 |E_G[S]| + x_{\text{out}}(S) \implies x_{\text{out}}(S) = \sum_{v \in S} \deg_G(v) - 2 |E_G[S]| \quad \blacksquare$$
 
-**Dynamic Delta Behavior:**
-When edge $e = \{a, b\}$ is updated with sign $\sigma \in \{+1, -1\}$:
-$$\Delta x_{\text{out}}(S) = \begin{cases}
-0 & \text{if } a, b \in S \text{ (internal chord update)} \\
-\sigma & \text{if } |\{a, b\} \cap S| = 1 \text{ (incident boundary update)} \\
-0 & \text{if } a, b \notin S \text{ (unrelated background update)}
-\end{cases}$$
+**Corollary (Chord Invariance on Boundary Cut):**
+Adding or deleting an internal chord edge $e = \{u, w\} \subseteq S$ yields:
+$$\Delta \left(\sum_{v \in S} \deg_G(v)\right) = 2 \Delta |E_G[S]| \implies \Delta x_{\text{out}}(S) = 0$$
 
-### 3.4. Subgraph Sampling Semantic Drift
-**Theorem 3 (Boundary Cut Monotonicity under Subgraph Sampling):**  
-Let $G' = (V', E')$ be an induced subgraph of $G$ with $V' \subset V_G$. For any embedding $f$ with image $S_f \subset V'$:
-$$x_{\text{out}}^{G'}(f) = x_{\text{out}}^G(f) - |\{ \{a, b\} \in E_G : a \in S_f, b \in V_G \setminus V' \}| \le x_{\text{out}}^G(f)$$
+> [!WARNING]
+> **Crucial Counterexample (Internal Chord != No Event):**
+> While an internal chord update strictly preserves $x_{\text{out}}$, it alters $x_{\text{in}}$ and can alter topological connectivity $\mathcal{C}(f)$.
+> *Counterexample:* Consider query path $0-1-2$, data graph with edges $\{0, 1\}$ and chord $\{0, 2\}$, configuration $\varepsilon_m = 1, \varepsilon_x = \text{None}$, `STRICT`. The mapping $(0, 1, 2)$ is initially accepted ($m=1, x_{\text{in}}=1, x_{\text{out}}=0, \text{connected}=\text{True}$).
+> When chord $\{0, 2\}$ is deleted, $G_t[S_f]$ loses the connection between $\{0, 1\}$ and vertex $2$. Node $2$ becomes isolated, rendering $G_t[S_f]$ disconnected.
+> In `STRICT` mode, the mapping becomes rejected, triggering an **`EXITED`** transition event, even though $x_{\text{out}}$ remained $0$ throughout.
 
-*Scientific Impact:* Evaluating Model C directly on a sampled subgraph $G'$ systematically underestimates external boundary cuts, yielding false-positive embeddings that would be rejected on the full graph. To ensure scientific validity, three distinct workload evaluation classes are formalized:
-1. **`FULL_GRAPH`:** Evaluates search and scores directly on full $G$. Ground truth for Model C, but subject to workstation resource limits.
-2. **`INDUCED_SUBGRAPH_RELATIVE`:** Evaluates search and scores relative to $G'$. Valid for algorithmic stress-testing, but explicitly isolated as not generalizable to full NetFlow semantics.
-3. **`ORIGINAL_GRAPH_SCORE_RESTRICTED_SEARCH`:** Constrains candidate search to vertices in $V'$, but evaluates $x_{\text{out}}(f)$ using true full-graph degrees $\deg_G(v)$. Guarantees 100% semantic soundness for discovered matches, with bounded search window.
+### 3.4. Theoretical Partial Mapping Lower Bounds (GEM-A3-NEW-01 Analysis)
+During partial mapping search with matched prefix $P \subset V_Q$ ($|P| < k$):
+- Global degree lower bound: $x_{\text{out}}(P) - (k - |P|) \Delta_{\max}$ is mathematically valid if $\Delta_{\max}$ is the global maximum degree, but on heavy-tailed graphs like NetFlow ($\Delta_{\max} = 49{,}014$) this bound is extremely loose.
+- Per-vertex bound from Theorem 1: $\max_{v \in P} \max(0, \deg_G(v) - (k - 1))$ is significantly tighter and monotonic.
+- Note: Partial mapping bounds are documented for theoretical completeness; **no early pruning is implemented in APX-03** in Gate A3-00.
 
----
+### 3.5. Monotonicity Analysis: Static Sets vs Dynamic Event Sets (GEM-A3-NEW-02)
+- **Static Monotonicity:** For static graphs, expanding thresholds expands accepted matches:
+  $$\varepsilon_m \le \varepsilon'_m \land \varepsilon_x \le \varepsilon'_x \implies M_t(\varepsilon_m, \varepsilon_x) \subseteq M_t(\varepsilon'_m, \varepsilon'_x)$$
+- **Dynamic Non-Monotonicity:** Dynamic transition event sets (`ENTERED`, `EXITED`) are **NOT** necessarily monotonic with respect to threshold expansion. An update may cause a mapping to transition from rejected to accepted at tight thresholds (`ENTERED`), while at wider thresholds the mapping was already accepted at $t-1$ (resulting in `UNCHANGED` or `SCORE_CHANGED` instead of `ENTERED`).
 
-## 4. NetFlow Dataset Provenance & Structural Audit
+### 3.6. Subgraph Sampling Semantic Drift
+**Theorem 3 (Boundary Cut Monotonicity under Subgraph Sampling):**
+Let $G' = G[V']$ be an induced subgraph on $V' \subset V_G$. For any subset $S \subseteq V'$:
+$$x_{\text{out}}^{G'}(S) \le x_{\text{out}}^G(S)$$
 
-### 4.1. Dataset Source & Cryptographic Identity
-- **Dataset Release:** NewSP author distribution (ICDE 2024), `https://github.com/hnuGraph/NewSP`, commit `c5c6eb05ce5059be0fa803d7a29d57cc26060a25`.
-- **Archive File:** `data/netflow/source_archive/netflow.zip` (SHA-256: `19460c5a69723ba108c484de26da79a616edff915f76de3f6bca7f6a12f4e66a`).
-- **Initial Data Graph:** `data/netflow/release_newsp/netflow/data_graph/Ndata.graph`
-  - Vertices: $3{,}114{,}895$ (IDs $0 \dots 3{,}114{,}894$)
-  - Edges: $2{,}849{,}732$
-  - Vertex Labels: Exactly 1 label (`0`)
-  - Edge Labels: 8 labels (`0 \dots 7`)
-  - Maximum Vertex Degree: $49{,}014$ (high-degree hub)
-  - File Size: $84\,\text{MB}$
-  - SHA-256: `bfedd2cab6d2c460141da945e77b0be39ae24c74d9a28b9394a38ee35b652fc6`
-- **Dynamic Stream Files:**
-  - `Ninsertion.graph`: $10{,}000$ edge insertions (SHA-256: `e45f2d908eaed5098653d4635076bef0152438014ad6e3aa03df522cef85ab05`)
-  - `Ndeletion10.graph`: $10{,}000$ mixed updates ($10\%$ deletions, $90\%$ insertions; SHA-256: `ab051a6514ac8bedb2454dfe3da6b6fd5422bffcc9565ccc1c9970a41e077372`)
-  - `Ndeletion20` to `Ndeletion50.graph`: $10{,}000$ operations each with $20\%$ to $50\%$ deletions.
-
-### 4.2. Query Corpus Audit & Author Gap
-Auditing all 2,700 query files in `data/netflow/release_newsp/netflow/Nquery/`:
-1. **Excluded Incompatible Queries:**
-   - `staticCaseStudyQuery` (30 files): Formatted with `t 7 10` without edge labels; incompatible with baseline parser. **EXCLUDED**.
-   - `Nquery180_8/Q_136` (1 file): Contains out-of-domain edge label `32513` (data graph domain is $0 \dots 7$). **EXCLUDED**.
-2. **Author Query Vertex Count Distribution:**
-   - $|V| = 4$: **0 queries** (completely absent from author archive).
-   - $|V| = 5$: **298 queries** ($|E| = 6$).
-   - $|V| = 6$: **302 queries** ($|E| = 8$).
-   - $|V| \ge 7$: **2,069 queries**.
-3. **Topological Structure Gap:**
-   - **0 author queries are trees or paths** ($|E| == |V| - 1$). All 2,669 valid author queries contain cycles ($|E| \ge |V|$).
-   - Consequently, evaluating Star, Path, and Tree motifs requires explicitly declared **`SYNTHETIC_PROBE`** queries, distinct from author queries (`AUTHOR_NEWSP`).
+*Proof:*
+Any edge $\{a, b\} \in E_{G'}$ with $a \in S, b \in V' \setminus S$ is also in $E_G$ with $b \in V_G \setminus S$. Thus $\partial_{G'}(S) \subseteq \partial_G(S)$, proving $x_{\text{out}}^{G'}(S) \le x_{\text{out}}^G(S)$. $\blacksquare$
 
 ---
 
-## 5. Workload Design & Threshold Grid
+## 4. Workload Design & Threshold Grid
 
-### 5.1. Query Families
+### 4.1. Query Families
 | Family | Purpose | Query Source | Representative Fixture |
 | :--- | :--- | :--- | :--- |
 | **Star** | Evaluates hub lower bounds and boundary cut sensitivity | `SYNTHETIC_PROBE` | `probe_star4_l0` ($K_{1,3}, k=4, |E|=3$) |
@@ -171,54 +146,46 @@ Auditing all 2,700 query files in `data/netflow/release_newsp/netflow/Nquery/`:
 | **Cycle** | Evaluates cyclic topological constraints | `AUTHOR_NEWSP` | `Q01_auth_5v_l1` ($k=5, |E|=6$, chordal cycle) |
 | **Dense** | Evaluates dense diamond / chordal structures | `AUTHOR_NEWSP` | `Q03_auth_6v_l2` ($k=6, |E|=8$, dense diamond) |
 
-### 5.2. Exploratory Threshold Grid
+### 4.2. Exploratory Threshold Grid
 $$\varepsilon_m \in \{0, 1, 2\}, \quad \varepsilon_x \in \{0, 2, 10, 30, \text{None}\}$$
 - **$\varepsilon_m = 0$:** Exact structural baseline.
 - **$\varepsilon_m = 1$:** Single missing required edge.
 - **$\varepsilon_m = 2$:** Severe omission (restricted to queries with $|E_Q| \ge 6$ per APX-01 AF3-02 protocol).
 - **$\varepsilon_x = \text{None}$:** Unconstrained boundary control (exact non-induced equivalence when $\varepsilon_m = 0$).
 
-### 5.3. Workload Categories
-Workloads are partitioned into 12 diagnostic categories:
-1. `EXACT_MATCH`: Baseline isomorphic verification.
-2. `NEAR_ONLY_MATCH`: Match set contains embeddings with $(m, x_{\text{out}}) > (0, 0)$ rejected at $(0, 0)$.
-3. `ZERO_RESULT_CANDIDATE`: Mappings explored but zero accepted.
-4. `HUB_SENSITIVE_MAPPING`: Mappings containing vertices with $\deg_G(v) > 30$.
-5. `BOUNDARY_THRESHOLD_CROSSING`: Mappings transitioning acceptance across $\varepsilon_x \in \{0, 2, 10, 30\}$.
-6. `INSERT_EDGE`: Dynamic state transition on edge insertion.
-7. `DELETE_EDGE`: Dynamic state transition on edge deletion.
-8. `SCORE_CHANGED`: Active mapping retains acceptance but changes score.
-9. `INTERNAL_CHORD_ONLY`: Update to chord ($x_{\text{in}}$) does not trigger `SCORE_CHANGED`.
-10. `INVALID_UPDATE`: Atomic rejection of invalid operations.
-11. `POTENTIAL_SEARCH_EXPLOSION`: Combinatorial stress test.
-12. `RESOURCE_LIMIT_NEGATIVE`: Resource budget exhaustion safety test.
+### 4.3. Scientific Definition of Near-Only Workloads
+$$M_{\text{near-only}}(\varepsilon_m, \varepsilon_x) = M_{\text{approx}}(\varepsilon_m, \varepsilon_x) \setminus M_{\text{exact}}(0, \text{None})$$
+Where the exact non-induced comparator uses $\varepsilon_m = 0, \varepsilon_x = \text{None}$ under identical label and universe conditions.
+- Any accepted near-only mapping strictly requires:
+  $$m(f) \ge 1$$
+- A mapping with $m(f) = 0$ and $x_{\text{out}}(f) > 0$ is an **exact non-induced mapping** (even if a tight clutter threshold rejects it). It is **never** a near-only mapping.
 
 ---
 
-## 6. Research Hypotheses
+## 5. Research Hypotheses
 
-- **H1 (Hub Exclusion):** For queries with $k \in \{4, 5, 6\}$, small boundary thresholds ($\varepsilon_x \le 30$) mathematically disqualify vertices with degree $> 35$, eliminating prominent NetFlow hub nodes from participating in accepted embeddings.
+- **H1 (Hub Exclusion):** For queries with $k \in \{4, 5, 6\}$, small boundary thresholds ($\varepsilon_x \le 30$) mathematically disqualify vertices with degree $> 35$, eliminating prominent NetFlow topological hubs from participating in accepted embeddings.
 - **H2 (Missing-Edge Candidate Explosion):** On graphs with a single vertex label, increasing $\varepsilon_m \ge 1$ eliminates structural pruning, increasing partial candidate expansions exponentially.
 - **H3 (Recompute Overhead):** When the delta $|\Delta M_t| \ll |M_t|$, recomputing $M_t$ from scratch incurs substantial avoidable overhead compared to theoretical update-local matching.
-- **H4 (Output Cardinality Dominance):** When $|M_t|$ is large, the intrinsic cost of serializing concrete ordered tuples dominates search time.
+- **H4 (Output Cardinality Dominance Hypothesis):** When $|M_t|$ is large, the empirical cost of serializing concrete ordered tuples can dominate total wall-clock runtime. This is an empirical hypothesis to be evaluated through profiling telemetry.
 - **H5 (Subgraph Sampling Semantic Drift):** Evaluating $x_{\text{out}}$ on sampled subgraphs causes systematic underestimation of boundary cuts ($x_{\text{out}}^{G'} \le x_{\text{out}}^G$), distorting Model C semantics.
 - **H6 (Update Locality Invariant):** An edge update $\{a, b\}$ cannot alter the Model C score of any mapping $f$ whose image $S_f$ does not intersect $\{a, b\}$ ($\{a, b\} \cap S_f = \emptyset$).
 
 ---
 
-## 7. Resource Safeguards & Stage Gates
+## 6. Resource Safeguards & Stage Gates
 
-### 7.1. Hardware Floor & Process Limits
+### 6.1. Hardware Floor & Process Limits
 - **CPU:** Single process execution (no concurrent benchmarking).
 - **Timeout:** Maximum $60.0\,\text{s}$ wall-clock limit per run.
-- **Memory Cap:** Active resident memory cap of $3.0\,\text{GiB}$.
+- **Active Memory Budget:** $\le 3.0\,\text{GiB}$ resident budget.
 - **Preflight Available RAM Floor:** $\ge 4.0\,\text{GiB}$ free before launching any benchmark.
-- **Combinatorial Budget:** $\le 10^7$ candidate evaluations, $\le 10^7$ search exploration steps.
+- **Execution Readiness:** Strictly `SAFETY_BLOCKED` in Gate A3-00.
 
-### 7.2. Four-Stage Gating Workflow
+### 6.2. Four-Stage Gating Workflow
 - **A3-00 (Current):** Read-only feasibility audit, mathematical proofs, workload design, preflight tool, safety protocol. **No benchmarks executed.**
 - **A3-01 (Requires User Approval):** Micro-pilot execution on 10-step stream prefixes and micrographs under strict resource supervision.
 - **A3-02 (Requires User Approval):** Extended pilot on 100-step prefixes if A3-01 proves computational feasibility.
 - **A3-03 (Requires User Approval):** Analysis, prior-art synthesis, and final Go/No-Go decision for incremental optimization (Gate A4).
 
-Antigravity stops execution upon completion of Gate A3-00 at status `READY_FOR_CHATGPT_REVIEW_A3_00`.
+Antigravity stops execution upon completion of Gate A3-00 at status `READY_FOR_CHATGPT_REVIEW_A3_00_ROUND_2`.
