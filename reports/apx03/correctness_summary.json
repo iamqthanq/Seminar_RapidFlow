@@ -1,0 +1,433 @@
+{
+  "report_metadata": {
+    "document_type": "apx03_correctness_summary",
+    "gate": "APX-03 (Gate A2)",
+    "issue": 18,
+    "branch": "feature/rf18-apx03-baseline",
+    "base": "QuangThang",
+    "generator_invocation_commit_sha": "6c9fd4a1a52ffa46bf3e09933b3a41aa4d732a62",
+    "working_tree_dirty": false,
+    "author": "Antigravity \u2014 Research Implementation Engineer",
+    "timestamp_iso": "2026-11-09T17:41:14.799717+00:00",
+    "generator_command": "python3 scripts/generate_apx03_correctness_report.py",
+    "provenance_notes": "The generator_invocation_commit_sha records the repository HEAD when this report was executed. Cryptographic source and binary integrity is independently anchored by source_files_sha256.",
+    "environment": {
+      "os": "Linux-7.0.0-42-generic-x86_64-with-glibc2.39",
+      "architecture": "x86_64",
+      "python_version": "3.12.3"
+    },
+    "source_files_sha256": {
+      "extensions/apx03/src/main.cpp": "e8c90e0ca2351a1ac5c0db8fdd406ec648f3e7563ad7fb26c518f44f9a13dfaa",
+      "extensions/apx03/src/apx03_graph.cpp": "10aa9ec49f5503d47842c096fd7171103715678e74bc39a1bf51227596ce6694",
+      "extensions/apx03/src/apx03_matcher.cpp": "9b932cc7e4a144880871350ff1a867ec3a7dd0b30e05b0ce8ba7e80cd9eb79be",
+      "extensions/apx03/src/apx03_dynamic_engine.cpp": "a1ae5b9adb478734543dc4fd4708c549c8b33011ee320bdd143320a8844183a8",
+      "extensions/apx03/include/apx03_types.h": "76f8fa64ac9619b4302757438010d3a93175862ad54e22037e287d36416de8ca",
+      "extensions/apx03/include/apx03_graph.h": "efe5c1af76c9a169bc11ea0afdfe6fd3d35b84d14971bbba07ad25398e96dcb3",
+      "extensions/apx03/include/apx03_matcher.h": "3beefef41006aa2665d57e4163e32b44c2858a2d1373af21a734861d4287e09b",
+      "extensions/apx03/include/apx03_dynamic_engine.h": "d6925d9260d0f82e290184cbd1334985cfb813498ee7a7ea422809bd685170f9",
+      "extensions/apx03/CMakeLists.txt": "640d99244f63f8411a757068b4a2389f524097634dd10d12779f454de42c9c4c",
+      "tests/test_apx03_baseline.py": "5b32b96a8ab52f96933fe2c904140d27ae2c8d827b635e7405d4d4ed58de3797",
+      "scripts/run_apx03_baseline.py": "b5903e3b28196669ea25d7bd3b937b6ec17ce426b0dd73af92c0513c499eef0d",
+      "docs/apx03_rapidflow_integration_audit.md": "d28d6a29e534daa1cb2f1a420f59f446de20ad14b31597b0ee836794df2f07c3",
+      "docs/apx03_baseline_contract.md": "4a26151b4c063cef75ce9ffdf6f146f94acee055f3d05c7d58e09e05148d5ef4"
+    }
+  },
+  "overall_verdict": {
+    "status": "PASS",
+    "total_microcases": 16,
+    "microcases_passed": 16,
+    "microcases_failed": 0,
+    "apx03_unit_tests": {
+      "total_tests": 46,
+      "passed": 46,
+      "failures": 0,
+      "errors": 0,
+      "duration_seconds": 0.6753,
+      "status": "PASS"
+    },
+    "exact_recovery_status": "PASS",
+    "near_only_proof_status": "PASS"
+  },
+  "combinatorial_guard": {
+    "max_candidates_limit": 10000000,
+    "scale_probe_strategy": "DIRECT_MAPPING_EVALUATION"
+  },
+  "independent_differential_verification": {
+    "status": "PASS",
+    "method": "FULL_ENUMERATION_AND_DYNAMIC_SNAPSHOT_DIFFERENTIAL",
+    "executed_tests": [
+      {
+        "test_id": "tests.test_apx03_baseline.TestAPX03RandomizedDifferential.test_static_randomized_trials_against_apx02_oracle",
+        "name": "Static Independent Differential (25 Randomized Trials)",
+        "description": "Cross-checks rapidflow_apx03_baseline against APX-02 Python Oracle across seeds 42, 1337, 2026, 7777, 9999",
+        "trials_executed": 25,
+        "status": "PASS"
+      },
+      {
+        "test_id": "tests.test_apx03_baseline.TestAPX03DynamicDeterministicDifferential.test_fifteen_step_deterministic_differential",
+        "name": "Dynamic Streaming Differential (State Machine Delta Verification)",
+        "description": "Cross-checks C++ RECOMPUTE_BASELINE deltas (ENTERED, EXITED, SCORE_CHANGED) against Python DynamicOracle",
+        "status": "PASS"
+      }
+    ],
+    "verification_scope": {
+      "static_randomized_trials": 25,
+      "seeds": [
+        42,
+        1337,
+        2026,
+        7777,
+        9999
+      ],
+      "query_sizes": [
+        2,
+        3,
+        4
+      ],
+      "data_graph_sizes": [
+        4,
+        5,
+        6
+      ],
+      "all_differential_tests_passed": true
+    }
+  },
+  "canonical_microcase_results": [
+    {
+      "case_id": "Case 01",
+      "name": "Exact Isomorphic Match",
+      "evaluation_type": "DIRECT_MAPPING_EVALUATION",
+      "expected": {
+        "m": 0,
+        "x_in": 0,
+        "x_out": 0,
+        "connected": true,
+        "strict_accepted_at_00": true,
+        "strict_accepted_at_12": true,
+        "relaxed_accepted": true
+      },
+      "actual": {
+        "m": 0,
+        "x_in": 0,
+        "x_out": 0,
+        "connected": true,
+        "strict_accepted_at_00": true,
+        "strict_accepted_at_12": true,
+        "relaxed_accepted": true
+      },
+      "verdict": "PASS"
+    },
+    {
+      "case_id": "Case 02",
+      "name": "Missing One Leaf Edge",
+      "evaluation_type": "DIRECT_MAPPING_EVALUATION",
+      "expected": {
+        "m": 1,
+        "x_in": 0,
+        "x_out": 0,
+        "connected": false,
+        "exact_accepted": false,
+        "strict_accepted": false,
+        "relaxed_accepted": true
+      },
+      "actual": {
+        "m": 1,
+        "x_in": 0,
+        "x_out": 0,
+        "connected": false,
+        "exact_accepted": false,
+        "strict_accepted": false,
+        "relaxed_accepted": true
+      },
+      "verdict": "PASS"
+    },
+    {
+      "case_id": "Case 03",
+      "name": "Missing Two Edges (Severe Omission)",
+      "evaluation_type": "DIRECT_MAPPING_EVALUATION",
+      "expected": {
+        "m": 2,
+        "x_in": 0,
+        "x_out": 0,
+        "connected": false,
+        "strict_accepted_at_22": false,
+        "relaxed_accepted_at_12": false,
+        "relaxed_accepted_at_22": true
+      },
+      "actual": {
+        "m": 2,
+        "x_in": 0,
+        "x_out": 0,
+        "connected": false,
+        "strict_accepted_at_22": false,
+        "relaxed_accepted_at_12": false,
+        "relaxed_accepted_at_22": true
+      },
+      "verdict": "PASS"
+    },
+    {
+      "case_id": "Case 04",
+      "name": "Extra Internal Chords (Non-Induced)",
+      "evaluation_type": "DIRECT_MAPPING_EVALUATION",
+      "expected": {
+        "m": 0,
+        "x_in": 2,
+        "x_out": 0,
+        "connected": true,
+        "model_c_accepted": true
+      },
+      "actual": {
+        "m": 0,
+        "x_in": 2,
+        "x_out": 0,
+        "connected": true,
+        "model_c_accepted": true
+      },
+      "verdict": "PASS"
+    },
+    {
+      "case_id": "Case 05",
+      "name": "One Extra External Tail",
+      "evaluation_type": "DIRECT_MAPPING_EVALUATION",
+      "expected": {
+        "m": 0,
+        "x_in": 0,
+        "x_out": 1,
+        "connected": true,
+        "strict_accepted_at_00": false,
+        "strict_accepted_at_01": true
+      },
+      "actual": {
+        "m": 0,
+        "x_in": 0,
+        "x_out": 1,
+        "connected": true,
+        "strict_accepted_at_00": false,
+        "strict_accepted_at_01": true
+      },
+      "verdict": "PASS"
+    },
+    {
+      "case_id": "Case 06",
+      "name": "Two Extra External Tails",
+      "evaluation_type": "DIRECT_MAPPING_EVALUATION",
+      "expected": {
+        "m": 0,
+        "x_in": 0,
+        "x_out": 2,
+        "connected": true,
+        "strict_accepted_at_01": false,
+        "strict_accepted_at_02": true
+      },
+      "actual": {
+        "m": 0,
+        "x_in": 0,
+        "x_out": 2,
+        "connected": true,
+        "strict_accepted_at_01": false,
+        "strict_accepted_at_02": true
+      },
+      "verdict": "PASS"
+    },
+    {
+      "case_id": "Case 07",
+      "name": "Thirty Extra External Tails",
+      "evaluation_type": "DIRECT_MAPPING_EVALUATION",
+      "expected": {
+        "m": 0,
+        "x_in": 0,
+        "x_out": 30,
+        "connected": true,
+        "strict_accepted_at_02": false,
+        "strict_accepted_at_30": true
+      },
+      "actual": {
+        "m": 0,
+        "x_in": 0,
+        "x_out": 30,
+        "connected": true,
+        "strict_accepted_at_02": false,
+        "strict_accepted_at_30": true
+      },
+      "verdict": "PASS"
+    },
+    {
+      "case_id": "Case 08",
+      "name": "High-Degree NetFlow Hub (Scalability Probe)",
+      "evaluation_type": "DIRECT_MAPPING_EVALUATION",
+      "expected": {
+        "m": 0,
+        "x_in": 0,
+        "x_out": 998,
+        "connected": true,
+        "strict_accepted_at_30": false,
+        "strict_accepted_at_inf": true
+      },
+      "actual": {
+        "m": 0,
+        "x_in": 0,
+        "x_out": 998,
+        "connected": true,
+        "strict_accepted_at_30": false,
+        "strict_accepted_at_inf": true
+      },
+      "verdict": "PASS"
+    },
+    {
+      "case_id": "Case 09",
+      "name": "Edge Label Mismatch",
+      "evaluation_type": "DIRECT_MAPPING_EVALUATION",
+      "expected": {
+        "m": 1,
+        "x_in": 0,
+        "x_out": 0,
+        "connected": true,
+        "exact_accepted": false,
+        "strict_accepted_at_12": true,
+        "relaxed_accepted_at_12": true
+      },
+      "actual": {
+        "m": 1,
+        "x_in": 0,
+        "x_out": 0,
+        "connected": true,
+        "exact_accepted": false,
+        "strict_accepted_at_12": true,
+        "relaxed_accepted_at_12": true
+      },
+      "verdict": "PASS"
+    },
+    {
+      "case_id": "Case 10",
+      "name": "Injectivity Violation (Hard Reject)",
+      "evaluation_type": "DIRECT_MAPPING_EVALUATION",
+      "expected": {
+        "injective": false,
+        "accepted": false
+      },
+      "actual": {
+        "injective": false,
+        "accepted": false
+      },
+      "verdict": "PASS"
+    },
+    {
+      "case_id": "Case 11",
+      "name": "Tree Query Disconnected by Missing Edge",
+      "evaluation_type": "DIRECT_MAPPING_EVALUATION",
+      "expected": {
+        "m": 1,
+        "x_in": 0,
+        "x_out": 0,
+        "connected": false,
+        "strict_accepted_at_12": false,
+        "relaxed_accepted_at_12": true
+      },
+      "actual": {
+        "m": 1,
+        "x_in": 0,
+        "x_out": 0,
+        "connected": false,
+        "strict_accepted_at_12": false,
+        "relaxed_accepted_at_12": true
+      },
+      "verdict": "PASS"
+    },
+    {
+      "case_id": "Case 12",
+      "name": "Dynamic Stream Insertion (ENTERED)",
+      "evaluation_type": "DYNAMIC_STREAM",
+      "expected": {
+        "target_entered": true,
+        "m": 0,
+        "x_out": 0,
+        "connected": true
+      },
+      "actual": {
+        "target_entered": true,
+        "m": 0,
+        "x_out": 0,
+        "connected": true
+      },
+      "verdict": "PASS"
+    },
+    {
+      "case_id": "Case 13",
+      "name": "Dynamic Stream Insertion (EXITED)",
+      "evaluation_type": "DYNAMIC_STREAM",
+      "expected": {
+        "target_exited": true,
+        "old_x_out": 1,
+        "new_x_out": 2
+      },
+      "actual": {
+        "target_exited": true,
+        "old_x_out": 1,
+        "new_x_out": 2
+      },
+      "verdict": "PASS"
+    },
+    {
+      "case_id": "Case 14",
+      "name": "Dynamic Stream Deletion (ENTERED)",
+      "evaluation_type": "DYNAMIC_STREAM",
+      "expected": {
+        "target_entered": true,
+        "old_x_out": 2,
+        "new_x_out": 1
+      },
+      "actual": {
+        "target_entered": true,
+        "old_x_out": 2,
+        "new_x_out": 1
+      },
+      "verdict": "PASS"
+    },
+    {
+      "case_id": "Case 15",
+      "name": "Dynamic Update: Score Modification (SCORE_CHANGED)",
+      "evaluation_type": "DYNAMIC_STREAM",
+      "expected": {
+        "target_score_changed": true,
+        "old_m": 0,
+        "old_x_out": 1,
+        "new_m": 0,
+        "new_x_out": 2
+      },
+      "actual": {
+        "target_score_changed": true,
+        "old_m": 0,
+        "old_x_out": 1,
+        "new_m": 0,
+        "new_x_out": 2
+      },
+      "verdict": "PASS"
+    },
+    {
+      "case_id": "Case 16",
+      "name": "Connected Near-Only Match",
+      "evaluation_type": "DIRECT_MAPPING_EVALUATION",
+      "expected": {
+        "m": 1,
+        "x_in": 1,
+        "x_out": 0,
+        "connected": true,
+        "exact_accepted": false,
+        "strict_at_00": false,
+        "strict_at_10": true,
+        "relaxed_at_10": true
+      },
+      "actual": {
+        "m": 1,
+        "x_in": 1,
+        "x_out": 0,
+        "connected": true,
+        "exact_accepted": false,
+        "strict_at_00": false,
+        "strict_at_10": true,
+        "relaxed_at_10": true
+      },
+      "verdict": "PASS"
+    }
+  ]
+}

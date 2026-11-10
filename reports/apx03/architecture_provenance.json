@@ -1,0 +1,54 @@
+{
+  "document_type": "apx03_architecture_provenance",
+  "gate": "APX-03 (Gate A2)",
+  "issue": 18,
+  "branch": "feature/rf18-apx03-baseline",
+  "base": "QuangThang",
+  "rapidflow_baseline": {
+    "repository": "https://github.com/iamqthanq/Seminar_RapidFlow",
+    "subtree_path": "baselines/rapidflow/source",
+    "pinned_commit_sha": "2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1",
+    "status": "pristine_read_only",
+    "reused_native_sources": [
+      "baselines/rapidflow/source/graph/graph.cpp",
+      "baselines/rapidflow/source/utility/graphoperations.cpp"
+    ],
+    "reused_native_headers": [
+      "baselines/rapidflow/source/graph/graph.h",
+      "baselines/rapidflow/source/configuration/types.h",
+      "baselines/rapidflow/source/configuration/config.h",
+      "baselines/rapidflow/source/utility/sparsepp/spp.h"
+    ],
+    "native_components_audited_unsafe_for_model_c": [
+      "GlobalViewManager (streaming/global_view_manager.cpp): drops non-query edge updates affecting external boundary",
+      "LocalViewManager (streaming/local_view_manager.cpp): relies on exact edge-intersection candidate lists",
+      "SearchEngine (streaming/search_engine.cpp): applies NLF and degree pruning unsound under missing edges",
+      "Automorphism quotienting (EXECUTION_MODE=0): returns scalar counts instead of distinct ordered mappings"
+    ]
+  },
+  "apx03_extension": {
+    "root_dir": "extensions/apx03",
+    "binary_target": "rapidflow_apx03_baseline",
+    "binary_path": "extensions/apx03/build/rapidflow_apx03_baseline",
+    "binary_sha256": "608927c21ee3e5ea46f9b3f98b019b721b9134cce7c9191bc099a5ed262addee",
+    "sources": [
+      "extensions/apx03/include/apx03_types.h",
+      "extensions/apx03/include/apx03_graph.h",
+      "extensions/apx03/include/apx03_matcher.h",
+      "extensions/apx03/include/apx03_dynamic_engine.h",
+      "extensions/apx03/src/apx03_graph.cpp",
+      "extensions/apx03/src/apx03_matcher.cpp",
+      "extensions/apx03/src/apx03_dynamic_engine.cpp",
+      "extensions/apx03/src/main.cpp",
+      "extensions/apx03/CMakeLists.txt"
+    ]
+  },
+  "build_environment": {
+    "cmake_version": "cmake version 3.28.3",
+    "cmake_path": "external/tools/cmake-3.28.3-linux-x86_64/bin/cmake",
+    "cxx_compiler": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "cxx_flags": "-std=c++17 -O3 -Wall -Wextra -pthread",
+    "architecture": "x86_64",
+    "platform": "Linux"
+  }
+}
