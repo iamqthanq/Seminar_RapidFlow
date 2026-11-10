@@ -1,7 +1,7 @@
 # APX-04 — Gate A3 Decision Framework & Prior-Art Synthesis
 
 **Document ID:** `docs/apx04_gate_a3_decision.md`
-**Current Gate Status:** `A3_00_READY_FOR_INDEPENDENT_REVIEW_ROUND_4`
+**Current Gate Status:** `A3_00_READY_FOR_INDEPENDENT_REVIEW_ROUND_5`
 **Associated Issue:** [#20](https://github.com/iamqthanq/Seminar_RapidFlow/issues/20)
 **Parent Roadmap:** [#1](https://github.com/iamqthanq/Seminar_RapidFlow/issues/1)
 **Deliverable State:** Preflight & Feasibility Audit Complete (No Optimizer Implemented)
@@ -93,12 +93,44 @@ Execution MUST HALT with a scientific verdict of `STOP` or `INCONCLUSIVE` if any
 - **Condition S3 (Trivial Semantic Degeneracy):** For all NetFlow queries, accepted matches are identically 0 under $\varepsilon_x \le 30$ due to hub exclusion, while $\varepsilon_x = \text{None}$ produces $> 10^7$ matches causing immediate budget exhaustion.
 - **Condition S4 (Integrity Violation):** Any unverified modification to pinned RapidFlow source, Model C definitions, or ground-truth Oracle.
 
+### 4.3. Registered Workload Identity Fingerprints & Trust Boundary
+
+To prevent accidental workload drift or query substitution (such as rebinding a registered pilot case to an alternative label-compatible query with divergent Oracle cardinalities), all `INITIAL_SAFE_PILOT` cases require a cryptographic `registered_identity_sha256`.
+
+#### Canonical Identity Fingerprint Specification
+The fingerprint is computed over a canonical JSON serialization of the structural and semantic identification tuple:
+```python
+payload = {
+    "case_id": case["case_id"],
+    "eps_m": case["eps_m"],
+    "eps_x": case["eps_x"],
+    "graph_id": case["graph_source"],
+    "graph_sha256": verified_graph_sha,
+    "mode": case["mode"],
+    "query_id": case["query_id"],
+    "query_sha256": verified_query_sha,
+    "semantic_class": case["semantic_class"],
+    "stream_id": case["stream_id"],
+    "stream_sha256": verified_stream_sha,
+}
+canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+registered_identity_sha256 = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+```
+Component hashes (`graph_sha256`, `query_sha256`, `stream_sha256`) are strictly derived from verified on-disk content, not unverified manifest declarations.
+
+#### Trust Boundary
+- **What it guarantees:** Detects input drift, accidental misconfiguration, query/graph/stream cross-wiring, and threshold tampering.
+- **What it does not guarantee:** Because the manifest is a mutable text file in the repository, a fingerprint is not an asymmetric digital signature against coordinated intentional modification of both the input and the fingerprint. True scientific immutability and provenance rely on Git commit history, pull request review, immutable artifact hashes, and bilateral adversarial adjudication.
+
+#### Workload Versioning Policy
+A registered workload cannot silently alter its inputs under the same `case_id`. Any intentional modification to graph, query, stream, thresholds, or execution mode strictly requires defining a new case ID / version, computing a new registered identity fingerprint, and establishing independent APX-02 Oracle ground truth.
+
 ---
 
 ## 5. Current Gate A3-00 Verdict
 
-$$\mathbf{VERDICT:}\quad \text{\textbf{A3\_00\_READY\_FOR\_INDEPENDENT\_REVIEW\_ROUND\_4}}$$
+$$\mathbf{VERDICT:}\quad \text{\textbf{A3\_00\_READY\_FOR\_INDEPENDENT\_REVIEW\_ROUND\_5}}$$
 $$\mathbf{EXECUTION\_READINESS:}\quad \text{\textbf{SAFETY\_BLOCKED}}$$
 
-- **Summary of Achievement:** Feasibility protocol, mathematical proofs of hub exclusion and boundary cut identities, internal chord counterexample, dynamic event non-monotonicity analysis, query corpus census, initial safe pilot design with deferred full-graph cases, stream provenance verification, sequential G0 replay verification, independent pilot graph metadata validation, strict case binding, fail-closed stream dispatch, fixed vertex universe enforcement, and resource safety plan have been fully established.
-- **Recommended Next Action:** Antigravity commits and pushes Round 4 remediation on branch `feature/rf20-apx04-feasibility`, updates Draft PR #21, and awaits independent review.
+- **Summary of Achievement:** Feasibility protocol, mathematical proofs of hub exclusion and boundary cut identities, internal chord counterexample, dynamic event non-monotonicity analysis, query corpus census, initial safe pilot design with deferred full-graph cases, stream provenance verification, sequential G0 replay verification, independent pilot graph metadata validation, strict case binding, fail-closed stream dispatch, fixed vertex universe enforcement, registered workload identity fingerprint binding, and resource safety plan have been fully established.
+- **Recommended Next Action:** Antigravity commits and pushes Round 5 remediation on branch `feature/rf20-apx04-feasibility`, updates Draft PR #21, and awaits independent review.

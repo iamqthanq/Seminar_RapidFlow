@@ -44,6 +44,51 @@ def is_strict_int(val: Any) -> bool:
     return type(val) is int and not isinstance(val, bool)
 
 
+def is_valid_sha256(val: Any) -> bool:
+    """Checks whether a value is a valid 64-character lowercase/uppercase hex SHA-256 string."""
+    return isinstance(val, str) and len(val) == 64 and all(c in "0123456789abcdefABCDEF" for c in val)
+
+
+def compute_workload_identity_sha256(
+    case_id: str,
+    graph_id: str,
+    graph_sha256: str,
+    query_id: str,
+    query_sha256: str,
+    stream_id: str,
+    stream_sha256: str,
+    eps_m: int,
+    eps_x: Optional[int],
+    mode: str,
+    semantic_class: str,
+) -> str:
+    """
+    Computes deterministic canonical SHA-256 identity fingerprint for an approved pilot workload case.
+    Serializes strictly the structural and semantic identification tuple without environmental,
+    system, or volatile parameters.
+    """
+    payload = {
+        "case_id": case_id,
+        "eps_m": eps_m,
+        "eps_x": eps_x,
+        "graph_id": graph_id,
+        "graph_sha256": graph_sha256,
+        "mode": mode,
+        "query_id": query_id,
+        "query_sha256": query_sha256,
+        "semantic_class": semantic_class,
+        "stream_id": stream_id,
+        "stream_sha256": stream_sha256,
+    }
+    canonical = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 def get_cgroup_memory_info(
     proc_cgroup_path: str = "/proc/self/cgroup",
     cgroup_base_path: str = "/sys/fs/cgroup",
@@ -1419,6 +1464,58 @@ class PreflightChecker:
                     self.errors.append(
                         f"Case {cid} declared in INITIAL_SAFE_PILOT must use semantic_class INDUCED_SUBGRAPH_RELATIVE, found '{sem_class}'"
                     )
+
+                # Registered Workload Identity Fingerprint verification (R4-NEW-01)
+                reg_id_sha = c.get("registered_identity_sha256")
+                if reg_id_sha is None:
+                    self.errors.append(
+                        f"[WORKLOAD_IDENTITY_MISSING] Case {cid} declared in INITIAL_SAFE_PILOT is missing required 'registered_identity_sha256'"
+                    )
+                elif not is_valid_sha256(reg_id_sha):
+                    self.errors.append(
+                        f"[WORKLOAD_IDENTITY_INVALID] Case {cid} has malformed registered_identity_sha256 '{reg_id_sha}' (must be 64-character hex string)"
+                    )
+                else:
+                    # Retrieve verified component SHA-256 hashes from actual content verification
+                    if gs in pilot_graphs_info:
+                        v_graph = self.audit_log.get("pilot_data_graphs_verified", {}).get(gs)
+                    elif gs == expected_graph:
+                        v_graph = self.audit_log.get("data_graph_verified")
+                    else:
+                        v_graph = None
+
+                    v_query = self.audit_log.get("queries_verified", {}).get(qid)
+                    v_stream = self.audit_log.get("streams_verified", {}).get(sid)
+
+                    if not v_graph or not v_query or not v_stream:
+                        self.errors.append(
+                            f"[WORKLOAD_IDENTITY_MISMATCH] Case {cid} references component(s) that failed content verification "
+                            f"(graph={bool(v_graph)}, query={bool(v_query)}, stream={bool(v_stream)})"
+                        )
+                    else:
+                        verified_graph_sha = v_graph["sha256"]
+                        verified_query_sha = v_query["sha256"]
+                        verified_stream_sha = v_stream["sha256"]
+
+                        actual_identity_sha = compute_workload_identity_sha256(
+                            case_id=cid,
+                            graph_id=gs,
+                            graph_sha256=verified_graph_sha,
+                            query_id=qid,
+                            query_sha256=verified_query_sha,
+                            stream_id=sid,
+                            stream_sha256=verified_stream_sha,
+                            eps_m=eps_m,
+                            eps_x=eps_x,
+                            mode=mode,
+                            semantic_class=sem_class,
+                        )
+
+                        if actual_identity_sha.lower() != reg_id_sha.lower():
+                            self.errors.append(
+                                f"[WORKLOAD_IDENTITY_MISMATCH] Case {cid} registered identity fingerprint mismatch: "
+                                f"declared '{reg_id_sha}', calculated '{actual_identity_sha}'"
+                            )
 
             # Safety and approval locks
             if c.get("approval_state") != "DRAFT_PENDING_USER_APPROVAL":

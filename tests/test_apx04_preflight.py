@@ -38,9 +38,11 @@ from scripts.apx02_oracle import (
 from scripts.apx04_preflight import (
     PreflightChecker,
     compute_sha256,
+    compute_workload_identity_sha256,
     get_cgroup_memory_info,
     get_system_resources,
     is_strict_int,
+    is_valid_sha256,
     parse_query_file,
     parse_stream_prefix_file,
 )
@@ -1367,6 +1369,233 @@ class TestRound4AdjudicationRemediation(unittest.TestCase):
             )
             stream_res = checker.audit_log["streams_verified"]["test_stream"]
             self.assertFalse(stream_res["sequential_updates_verified"])
+
+
+class TestRound5WorkloadIdentityFingerprint(unittest.TestCase):
+    """
+    Adversarial verification suite for Gate A3-00 Round 5 remediation (R4-NEW-01):
+    Registered Workload Identity Fingerprint Binding.
+    - Test 1: Original registered pilots identity fingerprints match.
+    - Test 2: Label-compatible query substitution fails with [WORKLOAD_IDENTITY_MISMATCH].
+    - Test 3: Graph and stream simultaneous substitution fails with [WORKLOAD_IDENTITY_MISMATCH].
+    - Test 4: Threshold or mode modification fails with [WORKLOAD_IDENTITY_MISMATCH].
+    - Test 5: Missing registered identity fails with [WORKLOAD_IDENTITY_MISSING].
+    - Test 6: Corrupted registered identity fails with [WORKLOAD_IDENTITY_MISMATCH] / [WORKLOAD_IDENTITY_INVALID].
+    - Test 7: Legitimate workload registration and versioning passes.
+    """
+
+    def setUp(self) -> None:
+        self.repo_root = Path(__file__).resolve().parent.parent
+        self.manifest_path = self.repo_root / "configs" / "apx04_workload_manifest.json"
+
+    def test_original_registered_pilots_identity_fingerprints_match(self) -> None:
+        """Test 1: All three registered INITIAL_SAFE_PILOT cases must pass preflight and have valid fingerprints."""
+        checker = PreflightChecker(manifest_path=self.manifest_path, repo_root=self.repo_root)
+        self.assertTrue(checker.run_all(), f"Preflight failed: {checker.errors}")
+
+        with open(self.manifest_path, "r", encoding="utf-8") as f:
+            manifest = json.load(f)
+
+        safe_pilots = [c for c in manifest["proposed_pilot_cases_a3_01"] if c.get("pilot_stage") == "INITIAL_SAFE_PILOT"]
+        self.assertEqual(len(safe_pilots), 3)
+
+        for case in safe_pilots:
+            cid = case["case_id"]
+            declared_fp = case.get("registered_identity_sha256")
+            self.assertTrue(is_valid_sha256(declared_fp), f"Case {cid} has invalid declared fingerprint: {declared_fp}")
+
+            # Recompute canonical fingerprint directly using actual file hashes
+            gs = case["graph_source"]
+            qid = case["query_id"]
+            sid = case["stream_id"]
+
+            v_graph = checker.audit_log["pilot_data_graphs_verified"][gs]
+            v_query = checker.audit_log["queries_verified"][qid]
+            v_stream = checker.audit_log["streams_verified"][sid]
+
+            computed_fp = compute_workload_identity_sha256(
+                case_id=cid,
+                graph_id=gs,
+                graph_sha256=v_graph["sha256"],
+                query_id=qid,
+                query_sha256=v_query["sha256"],
+                stream_id=sid,
+                stream_sha256=v_stream["sha256"],
+                eps_m=case["eps_m"],
+                eps_x=case["eps_x"],
+                mode=case["mode"],
+                semantic_class=case["semantic_class"],
+            )
+            self.assertEqual(declared_fp, computed_fp, f"Fingerprint mismatch for {cid}")
+
+    def test_label_compatible_query_substitution_fails_identity_check(self) -> None:
+        """Test 2: Rebinding Pilot A to label-compatible query Q_pilot_b_nearonly must trigger WORKLOAD_IDENTITY_MISMATCH."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_manifest = Path(tmpdir) / "manifest.json"
+            with open(self.manifest_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            # Adversarial substitution: substitute query_id in pilot_safe_01_micro_exact
+            # Q_pilot_b_nearonly has label 0 edges, vertex count 3 <= 6 (compatible with Pilot A)
+            data["proposed_pilot_cases_a3_01"][0]["query_id"] = "Q_pilot_b_nearonly"
+
+            with open(tmp_manifest, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+
+            checker = PreflightChecker(manifest_path=tmp_manifest, repo_root=self.repo_root)
+            self.assertFalse(checker.run_all())
+            self.assertTrue(
+                any("[WORKLOAD_IDENTITY_MISMATCH]" in e for e in checker.errors),
+                f"Expected [WORKLOAD_IDENTITY_MISMATCH], got: {checker.errors}",
+            )
+
+    def test_graph_and_stream_substitution_fails_identity_check(self) -> None:
+        """Test 3: Substituting both graph and stream with another valid pair fails with WORKLOAD_IDENTITY_MISMATCH."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_manifest = Path(tmpdir) / "manifest.json"
+            with open(self.manifest_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            # In Case 2 (pilot_safe_02_micro_nearonly), substitute graph and stream to Pilot A
+            # Q_pilot_b_nearonly (triangle label 0) is label-compatible with Pilot A (labels 0, 1)
+            # stream_pilot_a_exact matches Pilot_A_Exact_Micrograph
+            data["proposed_pilot_cases_a3_01"][1]["graph_source"] = "Pilot_A_Exact_Micrograph"
+            data["proposed_pilot_cases_a3_01"][1]["stream_id"] = "stream_pilot_a_exact"
+
+            with open(tmp_manifest, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+
+            checker = PreflightChecker(manifest_path=tmp_manifest, repo_root=self.repo_root)
+            self.assertFalse(checker.run_all())
+            self.assertTrue(
+                any("[WORKLOAD_IDENTITY_MISMATCH]" in e for e in checker.errors),
+                f"Expected [WORKLOAD_IDENTITY_MISMATCH], got: {checker.errors}",
+            )
+
+    def test_threshold_or_mode_modification_fails_identity_check(self) -> None:
+        """Test 4: Modifying eps_m, eps_x, or mode while keeping graph/query/stream triggers WORKLOAD_IDENTITY_MISMATCH."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_manifest = Path(tmpdir) / "manifest.json"
+            with open(self.manifest_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            # Change eps_m from 0 to 1
+            data["proposed_pilot_cases_a3_01"][0]["eps_m"] = 1
+
+            with open(tmp_manifest, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+
+            checker = PreflightChecker(manifest_path=tmp_manifest, repo_root=self.repo_root)
+            self.assertFalse(checker.run_all())
+            self.assertTrue(
+                any("[WORKLOAD_IDENTITY_MISMATCH]" in e for e in checker.errors),
+                f"Expected [WORKLOAD_IDENTITY_MISMATCH], got: {checker.errors}",
+            )
+
+    def test_missing_registered_identity_fails_with_workload_identity_missing(self) -> None:
+        """Test 5: Omitting registered_identity_sha256 in an INITIAL_SAFE_PILOT triggers WORKLOAD_IDENTITY_MISSING."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_manifest = Path(tmpdir) / "manifest.json"
+            with open(self.manifest_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            # Delete registered_identity_sha256 from Case 1
+            del data["proposed_pilot_cases_a3_01"][0]["registered_identity_sha256"]
+
+            with open(tmp_manifest, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+
+            checker = PreflightChecker(manifest_path=tmp_manifest, repo_root=self.repo_root)
+            self.assertFalse(checker.run_all())
+            self.assertTrue(
+                any("[WORKLOAD_IDENTITY_MISSING]" in e for e in checker.errors),
+                f"Expected [WORKLOAD_IDENTITY_MISSING], got: {checker.errors}",
+            )
+
+    def test_corrupted_registered_identity_fails_with_mismatch_or_invalid(self) -> None:
+        """Test 6: Corrupted 64-hex fingerprint yields MISMATCH; non-hex string yields INVALID."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_manifest = Path(tmpdir) / "manifest.json"
+            with open(self.manifest_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            # 6a. Wrong 64-hex string
+            data["proposed_pilot_cases_a3_01"][0]["registered_identity_sha256"] = "a" * 64
+            with open(tmp_manifest, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+
+            checker = PreflightChecker(manifest_path=tmp_manifest, repo_root=self.repo_root)
+            self.assertFalse(checker.run_all())
+            self.assertTrue(
+                any("[WORKLOAD_IDENTITY_MISMATCH]" in e for e in checker.errors),
+                f"Expected [WORKLOAD_IDENTITY_MISMATCH], got: {checker.errors}",
+            )
+
+            # 6b. Non-hex malformed string
+            data["proposed_pilot_cases_a3_01"][0]["registered_identity_sha256"] = "corrupted_invalid_non_hex_fingerprint"
+            with open(tmp_manifest, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+
+            checker = PreflightChecker(manifest_path=tmp_manifest, repo_root=self.repo_root)
+            self.assertFalse(checker.run_all())
+            self.assertTrue(
+                any("[WORKLOAD_IDENTITY_INVALID]" in e for e in checker.errors),
+                f"Expected [WORKLOAD_IDENTITY_INVALID], got: {checker.errors}",
+            )
+
+    def test_legitimate_workload_versioning_and_registration(self) -> None:
+        """Test 7: Demonstrates legitimate workload registration with recomputed canonical fingerprint passes cleanly."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_manifest = Path(tmpdir) / "manifest.json"
+            with open(self.manifest_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            # Create a legitimate versioned safe pilot (replace Case 3 so total initial safe pilots stays <= 3)
+            v_graph_sha = compute_sha256(self.repo_root / "data/pilots/pilot_c_tiny_netflow_data.graph")
+            v_query_sha = compute_sha256(self.repo_root / "data/pilots/pilot_c_tiny_netflow_query.graph")
+            v_stream_sha = compute_sha256(self.repo_root / "data/pilots/pilot_c_tiny_netflow_stream.graph")
+
+            new_case_id = "pilot_safe_03_tiny_netflow_v2"
+            new_fp = compute_workload_identity_sha256(
+                case_id=new_case_id,
+                graph_id="Pilot_C_Tiny_NetFlow",
+                graph_sha256=v_graph_sha,
+                query_id="Q_pilot_c_tiny",
+                query_sha256=v_query_sha,
+                stream_id="stream_pilot_c_projected",
+                stream_sha256=v_stream_sha,
+                eps_m=0,
+                eps_x=5,
+                mode="STRICT",
+                semantic_class="INDUCED_SUBGRAPH_RELATIVE",
+            )
+
+            data["proposed_pilot_cases_a3_01"][2] = {
+                "case_id": new_case_id,
+                "query_id": "Q_pilot_c_tiny",
+                "query_source": "PILOT_DERIVED",
+                "graph_source": "Pilot_C_Tiny_NetFlow",
+                "stream_id": "stream_pilot_c_projected",
+                "eps_m": 0,
+                "eps_x": 5,
+                "mode": "STRICT",
+                "workload_category": "EXACT_MATCH",
+                "semantic_class": "INDUCED_SUBGRAPH_RELATIVE",
+                "pilot_stage": "INITIAL_SAFE_PILOT",
+                "registered_identity_sha256": new_fp,
+                "random_seed": 20261110,
+                "approval_state": "DRAFT_PENDING_USER_APPROVAL",
+                "execution_status": "NOT_RUN",
+                "rationale": "Legitimate version 2 of pilot 3 with eps_x tightened to 5.",
+            }
+
+            with open(tmp_manifest, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+
+            checker = PreflightChecker(manifest_path=tmp_manifest, repo_root=self.repo_root)
+            passed = checker.run_all()
+            self.assertTrue(passed, f"Preflight failed on legitimate versioned registration: {checker.errors}")
+            self.assertEqual(len(checker.errors), 0)
 
 
 if __name__ == "__main__":
