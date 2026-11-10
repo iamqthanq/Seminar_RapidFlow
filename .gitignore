@@ -3,6 +3,8 @@ data/netflow/*
 !data/netflow/README.md
 data/streams/*
 !data/streams/README.md
+!data/streams/prefixes/
+!data/streams/prefixes/*
 data/queries/generated/
 external/*
 !external/README.md
