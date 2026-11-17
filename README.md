@@ -4,6 +4,8 @@ Workspace for **reproducible research on RapidFlow (PVLDB 2022)** using **NetFlo
 
 **Research state (2026-11-04):** NetFlow is selected; RapidFlow is the algorithm under investigation. **No improvement or novelty is selected.** Do not silently switch enumeration of incremental embeddings to counting.
 
+**D* Feasibility Route (2026-11-17, Issue #22 / DSTAR-01):** The project is investigating an approximate CSM feasibility/validation route under **Edge Recall** and **S2 connectivity** ($0 \le k < \lambda(Q)$). See [docs/dstar_problem_contract_v1.md](docs/dstar_problem_contract_v1.md) for the active working contract, [docs/dstar_reuse_audit.md](docs/dstar_reuse_audit.md) for the legacy component audit, and [docs/dstar01_validation_report.md](docs/dstar01_validation_report.md) for verification evidence. Previous Model C work (APX-01 through APX-04) is preserved as historical research evidence. Candidate algorithm M2 is not yet implemented. Advisor approval for Gate 0A remains pending.
+
 ## Bàn giao cho AI ở tài khoản khác
 
 **Đọc [AI_PROJECT_HANDOFF.md](AI_PROJECT_HANDOFF.md)** để hiểu đầy đủ bài toán CSM, trạng thái nghiên cứu, phân công AI quản lý/AI Coding Agent/AI phản biện, quy trình Issue–Draft PR, bằng chứng cần nộp và quy tắc GitHub. File này là bản snapshot có thể tải rồi gửi cho một AI/tài khoản khác, không tự cấp quyền truy cập GitHub hoặc Linux. Đọc các Issue/PR mới nhất trước khi hành động.

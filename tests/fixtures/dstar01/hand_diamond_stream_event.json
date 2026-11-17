@@ -1,0 +1,4 @@
+[
+  {"op": "INSERT", "u": 2, "v": 3, "label": 0},
+  {"op": "DELETE", "u": 2, "v": 3, "label": 0}
+]

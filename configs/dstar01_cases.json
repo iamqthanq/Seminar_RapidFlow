@@ -1,0 +1,111 @@
+{
+  "contract_version": "dstar-v1.0",
+  "seed_base": 20261117,
+  "resource_guards": {
+    "max_data_vertices": 10,
+    "max_query_vertices": 8,
+    "max_candidates": 100000
+  },
+  "lambda_reference": {
+    "P4": {"vertices": 4, "edges": 3, "lambda": 1},
+    "Star4": {"vertices": 4, "edges": 3, "lambda": 1},
+    "C4": {"vertices": 4, "edges": 4, "lambda": 2},
+    "C6": {"vertices": 6, "edges": 6, "lambda": 2},
+    "Diamond": {"vertices": 4, "edges": 5, "lambda": 2},
+    "K4": {"vertices": 4, "edges": 6, "lambda": 3},
+    "K3_3": {"vertices": 6, "edges": 9, "lambda": 3}
+  },
+  "hand_cases": [
+    {
+      "id": "CASE_HAND_A",
+      "description": "Exact recovery k=0 with extra data graph edges/vertices",
+      "query": "tests/fixtures/dstar01/hand_c4_query.json",
+      "k": 0
+    },
+    {
+      "id": "CASE_HAND_B",
+      "description": "Extra internal chord does not invalidate non-induced match",
+      "query": "tests/fixtures/dstar01/hand_c4_query.json",
+      "data": "tests/fixtures/dstar01/hand_c4_data_chord.json",
+      "k": 0
+    },
+    {
+      "id": "CASE_HAND_C",
+      "description": "External incident tail does not penalize edge recall",
+      "query": "tests/fixtures/dstar01/hand_diamond_query.json",
+      "k": 1
+    },
+    {
+      "id": "CASE_HAND_D",
+      "description": "Non-injective mapping rejected",
+      "query": "tests/fixtures/dstar01/hand_c4_query.json"
+    },
+    {
+      "id": "CASE_HAND_E",
+      "description": "Vertex label mismatch rejected",
+      "query": "tests/fixtures/dstar01/hand_diamond_query.json"
+    },
+    {
+      "id": "CASE_HAND_F",
+      "description": "Edge label mismatch counted as missing edge in R(f)",
+      "query": "tests/fixtures/dstar01/hand_c4_query.json"
+    },
+    {
+      "id": "CASE_HAND_G",
+      "description": "Sparse/non-contiguous query vertex IDs preserve ascending tuple order",
+      "query": "tests/fixtures/dstar01/hand_sparse_query.json",
+      "data": "tests/fixtures/dstar01/hand_sparse_data.json",
+      "k": 0
+    },
+    {
+      "id": "CASE_HAND_H",
+      "description": "Full K4 query and K4 data automorphism yields exactly 24 ordered tuples",
+      "query": "tests/fixtures/dstar01/hand_k4_query.json",
+      "data": "tests/fixtures/dstar01/hand_k4_data.json",
+      "k": 0,
+      "expected_count": 24
+    },
+    {
+      "id": "CASE_HAND_I",
+      "description": "Diamond event: insert bridge triggers ENTERED; delete bridge triggers EXITED",
+      "query": "tests/fixtures/dstar01/hand_diamond_query.json",
+      "data_before": "tests/fixtures/dstar01/hand_diamond_data_before.json",
+      "stream": "tests/fixtures/dstar01/hand_diamond_stream_event.json",
+      "k": 1
+    },
+    {
+      "id": "CASE_HAND_J",
+      "description": "Diamond no-event: deleting edge leaves mapping within budget (no SCORE_CHANGED)",
+      "query": "tests/fixtures/dstar01/hand_diamond_query.json",
+      "data_before": "tests/fixtures/dstar01/hand_diamond_data_full.json",
+      "stream": "tests/fixtures/dstar01/hand_diamond_stream_no_event.json",
+      "k": 1
+    },
+    {
+      "id": "CASE_HAND_K",
+      "description": "Unrelated edge update produces no entered or exited events",
+      "query": "tests/fixtures/dstar01/hand_diamond_query.json",
+      "k": 1
+    },
+    {
+      "id": "CASE_HAND_L",
+      "description": "S1 vs S2: G[image] connected via extra chord, but matched Q-edges disconnected",
+      "query": "tests/fixtures/dstar01/hand_s1_vs_s2_query.json",
+      "data": "tests/fixtures/dstar01/hand_s1_vs_s2_data.json",
+      "k": 1
+    }
+  ],
+  "seeded_compatibility": {
+    "seed_base": 20261117,
+    "configurations": [
+      {"query": "C4", "k_values": [0, 1], "seeds_per_k": 8},
+      {"query": "Diamond", "k_values": [0, 1], "seeds_per_k": 8},
+      {"query": "K4", "k_values": [0, 1, 2], "seeds_per_k": 8}
+    ],
+    "total_configurations": 56,
+    "min_updates_per_configuration": 4,
+    "total_valid_updates": 224,
+    "data_vertices": 6,
+    "label_modes": ["uniform", "mixed"]
+  }
+}

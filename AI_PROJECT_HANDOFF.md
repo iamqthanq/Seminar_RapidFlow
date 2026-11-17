@@ -70,6 +70,7 @@ Dữ liệu gốc, binary build, raw logs **không được push** vì nặng/gi
 - Cấu hình workflow v2 trên QuangThang commit **814e7d54eda2ea45748dcb7c4f14c2ab2779e6d1** (đọc lại để xem có thay đổi mới).
 - Trước đó PR #3 đã merge phần scaffold ban đầu vào main. **Không coi RF-01 đã merge vào main**.
 - Có thể có Issue/PR mới sau thời điểm snapshot; AI phải tự kiểm tra lại.
+- **D* Feasibility Route (2026-11-17, Issue #22 / DSTAR-01):** Dự án mở hướng nghiên cứu khả thi D* trên bài toán Edge Recall và S2 connectivity ($0 \le k < \lambda(Q)$). Hợp đồng bài toán tại `docs/dstar_problem_contract_v1.md`. Oracle độc lập tại `scripts/dstar_oracle.py`. Báo cáo bằng chứng tại `docs/dstar01_validation_report.md`. Toàn bộ kết quả Model C trước đây (APX-01 đến APX-04) được giữ nguyên làm bằng chứng lịch sử. Thuật toán M2 chưa triển khai. Quyết định Gate 0A của giảng viên vẫn pending.
 
 ### 6 số đếm smoke (chỉ là AUTHOR SAMPLE COUNT CHECK)
 | Input | Query | Result count (actual = expected) |
