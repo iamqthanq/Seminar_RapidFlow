@@ -1,25 +1,27 @@
 {
   "contract_version": "dstar-v1.0",
-  "run_id": "20261117T163048Z_9055de2e",
-  "timestamp": "2026-11-17T16:30:48.487095+00:00",
-  "runtime_seconds": 1.6254,
+  "run_id": "20261117T165218Z_91f5e55d",
+  "timestamp": "2026-11-17T16:52:20.599573+00:00",
+  "runtime_seconds": 1.6307,
   "environment": {
     "platform": "Linux-7.0.0-42-generic-x86_64-with-glibc2.39",
     "python_version": "3.12.3",
     "cpu_count": 8
   },
   "provenance": {
-    "observed_base_sha": "89f65b1490ba2e31d8b599d295065dbe694460aa",
-    "merge_base_sha": "89f65b1490ba2e31d8b599d295065dbe694460aa",
-    "execution_head_sha": "d9da5cfba8983436a8ef41058cc3b46286d48ac1",
+    "configured_historical_base_sha": "89f65b1490ba2e31d8b599d295065dbe694460aa",
+    "observed_origin_quangthang_sha": "89f65b1490ba2e31d8b599d295065dbe694460aa",
+    "observed_merge_base_sha": "89f65b1490ba2e31d8b599d295065dbe694460aa",
+    "execution_head_sha": "dc7d44ecdefd3fbd83bf982e3b6b42c938da85e4",
     "is_dirty_at_runtime": true,
     "branch": "feature/rf22-dstar01-foundation",
     "source_hashes": {
-      "scripts/dstar_oracle.py": "ed683981167c353954c8056f60060f8e9a209fed1864f773750d6d4a126c81ae",
-      "scripts/generate_dstar01_report.py": "bf79fef5e99f695e6b07cd96199d7d1a2e301d8758f74de6864b7dffdf6e5909",
-      "tests/test_dstar_oracle.py": "733e818f7e867c802284eb9e4d230867e17dd336514f99f0a95e1814559e2064",
+      "scripts/dstar_oracle.py": "e2583dceba1679ce10fdb5fa91dbbd6a79e10f59778968b1facd4a9f86b4337e",
+      "scripts/generate_dstar01_report.py": "73131840d62526af10730c2b1bfe1891c5d0012eccc33abd44c0c4f9a74e867d",
+      "tests/test_dstar_oracle.py": "52be4f4aab4481a7efef170d05682c5ceca7212b834ea2e9578c1e0c79e7b906",
       "tests/test_dstar_legacy_compatibility.py": "e72b3b4b13ea84d56267f01ec545e174d7172edd2e3b31e37cc51b034a81b097",
-      "configs/dstar01_cases.json": "9fc971ccd445a33ecab7a6e7a7e15efd6a60a8c8ededc7d649bf43976594fc51",
+      "tests/test_dstar_report_generator.py": "1f576f1f6f9caa089fe5a8824a38fc7f136e593c04a2e38e8dad8e7d941470ce",
+      "configs/dstar01_cases.json": "fd47a10244464c7ba74e5b5731e80bbc7a47b48a997010e45f534ea86edc03e9",
       "docs/dstar_problem_contract_v1.md": "092ca81fb155f14f3b8179403c0f67fbf889e5a38924fc75b0d6bf78b3e824f1",
       "tests/fixtures/dstar01/hand_c4_data_chord.json": "688c059b3f11369dc83bf428201422b380670837af0801d341294d1e50cb0d5b",
       "tests/fixtures/dstar01/hand_c4_query.json": "6db4d8692e1c60f9a3ac0ba34dee059feded049e37ef60b747eaefa3057431ed",
@@ -260,29 +262,81 @@
     "status": "PASS",
     "cases": [
       {
+        "case_id": "BOUNDARY_INSERT_EVENT_K0",
+        "name": "INSERT_bridge_event_k0",
+        "topology": "Diamond",
+        "k": 0,
+        "operation": "INSERT",
+        "expectation": "EVENT",
+        "actual_event_count": 1,
+        "property_holds": true,
+        "status": "PASS"
+      },
+      {
+        "case_id": "BOUNDARY_DELETE_EVENT_K0",
+        "name": "DELETE_bridge_event_k0",
+        "topology": "Diamond",
+        "k": 0,
+        "operation": "DELETE",
+        "expectation": "EVENT",
+        "actual_event_count": 1,
+        "property_holds": true,
+        "status": "PASS"
+      },
+      {
+        "case_id": "BOUNDARY_INSERT_EVENT_K1",
         "name": "INSERT_bridge_event_k1",
-        "status": "PASS",
-        "property_holds": true
+        "topology": "Diamond",
+        "k": 1,
+        "operation": "INSERT",
+        "expectation": "EVENT",
+        "actual_event_count": 1,
+        "property_holds": true,
+        "status": "PASS"
       },
       {
+        "case_id": "BOUNDARY_DELETE_EVENT_K1",
         "name": "DELETE_bridge_event_k1",
-        "status": "PASS",
-        "property_holds": true
+        "topology": "Diamond",
+        "k": 1,
+        "operation": "DELETE",
+        "expectation": "EVENT",
+        "actual_event_count": 1,
+        "property_holds": true,
+        "status": "PASS"
       },
       {
+        "case_id": "BOUNDARY_REVERSE_ORIENTATION_K1",
         "name": "INSERT_reverse_orientation_k1",
-        "status": "PASS",
-        "property_holds": true
+        "topology": "Diamond",
+        "k": 1,
+        "operation": "INSERT",
+        "expectation": "EVENT",
+        "actual_event_count": 1,
+        "property_holds": true,
+        "status": "PASS"
       },
       {
+        "case_id": "BOUNDARY_NO_EVENT_DELETE_K1",
         "name": "DELETE_within_threshold_no_event_k1",
-        "status": "PASS",
-        "property_holds": true
+        "topology": "Diamond",
+        "k": 1,
+        "operation": "DELETE",
+        "expectation": "NO_EVENT",
+        "actual_event_count": 0,
+        "property_holds": true,
+        "status": "PASS"
       },
       {
+        "case_id": "BOUNDARY_WRONG_LABEL_ANCHOR_K1",
         "name": "INSERT_wrong_label_anchor_k1",
-        "status": "PASS",
-        "property_holds": true
+        "topology": "Diamond",
+        "k": 1,
+        "operation": "INSERT",
+        "expectation": "NO_EVENT",
+        "actual_event_count": 0,
+        "property_holds": true,
+        "status": "PASS"
       }
     ]
   },
@@ -323,7 +377,6 @@
     "status": "PASS",
     "manifest_cases_count": 12,
     "executed_cases_count": 12,
-    "missing_cases": [],
     "errors": []
   },
   "legacy_compatibility": {

@@ -663,25 +663,27 @@ def enumerate_snapshot(
             f"Data graph size {n_g} exceeds max allowed ({max_data_vertices})"
         )
 
-    # 5. Candidate injection bound check
-    if n_g < n_q:
-        return []
-
-    perm_count = math.perm(n_g, n_q)
-    if perm_count > max_candidates:
-        raise ResourceLimitError(
-            f"Candidate injection bound {perm_count} exceeds limit {max_candidates}"
-        )
-
-    # 6. Basic topology validation
+    # 5. Basic topology validation (Q must be valid connected query; G must be valid data graph)
     Q.validate_as_query()
     G.validate_as_data()
 
-    # 7. Compute lambda and enforce k < lambda(Q)
+    # 6. Compute lambda and enforce contract domain k < lambda(Q)
     lam = compute_edge_connectivity(Q, max_query_vertices=max_query_vertices)
     if k >= lam:
         raise InvalidThresholdError(
             f"k={k} violates contract precondition k < lambda(Q) (lambda={lam})"
+        )
+
+    # 7. Valid zero-result check: If data graph has fewer vertices than query,
+    # no injective mapping V_Q -> V_G can exist.
+    if n_g < n_q:
+        return []
+
+    # 8. Candidate injection bound guard before permutation enumeration
+    perm_count = math.perm(n_g, n_q)
+    if perm_count > max_candidates:
+        raise ResourceLimitError(
+            f"Candidate injection bound {perm_count} exceeds limit {max_candidates}"
         )
 
     q_nodes = sorted(Q.vertices.keys())

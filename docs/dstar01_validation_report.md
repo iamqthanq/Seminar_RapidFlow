@@ -3,29 +3,30 @@
 **Issue:** [#22](https://github.com/iamqthanq/Seminar_RapidFlow/issues/22) — `[DSTAR-01] D* correctness foundation — working contract, independent M0 Oracle & legacy reuse audit`
 **Date:** 2026-11-17
 **Author:** Research Implementation Engineer (Antigravity)
-**Status:** READY_FOR_INDEPENDENT_REVIEW_ROUND_2
+**Status:** READY_FOR_INDEPENDENT_REVIEW_ROUND_3
 **Target Integration Branch:** `QuangThang` (**never main**)
 
 ---
 
 ## 1. Executive Summary
 
-This report delivers the foundational correctness artifacts for the **D* feasibility and validation route** in Continuous Subgraph Matching (CSM), updated following **Remediation Round 1** (resolving findings F01–F06 and N01–N04 from ChatGPT review and adjudication).
+This report delivers the foundational correctness artifacts for the **D* feasibility and validation route** in Continuous Subgraph Matching (CSM), updated following **Remediation Round 2** (resolving findings R2-F01 through R2-F05 from review comment 6954354170).
 
-Under Issue #22 and Round 1 remediation, we have:
+Under Issue #22 and Remediation Rounds 1 and 2, we have:
 1. Frozen the **D* Working Contract v1** (`docs/dstar_problem_contract_v1.md`) specifying Edge Recall scoring, explicit S2 connectivity ($Q[E_Q \setminus R(f)]$ spanning connected), and the domain constraint $0 \le k < \lambda(Q)$.
 2. Implemented the standalone, zero-external-dependency **Independent M0 Oracle** (`scripts/dstar_oracle.py`) using exhaustive ordered permutation search, strict type validation, and dynamic snapshot-and-diff.
 3. Created comprehensive correctness suites:
    - 12 analytical hand cases ($A$ through $L$) with full edge/chord/label variations.
-   - 7 canonical edge-connectivity reference topologies.
+   - 7 canonical edge-connectivity reference topologies ($P_3, \text{Star}_4, C_4, C_6, \text{Diamond}, K_4, K_{3,3}$) verified via focused unit tests.
    - 5 atomic invalid update checks ensuring zero graph/match mutation on failure.
-   - 5 boundary diagnostics testing anchor edge + $|R|=k$ property across operations and orientations.
-   - Resource limit guards enforcing cheap vertex count ($|V_G| \le 8, |V_Q| \le 6$) and candidate space checks *before* min-cut computation.
+   - 7 boundary diagnostics testing anchor edge + $|R|=k$ property across $k=0$ and $k=1$ operations and orientations.
+   - Resource limit guards enforcing cheap vertex count ($|V_G| \le 8, |V_Q| \le 6$) and candidate space checks *before* cut computation.
+   - Complete input validation ordering ensuring that invalid queries or out-of-domain thresholds ($k \ge \lambda(Q)$) fail closed even if $|V_G| < |V_Q|$.
 4. Audited and verified **Legacy Model C Compatibility**:
    - 56 configurations across $C_4$, Diamond, and $K_4$ with 224 valid dynamic updates.
    - 100.0% snapshot and delta event agreement with legacy APX-02 Oracle.
-5. Resolved all 10 Round 1 adjudication findings (R1–R8) with fail-closed regression tests.
-6. Conducted full repository regression: **301 / 301 tests PASS (100%)**.
+5. Resolved all Round 1 (R1–R8) and Round 2 (R2-F01–R2-F05) review findings with fail-closed regression tests.
+6. Conducted full repository regression: **337 / 337 tests PASS (100%)**.
 
 ---
 
@@ -56,16 +57,15 @@ The M0 Oracle is implemented in `scripts/dstar_oracle.py` using Python standard 
    - Strict label validation: integer or string only (booleans, floats, `None`, lists strictly rejected; string `"0"` and integer `0` are distinct).
    - Strict edge removal: explicit `(u, v, label)` required; wildcard deletion (`label=None`) eliminated.
 2. **Global Edge Connectivity (`compute_edge_connectivity`)**:
-   - Computes minimum $s$-$t$ cut over all vertex pairs via Ford-Fulkerson maximum flow with unit edge capacities.
+   - Computes minimum cut over all non-trivial vertex partitions via bounded exhaustive cut enumeration ($2^{|V_Q|-1}-1$ cuts, bounded by $|V_Q| \le 6$ cap).
    - Guaranteed resource limit check ($|V_Q| \le \text{max\_query\_vertices}$) executed *prior* to cut computation.
 3. **Snapshot Enumeration (`enumerate_snapshot`)**:
-   - Generates injective mappings via `itertools.permutations`.
-   - Cheap pre-enumeration guard on $|V_G|$, $|V_Q|$, and candidate space $P(|V_G|, |V_Q|)$.
-   - Evaluates vertex labels, computes $R(f)$, validates $0 \le k < \lambda(Q)$, and tests S2 spanning connectivity.
+   - Strictly ordered pipeline: (1) resource limit checks, (2) threshold integer/sign validation, (3) cheap query/data non-empty guards, (4) query topology and data graph structure validation, (5) domain bound validation ($k < \lambda(Q)$), (6) early empty return if $|V_G| < |V_Q|$, (7) candidate injection bound guard, (8) exhaustive permutation search.
    - Yields deterministic ordered tuples sorted lexicographically.
 4. **Dynamic Stream Processor (`DStarDynamicOracle`)**:
-   - Independent deep-cloning of both query $Q$ and data $G$ at initialization to prevent external aliasing.
+   - Independent deep-cloning of both query $Q$ and data $G$ at initialization to prevent external aliasing or caller mutation side effects.
    - Validates each `DStarUpdate` atomically (`UnknownVertexError`, `DuplicateEdgeInsertionError`, `NonexistentEdgeDeletionError`, `EdgeLabelMismatchDeletionError`, `SelfLoopError`).
+   - If an update fails validation or resource limits, the internal graph and match states remain completely unmutated (fail-closed rollback semantics).
    - Computes exact differential event sets: $\Delta_{\text{entered}} = M_t \setminus M_{t-1}$ and $\Delta_{\text{exited}} = M_{t-1} \setminus M_t$.
 
 ---
@@ -87,9 +87,28 @@ All confirmed findings from the ChatGPT review and joint adjudication were resol
 
 ---
 
-## 5. Verification Evidence Summary
+## 5. Remediation Round 2 (R2-F01 through R2-F05)
 
-### 5.1. Analytical Hand Cases (A through L)
+All confirmed findings from the Round 2 review (review comment 6954354170) were resolved in this iteration:
+
+| Ref | Finding ID | Severity | Root Cause | Remediation Applied | Regression Test |
+|---|---|---|---|---|---|
+| **R2-1** | **R2-F01** | High | In `scripts/dstar_oracle.py`, `if n_g < n_q: return []` fired before topology and threshold validation, returning empty results on invalid inputs (e.g. $k=2$ or $99$ on $C_4$). | Reordered `enumerate_snapshot`: (1) validate resource caps; (2) validate threshold $k$ integer/sign; (3) cheap query/data non-empty guards; (4) validate query topology and data graph structure; (5) contractual domain validation ($k < \lambda(Q)$); (6) valid zero-result return if $n_g < n_q$; (7) candidate injection bound guard; (8) injective permutation search. Dynamic oracle init rejects invalid $k$ or $Q$ on small $G_0$. | 8 regression tests in `TestDStarEarlyResourceGuards` and `TestDStarInputValidation` |
+| **R2-2** | **R2-F02** | High | `reconcile_manifest` only compared set symmetric difference, ignoring duplicates and failing to bind parameters ($k$, caps, expected counts, lambda, matrix seeds, fixtures). | Implemented bidirectional manifest validation against `EXECUTABLE_CASE_SPEC` in `scripts/generate_dstar01_report.py`. Rejects duplicate IDs, missing/unknown IDs, cap drift, lambda drift, $k$ drift, expected count drift, seed matrix drift, and missing fixture files. Canonical caps synchronized to 8 data / 6 query / 100k candidates. | 9 fault-injection tests in `TestDStarManifestReconciliationNegative` (`test_dstar_report_generator.py`) |
+| **R2-3** | **R2-F03** | Medium | Boundary diagnostics had 5 cases all at $k=1$, omitting $k=0$ operations and lacking structured reporting. | Added $k=0$ `INSERT` event and $k=0$ `DELETE` event using Diamond query ($G_{\text{almost}}$ with 4 edges vs $G_{\text{full}}$ with 5 edges). Expanded suite to 7 cases. Recorded structured metadata per case (`case_id`, `topology`, `k`, `operation`, `expectation`, `actual_event_count`, `property_holds`, `status`). | Verified in `scripts/generate_dstar01_report.py` |
+| **R2-4** | **R2-F04** | Medium | Prior consolidation removed focused edge-case tests (self-loops, duplicate edges, undeclared endpoints, label mismatches, individual reference topologies, rollback semantics). | Restored and expanded behavior coverage to 55 unit tests in `tests/test_dstar_oracle.py`: all 7 reference topologies verified in individual unit tests, atomic update rollback on resource limit failure, caller $G$ mutation isolation, and structured CLI schema/stream validation. | 55 unit tests in `tests/test_dstar_oracle.py` |
+| **R2-5** | **R2-F05** | Medium | Report generator used hardcoded fallback strings for branch/base when Git commands failed; fatal exceptions dropped completed stages and `run_id`. | Distinguishes `configured_historical_base_sha` from `observed_merge_base_sha`; records `"DETACHED_HEAD"` or explicit `UNKNOWN`/`UNAVAILABLE` with error reasons; generates `run_id` immediately; wraps execution in top-level try/except preserving `partial_results: completed_stages` in ERROR artifact upon fatal failure. | `TestDStarProvenanceAndPartialFailure` (3 tests in `test_dstar_report_generator.py`) |
+
+### Technical and Methodological Clarifications
+1. **Connectivity Algorithm**: `compute_edge_connectivity` uses bounded exhaustive cut enumeration over all $2^{|V_Q|-1}-1$ non-trivial vertex partitions (bounded by $|V_Q| \le 6$ cap), rather than Ford-Fulkerson max-flow.
+2. **Execution Provenance**: Pre-commit report artifacts intentionally record the parent commit SHA (`execution_head_sha: d9da5cf...`) with `dirty: true` prior to creating the remediation commit. This provides accurate, auditable provenance of the exact execution environment that produced the report.
+3. **Gate 0A Question Clarification**: The `SCORE_CHANGED` design question addresses whether valid embeddings whose missing-edge score changes (e.g. from 1 missing edge to 0 missing edges) upon an update should be emitted as a distinct event type. Multigraph support is excluded from the current MVP.
+
+---
+
+## 6. Verification Evidence Summary
+
+### 6.1. Analytical Hand Cases (A through L)
 
 | Case ID | Query Topology | $k$ | $\lambda(Q)$ | Expected Matches | Computed Matches | Status |
 |---|---|---|---|---|---|---|
@@ -106,7 +125,7 @@ All confirmed findings from the ChatGPT review and joint adjudication were resol
 | `CASE_HAND_K` | Dynamic Edge Insertion | 1 | 2 | entered=1, exited=0 | entered=1, exited=0 | **PASS** |
 | `CASE_HAND_L` | Strict Domain Boundary ($k \ge \lambda$) | 1 | 1 | Public Domain Rejection | Public Domain Rejection | **PASS** |
 
-### 5.2. Edge Connectivity Reference Verification
+### 6.2. Edge Connectivity Reference Verification
 
 | Topology | $|V_Q|$ | $|E_Q|$ | Theoretical $\lambda$ | Computed $\lambda$ | Status |
 |---|---|---|---|---|---|
@@ -118,7 +137,19 @@ All confirmed findings from the ChatGPT review and joint adjudication were resol
 | $K_4$ (Complete) | 4 | 6 | 3 | 3 | **PASS** |
 | $K_{3,3}$ (Bipartite) | 6 | 9 | 3 | 3 | **PASS** |
 
-### 5.3. Legacy APX-02 Compatibility Matrix
+### 6.3. Boundary Diagnostics (7 Cases: $k=0$ and $k=1$)
+
+| Diagnostic ID | Topology | $k$ | Operation | Anchor Edge | Property Holds | Status |
+|---|---|---|---|---|---|---|
+| `CASE_DIAG_K0_INSERT` | Diamond | 0 | INSERT | (2, 3, 0) | Yes (1 event) | **PASS** |
+| `CASE_DIAG_K0_DELETE` | Diamond | 0 | DELETE | (2, 3, 0) | Yes (1 event) | **PASS** |
+| `CASE_DIAG_01_INSERT` | Diamond | 1 | INSERT | (2, 4, 0) | Yes (1 event) | **PASS** |
+| `CASE_DIAG_02_DELETE` | Diamond | 1 | DELETE | (2, 4, 0) | Yes (1 event) | **PASS** |
+| `CASE_DIAG_03_REVERSE` | Diamond | 1 | INSERT | (4, 2, 0) | Yes (0 event, wrong dir) | **PASS** |
+| `CASE_DIAG_04_DEL_NOEVENT`| Diamond | 1 | DELETE | (1, 3, 0) | Yes (0 event, retained $\le k$) | **PASS** |
+| `CASE_DIAG_05_WRONG_LABEL`| Diamond | 1 | INSERT | (2, 4, 99) | Yes (0 event, wrong label) | **PASS** |
+
+### 6.4. Legacy APX-02 Compatibility Matrix
 
 - **Configurations**: 56 configurations ($C_4, \text{Diamond}, K_4$; uniform and mixed labels; seeds 0–7)
 - **Updates**: 224 dynamic updates (112 INSERT, 112 DELETE)
@@ -127,23 +158,23 @@ All confirmed findings from the ChatGPT review and joint adjudication were resol
 - **Agreement**: **224 / 224 updates (100.0%)** identical between D* M0 and Legacy APX-02.
 - **Status**: **PASS**
 
-### 5.4. Full Repository Test Suite
+### 6.5. Full Repository Test Suite
 
 | Test Suite / Category | Command | Tests | Status |
 |---|---|---|---|
-| **D* Oracle Suite** | `python3 -m unittest tests/test_dstar_oracle.py` | 30 tests | **PASS** |
+| **D* Oracle Suite** | `python3 -m unittest tests/test_dstar_oracle.py` | 55 tests | **PASS** |
 | **Legacy Compatibility** | `python3 -m unittest tests/test_dstar_legacy_compatibility.py` | 2 tests (56 configs, 224 updates) | **PASS** |
-| **Report Generator Negative Tests** | `python3 -m unittest tests/test_dstar_report_generator.py` | 8 tests | **PASS** |
+| **Report Generator Suite** | `python3 -m unittest tests/test_dstar_report_generator.py` | 19 tests | **PASS** |
 | **Report Generator Main Execution** | `python3 scripts/generate_dstar01_report.py` | 7 verification groups | **PASS** |
 | **APX-02 Oracle Suite** | `python3 -m unittest tests/test_apx02_oracle.py` | 33 tests | **PASS** |
 | **APX-03 Native Baseline** | `python3 -m unittest tests/test_apx03_baseline.py` | 46 tests | **PASS** |
 | **APX-04 Preflight & Manifest** | `python3 -m unittest tests/test_apx04_preflight.py` | 62 tests | **PASS** |
 | **RF-02 Runner & Oracle** | `python3 -m unittest tests/test_rf02_runner.py tests/test_rf02_oracle.py` | 21 tests | **PASS** |
-| **Full Repository Regression** | `python3 -m unittest discover tests` | **301 tests** | **PASS** |
+| **Full Repository Regression** | `python3 -m unittest discover tests` | **337 tests** | **PASS** |
 
 ---
 
-## 6. Preservation and Non-Regression Evidence
+## 7. Preservation and Non-Regression Evidence
 
 - `baselines/rapidflow/source/`: pristine at pinned commit `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1`.
 - `data/netflow/`: untouched; `Ndata.graph` hash `bfedd2cab6d2c460141da945e77b0be39ae24c74d9a28b9394a38ee35b652fc6` preserved.
@@ -152,34 +183,34 @@ All confirmed findings from the ChatGPT review and joint adjudication were resol
 
 ---
 
-## 7. Reproduction Instructions
+## 8. Reproduction Instructions
 
-### 7.1. Sibling Worktree Setup (Without Installing External Packages)
+### 8.1. Sibling Worktree Setup (Without Installing External Packages)
 
 In a new worktree branched from `origin/QuangThang`:
 
 ```bash
-# 1. Symlink untracked third-party source, build artifacts, and raw data from primary checkout
-ln -s /home/iamqthanq/Desktop/Seminar_RapidFlow/baselines/rapidflow/source baselines/rapidflow/source
+# 1. Symlink untracked third-party source, build artifacts, and raw data from primary checkout (idempotent)
+[ -e baselines/rapidflow/source ] || ln -s /home/iamqthanq/Desktop/Seminar_RapidFlow/baselines/rapidflow/source baselines/rapidflow/source
 mkdir -p extensions/apx03/build
-ln -s /home/iamqthanq/Desktop/Seminar_RapidFlow/extensions/apx03/build/rapidflow_apx03_baseline extensions/apx03/build/rapidflow_apx03_baseline
-ln -s /home/iamqthanq/Desktop/Seminar_RapidFlow/data/netflow/release_newsp data/netflow/release_newsp
-ln -s /home/iamqthanq/Desktop/Seminar_RapidFlow/data/netflow/source_archive data/netflow/source_archive
+[ -e extensions/apx03/build/rapidflow_apx03_baseline ] || ln -s /home/iamqthanq/Desktop/Seminar_RapidFlow/extensions/apx03/build/rapidflow_apx03_baseline extensions/apx03/build/rapidflow_apx03_baseline
+[ -e data/netflow/release_newsp ] || ln -s /home/iamqthanq/Desktop/Seminar_RapidFlow/data/netflow/release_newsp data/netflow/release_newsp
+[ -e data/netflow/source_archive ] || ln -s /home/iamqthanq/Desktop/Seminar_RapidFlow/data/netflow/source_archive data/netflow/source_archive
 
 # 2. Add portable repository CMake to PATH
 export PATH="$PWD/external/tools/cmake-3.28.3-linux-x86_64/bin:$PATH"
 ```
 
-### 7.2. Test Execution Commands
+### 8.2. Test Execution Commands
 
 ```bash
-# 1. Run independent D* Oracle suite (30 tests)
+# 1. Run independent D* Oracle suite (55 tests)
 python3 -m unittest tests/test_dstar_oracle.py
 
 # 2. Run legacy compatibility matrix (56 configs, 224 updates)
 python3 -m unittest tests/test_dstar_legacy_compatibility.py
 
-# 3. Run report generator negative & fault-injection regression (8 tests)
+# 3. Run report generator negative & fault-injection regression (19 tests)
 python3 -m unittest tests/test_dstar_report_generator.py
 
 # 4. Generate structured report artifact into temporary file (clean test)
@@ -188,6 +219,6 @@ python3 scripts/generate_dstar01_report.py --output /tmp/dstar01_test_summary.js
 # 5. Generate canonical tracked report
 python3 scripts/generate_dstar01_report.py
 
-# 6. Run full repository regression (301 tests)
+# 6. Run full repository regression (337 tests)
 python3 -m unittest discover tests
 ```

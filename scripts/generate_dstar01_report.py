@@ -87,38 +87,60 @@ def compute_file_sha256(path: Path) -> str:
 
 
 def get_git_metadata() -> Dict[str, Any]:
+    # 1. Execution HEAD
     try:
         head_sha = subprocess.check_output(
             ["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, text=True, stderr=subprocess.PIPE
         ).strip()
     except Exception as e:
-        head_sha = f"UNKNOWN ({e})"
+        head_sha = f"UNKNOWN (git rev-parse HEAD failed: {e})"
 
+    # 2. Branch name or detached HEAD
     try:
         branch = subprocess.check_output(
             ["git", "symbolic-ref", "--quiet", "--short", "HEAD"], cwd=REPO_ROOT, text=True, stderr=subprocess.PIPE
         ).strip()
     except Exception:
-        branch = "feature/rf22-dstar01-foundation"
+        try:
+            curr = subprocess.check_output(
+                ["git", "branch", "--show-current"], cwd=REPO_ROOT, text=True, stderr=subprocess.PIPE
+            ).strip()
+            if curr:
+                branch = curr
+            else:
+                branch = "DETACHED_HEAD"
+        except Exception as e:
+            branch = f"UNKNOWN (git branch check failed: {e})"
 
+    # 3. Dirty status
     try:
         status_out = subprocess.check_output(
             ["git", "status", "--porcelain"], cwd=REPO_ROOT, text=True, stderr=subprocess.PIPE
         ).strip()
         is_dirty = bool(status_out)
-    except Exception:
-        is_dirty = True
+    except Exception as e:
+        is_dirty = f"UNKNOWN (git status failed: {e})"
 
+    # 4. Observed origin/QuangThang SHA
+    try:
+        origin_qt_sha = subprocess.check_output(
+            ["git", "rev-parse", "origin/QuangThang"], cwd=REPO_ROOT, text=True, stderr=subprocess.PIPE
+        ).strip()
+    except Exception as e:
+        origin_qt_sha = f"UNAVAILABLE (rev-parse origin/QuangThang failed: {e})"
+
+    # 5. Observed merge-base SHA
     try:
         merge_base = subprocess.check_output(
             ["git", "merge-base", "origin/QuangThang", "HEAD"], cwd=REPO_ROOT, text=True, stderr=subprocess.PIPE
         ).strip()
-    except Exception:
-        merge_base = "89f65b1490ba2e31d8b599d295065dbe694460aa"
+    except Exception as e:
+        merge_base = f"UNAVAILABLE (merge-base failed: {e})"
 
     return {
-        "observed_base_sha": "89f65b1490ba2e31d8b599d295065dbe694460aa",
-        "merge_base_sha": merge_base,
+        "configured_historical_base_sha": "89f65b1490ba2e31d8b599d295065dbe694460aa",
+        "observed_origin_quangthang_sha": origin_qt_sha,
+        "observed_merge_base_sha": merge_base,
         "execution_head_sha": head_sha,
         "is_dirty_at_runtime": is_dirty,
         "branch": branch,
@@ -734,13 +756,13 @@ def run_legacy_compatibility_matrix() -> Tuple[Dict[str, Any], bool]:
 
 def run_boundary_diagnostics(fixtures_dir: Path) -> Tuple[Dict[str, Any], bool]:
     """
-    R7 / F05: Expanded boundary diagnostics matrix.
+    R2-F03 / R7: Expanded boundary diagnostics matrix.
     Tests anchor edge + |R|=k characterization for:
-    - INSERT and DELETE
-    - k=0 and k>0
-    - event updates and no-event updates
-    - non-matching label anchor
-    - both edge endpoint orientations (u, v) and (v, u).
+    - k=0 (Exact recovery boundary) for INSERT and DELETE events
+    - k=1 (Approximate boundary) for INSERT and DELETE events
+    - reverse orientation: INSERT (v, u)
+    - within-threshold no-event: DELETE leaving mapping within budget
+    - non-matching label anchor: INSERT with non-matching edge label.
     """
     cases: List[Dict[str, Any]] = []
     all_ok = True
@@ -752,55 +774,168 @@ def run_boundary_diagnostics(fixtures_dir: Path) -> Tuple[Dict[str, Any], bool]:
     with open(fixtures_dir / "hand_diamond_data_full.json", "r") as f:
         G_full = DStarGraph.from_dict(json.load(f))
 
-    # Test 1: INSERT bridge event (k=1, edge 2-3)
+    # Test 1 (k=0): INSERT event at exact recovery boundary
+    # G_almost has 4 of 5 edges of Diamond (edge 2-3 missing).
+    # At k=0, m_bef is empty (|R|=1 > 0). Inserting (2, 3) yields full Diamond (|R|=0).
+    G_almost = G_full.clone()
+    G_almost.remove_edge(2, 3, 0)
+    up_ins_k0 = DStarUpdate(op="INSERT", u=2, v=3, label=0)
+    m_bef_k0 = set(enumerate_snapshot(Q, G_almost, k=0))
+    m_aft_k0 = set(enumerate_snapshot(Q, G_full, k=0))
+    diag_k0_ins = check_anchored_boundary_property(
+        Q, G_almost, G_full, up_ins_k0, k=0,
+        true_entered=m_aft_k0 - m_bef_k0, true_exited=m_bef_k0 - m_aft_k0
+    )
+    ok_k0_ins = diag_k0_ins["property_holds"] and diag_k0_ins["target_event_count"] == 1
+    cases.append({
+        "case_id": "BOUNDARY_INSERT_EVENT_K0",
+        "name": "INSERT_bridge_event_k0",
+        "topology": "Diamond",
+        "k": 0,
+        "operation": "INSERT",
+        "expectation": "EVENT",
+        "actual_event_count": diag_k0_ins["target_event_count"],
+        "property_holds": diag_k0_ins["property_holds"],
+        "status": "PASS" if ok_k0_ins else "FAIL",
+    })
+    if not ok_k0_ins:
+        all_ok = False
+
+    # Test 2 (k=0): DELETE event at exact recovery boundary
+    up_del_k0 = DStarUpdate(op="DELETE", u=2, v=3, label=0)
+    diag_k0_del = check_anchored_boundary_property(
+        Q, G_full, G_almost, up_del_k0, k=0,
+        true_entered=set(), true_exited=m_aft_k0 - m_bef_k0
+    )
+    ok_k0_del = diag_k0_del["property_holds"] and diag_k0_del["target_event_count"] == 1
+    cases.append({
+        "case_id": "BOUNDARY_DELETE_EVENT_K0",
+        "name": "DELETE_bridge_event_k0",
+        "topology": "Diamond",
+        "k": 0,
+        "operation": "DELETE",
+        "expectation": "EVENT",
+        "actual_event_count": diag_k0_del["target_event_count"],
+        "property_holds": diag_k0_del["property_holds"],
+        "status": "PASS" if ok_k0_del else "FAIL",
+    })
+    if not ok_k0_del:
+        all_ok = False
+
+    # Test 3 (k=1): INSERT bridge event (edge 2-3)
     up_ins = DStarUpdate(op="INSERT", u=2, v=3, label=0)
     G_after = G_before.clone()
     apply_update(G_after, up_ins)
     m_bef = set(enumerate_snapshot(Q, G_before, k=1))
     m_aft = set(enumerate_snapshot(Q, G_after, k=1))
-    diag1 = check_anchored_boundary_property(Q, G_before, G_after, up_ins, k=1, true_entered=m_aft - m_bef, true_exited=m_bef - m_aft)
+    diag1 = check_anchored_boundary_property(
+        Q, G_before, G_after, up_ins, k=1,
+        true_entered=m_aft - m_bef, true_exited=m_bef - m_aft
+    )
     ok1 = diag1["property_holds"] and diag1["target_event_count"] == 1
-    cases.append({"name": "INSERT_bridge_event_k1", "status": "PASS" if ok1 else "FAIL", "property_holds": diag1["property_holds"]})
+    cases.append({
+        "case_id": "BOUNDARY_INSERT_EVENT_K1",
+        "name": "INSERT_bridge_event_k1",
+        "topology": "Diamond",
+        "k": 1,
+        "operation": "INSERT",
+        "expectation": "EVENT",
+        "actual_event_count": diag1["target_event_count"],
+        "property_holds": diag1["property_holds"],
+        "status": "PASS" if ok1 else "FAIL",
+    })
     if not ok1:
         all_ok = False
 
-    # Test 2: DELETE bridge event (k=1, edge 2-3)
+    # Test 4 (k=1): DELETE bridge event (edge 2-3)
     up_del = DStarUpdate(op="DELETE", u=2, v=3, label=0)
-    diag2 = check_anchored_boundary_property(Q, G_after, G_before, up_del, k=1, true_entered=set(), true_exited=m_aft - m_bef)
+    diag2 = check_anchored_boundary_property(
+        Q, G_after, G_before, up_del, k=1,
+        true_entered=set(), true_exited=m_aft - m_bef
+    )
     ok2 = diag2["property_holds"] and diag2["target_event_count"] == 1
-    cases.append({"name": "DELETE_bridge_event_k1", "status": "PASS" if ok2 else "FAIL", "property_holds": diag2["property_holds"]})
+    cases.append({
+        "case_id": "BOUNDARY_DELETE_EVENT_K1",
+        "name": "DELETE_bridge_event_k1",
+        "topology": "Diamond",
+        "k": 1,
+        "operation": "DELETE",
+        "expectation": "EVENT",
+        "actual_event_count": diag2["target_event_count"],
+        "property_holds": diag2["property_holds"],
+        "status": "PASS" if ok2 else "FAIL",
+    })
     if not ok2:
         all_ok = False
 
-    # Test 3: Reverse orientation: INSERT (3, 2)
+    # Test 5 (k=1): Reverse orientation: INSERT (3, 2)
     up_ins_rev = DStarUpdate(op="INSERT", u=3, v=2, label=0)
-    diag3 = check_anchored_boundary_property(Q, G_before, G_after, up_ins_rev, k=1, true_entered=m_aft - m_bef, true_exited=m_bef - m_aft)
+    diag3 = check_anchored_boundary_property(
+        Q, G_before, G_after, up_ins_rev, k=1,
+        true_entered=m_aft - m_bef, true_exited=m_bef - m_aft
+    )
     ok3 = diag3["property_holds"] and diag3["target_event_count"] == 1
-    cases.append({"name": "INSERT_reverse_orientation_k1", "status": "PASS" if ok3 else "FAIL", "property_holds": diag3["property_holds"]})
+    cases.append({
+        "case_id": "BOUNDARY_REVERSE_ORIENTATION_K1",
+        "name": "INSERT_reverse_orientation_k1",
+        "topology": "Diamond",
+        "k": 1,
+        "operation": "INSERT",
+        "expectation": "EVENT",
+        "actual_event_count": diag3["target_event_count"],
+        "property_holds": diag3["property_holds"],
+        "status": "PASS" if ok3 else "FAIL",
+    })
     if not ok3:
         all_ok = False
 
-    # Test 4: DELETE no-event within threshold (edge 2-4 from G_full, k=1)
+    # Test 6 (k=1): DELETE no-event within threshold (edge 2-4 from G_full, k=1)
     up_del_noev = DStarUpdate(op="DELETE", u=2, v=4, label=0)
     G_after_noev = G_full.clone()
     apply_update(G_after_noev, up_del_noev)
     m_bef_noev = set(enumerate_snapshot(Q, G_full, k=1))
     m_aft_noev = set(enumerate_snapshot(Q, G_after_noev, k=1))
-    diag4 = check_anchored_boundary_property(Q, G_full, G_after_noev, up_del_noev, k=1, true_entered=m_aft_noev - m_bef_noev, true_exited=m_bef_noev - m_aft_noev)
+    diag4 = check_anchored_boundary_property(
+        Q, G_full, G_after_noev, up_del_noev, k=1,
+        true_entered=m_aft_noev - m_bef_noev, true_exited=m_bef_noev - m_aft_noev
+    )
     ok4 = diag4["property_holds"] and diag4["target_event_count"] == 0
-    cases.append({"name": "DELETE_within_threshold_no_event_k1", "status": "PASS" if ok4 else "FAIL", "property_holds": diag4["property_holds"]})
+    cases.append({
+        "case_id": "BOUNDARY_NO_EVENT_DELETE_K1",
+        "name": "DELETE_within_threshold_no_event_k1",
+        "topology": "Diamond",
+        "k": 1,
+        "operation": "DELETE",
+        "expectation": "NO_EVENT",
+        "actual_event_count": diag4["target_event_count"],
+        "property_holds": diag4["property_holds"],
+        "status": "PASS" if ok4 else "FAIL",
+    })
     if not ok4:
         all_ok = False
 
-    # Test 5: Wrong-label anchor: INSERT (2, 3) label "WRONG"
+    # Test 7 (k=1): Wrong-label anchor: INSERT (2, 3) label "WRONG"
     up_wrong = DStarUpdate(op="INSERT", u=2, v=3, label="WRONG")
     G_wrong = G_before.clone()
     apply_update(G_wrong, up_wrong)
     m_bef_w = set(enumerate_snapshot(Q, G_before, k=1))
     m_aft_w = set(enumerate_snapshot(Q, G_wrong, k=1))
-    diag5 = check_anchored_boundary_property(Q, G_before, G_wrong, up_wrong, k=1, true_entered=m_aft_w - m_bef_w, true_exited=m_bef_w - m_aft_w)
+    diag5 = check_anchored_boundary_property(
+        Q, G_before, G_wrong, up_wrong, k=1,
+        true_entered=m_aft_w - m_bef_w, true_exited=m_bef_w - m_aft_w
+    )
     ok5 = diag5["property_holds"] and diag5["target_event_count"] == 0
-    cases.append({"name": "INSERT_wrong_label_anchor_k1", "status": "PASS" if ok5 else "FAIL", "property_holds": diag5["property_holds"]})
+    cases.append({
+        "case_id": "BOUNDARY_WRONG_LABEL_ANCHOR_K1",
+        "name": "INSERT_wrong_label_anchor_k1",
+        "topology": "Diamond",
+        "k": 1,
+        "operation": "INSERT",
+        "expectation": "NO_EVENT",
+        "actual_event_count": diag5["target_event_count"],
+        "property_holds": diag5["property_holds"],
+        "status": "PASS" if ok5 else "FAIL",
+    })
     if not ok5:
         all_ok = False
 
@@ -808,6 +943,7 @@ def run_boundary_diagnostics(fixtures_dir: Path) -> Tuple[Dict[str, Any], bool]:
         "status": "PASS" if all_ok else "FAIL",
         "cases": cases,
     }
+    return summary, all_ok
     return summary, all_ok
 
 
@@ -881,38 +1017,196 @@ def run_resource_guard_checks() -> Tuple[List[Dict[str, Any]], bool]:
     return cases, all_ok
 
 
+EXECUTABLE_CASE_SPEC: Dict[str, Any] = {
+    "contract_version": "dstar-v1.0",
+    "resource_guards": {
+        "max_data_vertices": 8,
+        "max_query_vertices": 6,
+        "max_candidates": 100000,
+    },
+    "lambda_reference": {
+        "P4": {"vertices": 4, "edges": 3, "lambda": 1},
+        "Star4": {"vertices": 4, "edges": 3, "lambda": 1},
+        "C4": {"vertices": 4, "edges": 4, "lambda": 2},
+        "C6": {"vertices": 6, "edges": 6, "lambda": 2},
+        "Diamond": {"vertices": 4, "edges": 5, "lambda": 2},
+        "K4": {"vertices": 4, "edges": 6, "lambda": 3},
+        "K3_3": {"vertices": 6, "edges": 9, "lambda": 3},
+    },
+    "hand_cases": {
+        "CASE_HAND_A": {"k": 0, "recipe": "python:triangle_k3_with_tail", "expected_count": 6},
+        "CASE_HAND_B": {"k": 0, "query": "tests/fixtures/dstar01/hand_c4_query.json", "data": "tests/fixtures/dstar01/hand_c4_data_chord.json", "expected_count": 8},
+        "CASE_HAND_C": {"k": 1, "query": "tests/fixtures/dstar01/hand_diamond_query.json", "recipe_data": "python:diamond_external_tail"},
+        "CASE_HAND_D": {"k": 0, "recipe_query": "python:p2", "recipe_data": "python:v10"},
+        "CASE_HAND_E": {"k": 0, "recipe_query": "python:edge_ab", "recipe_data": "python:edge_ac"},
+        "CASE_HAND_F": {"k_values": [0, 1], "recipe_query": "python:triangle_k3", "recipe_data": "python:triangle_k3_label_mismatch"},
+        "CASE_HAND_G": {"k": 0, "query": "tests/fixtures/dstar01/hand_sparse_query.json", "data": "tests/fixtures/dstar01/hand_sparse_data.json"},
+        "CASE_HAND_H": {"k": 0, "query": "tests/fixtures/dstar01/hand_k4_query.json", "data": "tests/fixtures/dstar01/hand_k4_data.json", "expected_count": 24},
+        "CASE_HAND_I": {"k": 1, "query": "tests/fixtures/dstar01/hand_diamond_query.json", "data_before": "tests/fixtures/dstar01/hand_diamond_data_before.json", "stream": "tests/fixtures/dstar01/hand_diamond_stream_event.json"},
+        "CASE_HAND_J": {"k": 1, "query": "tests/fixtures/dstar01/hand_diamond_query.json", "data_before": "tests/fixtures/dstar01/hand_diamond_data_full.json", "stream": "tests/fixtures/dstar01/hand_diamond_stream_no_event.json"},
+        "CASE_HAND_K": {"k": 1, "query": "tests/fixtures/dstar01/hand_diamond_query.json", "recipe_data": "python:diamond_unrelated"},
+        "CASE_HAND_L": {"k": 1, "query": "tests/fixtures/dstar01/hand_s1_vs_s2_query.json", "data": "tests/fixtures/dstar01/hand_s1_vs_s2_data.json"},
+    },
+    "seeded_compatibility": {
+        "seed_base": 20261117,
+        "total_configurations": 56,
+        "min_updates_per_configuration": 4,
+        "total_valid_updates": 224,
+        "data_vertices": 6,
+        "label_modes": ["uniform", "mixed"],
+        "configurations": [
+            {"query": "C4", "k_values": [0, 1], "seeds_per_k": 8},
+            {"query": "Diamond", "k_values": [0, 1], "seeds_per_k": 8},
+            {"query": "K4", "k_values": [0, 1, 2], "seeds_per_k": 8},
+        ],
+    },
+}
+
+
 def reconcile_manifest(
     manifest_path: Path,
     hand_cases: List[Dict[str, Any]],
     lambda_topologies: List[Dict[str, Any]],
 ) -> Tuple[Dict[str, Any], bool]:
     """
-    R7 / F05: Reconciles manifest configs/dstar01_cases.json with executed cases.
+    R2-F02: Rigorous, bidirectional reconciliation between manifest and executable specification.
+    Fails closed on duplicate IDs, missing/unknown IDs, parameter drift, cap drift,
+    matrix drift, and nonexistent fixture paths.
     """
-    with open(manifest_path, "r", encoding="utf-8") as f:
-        manifest = json.load(f)
-
     errors: List[str] = []
-    # 1. Reconcile hand cases
-    manifest_hand_ids = {c["id"] for c in manifest.get("hand_cases", [])}
-    executed_hand_ids = {c["case_id"] for c in hand_cases}
-    missing_hand = manifest_hand_ids - executed_hand_ids
-    if missing_hand:
-        errors.append(f"Missing hand cases from manifest: {missing_hand}")
+    if not manifest_path.is_file():
+        return {
+            "status": "FAIL",
+            "errors": [f"Manifest file not found: {manifest_path}"],
+        }, False
 
-    # 2. Reconcile lambda topologies
-    manifest_lambda_names = set(manifest.get("lambda_reference", {}).keys())
+    try:
+        with open(manifest_path, "r", encoding="utf-8") as f:
+            manifest = json.load(f)
+    except Exception as e:
+        return {
+            "status": "FAIL",
+            "errors": [f"Malformed manifest JSON: {e}"],
+        }, False
+
+    # 1. Duplicate ID check in hand_cases
+    raw_cases = manifest.get("hand_cases", [])
+    if not isinstance(raw_cases, list):
+        errors.append("manifest 'hand_cases' must be a list")
+        raw_cases = []
+    case_ids = [c.get("id") for c in raw_cases if isinstance(c, dict) and "id" in c]
+    if len(case_ids) != len(set(case_ids)):
+        duplicates = [cid for cid in case_ids if case_ids.count(cid) > 1]
+        errors.append(f"Duplicate hand_cases IDs found in manifest: {sorted(set(duplicates))}")
+
+    # 2. Missing and unknown hand case IDs
+    manifest_hand_set = set(case_ids)
+    spec_hand_set = set(EXECUTABLE_CASE_SPEC["hand_cases"].keys())
+    missing_in_manifest = spec_hand_set - manifest_hand_set
+    if missing_in_manifest:
+        errors.append(f"Required hand cases missing from manifest: {sorted(missing_in_manifest)}")
+    unknown_in_manifest = manifest_hand_set - spec_hand_set
+    if unknown_in_manifest:
+        errors.append(f"Unknown hand cases present in manifest: {sorted(unknown_in_manifest)}")
+
+    # 3. Parameter and fixture reconciliation for each hand case
+    for c in raw_cases:
+        if not isinstance(c, dict):
+            errors.append(f"Invalid hand case item in manifest: {c!r}")
+            continue
+        cid = c.get("id")
+        if cid not in EXECUTABLE_CASE_SPEC["hand_cases"]:
+            continue
+        spec_c = EXECUTABLE_CASE_SPEC["hand_cases"][cid]
+
+        # Check k
+        if "k" in spec_c and c.get("k") != spec_c["k"]:
+            errors.append(f"Case {cid} k mismatch: manifest={c.get('k')} vs spec={spec_c['k']}")
+        if "k_values" in spec_c and c.get("k_values") != spec_c["k_values"]:
+            errors.append(f"Case {cid} k_values mismatch: manifest={c.get('k_values')} vs spec={spec_c['k_values']}")
+
+        # Check expected_count
+        if "expected_count" in spec_c and c.get("expected_count") != spec_c["expected_count"]:
+            errors.append(
+                f"Case {cid} expected_count mismatch: manifest={c.get('expected_count')} vs spec={spec_c['expected_count']}"
+            )
+
+        # Check declared fixtures vs recipes
+        for field in ("query", "data", "data_before", "stream"):
+            if field in spec_c:
+                manifest_val = c.get(field)
+                if manifest_val != spec_c[field]:
+                    errors.append(f"Case {cid} {field} path mismatch: manifest={manifest_val} vs spec={spec_c[field]}")
+                elif manifest_val:
+                    p = REPO_ROOT / manifest_val
+                    if not p.is_file():
+                        errors.append(f"Case {cid} {field} fixture missing on disk: {manifest_val}")
+            elif field in c:
+                errors.append(f"Case {cid} unexpectedly declared {field} in manifest when spec uses python recipe")
+
+        for r_field in ("recipe", "recipe_query", "recipe_data"):
+            if r_field in spec_c and c.get(r_field) != spec_c[r_field]:
+                errors.append(f"Case {cid} {r_field} mismatch: manifest={c.get(r_field)} vs spec={spec_c[r_field]}")
+
+    # 4. Resource guards caps check
+    m_caps = manifest.get("resource_guards", {})
+    s_caps = EXECUTABLE_CASE_SPEC["resource_guards"]
+    for cap_key in ("max_data_vertices", "max_query_vertices", "max_candidates"):
+        if m_caps.get(cap_key) != s_caps[cap_key]:
+            errors.append(
+                f"Resource cap {cap_key} mismatch: manifest={m_caps.get(cap_key)} vs canonical={s_caps[cap_key]}"
+            )
+
+    # 5. Lambda reference topology check
+    m_lambda = manifest.get("lambda_reference", {})
+    s_lambda = EXECUTABLE_CASE_SPEC["lambda_reference"]
+    if set(m_lambda.keys()) != set(s_lambda.keys()):
+        errors.append(
+            f"Lambda reference topologies mismatch: manifest={sorted(m_lambda.keys())} vs spec={sorted(s_lambda.keys())}"
+        )
+    for top_name, top_spec in s_lambda.items():
+        m_top = m_lambda.get(top_name, {})
+        for f_name in ("vertices", "edges", "lambda"):
+            if m_top.get(f_name) != top_spec[f_name]:
+                errors.append(
+                    f"Lambda topology {top_name} {f_name} mismatch: manifest={m_top.get(f_name)} vs spec={top_spec[f_name]}"
+                )
+
+    # 6. Seeded compatibility matrix check
+    m_seed = manifest.get("seeded_compatibility", {})
+    s_seed = EXECUTABLE_CASE_SPEC["seeded_compatibility"]
+    for s_key in (
+        "seed_base",
+        "total_configurations",
+        "min_updates_per_configuration",
+        "total_valid_updates",
+        "data_vertices",
+        "label_modes",
+    ):
+        if m_seed.get(s_key) != s_seed[s_key]:
+            errors.append(f"Seeded compatibility {s_key} mismatch: manifest={m_seed.get(s_key)} vs spec={s_seed[s_key]}")
+    if m_seed.get("configurations") != s_seed["configurations"]:
+        errors.append(
+            f"Seeded compatibility configurations matrix mismatch: manifest={m_seed.get('configurations')} vs spec={s_seed['configurations']}"
+        )
+
+    # 7. Check executed cases match specification
+    executed_hand_ids = {c["case_id"] for c in hand_cases}
+    if executed_hand_ids != spec_hand_set:
+        errors.append(
+            f"Executed hand cases {sorted(executed_hand_ids)} do not match spec {sorted(spec_hand_set)}"
+        )
     executed_lambda_names = {c["topology"] for c in lambda_topologies}
-    missing_lambda = manifest_lambda_names - executed_lambda_names
-    if missing_lambda:
-        errors.append(f"Missing lambda reference topologies: {missing_lambda}")
+    if executed_lambda_names != set(s_lambda.keys()):
+        errors.append(
+            f"Executed lambda topologies {sorted(executed_lambda_names)} do not match spec {sorted(s_lambda.keys())}"
+        )
 
     is_reconciled = (len(errors) == 0)
     return {
         "status": "PASS" if is_reconciled else "FAIL",
-        "manifest_cases_count": len(manifest_hand_ids),
+        "manifest_cases_count": len(manifest_hand_set),
         "executed_cases_count": len(executed_hand_ids),
-        "missing_cases": list(missing_hand),
         "errors": errors,
     }, is_reconciled
 
@@ -927,63 +1221,87 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    run_id = f"{datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')}_{hashlib.sha256(str(time.time()).encode()).hexdigest()[:8]}"
     t_start = time.time()
+    completed_stages: Dict[str, Any] = {}
+    current_stage = "INITIALIZATION"
+    git_meta: Dict[str, Any] = {}
+
     fixtures_dir = REPO_ROOT / "tests" / "fixtures" / "dstar01"
     manifest_path = REPO_ROOT / "configs" / "dstar01_cases.json"
 
-    tracked_source_files = [
-        REPO_ROOT / "scripts" / "dstar_oracle.py",
-        REPO_ROOT / "scripts" / "generate_dstar01_report.py",
-        REPO_ROOT / "tests" / "test_dstar_oracle.py",
-        REPO_ROOT / "tests" / "test_dstar_legacy_compatibility.py",
-        REPO_ROOT / "configs" / "dstar01_cases.json",
-        REPO_ROOT / "docs" / "dstar_problem_contract_v1.md",
-    ]
-    # Add all fixtures to source hashes
-    if fixtures_dir.is_dir():
-        for fix_p in sorted(fixtures_dir.glob("*.json")):
-            tracked_source_files.append(fix_p)
-
-    source_hashes = {str(p.relative_to(REPO_ROOT)): compute_file_sha256(p) for p in tracked_source_files}
-    git_meta = get_git_metadata()
-
-    print("=" * 70)
-    print("DSTAR-01 VERIFICATION SUITE — EXECUTING INDEPENDENT M0 ORACLE CHECKS")
-    print(f"Base SHA: {git_meta['observed_base_sha']}")
-    print(f"Execution HEAD: {git_meta['execution_head_sha']} (dirty={git_meta['is_dirty_at_runtime']})")
-    print(f"Output Target: {args.output}")
-    print("=" * 70)
-
     try:
+        current_stage = "PROVENANCE_AND_HASHING"
+        tracked_source_files = [
+            REPO_ROOT / "scripts" / "dstar_oracle.py",
+            REPO_ROOT / "scripts" / "generate_dstar01_report.py",
+            REPO_ROOT / "tests" / "test_dstar_oracle.py",
+            REPO_ROOT / "tests" / "test_dstar_legacy_compatibility.py",
+            REPO_ROOT / "tests" / "test_dstar_report_generator.py",
+            REPO_ROOT / "configs" / "dstar01_cases.json",
+            REPO_ROOT / "docs" / "dstar_problem_contract_v1.md",
+        ]
+        if fixtures_dir.is_dir():
+            for fix_p in sorted(fixtures_dir.glob("*.json")):
+                tracked_source_files.append(fix_p)
+
+        source_hashes = {str(p.relative_to(REPO_ROOT)): compute_file_sha256(p) for p in tracked_source_files}
+        git_meta = get_git_metadata()
+
+        print("=" * 70)
+        print("DSTAR-01 VERIFICATION SUITE — EXECUTING INDEPENDENT M0 ORACLE CHECKS")
+        print(f"Run ID: {run_id}")
+        print(f"Historical Base: {git_meta['configured_historical_base_sha']}")
+        print(f"Execution HEAD: {git_meta['execution_head_sha']} (dirty={git_meta['is_dirty_at_runtime']})")
+        print(f"Output Target: {args.output}")
+        print("=" * 70)
+
         # 1. Hand cases A-L
+        current_stage = "HAND_CASES"
         hand_cases, hand_ok = run_hand_cases(fixtures_dir)
+        completed_stages["hand_cases"] = hand_cases
         print(f"[1/7] Hand cases A-L: {'PASS' if hand_ok else 'FAIL'} ({len(hand_cases)} cases)")
 
         # 2. Lambda connectivity
+        current_stage = "LAMBDA_CHECKS"
         lambda_cases, lambda_ok = run_lambda_checks()
+        completed_stages["lambda_topologies"] = lambda_cases
         print(f"[2/7] Lambda(Q) reference checks: {'PASS' if lambda_ok else 'FAIL'} ({len(lambda_cases)} topologies)")
 
         # 3. Atomic invalid updates
+        current_stage = "ATOMIC_UPDATES"
         atomic_cases, atomic_ok = run_atomic_update_checks(fixtures_dir)
+        completed_stages["atomic_checks"] = atomic_cases
         print(f"[3/7] Atomic invalid updates: {'PASS' if atomic_ok else 'FAIL'} ({len(atomic_cases)} checks)")
 
         # 4. Legacy compatibility matrix
+        current_stage = "LEGACY_MATRIX"
         legacy_matrix, legacy_ok = run_legacy_compatibility_matrix()
+        completed_stages["legacy_compatibility"] = legacy_matrix
         print(
             f"[4/7] Legacy compatibility (56 configs, 224 updates): {'PASS' if legacy_ok else 'FAIL'} "
             f"(Entered events={legacy_matrix['total_entered_events']}, Exited events={legacy_matrix['total_exited_events']})"
         )
 
         # 5. Boundary diagnostics
+        current_stage = "BOUNDARY_DIAGNOSTICS"
         boundary_diag, boundary_ok = run_boundary_diagnostics(fixtures_dir)
-        print(f"[5/7] Boundary diagnostics (|R|=k anchor matrix): {'PASS' if boundary_ok else 'FAIL'} ({len(boundary_diag['cases'])} cases)")
+        completed_stages["boundary_diagnostics"] = boundary_diag
+        print(
+            f"[5/7] Boundary diagnostics (|R|=k anchor matrix): {'PASS' if boundary_ok else 'FAIL'} "
+            f"({len(boundary_diag['cases'])} cases, covering k=0 and k=1)"
+        )
 
         # 6. Resource guard checks
+        current_stage = "RESOURCE_GUARDS"
         resource_cases, resource_ok = run_resource_guard_checks()
+        completed_stages["resource_guards"] = resource_cases
         print(f"[6/7] Resource guard checks: {'PASS' if resource_ok else 'FAIL'} ({len(resource_cases)} checks)")
 
         # 7. Manifest reconciliation
+        current_stage = "MANIFEST_RECONCILIATION"
         manifest_res, manifest_ok = reconcile_manifest(manifest_path, hand_cases, lambda_cases)
+        completed_stages["manifest_reconciliation"] = manifest_res
         print(f"[7/7] Manifest reconciliation: {'PASS' if manifest_ok else 'FAIL'}")
 
         all_passed = (
@@ -996,8 +1314,6 @@ def main() -> None:
             and manifest_ok
         )
         t_elapsed = time.time() - t_start
-
-        run_id = f"{datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')}_{hashlib.sha256(str(time.time()).encode()).hexdigest()[:8]}"
 
         report_data = {
             "contract_version": "dstar-v1.0",
@@ -1057,18 +1373,23 @@ def main() -> None:
             sys.exit(1)
 
     except Exception as e:
-        print(f"[FATAL] Uncaught exception during report generation: {e}", file=sys.stderr)
+        print(f"[FATAL] Uncaught exception during report generation in stage '{current_stage}': {e}", file=sys.stderr)
         err_report = {
             "contract_version": "dstar-v1.0",
+            "run_id": run_id,
             "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "overall_status": "ERROR",
             "fatal_error": str(e),
+            "failing_stage": current_stage,
+            "partial_results": completed_stages,
             "provenance": git_meta,
         }
         try:
             args.output.parent.mkdir(parents=True, exist_ok=True)
-            with open(args.output, "w", encoding="utf-8") as f:
+            tmp_err = args.output.with_suffix(".tmp")
+            with open(tmp_err, "w", encoding="utf-8") as f:
                 json.dump(err_report, f, indent=2)
+            tmp_err.replace(args.output)
         except Exception:
             pass
         sys.exit(1)
