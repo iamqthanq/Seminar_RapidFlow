@@ -1,0 +1,126 @@
+{
+  "contract_version": "dstar-v1.0",
+  "seed_base": 20261117,
+  "resource_guards": {
+    "max_data_vertices": 8,
+    "max_query_vertices": 6,
+    "max_candidates": 100000
+  },
+  "lambda_reference": {
+    "P4": {"vertices": 4, "edges": 3, "lambda": 1},
+    "Star4": {"vertices": 4, "edges": 3, "lambda": 1},
+    "C4": {"vertices": 4, "edges": 4, "lambda": 2},
+    "C6": {"vertices": 6, "edges": 6, "lambda": 2},
+    "Diamond": {"vertices": 4, "edges": 5, "lambda": 2},
+    "K4": {"vertices": 4, "edges": 6, "lambda": 3},
+    "K3_3": {"vertices": 6, "edges": 9, "lambda": 3}
+  },
+  "hand_cases": [
+    {
+      "id": "CASE_HAND_A",
+      "description": "Exact recovery k=0 with extra chord/tail",
+      "recipe": "python:triangle_k3_with_tail",
+      "k": 0,
+      "expected_count": 6
+    },
+    {
+      "id": "CASE_HAND_B",
+      "description": "Extra internal chord does not invalidate non-induced match",
+      "query": "tests/fixtures/dstar01/hand_c4_query.json",
+      "data": "tests/fixtures/dstar01/hand_c4_data_chord.json",
+      "k": 0,
+      "expected_count": 8
+    },
+    {
+      "id": "CASE_HAND_C",
+      "description": "External incident tail does not penalize edge recall",
+      "query": "tests/fixtures/dstar01/hand_diamond_query.json",
+      "recipe_data": "python:diamond_external_tail",
+      "k": 1,
+      "expected_match": [1, 2, 3, 4]
+    },
+    {
+      "id": "CASE_HAND_D",
+      "description": "Non-injective mapping rejected",
+      "recipe_query": "python:p2",
+      "recipe_data": "python:v10",
+      "k": 0,
+      "expected_rejected": "NON_INJECTIVE"
+    },
+    {
+      "id": "CASE_HAND_E",
+      "description": "Vertex label mismatch rejected",
+      "recipe_query": "python:edge_ab",
+      "recipe_data": "python:edge_ac",
+      "k": 0,
+      "expected_rejected": "VERTEX_LABEL_MISMATCH"
+    },
+    {
+      "id": "CASE_HAND_F",
+      "description": "Edge label mismatch counted as missing edge in R(f)",
+      "recipe_query": "python:triangle_k3",
+      "recipe_data": "python:triangle_k3_label_mismatch",
+      "k_values": [0, 1]
+    },
+    {
+      "id": "CASE_HAND_G",
+      "description": "Sparse/non-contiguous query vertex IDs preserve ascending tuple order",
+      "query": "tests/fixtures/dstar01/hand_sparse_query.json",
+      "data": "tests/fixtures/dstar01/hand_sparse_data.json",
+      "k": 0,
+      "expected_matches": [[100, 200, 300]]
+    },
+    {
+      "id": "CASE_HAND_H",
+      "description": "Full K4 query and K4 data automorphism yields exactly 24 ordered tuples",
+      "query": "tests/fixtures/dstar01/hand_k4_query.json",
+      "data": "tests/fixtures/dstar01/hand_k4_data.json",
+      "k": 0,
+      "expected_count": 24
+    },
+    {
+      "id": "CASE_HAND_I",
+      "description": "Diamond event: insert bridge triggers ENTERED; delete bridge triggers EXITED",
+      "query": "tests/fixtures/dstar01/hand_diamond_query.json",
+      "data_before": "tests/fixtures/dstar01/hand_diamond_data_before.json",
+      "stream": "tests/fixtures/dstar01/hand_diamond_stream_event.json",
+      "k": 1
+    },
+    {
+      "id": "CASE_HAND_J",
+      "description": "Diamond no-event: deleting edge leaves mapping within budget (no SCORE_CHANGED)",
+      "query": "tests/fixtures/dstar01/hand_diamond_query.json",
+      "data_before": "tests/fixtures/dstar01/hand_diamond_data_full.json",
+      "stream": "tests/fixtures/dstar01/hand_diamond_stream_no_event.json",
+      "k": 1
+    },
+    {
+      "id": "CASE_HAND_K",
+      "description": "Unrelated edge update produces no entered or exited events",
+      "query": "tests/fixtures/dstar01/hand_diamond_query.json",
+      "recipe_data": "python:diamond_unrelated",
+      "k": 1
+    },
+    {
+      "id": "CASE_HAND_L",
+      "description": "S1 vs S2: G[image] connected via extra chord, but matched Q-edges disconnected",
+      "query": "tests/fixtures/dstar01/hand_s1_vs_s2_query.json",
+      "data": "tests/fixtures/dstar01/hand_s1_vs_s2_data.json",
+      "k": 1,
+      "expected_public_rejection": true
+    }
+  ],
+  "seeded_compatibility": {
+    "seed_base": 20261117,
+    "configurations": [
+      {"query": "C4", "k_values": [0, 1], "seeds_per_k": 8},
+      {"query": "Diamond", "k_values": [0, 1], "seeds_per_k": 8},
+      {"query": "K4", "k_values": [0, 1, 2], "seeds_per_k": 8}
+    ],
+    "total_configurations": 56,
+    "min_updates_per_configuration": 4,
+    "total_valid_updates": 224,
+    "data_vertices": 6,
+    "label_modes": ["uniform", "mixed"]
+  }
+}
