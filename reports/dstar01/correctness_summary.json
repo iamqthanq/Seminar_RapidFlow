@@ -1,7 +1,8 @@
 {
   "contract_version": "dstar-v1.0",
-  "timestamp": "2026-11-17T15:42:03.113013+00:00",
-  "runtime_seconds": 1.4932,
+  "run_id": "20261117T163048Z_9055de2e",
+  "timestamp": "2026-11-17T16:30:48.487095+00:00",
+  "runtime_seconds": 1.6254,
   "environment": {
     "platform": "Linux-7.0.0-42-generic-x86_64-with-glibc2.39",
     "python_version": "3.12.3",
@@ -9,17 +10,32 @@
   },
   "provenance": {
     "observed_base_sha": "89f65b1490ba2e31d8b599d295065dbe694460aa",
-    "execution_head_sha": "89f65b1490ba2e31d8b599d295065dbe694460aa",
+    "merge_base_sha": "89f65b1490ba2e31d8b599d295065dbe694460aa",
+    "execution_head_sha": "d9da5cfba8983436a8ef41058cc3b46286d48ac1",
     "is_dirty_at_runtime": true,
     "branch": "feature/rf22-dstar01-foundation",
     "source_hashes": {
-      "scripts/dstar_oracle.py": "a3cbfcbd3433a4854a7e3271badc1ae2e0362d7ed0ce697fe9e4825861199054",
-      "tests/test_dstar_oracle.py": "dcff44f371ed832d57e337158240b155d1752023fe0609f8fb3b6bda270f8c71",
+      "scripts/dstar_oracle.py": "ed683981167c353954c8056f60060f8e9a209fed1864f773750d6d4a126c81ae",
+      "scripts/generate_dstar01_report.py": "bf79fef5e99f695e6b07cd96199d7d1a2e301d8758f74de6864b7dffdf6e5909",
+      "tests/test_dstar_oracle.py": "733e818f7e867c802284eb9e4d230867e17dd336514f99f0a95e1814559e2064",
       "tests/test_dstar_legacy_compatibility.py": "e72b3b4b13ea84d56267f01ec545e174d7172edd2e3b31e37cc51b034a81b097",
       "configs/dstar01_cases.json": "9fc971ccd445a33ecab7a6e7a7e15efd6a60a8c8ededc7d649bf43976594fc51",
-      "docs/dstar_problem_contract_v1.md": "3a86a5f2ef9908bcf28cfdc4ddaba71ff62ced75804340944892dd0fc0c1573c"
+      "docs/dstar_problem_contract_v1.md": "092ca81fb155f14f3b8179403c0f67fbf889e5a38924fc75b0d6bf78b3e824f1",
+      "tests/fixtures/dstar01/hand_c4_data_chord.json": "688c059b3f11369dc83bf428201422b380670837af0801d341294d1e50cb0d5b",
+      "tests/fixtures/dstar01/hand_c4_query.json": "6db4d8692e1c60f9a3ac0ba34dee059feded049e37ef60b747eaefa3057431ed",
+      "tests/fixtures/dstar01/hand_diamond_data_before.json": "f49c75853efdd92dc03a9ccc277e2392f5bd091786727b393c783c161a6257d1",
+      "tests/fixtures/dstar01/hand_diamond_data_full.json": "e8228d49e90850ac9e97faff33abd889298f3ea0285ba172b2f439a84facf5c1",
+      "tests/fixtures/dstar01/hand_diamond_query.json": "e8228d49e90850ac9e97faff33abd889298f3ea0285ba172b2f439a84facf5c1",
+      "tests/fixtures/dstar01/hand_diamond_stream_event.json": "27035851cc726eb975aae0aa62abab6af3d92907b23040ec3910d28834a1190d",
+      "tests/fixtures/dstar01/hand_diamond_stream_no_event.json": "fa0401fc591643a5fd554f0f9721ae7ebba09eee8105b27b54140362cf133f7d",
+      "tests/fixtures/dstar01/hand_k4_data.json": "a0e33bf7814be194e2df40cb018a3f2d6a9e7ee356fd1016d4715f4fe33ab983",
+      "tests/fixtures/dstar01/hand_k4_query.json": "5201f240672cd39c472553b18a706f526f7fc064cb5bf2446ebd9b56487b3094",
+      "tests/fixtures/dstar01/hand_s1_vs_s2_data.json": "8e17c01b0b549f2645e52c4c363711cc196914b376f3db68eae83dad8c2a875f",
+      "tests/fixtures/dstar01/hand_s1_vs_s2_query.json": "b808a47935b1a9672af2da7944afe962ad14e599391266a363e4d157cdc9b0b1",
+      "tests/fixtures/dstar01/hand_sparse_data.json": "37c8eb69a7a37c1fcb8e79c5149e16d100923aff4c55adf0019125b1f056022a",
+      "tests/fixtures/dstar01/hand_sparse_query.json": "5c4e09d62cbd462d9ce6e4ec385d1d71f6d688f3f91f86092cb1b57217e7ea60"
     },
-    "invocation": "python3 scripts/generate_dstar01_report.py"
+    "invocation": "python3 scripts/generate_dstar01_report.py --output /home/iamqthanq/Desktop/Seminar_RapidFlow_DSTAR01/reports/dstar01/correctness_summary.json"
   },
   "overall_status": "PASS",
   "summary": {
@@ -35,7 +51,9 @@
     "legacy_exited_events": 39,
     "legacy_entered_tuples": 1148,
     "legacy_exited_tuples": 978,
-    "boundary_diagnostics_status": "PASS"
+    "boundary_diagnostics_status": "PASS",
+    "resource_guards_status": "PASS",
+    "manifest_reconciliation_status": "PASS"
   },
   "hand_cases": [
     {
@@ -140,11 +158,12 @@
     },
     {
       "case_id": "CASE_HAND_L",
-      "name": "S1 vs S2 distinction: G[image] connected via chord, but matched Q-edges disconnected",
+      "name": "S1 vs S2 distinction & public out-of-domain rejection",
       "status": "PASS",
-      "s1_connected": true,
-      "s2_connected": false,
-      "accepted": false
+      "public_rejected_properly": true,
+      "diagnostic_s1": true,
+      "diagnostic_s2": false,
+      "in_mvp_domain": false
     }
   ],
   "lambda_topologies": [
@@ -239,15 +258,79 @@
   ],
   "boundary_diagnostics": {
     "status": "PASS",
-    "insert_property_holds": true,
-    "delete_property_holds": true,
-    "insert_event_count": 1,
-    "delete_event_count": 1
+    "cases": [
+      {
+        "name": "INSERT_bridge_event_k1",
+        "status": "PASS",
+        "property_holds": true
+      },
+      {
+        "name": "DELETE_bridge_event_k1",
+        "status": "PASS",
+        "property_holds": true
+      },
+      {
+        "name": "INSERT_reverse_orientation_k1",
+        "status": "PASS",
+        "property_holds": true
+      },
+      {
+        "name": "DELETE_within_threshold_no_event_k1",
+        "status": "PASS",
+        "property_holds": true
+      },
+      {
+        "name": "INSERT_wrong_label_anchor_k1",
+        "status": "PASS",
+        "property_holds": true
+      }
+    ]
+  },
+  "resource_guards": [
+    {
+      "check": "oversized_query_guard",
+      "status": "PASS",
+      "message": "Query size 7 exceeds max allowed (6)"
+    },
+    {
+      "check": "oversized_data_guard",
+      "status": "PASS",
+      "message": "Data graph size 9 exceeds max allowed (8)"
+    },
+    {
+      "check": "candidate_bound_guard",
+      "status": "PASS",
+      "message": "Candidate injection bound 20160 exceeds limit 1000"
+    },
+    {
+      "check": "invalid_cap_-1",
+      "status": "PASS"
+    },
+    {
+      "check": "invalid_cap_0",
+      "status": "PASS"
+    },
+    {
+      "check": "invalid_cap_True",
+      "status": "PASS"
+    },
+    {
+      "check": "invalid_cap_2.5",
+      "status": "PASS"
+    }
+  ],
+  "manifest_reconciliation": {
+    "status": "PASS",
+    "manifest_cases_count": 12,
+    "executed_cases_count": 12,
+    "missing_cases": [],
+    "errors": []
   },
   "legacy_compatibility": {
-    "status": "PASS",
     "total_configurations": 56,
     "total_updates": 224,
+    "total_insert_updates": 105,
+    "total_delete_updates": 119,
     "total_entered_events": 41,
     "total_exited_events": 39,
     "total_entered_tuples": 1148,
@@ -925,6 +1008,8 @@
         "exited_tuples": 48,
         "status": "PASS"
       }
-    ]
+    ],
+    "status": "PASS",
+    "failure_reasons": []
   }
 }

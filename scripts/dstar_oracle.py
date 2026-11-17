@@ -22,6 +22,11 @@ import sys
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, FrozenSet, Iterable, List, Optional, Sequence, Set, Tuple
 
+# Default resource caps as specified in Issue #22
+DEFAULT_MAX_DATA_VERTICES = 8
+DEFAULT_MAX_QUERY_VERTICES = 6
+DEFAULT_MAX_CANDIDATES = 100000
+
 
 # ============================================================================
 # Exceptions (Strict, Atomic & Fail-Closed)
@@ -78,14 +83,70 @@ class UnsupportedOperationError(DStarError):
 
 
 # ============================================================================
+# Validation Helpers
+# ============================================================================
+
+def validate_vertex_id(v: Any) -> int:
+    """Strictly validates that a vertex ID is an integer (rejecting bool, float, str, None)."""
+    if isinstance(v, bool) or not isinstance(v, int):
+        raise InvalidGraphError(f"Vertex ID must be an integer, got {type(v).__name__}: {v!r}")
+    return v
+
+
+def validate_label(lbl: Any, field_name: str = "Label") -> Any:
+    """Strictly validates that a label is int or str (rejecting bool, None, float, list, dict)."""
+    if isinstance(lbl, bool) or not isinstance(lbl, (int, str)):
+        raise InvalidGraphError(f"{field_name} must be an int or str, got {type(lbl).__name__}: {lbl!r}")
+    return lbl
+
+
+def parse_vertex_id_string(s: Any) -> int:
+    """
+    Parses a vertex ID from a JSON object string key.
+    Strictly accepts canonical integer representations like '0', '1', '-2'.
+    Rejects floats ('1.5'), bool ('True'), empty string, leading zeros ('01', '-0').
+    """
+    if not isinstance(s, str):
+        raise InvalidGraphError(f"Dict key for vertex ID must be a string, got {type(s).__name__}: {s!r}")
+    if not s:
+        raise InvalidGraphError("Empty string cannot be a vertex ID")
+    if s != "0" and s.startswith("0"):
+        raise InvalidGraphError(f"Invalid integer string format (leading zero forbidden): {s!r}")
+    if s.startswith("-0"):
+        raise InvalidGraphError(f"Invalid integer string format (-0 forbidden): {s!r}")
+    try:
+        val = int(s)
+    except ValueError:
+        raise InvalidGraphError(f"Cannot parse vertex ID from string: {s!r}")
+    if str(val) != s:
+        raise InvalidGraphError(f"Non-canonical integer string in vertex key: {s!r}")
+    return val
+
+
+def validate_resource_caps(
+    max_candidates: int,
+    max_data_vertices: int,
+    max_query_vertices: int,
+) -> None:
+    """Validates that resource safety caps are positive finite integers (rejecting bool, float, nonpositive)."""
+    for name, val in [
+        ("max_candidates", max_candidates),
+        ("max_data_vertices", max_data_vertices),
+        ("max_query_vertices", max_query_vertices),
+    ]:
+        if isinstance(val, bool) or not isinstance(val, int) or val <= 0:
+            raise ResourceLimitError(f"{name} must be a positive integer, got {type(val).__name__}: {val!r}")
+
+
+# ============================================================================
 # Graph Data Structure
 # ============================================================================
 
 class DStarGraph:
     """
     Undirected, simple, labeled graph representation using Python stdlib.
-    Vertices have immutable IDs and labels.
-    Edges are stored canonically as (min(u, v), max(u, v)).
+    Vertices have immutable IDs (int) and labels (int or str).
+    Edges are stored canonically as (min(u, v), max(u, v)) -> label.
     """
 
     def __init__(self) -> None:
@@ -94,55 +155,67 @@ class DStarGraph:
         self.adj: Dict[int, Dict[int, Any]] = {}
 
     def add_vertex(self, v: int, label: Any) -> None:
-        if isinstance(v, bool) or not isinstance(v, int):
-            raise InvalidGraphError(f"Vertex ID must be an integer, got {type(v).__name__}: {v}")
-        if v in self.vertices:
-            if self.vertices[v] != label:
-                raise InvalidGraphError(f"Conflicting label for vertex {v}: {self.vertices[v]} vs {label}")
+        v_id = validate_vertex_id(v)
+        lbl = validate_label(label, "Vertex label")
+        if v_id in self.vertices:
+            if self.vertices[v_id] != lbl:
+                raise InvalidGraphError(f"Conflicting label for vertex {v_id}: {self.vertices[v_id]!r} vs {lbl!r}")
             return
-        self.vertices[v] = label
-        self.adj[v] = {}
+        self.vertices[v_id] = lbl
+        self.adj[v_id] = {}
 
     def add_edge(self, u: int, v: int, label: Any) -> None:
-        if u == v:
-            raise SelfLoopError(f"Self-loops are forbidden: ({u}, {v})")
-        if u not in self.vertices:
-            raise UnknownVertexError(f"Undeclared endpoint vertex {u}")
-        if v not in self.vertices:
-            raise UnknownVertexError(f"Undeclared endpoint vertex {v}")
+        u_id = validate_vertex_id(u)
+        v_id = validate_vertex_id(v)
+        lbl = validate_label(label, "Edge label")
 
-        edge_key = (min(u, v), max(u, v))
+        if u_id == v_id:
+            raise SelfLoopError(f"Self-loops are forbidden: ({u_id}, {v_id})")
+        if u_id not in self.vertices:
+            raise UnknownVertexError(f"Undeclared endpoint vertex {u_id}")
+        if v_id not in self.vertices:
+            raise UnknownVertexError(f"Undeclared endpoint vertex {v_id}")
+
+        edge_key = (min(u_id, v_id), max(u_id, v_id))
         if edge_key in self.edges:
             raise DuplicateEdgeInsertionError(f"Edge {edge_key} already exists in graph")
 
-        self.edges[edge_key] = label
-        self.adj[u][v] = label
-        self.adj[v][u] = label
+        self.edges[edge_key] = lbl
+        self.adj[u_id][v_id] = lbl
+        self.adj[v_id][u_id] = lbl
 
-    def remove_edge(self, u: int, v: int, label: Optional[Any] = None) -> None:
-        if u not in self.vertices:
-            raise UnknownVertexError(f"Endpoint vertex {u} not in graph")
-        if v not in self.vertices:
-            raise UnknownVertexError(f"Endpoint vertex {v} not in graph")
+    def remove_edge(self, u: int, v: int, label: Any) -> None:
+        u_id = validate_vertex_id(u)
+        v_id = validate_vertex_id(v)
+        lbl = validate_label(label, "Edge label")
 
-        edge_key = (min(u, v), max(u, v))
-        if edge_key not in self.edges:
+        if u_id not in self.vertices:
+            raise UnknownVertexError(f"Endpoint vertex {u_id} not in graph")
+        if v_id not in self.vertices:
+            raise UnknownVertexError(f"Endpoint vertex {v_id} not in graph")
+
+        edge_key = (min(u_id, v_id), max(u_id, v_id))
+        if not self.has_edge(u_id, v_id):
             raise NonexistentEdgeDeletionError(f"Edge {edge_key} does not exist in graph")
 
         existing_label = self.edges[edge_key]
-        if label is not None and existing_label != label:
+        if existing_label != lbl:
             raise EdgeLabelMismatchDeletionError(
-                f"Edge {edge_key} has label {existing_label!r}, delete requested {label!r}"
+                f"Edge {edge_key} has label {existing_label!r}, delete requested {lbl!r}"
             )
 
         del self.edges[edge_key]
-        del self.adj[u][v]
-        del self.adj[v][u]
+        del self.adj[u_id][v_id]
+        del self.adj[v_id][u_id]
 
     def has_edge(self, u: int, v: int) -> bool:
+        if isinstance(u, bool) or not isinstance(u, int) or isinstance(v, bool) or not isinstance(v, int):
+            return False
         return (min(u, v), max(u, v)) in self.edges
 
     def get_edge_label(self, u: int, v: int) -> Optional[Any]:
+        if isinstance(u, bool) or not isinstance(u, int) or isinstance(v, bool) or not isinstance(v, int):
+            return None
         return self.edges.get((min(u, v), max(u, v)))
 
     def degree(self, v: int) -> int:
@@ -161,7 +234,6 @@ class DStarGraph:
         if n < 2:
             raise InvalidGraphError(f"Query must have at least 2 vertices, got {n}")
 
-        # Check connectivity
         if not is_connected_graph(set(self.vertices.keys()), self.edges.keys()):
             raise InvalidGraphError("Query graph must be connected")
 
@@ -172,37 +244,69 @@ class DStarGraph:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "vertices": {str(v): lbl for v, lbl in self.vertices.items()},
-            "edges": [{"u": u, "v": v, "label": lbl} for (u, v), lbl in self.edges.items()],
+            "vertices": {str(v): lbl for v, lbl in sorted(self.vertices.items())},
+            "edges": [{"u": u, "v": v, "label": lbl} for (u, v), lbl in sorted(self.edges.items())],
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> DStarGraph:
+    def from_dict(cls, data: Any) -> DStarGraph:
+        if not isinstance(data, dict):
+            raise InvalidGraphError(f"Graph data must be a dict, got {type(data).__name__}")
+
         g = cls()
-        raw_vertices = data.get("vertices", {})
+        if "vertices" not in data:
+            raise InvalidGraphError("Missing required field 'vertices' in graph dict")
+        raw_vertices = data["vertices"]
+
         if isinstance(raw_vertices, dict):
+            seen_ids: Set[int] = set()
             for v_str, lbl in raw_vertices.items():
-                g.add_vertex(int(v_str), lbl)
+                v_id = parse_vertex_id_string(v_str)
+                if v_id in seen_ids:
+                    raise InvalidGraphError(f"Collision in vertex ID normalization: {v_id}")
+                seen_ids.add(v_id)
+                g.add_vertex(v_id, lbl)
         elif isinstance(raw_vertices, list):
+            seen_ids = set()
             for item in raw_vertices:
                 if isinstance(item, dict):
-                    g.add_vertex(int(item["id"]), item["label"])
+                    if "id" not in item:
+                        raise InvalidGraphError("Missing required field 'id' in vertex spec")
+                    if "label" not in item:
+                        raise InvalidGraphError("Missing required field 'label' in vertex spec")
+                    v_id = validate_vertex_id(item["id"])
+                    lbl = item["label"]
                 elif isinstance(item, (list, tuple)) and len(item) == 2:
-                    g.add_vertex(int(item[0]), item[1])
+                    v_id = validate_vertex_id(item[0])
+                    lbl = item[1]
                 else:
-                    raise InvalidGraphError(f"Invalid vertex spec: {item}")
+                    raise InvalidGraphError(f"Invalid vertex spec in list: {item!r}")
+                if v_id in seen_ids:
+                    raise InvalidGraphError(f"Duplicate vertex ID in vertex list: {v_id}")
+                seen_ids.add(v_id)
+                g.add_vertex(v_id, lbl)
         else:
-            raise InvalidGraphError(f"Unexpected vertices type: {type(raw_vertices)}")
+            raise InvalidGraphError(f"Unexpected vertices type: {type(raw_vertices).__name__}")
 
-        raw_edges = data.get("edges", [])
+        if "edges" not in data:
+            raise InvalidGraphError("Missing required field 'edges' in graph dict")
+        raw_edges = data["edges"]
+        if not isinstance(raw_edges, list):
+            raise InvalidGraphError(f"Edges must be a list, got {type(raw_edges).__name__}")
+
         for e in raw_edges:
             if isinstance(e, dict):
-                g.add_edge(int(e["u"]), int(e["v"]), e.get("label", 0))
-            elif isinstance(e, (list, tuple)) and len(e) >= 2:
-                lbl = e[2] if len(e) >= 3 else 0
-                g.add_edge(int(e[0]), int(e[1]), lbl)
+                if "u" not in e or "v" not in e:
+                    raise InvalidGraphError("Missing required endpoint fields 'u' or 'v' in edge spec")
+                if "label" not in e:
+                    raise InvalidGraphError("Missing required field 'label' in edge spec")
+                g.add_edge(e["u"], e["v"], e["label"])
+            elif isinstance(e, (list, tuple)):
+                if len(e) != 3:
+                    raise InvalidGraphError(f"Edge tuple must have exactly 3 elements (u, v, label), got len {len(e)}: {e!r}")
+                g.add_edge(e[0], e[1], e[2])
             else:
-                raise InvalidGraphError(f"Invalid edge spec: {e}")
+                raise InvalidGraphError(f"Invalid edge spec: {e!r}")
         return g
 
 
@@ -258,11 +362,9 @@ def is_spanning_connected(V: Set[int], edges: Iterable[Tuple[int, int]]) -> bool
             adj[u].append(v)
             adj[v].append(u)
 
-    # Must span all of V
     if incident_vertices != V:
         return False
 
-    # Must be connected
     start = next(iter(V))
     visited: Set[int] = {start}
     queue: List[int] = [start]
@@ -276,18 +378,21 @@ def is_spanning_connected(V: Set[int], edges: Iterable[Tuple[int, int]]) -> bool
     return len(visited) == len(V)
 
 
-def compute_edge_connectivity(graph: DStarGraph) -> int:
+def compute_edge_connectivity(graph: DStarGraph, max_query_vertices: int = DEFAULT_MAX_QUERY_VERTICES) -> int:
     """
-    Computes the global edge connectivity lambda(Q) by brute-force cut enumeration.
-    Exact, standard library only, valid for small query graphs (|V_Q| <= 10).
-    lambda(Q) = min_{emptyset != S subset V_Q} |cut(S, V_Q \\ S)|
+    Computes global edge connectivity lambda(Q) by brute-force cut enumeration.
+    Enforces max_query_vertices cap BEFORE performing exponential cut calculation.
+    Exact, standard library only, valid for small query graphs.
     """
     nodes = list(graph.vertices.keys())
     n = len(nodes)
+    if n > max_query_vertices:
+        raise ResourceLimitError(
+            f"Query vertex count {n} exceeds max_query_vertices cap ({max_query_vertices})"
+        )
     if n < 2:
         return 0
 
-    # If already disconnected, connectivity is 0
     if not is_connected_graph(set(nodes), graph.edges.keys()):
         return 0
 
@@ -295,15 +400,12 @@ def compute_edge_connectivity(graph: DStarGraph) -> int:
     fixed_v = nodes[0]
     other_nodes = nodes[1:]
 
-    # Partition V into S (containing fixed_v) and V \ S.
-    # S can have size from 1 to n - 1.
     for r in range(0, n - 1):
         for combo in itertools.combinations(other_nodes, r):
             S = set(combo)
             S.add(fixed_v)
             if len(S) == n:
                 continue
-            # Count edges crossing cut (S, V \ S)
             cut_size = 0
             for (u, v) in graph.edges.keys():
                 if (u in S and v not in S) or (v in S and u not in S):
@@ -331,31 +433,20 @@ class MappingEvaluation:
     reject_reasons: List[str]
 
 
-def evaluate_mapping(
+def _score_mapping_internal(
     Q: DStarGraph,
     G: DStarGraph,
     mapping: Sequence[int],
     k: int,
-    enforce_k_bound: bool = True,
+    q_nodes: Optional[List[int]] = None,
 ) -> MappingEvaluation:
     """
-    Evaluates mapping f: V_Q -> V_G where query vertices are sorted in canonical ascending order.
-    mapping[i] = f(q_i) for q_i in sorted(V_Q).
+    Internal fast mapping scorer for pre-validated inputs.
+    Scores R(f), checks S2 (matched query edges) and diagnostic S1 (data induced edges).
     """
-    q_nodes = sorted(Q.vertices.keys())
+    if q_nodes is None:
+        q_nodes = sorted(Q.vertices.keys())
     n = len(q_nodes)
-
-    if isinstance(k, bool) or not isinstance(k, int):
-        raise InvalidThresholdError(f"k must be an integer, got {type(k).__name__}: {k}")
-    if k < 0:
-        raise InvalidThresholdError(f"k cannot be negative: {k}")
-
-    if enforce_k_bound:
-        lam = compute_edge_connectivity(Q)
-        if k >= lam:
-            raise InvalidThresholdError(
-                f"k={k} violates contract precondition k < lambda(Q) (lambda={lam})"
-            )
 
     if len(mapping) != n:
         raise ValueError(f"Mapping length ({len(mapping)}) does not match query size ({n})")
@@ -364,6 +455,9 @@ def evaluate_mapping(
 
     # 1. Injectivity check
     mapped_nodes = list(mapping)
+    for v in mapped_nodes:
+        validate_vertex_id(v)
+
     is_injective = (len(set(mapped_nodes)) == n)
     if not is_injective:
         reject_reasons.append("NON_INJECTIVE")
@@ -381,7 +475,7 @@ def evaluate_mapping(
         elif G.vertices[g_v] != Q.vertices[q_u]:
             vertex_labels_ok = False
             reject_reasons.append(
-                f"VERTEX_LABEL_MISMATCH:q{q_u}({Q.vertices[q_u]})!=g{g_v}({G.vertices[g_v]})"
+                f"VERTEX_LABEL_MISMATCH:q{q_u}({Q.vertices[q_u]!r})!=g{g_v}({G.vertices[g_v]!r})"
             )
 
     # 3. Query edge matching & missing edge set R(f)
@@ -393,13 +487,14 @@ def evaluate_mapping(
         if v1 == v2:
             r_edges.append((u1, u2))
             continue
-        g_label = G.get_edge_label(v1, v2)
-        if g_label is None:
-            r_edges.append((u1, u2))
-        elif g_label != q_label:
+        if not G.has_edge(v1, v2):
             r_edges.append((u1, u2))
         else:
-            matched_q_edges.append((u1, u2))
+            g_label = G.get_edge_label(v1, v2)
+            if g_label != q_label:
+                r_edges.append((u1, u2))
+            else:
+                matched_q_edges.append((u1, u2))
 
     r_count = len(r_edges)
     m = len(Q.edges)
@@ -418,7 +513,6 @@ def evaluate_mapping(
                     s1_edges.append((v1, v2))
     s1_connected = is_connected_graph(img_V, s1_edges)
 
-    # Acceptance predicate
     accepted = True
     if not is_injective:
         accepted = False
@@ -443,6 +537,91 @@ def evaluate_mapping(
     )
 
 
+def evaluate_mapping(
+    Q: DStarGraph,
+    G: DStarGraph,
+    mapping: Sequence[int],
+    k: int,
+) -> MappingEvaluation:
+    """
+    PUBLIC MVP mapping acceptance evaluation.
+    ALWAYS validates Q, G, and strictly enforces 0 <= k < lambda(Q).
+    Rejects out-of-domain k >= lambda(Q) with InvalidThresholdError.
+    NO BYPASS ALLOWED.
+    """
+    if isinstance(k, bool) or not isinstance(k, int):
+        raise InvalidThresholdError(f"k must be an integer, got {type(k).__name__}: {k!r}")
+    if k < 0:
+        raise InvalidThresholdError(f"k cannot be negative: {k}")
+
+    Q.validate_as_query()
+    G.validate_as_data()
+
+    lam = compute_edge_connectivity(Q)
+    if k >= lam:
+        raise InvalidThresholdError(
+            f"k={k} violates contract precondition k < lambda(Q) (lambda={lam})"
+        )
+
+    return _score_mapping_internal(Q, G, mapping, k)
+
+
+@dataclass
+class DiagnosticEvaluation:
+    s1_connected: bool
+    s2_connected: bool
+    r_count: int
+    r_edges: List[Tuple[int, int]]
+    m: int
+    lambda_q: int
+    in_mvp_domain: bool
+    mvp_accepted: bool
+    is_injective: bool
+    vertex_labels_ok: bool
+    reject_reasons: List[str]
+
+
+def diagnose_mapping_s1_s2(
+    Q: DStarGraph,
+    G: DStarGraph,
+    mapping: Sequence[int],
+    k: int,
+) -> DiagnosticEvaluation:
+    """
+    DIAGNOSTIC ONLY helper for comparative research (e.g. comparing S1 vs S2).
+    Evaluates topological S1 and query S2 properties even outside MVP domain (k >= lambda).
+    Explicitly reports whether mapping is in MVP domain. Does NOT bypass public evaluate_mapping.
+    """
+    if isinstance(k, bool) or not isinstance(k, int):
+        raise InvalidThresholdError(f"k must be an integer, got {type(k).__name__}: {k!r}")
+    if k < 0:
+        raise InvalidThresholdError(f"k cannot be negative: {k}")
+
+    lam = compute_edge_connectivity(Q)
+    in_mvp_domain = (k < lam)
+
+    eval_res = _score_mapping_internal(Q, G, mapping, k)
+    mvp_accepted = in_mvp_domain and eval_res.accepted
+
+    reasons = list(eval_res.reject_reasons)
+    if not in_mvp_domain:
+        reasons.append(f"OUT_OF_DOMAIN:k={k}>=lambda={lam}")
+
+    return DiagnosticEvaluation(
+        s1_connected=eval_res.s1_connected,
+        s2_connected=eval_res.s2_connected,
+        r_count=eval_res.r_count,
+        r_edges=eval_res.r_edges,
+        m=eval_res.m,
+        lambda_q=lam,
+        in_mvp_domain=in_mvp_domain,
+        mvp_accepted=mvp_accepted,
+        is_injective=eval_res.is_injective,
+        vertex_labels_ok=eval_res.vertex_labels_ok,
+        reject_reasons=reasons,
+    )
+
+
 # ============================================================================
 # Exhaustive Enumeration (M0 Oracle Engine)
 # ============================================================================
@@ -451,43 +630,40 @@ def enumerate_snapshot(
     Q: DStarGraph,
     G: DStarGraph,
     k: int,
-    max_candidates: int = 100000,
-    max_data_vertices: int = 10,
-    max_query_vertices: int = 8,
+    max_candidates: int = DEFAULT_MAX_CANDIDATES,
+    max_data_vertices: int = DEFAULT_MAX_DATA_VERTICES,
+    max_query_vertices: int = DEFAULT_MAX_QUERY_VERTICES,
 ) -> List[Tuple[int, ...]]:
     """
     Exhaustively enumerates all valid ordered tuples f: V_Q -> V_G.
+    Validates cheap schema/caps/sizes BEFORE computing edge connectivity.
     Fails closed with ResourceLimitError if candidate upper bound exceeds safety caps.
     Returns list of accepted tuples ordered by canonical sorted(V_Q).
     """
-    Q.validate_as_query()
-    G.validate_as_data()
+    # 1. Validate resource caps
+    validate_resource_caps(max_candidates, max_data_vertices, max_query_vertices)
 
+    # 2. Validate k
     if isinstance(k, bool) or not isinstance(k, int):
-        raise InvalidThresholdError(f"k must be an integer, got {type(k).__name__}: {k}")
+        raise InvalidThresholdError(f"k must be an integer, got {type(k).__name__}: {k!r}")
     if k < 0:
         raise InvalidThresholdError(f"k cannot be negative: {k}")
 
-    lam = compute_edge_connectivity(Q)
-    if k >= lam:
-        raise InvalidThresholdError(
-            f"k={k} violates contract precondition k < lambda(Q) (lambda={lam})"
-        )
-
+    # 3. Cheap query size check BEFORE computing cuts
     n_q = len(Q.vertices)
-    n_g = len(G.vertices)
-
     if n_q > max_query_vertices:
         raise ResourceLimitError(
             f"Query size {n_q} exceeds max allowed ({max_query_vertices})"
         )
+
+    # 4. Cheap data graph size check
+    n_g = len(G.vertices)
     if n_g > max_data_vertices:
         raise ResourceLimitError(
             f"Data graph size {n_g} exceeds max allowed ({max_data_vertices})"
         )
 
-    # Conservative candidate bound check
-    # Number of injective mappings V_Q -> V_G is P(n_g, n_q)
+    # 5. Candidate injection bound check
     if n_g < n_q:
         return []
 
@@ -497,20 +673,19 @@ def enumerate_snapshot(
             f"Candidate injection bound {perm_count} exceeds limit {max_candidates}"
         )
 
+    # 6. Basic topology validation
+    Q.validate_as_query()
+    G.validate_as_data()
+
+    # 7. Compute lambda and enforce k < lambda(Q)
+    lam = compute_edge_connectivity(Q, max_query_vertices=max_query_vertices)
+    if k >= lam:
+        raise InvalidThresholdError(
+            f"k={k} violates contract precondition k < lambda(Q) (lambda={lam})"
+        )
+
     q_nodes = sorted(Q.vertices.keys())
     data_nodes = sorted(G.vertices.keys())
-
-    # Filter candidate data vertices by vertex label compatibility
-    candidates_per_q: List[List[int]] = []
-    for q_u in q_nodes:
-        req_lbl = Q.vertices[q_u]
-        cands = [g_v for g_v in data_nodes if G.vertices[g_v] == req_lbl]
-        candidates_per_q.append(cands)
-
-    # Upper bound based on label compatibility
-    label_prod = 1
-    for cands in candidates_per_q:
-        label_prod *= len(cands)
 
     results: List[Tuple[int, ...]] = []
 
@@ -525,7 +700,7 @@ def enumerate_snapshot(
         if not label_match:
             continue
 
-        eval_res = evaluate_mapping(Q, G, perm, k, enforce_k_bound=False)
+        eval_res = _score_mapping_internal(Q, G, perm, k, q_nodes)
         if eval_res.accepted:
             results.append(perm)
 
@@ -545,9 +720,12 @@ class DStarUpdate:
 
     def __post_init__(self) -> None:
         if self.op not in ("INSERT", "DELETE"):
-            raise UnsupportedOperationError(f"Unsupported update op: {self.op}")
+            raise UnsupportedOperationError(f"Unsupported update op: {self.op!r}")
+        validate_vertex_id(self.u)
+        validate_vertex_id(self.v)
         if self.u == self.v:
             raise SelfLoopError(f"Self-loops are forbidden in updates: ({self.u}, {self.v})")
+        validate_label(self.label, "Update edge label")
 
 
 def apply_update(G: DStarGraph, update: DStarUpdate) -> None:
@@ -581,7 +759,7 @@ class DynamicDelta:
 class DStarDynamicOracle:
     """
     Stateful incremental oracle for D*.
-    Maintains G_t and snapshot M_t.
+    Maintains isolated copies of Q and G_t, along with snapshot M_t.
     On valid update:
       M_next = enumerate_snapshot(Q, G_next, k)
       ENTERED = M_next - M_curr
@@ -595,11 +773,13 @@ class DStarDynamicOracle:
         Q: DStarGraph,
         G: DStarGraph,
         k: int,
-        max_candidates: int = 100000,
-        max_data_vertices: int = 10,
-        max_query_vertices: int = 8,
+        max_candidates: int = DEFAULT_MAX_CANDIDATES,
+        max_data_vertices: int = DEFAULT_MAX_DATA_VERTICES,
+        max_query_vertices: int = DEFAULT_MAX_QUERY_VERTICES,
     ) -> None:
-        self.Q = Q
+        validate_resource_caps(max_candidates, max_data_vertices, max_query_vertices)
+        # R5 / N01: Deep-clone and isolate query and data graphs
+        self.Q = Q.clone()
         self.G = G.clone()
         self.k = k
         self.max_candidates = max_candidates
@@ -621,6 +801,7 @@ class DStarDynamicOracle:
     def apply_update(self, update: DStarUpdate) -> DynamicDelta:
         """
         Applies update atomically, computes ENTERED/EXITED, updates state.
+        Leaves state intact if an error occurs.
         """
         # Validate update on a clone first for strict atomicity
         test_g = self.G.clone()
@@ -677,7 +858,6 @@ def check_anchored_boundary_property(
     u_up, v_up = update.u, update.v
     up_lbl = update.label
 
-    # Identify all mappings in G_after (for INSERT) or G_before (for DELETE) that anchor to (u_up, v_up)
     if update.op == "INSERT":
         active_G = G_after
         target_event_set = true_entered
@@ -690,7 +870,6 @@ def check_anchored_boundary_property(
 
     for tup in all_matches:
         f = {q_nodes[i]: tup[i] for i in range(len(q_nodes))}
-        # Check if mapped to updated edge with matching label
         is_anchored = False
         for (q_u, q_v), q_lbl in Q.edges.items():
             if q_lbl == up_lbl:
@@ -698,7 +877,7 @@ def check_anchored_boundary_property(
                     is_anchored = True
                     break
         if is_anchored:
-            eval_res = evaluate_mapping(Q, active_G, tup, k, enforce_k_bound=False)
+            eval_res = _score_mapping_internal(Q, active_G, tup, k, q_nodes)
             if eval_res.r_count == k:
                 anchored_at_boundary.add(tup)
 
@@ -713,8 +892,21 @@ def check_anchored_boundary_property(
 
 
 # ============================================================================
-# CLI Implementation
+# CLI Implementation with Structured Error Handling
 # ============================================================================
+
+def emit_cli_error(status: str, exc: Exception, exit_code: int) -> None:
+    """Emits deterministic structured error JSON to stderr and exits with given code."""
+    out = {
+        "semantics_version": "dstar-v1.0",
+        "status": status,
+        "error_type": type(exc).__name__,
+        "error_message": str(exc),
+    }
+    json.dump(out, sys.stderr, indent=2)
+    sys.stderr.write("\n")
+    sys.exit(exit_code)
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Independent D* CSM Oracle")
@@ -725,7 +917,9 @@ def main() -> None:
     snap_p.add_argument("--query", required=True, help="Path to query JSON")
     snap_p.add_argument("--graph", required=True, help="Path to data graph JSON")
     snap_p.add_argument("--k", type=int, required=True, help="Missing edge budget k")
-    snap_p.add_argument("--max-candidates", type=int, default=100000, help="Max candidates guard")
+    snap_p.add_argument("--max-candidates", type=int, default=DEFAULT_MAX_CANDIDATES, help="Max candidates guard")
+    snap_p.add_argument("--max-data-vertices", type=int, default=DEFAULT_MAX_DATA_VERTICES, help="Max data vertices guard")
+    snap_p.add_argument("--max-query-vertices", type=int, default=DEFAULT_MAX_QUERY_VERTICES, help="Max query vertices guard")
 
     # Stream subcommand
     stream_p = subparsers.add_parser("stream", help="Run dynamic stream updates")
@@ -733,22 +927,43 @@ def main() -> None:
     stream_p.add_argument("--graph", required=True, help="Path to data graph JSON")
     stream_p.add_argument("--stream", required=True, help="Path to stream JSON")
     stream_p.add_argument("--k", type=int, required=True, help="Missing edge budget k")
-    stream_p.add_argument("--max-candidates", type=int, default=100000, help="Max candidates guard")
+    stream_p.add_argument("--max-candidates", type=int, default=DEFAULT_MAX_CANDIDATES, help="Max candidates guard")
+    stream_p.add_argument("--max-data-vertices", type=int, default=DEFAULT_MAX_DATA_VERTICES, help="Max data vertices guard")
+    stream_p.add_argument("--max-query-vertices", type=int, default=DEFAULT_MAX_QUERY_VERTICES, help="Max query vertices guard")
 
     args = parser.parse_args()
 
-    with open(args.query, "r", encoding="utf-8") as f:
-        q_data = json.load(f)
-    with open(args.graph, "r", encoding="utf-8") as f:
-        g_data = json.load(f)
-
-    Q = DStarGraph.from_dict(q_data)
-    G = DStarGraph.from_dict(g_data)
-    lam = compute_edge_connectivity(Q)
-
-    if args.command == "snapshot":
+    try:
+        # 1. Load files with structured error trapping
         try:
-            matches = enumerate_snapshot(Q, G, args.k, max_candidates=args.max_candidates)
+            with open(args.query, "r", encoding="utf-8") as f:
+                q_data = json.load(f)
+        except Exception as e:
+            emit_cli_error("ERROR", e, 1)
+
+        try:
+            with open(args.graph, "r", encoding="utf-8") as f:
+                g_data = json.load(f)
+        except Exception as e:
+            emit_cli_error("ERROR", e, 1)
+
+        # 2. Parse graphs
+        try:
+            Q = DStarGraph.from_dict(q_data)
+            G = DStarGraph.from_dict(g_data)
+        except Exception as e:
+            emit_cli_error("ERROR", e, 1)
+
+        if args.command == "snapshot":
+            matches = enumerate_snapshot(
+                Q,
+                G,
+                args.k,
+                max_candidates=args.max_candidates,
+                max_data_vertices=args.max_data_vertices,
+                max_query_vertices=args.max_query_vertices,
+            )
+            lam = compute_edge_connectivity(Q, max_query_vertices=args.max_query_vertices)
             out = {
                 "semantics_version": "dstar-v1.0",
                 "status": "SUCCESS",
@@ -760,38 +975,45 @@ def main() -> None:
             }
             json.dump(out, sys.stdout, indent=2)
             sys.stdout.write("\n")
-        except ResourceLimitError as e:
-            out = {
-                "semantics_version": "dstar-v1.0",
-                "status": "RESOURCE_LIMIT",
-                "error": str(e),
-            }
-            json.dump(out, sys.stderr, indent=2)
-            sys.exit(2)
-        except Exception as e:
-            out = {
-                "semantics_version": "dstar-v1.0",
-                "status": "ERROR",
-                "error": str(e),
-            }
-            json.dump(out, sys.stderr, indent=2)
-            sys.exit(1)
 
-    elif args.command == "stream":
-        with open(args.stream, "r", encoding="utf-8") as f:
-            stream_data = json.load(f)
+        elif args.command == "stream":
+            try:
+                with open(args.stream, "r", encoding="utf-8") as f:
+                    stream_data = json.load(f)
+            except Exception as e:
+                emit_cli_error("ERROR", e, 1)
 
-        try:
-            oracle = DStarDynamicOracle(Q, G, args.k, max_candidates=args.max_candidates)
+            if not isinstance(stream_data, list):
+                emit_cli_error("ERROR", InvalidGraphError("Stream must be a JSON array of update objects"), 1)
+
+            oracle = DStarDynamicOracle(
+                Q,
+                G,
+                args.k,
+                max_candidates=args.max_candidates,
+                max_data_vertices=args.max_data_vertices,
+                max_query_vertices=args.max_query_vertices,
+            )
+            lam = compute_edge_connectivity(oracle.Q, max_query_vertices=args.max_query_vertices)
             deltas_out = []
-            for item in stream_data:
-                up = DStarUpdate(
-                    op=item["op"],
-                    u=int(item["u"]),
-                    v=int(item["v"]),
-                    label=item.get("label", 0),
-                )
-                delta = oracle.apply_update(up)
+            for idx, item in enumerate(stream_data):
+                if not isinstance(item, dict):
+                    emit_cli_error("ERROR", InvalidGraphError(f"Stream item at index {idx} must be a dict: {item!r}"), 1)
+                for req_f in ("op", "u", "v", "label"):
+                    if req_f not in item:
+                        emit_cli_error("ERROR", InvalidGraphError(f"Missing required field {req_f!r} in stream item {idx}"), 1)
+
+                try:
+                    up = DStarUpdate(
+                        op=item["op"],
+                        u=item["u"],
+                        v=item["v"],
+                        label=item["label"],
+                    )
+                    delta = oracle.apply_update(up)
+                except Exception as e:
+                    emit_cli_error("ERROR", e, 1)
+
                 deltas_out.append({
                     "step": delta.step,
                     "op": delta.op,
@@ -803,30 +1025,19 @@ def main() -> None:
             out = {
                 "semantics_version": "dstar-v1.0",
                 "status": "SUCCESS",
-                "query_vertex_order": sorted(Q.vertices.keys()),
+                "query_vertex_order": sorted(oracle.Q.vertices.keys()),
                 "k": args.k,
-                "m": len(Q.edges),
+                "m": len(oracle.Q.edges),
                 "lambda": lam,
                 "updates": deltas_out,
             }
             json.dump(out, sys.stdout, indent=2)
             sys.stdout.write("\n")
-        except ResourceLimitError as e:
-            out = {
-                "semantics_version": "dstar-v1.0",
-                "status": "RESOURCE_LIMIT",
-                "error": str(e),
-            }
-            json.dump(out, sys.stderr, indent=2)
-            sys.exit(2)
-        except Exception as e:
-            out = {
-                "semantics_version": "dstar-v1.0",
-                "status": "ERROR",
-                "error": str(e),
-            }
-            json.dump(out, sys.stderr, indent=2)
-            sys.exit(1)
+
+    except ResourceLimitError as e:
+        emit_cli_error("RESOURCE_LIMIT", e, 2)
+    except Exception as e:
+        emit_cli_error("ERROR", e, 1)
 
 
 if __name__ == "__main__":

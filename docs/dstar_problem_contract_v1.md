@@ -1,9 +1,9 @@
 # D* Problem Contract v1 — Working Specification
 
-**Status:** WORKING CONTRACT (Advisor Approval Pending at Gate 0A)  
-**Date:** 2026-11-17  
-**Context:** Seminar RapidFlow / Continuous Subgraph Matching (CSM) — D* Feasibility Route  
-**Scope:** DSTAR-01 (Issue #22) Correctness Foundation  
+**Status:** WORKING CONTRACT (Advisor Approval Pending at Gate 0A)
+**Date:** 2026-11-17
+**Context:** Seminar RapidFlow / Continuous Subgraph Matching (CSM) — D* Feasibility Route
+**Scope:** DSTAR-01 (Issue #22) Correctness Foundation
 **Reference Document:** RapidFlow-APX Research Direction & Algorithm Design (17/11/2026, Google Doc `1-xOypqAphEQ3VXxFPzQeABKhWh_WKePt_gu1uNPehVk`)
 
 ---
