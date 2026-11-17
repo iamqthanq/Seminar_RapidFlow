@@ -1,8 +1,8 @@
 {
   "contract_version": "dstar-v1.0",
-  "run_id": "20261117T165218Z_91f5e55d",
-  "timestamp": "2026-11-17T16:52:20.599573+00:00",
-  "runtime_seconds": 1.6307,
+  "run_id": "20261117T171503Z_0f952471",
+  "timestamp": "2026-11-17T17:15:05.427213+00:00",
+  "runtime_seconds": 1.6658,
   "environment": {
     "platform": "Linux-7.0.0-42-generic-x86_64-with-glibc2.39",
     "python_version": "3.12.3",
@@ -12,15 +12,15 @@
     "configured_historical_base_sha": "89f65b1490ba2e31d8b599d295065dbe694460aa",
     "observed_origin_quangthang_sha": "89f65b1490ba2e31d8b599d295065dbe694460aa",
     "observed_merge_base_sha": "89f65b1490ba2e31d8b599d295065dbe694460aa",
-    "execution_head_sha": "dc7d44ecdefd3fbd83bf982e3b6b42c938da85e4",
+    "execution_head_sha": "c1434eadc25737cd4070b18adad9bb2f417cc641",
     "is_dirty_at_runtime": true,
     "branch": "feature/rf22-dstar01-foundation",
     "source_hashes": {
       "scripts/dstar_oracle.py": "e2583dceba1679ce10fdb5fa91dbbd6a79e10f59778968b1facd4a9f86b4337e",
-      "scripts/generate_dstar01_report.py": "73131840d62526af10730c2b1bfe1891c5d0012eccc33abd44c0c4f9a74e867d",
+      "scripts/generate_dstar01_report.py": "ddb5f11d8231b3e0c02183db6e4c34b32deb2623208cca4993d2f6c7d3943483",
       "tests/test_dstar_oracle.py": "52be4f4aab4481a7efef170d05682c5ceca7212b834ea2e9578c1e0c79e7b906",
       "tests/test_dstar_legacy_compatibility.py": "e72b3b4b13ea84d56267f01ec545e174d7172edd2e3b31e37cc51b034a81b097",
-      "tests/test_dstar_report_generator.py": "1f576f1f6f9caa089fe5a8824a38fc7f136e593c04a2e38e8dad8e7d941470ce",
+      "tests/test_dstar_report_generator.py": "9624b63caa2fdf991a45236949343aa7e93da7d24fcb7faea3152874c9321a43",
       "configs/dstar01_cases.json": "fd47a10244464c7ba74e5b5731e80bbc7a47b48a997010e45f534ea86edc03e9",
       "docs/dstar_problem_contract_v1.md": "092ca81fb155f14f3b8179403c0f67fbf889e5a38924fc75b0d6bf78b3e824f1",
       "tests/fixtures/dstar01/hand_c4_data_chord.json": "688c059b3f11369dc83bf428201422b380670837af0801d341294d1e50cb0d5b",
@@ -76,6 +76,13 @@
       "case_id": "CASE_HAND_C",
       "name": "External tail does not penalize edge recall",
       "status": "PASS",
+      "expected_match": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "match_found": true,
       "accepted": true
     },
     {
@@ -101,6 +108,13 @@
       "case_id": "CASE_HAND_G",
       "name": "Sparse query IDs preserve ascending canonical order",
       "status": "PASS",
+      "expected_matches": [
+        [
+          100,
+          200,
+          300
+        ]
+      ],
       "matches": [
         [
           100,
@@ -162,6 +176,7 @@
       "case_id": "CASE_HAND_L",
       "name": "S1 vs S2 distinction & public out-of-domain rejection",
       "status": "PASS",
+      "expected_public_rejection": true,
       "public_rejected_properly": true,
       "diagnostic_s1": true,
       "diagnostic_s2": false,
@@ -380,8 +395,13 @@
     "errors": []
   },
   "legacy_compatibility": {
+    "status": "PASS",
     "total_configurations": 56,
+    "total_configurations_completed": 56,
     "total_updates": 224,
+    "total_updates_attempted": 224,
+    "total_updates_completed": 224,
+    "total_updates_agreed": 224,
     "total_insert_updates": 105,
     "total_delete_updates": 119,
     "total_entered_events": 41,
@@ -1062,7 +1082,3816 @@
         "status": "PASS"
       }
     ],
-    "status": "PASS",
+    "step_records": [
+      {
+        "config_id": "CONFIG_01_C4_k0_s0",
+        "query": "C4",
+        "k": 0,
+        "seed": 20261148,
+        "update_index": 0,
+        "operation": "INSERT",
+        "endpoints": [
+          2,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_01_C4_k0_s0",
+        "query": "C4",
+        "k": 0,
+        "seed": 20261148,
+        "update_index": 1,
+        "operation": "INSERT",
+        "endpoints": [
+          5,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_01_C4_k0_s0",
+        "query": "C4",
+        "k": 0,
+        "seed": 20261148,
+        "update_index": 2,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          4
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_01_C4_k0_s0",
+        "query": "C4",
+        "k": 0,
+        "seed": 20261148,
+        "update_index": 3,
+        "operation": "INSERT",
+        "endpoints": [
+          1,
+          2
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_02_C4_k0_s1",
+        "query": "C4",
+        "k": 0,
+        "seed": 20261180,
+        "update_index": 0,
+        "operation": "DELETE",
+        "endpoints": [
+          3,
+          4
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_02_C4_k0_s1",
+        "query": "C4",
+        "k": 0,
+        "seed": 20261180,
+        "update_index": 1,
+        "operation": "DELETE",
+        "endpoints": [
+          5,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_02_C4_k0_s1",
+        "query": "C4",
+        "k": 0,
+        "seed": 20261180,
+        "update_index": 2,
+        "operation": "INSERT",
+        "endpoints": [
+          3,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_02_C4_k0_s1",
+        "query": "C4",
+        "k": 0,
+        "seed": 20261180,
+        "update_index": 3,
+        "operation": "INSERT",
+        "endpoints": [
+          3,
+          4
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_03_C4_k0_s2",
+        "query": "C4",
+        "k": 0,
+        "seed": 20261212,
+        "update_index": 0,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          6
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_03_C4_k0_s2",
+        "query": "C4",
+        "k": 0,
+        "seed": 20261212,
+        "update_index": 1,
+        "operation": "INSERT",
+        "endpoints": [
+          5,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_03_C4_k0_s2",
+        "query": "C4",
+        "k": 0,
+        "seed": 20261212,
+        "update_index": 2,
+        "operation": "DELETE",
+        "endpoints": [
+          2,
+          5
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_03_C4_k0_s2",
+        "query": "C4",
+        "k": 0,
+        "seed": 20261212,
+        "update_index": 3,
+        "operation": "DELETE",
+        "endpoints": [
+          5,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_04_C4_k0_s3",
+        "query": "C4",
+        "k": 0,
+        "seed": 20261244,
+        "update_index": 0,
+        "operation": "DELETE",
+        "endpoints": [
+          4,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_04_C4_k0_s3",
+        "query": "C4",
+        "k": 0,
+        "seed": 20261244,
+        "update_index": 1,
+        "operation": "DELETE",
+        "endpoints": [
+          2,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_04_C4_k0_s3",
+        "query": "C4",
+        "k": 0,
+        "seed": 20261244,
+        "update_index": 2,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          3
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_04_C4_k0_s3",
+        "query": "C4",
+        "k": 0,
+        "seed": 20261244,
+        "update_index": 3,
+        "operation": "INSERT",
+        "endpoints": [
+          1,
+          4
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_05_C4_k0_s4",
+        "query": "C4",
+        "k": 0,
+        "seed": 20261276,
+        "update_index": 0,
+        "operation": "INSERT",
+        "endpoints": [
+          2,
+          5
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_05_C4_k0_s4",
+        "query": "C4",
+        "k": 0,
+        "seed": 20261276,
+        "update_index": 1,
+        "operation": "DELETE",
+        "endpoints": [
+          3,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_05_C4_k0_s4",
+        "query": "C4",
+        "k": 0,
+        "seed": 20261276,
+        "update_index": 2,
+        "operation": "DELETE",
+        "endpoints": [
+          2,
+          5
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_05_C4_k0_s4",
+        "query": "C4",
+        "k": 0,
+        "seed": 20261276,
+        "update_index": 3,
+        "operation": "INSERT",
+        "endpoints": [
+          2,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_06_C4_k0_s5",
+        "query": "C4",
+        "k": 0,
+        "seed": 20261308,
+        "update_index": 0,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          2
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_06_C4_k0_s5",
+        "query": "C4",
+        "k": 0,
+        "seed": 20261308,
+        "update_index": 1,
+        "operation": "INSERT",
+        "endpoints": [
+          1,
+          3
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_06_C4_k0_s5",
+        "query": "C4",
+        "k": 0,
+        "seed": 20261308,
+        "update_index": 2,
+        "operation": "INSERT",
+        "endpoints": [
+          1,
+          4
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_06_C4_k0_s5",
+        "query": "C4",
+        "k": 0,
+        "seed": 20261308,
+        "update_index": 3,
+        "operation": "DELETE",
+        "endpoints": [
+          2,
+          3
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_07_C4_k0_s6",
+        "query": "C4",
+        "k": 0,
+        "seed": 20261340,
+        "update_index": 0,
+        "operation": "INSERT",
+        "endpoints": [
+          2,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_07_C4_k0_s6",
+        "query": "C4",
+        "k": 0,
+        "seed": 20261340,
+        "update_index": 1,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          4
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_07_C4_k0_s6",
+        "query": "C4",
+        "k": 0,
+        "seed": 20261340,
+        "update_index": 2,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_07_C4_k0_s6",
+        "query": "C4",
+        "k": 0,
+        "seed": 20261340,
+        "update_index": 3,
+        "operation": "DELETE",
+        "endpoints": [
+          2,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_08_C4_k0_s7",
+        "query": "C4",
+        "k": 0,
+        "seed": 20261372,
+        "update_index": 0,
+        "operation": "INSERT",
+        "endpoints": [
+          2,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_08_C4_k0_s7",
+        "query": "C4",
+        "k": 0,
+        "seed": 20261372,
+        "update_index": 1,
+        "operation": "INSERT",
+        "endpoints": [
+          4,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_08_C4_k0_s7",
+        "query": "C4",
+        "k": 0,
+        "seed": 20261372,
+        "update_index": 2,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_08_C4_k0_s7",
+        "query": "C4",
+        "k": 0,
+        "seed": 20261372,
+        "update_index": 3,
+        "operation": "DELETE",
+        "endpoints": [
+          3,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_09_C4_k1_s0",
+        "query": "C4",
+        "k": 1,
+        "seed": 20261396,
+        "update_index": 0,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_09_C4_k1_s0",
+        "query": "C4",
+        "k": 1,
+        "seed": 20261396,
+        "update_index": 1,
+        "operation": "INSERT",
+        "endpoints": [
+          2,
+          5
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_09_C4_k1_s0",
+        "query": "C4",
+        "k": 1,
+        "seed": 20261396,
+        "update_index": 2,
+        "operation": "INSERT",
+        "endpoints": [
+          3,
+          6
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_09_C4_k1_s0",
+        "query": "C4",
+        "k": 1,
+        "seed": 20261396,
+        "update_index": 3,
+        "operation": "INSERT",
+        "endpoints": [
+          4,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_10_C4_k1_s1",
+        "query": "C4",
+        "k": 1,
+        "seed": 20261428,
+        "update_index": 0,
+        "operation": "DELETE",
+        "endpoints": [
+          2,
+          3
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_10_C4_k1_s1",
+        "query": "C4",
+        "k": 1,
+        "seed": 20261428,
+        "update_index": 1,
+        "operation": "DELETE",
+        "endpoints": [
+          2,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_10_C4_k1_s1",
+        "query": "C4",
+        "k": 1,
+        "seed": 20261428,
+        "update_index": 2,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          4
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_10_C4_k1_s1",
+        "query": "C4",
+        "k": 1,
+        "seed": 20261428,
+        "update_index": 3,
+        "operation": "INSERT",
+        "endpoints": [
+          1,
+          4
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_11_C4_k1_s2",
+        "query": "C4",
+        "k": 1,
+        "seed": 20261460,
+        "update_index": 0,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          4
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_11_C4_k1_s2",
+        "query": "C4",
+        "k": 1,
+        "seed": 20261460,
+        "update_index": 1,
+        "operation": "INSERT",
+        "endpoints": [
+          3,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_11_C4_k1_s2",
+        "query": "C4",
+        "k": 1,
+        "seed": 20261460,
+        "update_index": 2,
+        "operation": "DELETE",
+        "endpoints": [
+          3,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_11_C4_k1_s2",
+        "query": "C4",
+        "k": 1,
+        "seed": 20261460,
+        "update_index": 3,
+        "operation": "DELETE",
+        "endpoints": [
+          2,
+          6
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_12_C4_k1_s3",
+        "query": "C4",
+        "k": 1,
+        "seed": 20261492,
+        "update_index": 0,
+        "operation": "INSERT",
+        "endpoints": [
+          2,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_12_C4_k1_s3",
+        "query": "C4",
+        "k": 1,
+        "seed": 20261492,
+        "update_index": 1,
+        "operation": "INSERT",
+        "endpoints": [
+          1,
+          2
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_12_C4_k1_s3",
+        "query": "C4",
+        "k": 1,
+        "seed": 20261492,
+        "update_index": 2,
+        "operation": "INSERT",
+        "endpoints": [
+          1,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_12_C4_k1_s3",
+        "query": "C4",
+        "k": 1,
+        "seed": 20261492,
+        "update_index": 3,
+        "operation": "INSERT",
+        "endpoints": [
+          5,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_13_C4_k1_s4",
+        "query": "C4",
+        "k": 1,
+        "seed": 20261524,
+        "update_index": 0,
+        "operation": "DELETE",
+        "endpoints": [
+          3,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_13_C4_k1_s4",
+        "query": "C4",
+        "k": 1,
+        "seed": 20261524,
+        "update_index": 1,
+        "operation": "INSERT",
+        "endpoints": [
+          3,
+          6
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_13_C4_k1_s4",
+        "query": "C4",
+        "k": 1,
+        "seed": 20261524,
+        "update_index": 2,
+        "operation": "DELETE",
+        "endpoints": [
+          2,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_13_C4_k1_s4",
+        "query": "C4",
+        "k": 1,
+        "seed": 20261524,
+        "update_index": 3,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          4
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_14_C4_k1_s5",
+        "query": "C4",
+        "k": 1,
+        "seed": 20261556,
+        "update_index": 0,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_14_C4_k1_s5",
+        "query": "C4",
+        "k": 1,
+        "seed": 20261556,
+        "update_index": 1,
+        "operation": "INSERT",
+        "endpoints": [
+          2,
+          4
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_14_C4_k1_s5",
+        "query": "C4",
+        "k": 1,
+        "seed": 20261556,
+        "update_index": 2,
+        "operation": "DELETE",
+        "endpoints": [
+          4,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_14_C4_k1_s5",
+        "query": "C4",
+        "k": 1,
+        "seed": 20261556,
+        "update_index": 3,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          4
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_15_C4_k1_s6",
+        "query": "C4",
+        "k": 1,
+        "seed": 20261588,
+        "update_index": 0,
+        "operation": "DELETE",
+        "endpoints": [
+          3,
+          4
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_15_C4_k1_s6",
+        "query": "C4",
+        "k": 1,
+        "seed": 20261588,
+        "update_index": 1,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          4
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_15_C4_k1_s6",
+        "query": "C4",
+        "k": 1,
+        "seed": 20261588,
+        "update_index": 2,
+        "operation": "INSERT",
+        "endpoints": [
+          2,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_15_C4_k1_s6",
+        "query": "C4",
+        "k": 1,
+        "seed": 20261588,
+        "update_index": 3,
+        "operation": "DELETE",
+        "endpoints": [
+          2,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_16_C4_k1_s7",
+        "query": "C4",
+        "k": 1,
+        "seed": 20261620,
+        "update_index": 0,
+        "operation": "INSERT",
+        "endpoints": [
+          1,
+          2
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_16_C4_k1_s7",
+        "query": "C4",
+        "k": 1,
+        "seed": 20261620,
+        "update_index": 1,
+        "operation": "INSERT",
+        "endpoints": [
+          2,
+          3
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_16_C4_k1_s7",
+        "query": "C4",
+        "k": 1,
+        "seed": 20261620,
+        "update_index": 2,
+        "operation": "DELETE",
+        "endpoints": [
+          2,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_16_C4_k1_s7",
+        "query": "C4",
+        "k": 1,
+        "seed": 20261620,
+        "update_index": 3,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          4
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_17_Diamond_k0_s0",
+        "query": "Diamond",
+        "k": 0,
+        "seed": 20261644,
+        "update_index": 0,
+        "operation": "DELETE",
+        "endpoints": [
+          2,
+          5
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_17_Diamond_k0_s0",
+        "query": "Diamond",
+        "k": 0,
+        "seed": 20261644,
+        "update_index": 1,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          5
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_17_Diamond_k0_s0",
+        "query": "Diamond",
+        "k": 0,
+        "seed": 20261644,
+        "update_index": 2,
+        "operation": "DELETE",
+        "endpoints": [
+          3,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_17_Diamond_k0_s0",
+        "query": "Diamond",
+        "k": 0,
+        "seed": 20261644,
+        "update_index": 3,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          2
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_18_Diamond_k0_s1",
+        "query": "Diamond",
+        "k": 0,
+        "seed": 20261676,
+        "update_index": 0,
+        "operation": "INSERT",
+        "endpoints": [
+          5,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_18_Diamond_k0_s1",
+        "query": "Diamond",
+        "k": 0,
+        "seed": 20261676,
+        "update_index": 1,
+        "operation": "DELETE",
+        "endpoints": [
+          5,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_18_Diamond_k0_s1",
+        "query": "Diamond",
+        "k": 0,
+        "seed": 20261676,
+        "update_index": 2,
+        "operation": "INSERT",
+        "endpoints": [
+          5,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_18_Diamond_k0_s1",
+        "query": "Diamond",
+        "k": 0,
+        "seed": 20261676,
+        "update_index": 3,
+        "operation": "DELETE",
+        "endpoints": [
+          2,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_19_Diamond_k0_s2",
+        "query": "Diamond",
+        "k": 0,
+        "seed": 20261708,
+        "update_index": 0,
+        "operation": "DELETE",
+        "endpoints": [
+          5,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_19_Diamond_k0_s2",
+        "query": "Diamond",
+        "k": 0,
+        "seed": 20261708,
+        "update_index": 1,
+        "operation": "DELETE",
+        "endpoints": [
+          3,
+          6
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_19_Diamond_k0_s2",
+        "query": "Diamond",
+        "k": 0,
+        "seed": 20261708,
+        "update_index": 2,
+        "operation": "INSERT",
+        "endpoints": [
+          4,
+          5
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_19_Diamond_k0_s2",
+        "query": "Diamond",
+        "k": 0,
+        "seed": 20261708,
+        "update_index": 3,
+        "operation": "DELETE",
+        "endpoints": [
+          3,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_20_Diamond_k0_s3",
+        "query": "Diamond",
+        "k": 0,
+        "seed": 20261740,
+        "update_index": 0,
+        "operation": "INSERT",
+        "endpoints": [
+          1,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_20_Diamond_k0_s3",
+        "query": "Diamond",
+        "k": 0,
+        "seed": 20261740,
+        "update_index": 1,
+        "operation": "INSERT",
+        "endpoints": [
+          2,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_20_Diamond_k0_s3",
+        "query": "Diamond",
+        "k": 0,
+        "seed": 20261740,
+        "update_index": 2,
+        "operation": "INSERT",
+        "endpoints": [
+          3,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_20_Diamond_k0_s3",
+        "query": "Diamond",
+        "k": 0,
+        "seed": 20261740,
+        "update_index": 3,
+        "operation": "DELETE",
+        "endpoints": [
+          4,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_21_Diamond_k0_s4",
+        "query": "Diamond",
+        "k": 0,
+        "seed": 20261772,
+        "update_index": 0,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          2
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_21_Diamond_k0_s4",
+        "query": "Diamond",
+        "k": 0,
+        "seed": 20261772,
+        "update_index": 1,
+        "operation": "INSERT",
+        "endpoints": [
+          4,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_21_Diamond_k0_s4",
+        "query": "Diamond",
+        "k": 0,
+        "seed": 20261772,
+        "update_index": 2,
+        "operation": "INSERT",
+        "endpoints": [
+          2,
+          4
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_21_Diamond_k0_s4",
+        "query": "Diamond",
+        "k": 0,
+        "seed": 20261772,
+        "update_index": 3,
+        "operation": "DELETE",
+        "endpoints": [
+          5,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_22_Diamond_k0_s5",
+        "query": "Diamond",
+        "k": 0,
+        "seed": 20261804,
+        "update_index": 0,
+        "operation": "INSERT",
+        "endpoints": [
+          1,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_22_Diamond_k0_s5",
+        "query": "Diamond",
+        "k": 0,
+        "seed": 20261804,
+        "update_index": 1,
+        "operation": "DELETE",
+        "endpoints": [
+          4,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_22_Diamond_k0_s5",
+        "query": "Diamond",
+        "k": 0,
+        "seed": 20261804,
+        "update_index": 2,
+        "operation": "DELETE",
+        "endpoints": [
+          5,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_22_Diamond_k0_s5",
+        "query": "Diamond",
+        "k": 0,
+        "seed": 20261804,
+        "update_index": 3,
+        "operation": "INSERT",
+        "endpoints": [
+          5,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_23_Diamond_k0_s6",
+        "query": "Diamond",
+        "k": 0,
+        "seed": 20261836,
+        "update_index": 0,
+        "operation": "INSERT",
+        "endpoints": [
+          4,
+          5
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_23_Diamond_k0_s6",
+        "query": "Diamond",
+        "k": 0,
+        "seed": 20261836,
+        "update_index": 1,
+        "operation": "DELETE",
+        "endpoints": [
+          2,
+          5
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_23_Diamond_k0_s6",
+        "query": "Diamond",
+        "k": 0,
+        "seed": 20261836,
+        "update_index": 2,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          2
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_23_Diamond_k0_s6",
+        "query": "Diamond",
+        "k": 0,
+        "seed": 20261836,
+        "update_index": 3,
+        "operation": "DELETE",
+        "endpoints": [
+          4,
+          5
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_24_Diamond_k0_s7",
+        "query": "Diamond",
+        "k": 0,
+        "seed": 20261868,
+        "update_index": 0,
+        "operation": "DELETE",
+        "endpoints": [
+          3,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_24_Diamond_k0_s7",
+        "query": "Diamond",
+        "k": 0,
+        "seed": 20261868,
+        "update_index": 1,
+        "operation": "INSERT",
+        "endpoints": [
+          2,
+          3
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_24_Diamond_k0_s7",
+        "query": "Diamond",
+        "k": 0,
+        "seed": 20261868,
+        "update_index": 2,
+        "operation": "DELETE",
+        "endpoints": [
+          2,
+          3
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_24_Diamond_k0_s7",
+        "query": "Diamond",
+        "k": 0,
+        "seed": 20261868,
+        "update_index": 3,
+        "operation": "INSERT",
+        "endpoints": [
+          3,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_25_Diamond_k1_s0",
+        "query": "Diamond",
+        "k": 1,
+        "seed": 20261892,
+        "update_index": 0,
+        "operation": "DELETE",
+        "endpoints": [
+          2,
+          6
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_25_Diamond_k1_s0",
+        "query": "Diamond",
+        "k": 1,
+        "seed": 20261892,
+        "update_index": 1,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          5
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_25_Diamond_k1_s0",
+        "query": "Diamond",
+        "k": 1,
+        "seed": 20261892,
+        "update_index": 2,
+        "operation": "INSERT",
+        "endpoints": [
+          1,
+          4
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_25_Diamond_k1_s0",
+        "query": "Diamond",
+        "k": 1,
+        "seed": 20261892,
+        "update_index": 3,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          4
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_26_Diamond_k1_s1",
+        "query": "Diamond",
+        "k": 1,
+        "seed": 20261924,
+        "update_index": 0,
+        "operation": "INSERT",
+        "endpoints": [
+          1,
+          4
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_26_Diamond_k1_s1",
+        "query": "Diamond",
+        "k": 1,
+        "seed": 20261924,
+        "update_index": 1,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_26_Diamond_k1_s1",
+        "query": "Diamond",
+        "k": 1,
+        "seed": 20261924,
+        "update_index": 2,
+        "operation": "INSERT",
+        "endpoints": [
+          1,
+          2
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_26_Diamond_k1_s1",
+        "query": "Diamond",
+        "k": 1,
+        "seed": 20261924,
+        "update_index": 3,
+        "operation": "INSERT",
+        "endpoints": [
+          5,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_27_Diamond_k1_s2",
+        "query": "Diamond",
+        "k": 1,
+        "seed": 20261956,
+        "update_index": 0,
+        "operation": "DELETE",
+        "endpoints": [
+          2,
+          5
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_27_Diamond_k1_s2",
+        "query": "Diamond",
+        "k": 1,
+        "seed": 20261956,
+        "update_index": 1,
+        "operation": "INSERT",
+        "endpoints": [
+          4,
+          5
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_27_Diamond_k1_s2",
+        "query": "Diamond",
+        "k": 1,
+        "seed": 20261956,
+        "update_index": 2,
+        "operation": "INSERT",
+        "endpoints": [
+          2,
+          5
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_27_Diamond_k1_s2",
+        "query": "Diamond",
+        "k": 1,
+        "seed": 20261956,
+        "update_index": 3,
+        "operation": "DELETE",
+        "endpoints": [
+          3,
+          4
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_28_Diamond_k1_s3",
+        "query": "Diamond",
+        "k": 1,
+        "seed": 20261988,
+        "update_index": 0,
+        "operation": "INSERT",
+        "endpoints": [
+          1,
+          3
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_28_Diamond_k1_s3",
+        "query": "Diamond",
+        "k": 1,
+        "seed": 20261988,
+        "update_index": 1,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          4
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_28_Diamond_k1_s3",
+        "query": "Diamond",
+        "k": 1,
+        "seed": 20261988,
+        "update_index": 2,
+        "operation": "DELETE",
+        "endpoints": [
+          3,
+          4
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_28_Diamond_k1_s3",
+        "query": "Diamond",
+        "k": 1,
+        "seed": 20261988,
+        "update_index": 3,
+        "operation": "DELETE",
+        "endpoints": [
+          2,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_29_Diamond_k1_s4",
+        "query": "Diamond",
+        "k": 1,
+        "seed": 20262020,
+        "update_index": 0,
+        "operation": "DELETE",
+        "endpoints": [
+          2,
+          5
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_29_Diamond_k1_s4",
+        "query": "Diamond",
+        "k": 1,
+        "seed": 20262020,
+        "update_index": 1,
+        "operation": "INSERT",
+        "endpoints": [
+          5,
+          6
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_29_Diamond_k1_s4",
+        "query": "Diamond",
+        "k": 1,
+        "seed": 20262020,
+        "update_index": 2,
+        "operation": "DELETE",
+        "endpoints": [
+          2,
+          6
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_29_Diamond_k1_s4",
+        "query": "Diamond",
+        "k": 1,
+        "seed": 20262020,
+        "update_index": 3,
+        "operation": "INSERT",
+        "endpoints": [
+          2,
+          3
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_30_Diamond_k1_s5",
+        "query": "Diamond",
+        "k": 1,
+        "seed": 20262052,
+        "update_index": 0,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_30_Diamond_k1_s5",
+        "query": "Diamond",
+        "k": 1,
+        "seed": 20262052,
+        "update_index": 1,
+        "operation": "DELETE",
+        "endpoints": [
+          4,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_30_Diamond_k1_s5",
+        "query": "Diamond",
+        "k": 1,
+        "seed": 20262052,
+        "update_index": 2,
+        "operation": "INSERT",
+        "endpoints": [
+          2,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_30_Diamond_k1_s5",
+        "query": "Diamond",
+        "k": 1,
+        "seed": 20262052,
+        "update_index": 3,
+        "operation": "DELETE",
+        "endpoints": [
+          3,
+          4
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_31_Diamond_k1_s6",
+        "query": "Diamond",
+        "k": 1,
+        "seed": 20262084,
+        "update_index": 0,
+        "operation": "DELETE",
+        "endpoints": [
+          2,
+          6
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_31_Diamond_k1_s6",
+        "query": "Diamond",
+        "k": 1,
+        "seed": 20262084,
+        "update_index": 1,
+        "operation": "INSERT",
+        "endpoints": [
+          1,
+          2
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_31_Diamond_k1_s6",
+        "query": "Diamond",
+        "k": 1,
+        "seed": 20262084,
+        "update_index": 2,
+        "operation": "INSERT",
+        "endpoints": [
+          2,
+          6
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_31_Diamond_k1_s6",
+        "query": "Diamond",
+        "k": 1,
+        "seed": 20262084,
+        "update_index": 3,
+        "operation": "INSERT",
+        "endpoints": [
+          1,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_32_Diamond_k1_s7",
+        "query": "Diamond",
+        "k": 1,
+        "seed": 20262116,
+        "update_index": 0,
+        "operation": "DELETE",
+        "endpoints": [
+          5,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_32_Diamond_k1_s7",
+        "query": "Diamond",
+        "k": 1,
+        "seed": 20262116,
+        "update_index": 1,
+        "operation": "DELETE",
+        "endpoints": [
+          4,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_32_Diamond_k1_s7",
+        "query": "Diamond",
+        "k": 1,
+        "seed": 20262116,
+        "update_index": 2,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_32_Diamond_k1_s7",
+        "query": "Diamond",
+        "k": 1,
+        "seed": 20262116,
+        "update_index": 3,
+        "operation": "INSERT",
+        "endpoints": [
+          3,
+          4
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_33_K4_k0_s0",
+        "query": "K4",
+        "k": 0,
+        "seed": 20262140,
+        "update_index": 0,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          6
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_33_K4_k0_s0",
+        "query": "K4",
+        "k": 0,
+        "seed": 20262140,
+        "update_index": 1,
+        "operation": "DELETE",
+        "endpoints": [
+          2,
+          3
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_33_K4_k0_s0",
+        "query": "K4",
+        "k": 0,
+        "seed": 20262140,
+        "update_index": 2,
+        "operation": "INSERT",
+        "endpoints": [
+          1,
+          4
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_33_K4_k0_s0",
+        "query": "K4",
+        "k": 0,
+        "seed": 20262140,
+        "update_index": 3,
+        "operation": "INSERT",
+        "endpoints": [
+          3,
+          6
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_34_K4_k0_s1",
+        "query": "K4",
+        "k": 0,
+        "seed": 20262172,
+        "update_index": 0,
+        "operation": "INSERT",
+        "endpoints": [
+          3,
+          4
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_34_K4_k0_s1",
+        "query": "K4",
+        "k": 0,
+        "seed": 20262172,
+        "update_index": 1,
+        "operation": "INSERT",
+        "endpoints": [
+          4,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_34_K4_k0_s1",
+        "query": "K4",
+        "k": 0,
+        "seed": 20262172,
+        "update_index": 2,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          2
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_34_K4_k0_s1",
+        "query": "K4",
+        "k": 0,
+        "seed": 20262172,
+        "update_index": 3,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_35_K4_k0_s2",
+        "query": "K4",
+        "k": 0,
+        "seed": 20262204,
+        "update_index": 0,
+        "operation": "INSERT",
+        "endpoints": [
+          2,
+          5
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_35_K4_k0_s2",
+        "query": "K4",
+        "k": 0,
+        "seed": 20262204,
+        "update_index": 1,
+        "operation": "DELETE",
+        "endpoints": [
+          4,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_35_K4_k0_s2",
+        "query": "K4",
+        "k": 0,
+        "seed": 20262204,
+        "update_index": 2,
+        "operation": "INSERT",
+        "endpoints": [
+          1,
+          2
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_35_K4_k0_s2",
+        "query": "K4",
+        "k": 0,
+        "seed": 20262204,
+        "update_index": 3,
+        "operation": "INSERT",
+        "endpoints": [
+          3,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_36_K4_k0_s3",
+        "query": "K4",
+        "k": 0,
+        "seed": 20262236,
+        "update_index": 0,
+        "operation": "INSERT",
+        "endpoints": [
+          3,
+          4
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_36_K4_k0_s3",
+        "query": "K4",
+        "k": 0,
+        "seed": 20262236,
+        "update_index": 1,
+        "operation": "INSERT",
+        "endpoints": [
+          4,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_36_K4_k0_s3",
+        "query": "K4",
+        "k": 0,
+        "seed": 20262236,
+        "update_index": 2,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_36_K4_k0_s3",
+        "query": "K4",
+        "k": 0,
+        "seed": 20262236,
+        "update_index": 3,
+        "operation": "INSERT",
+        "endpoints": [
+          4,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_37_K4_k0_s4",
+        "query": "K4",
+        "k": 0,
+        "seed": 20262268,
+        "update_index": 0,
+        "operation": "INSERT",
+        "endpoints": [
+          2,
+          6
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_37_K4_k0_s4",
+        "query": "K4",
+        "k": 0,
+        "seed": 20262268,
+        "update_index": 1,
+        "operation": "INSERT",
+        "endpoints": [
+          2,
+          4
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_37_K4_k0_s4",
+        "query": "K4",
+        "k": 0,
+        "seed": 20262268,
+        "update_index": 2,
+        "operation": "INSERT",
+        "endpoints": [
+          1,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_37_K4_k0_s4",
+        "query": "K4",
+        "k": 0,
+        "seed": 20262268,
+        "update_index": 3,
+        "operation": "INSERT",
+        "endpoints": [
+          4,
+          5
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_38_K4_k0_s5",
+        "query": "K4",
+        "k": 0,
+        "seed": 20262300,
+        "update_index": 0,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          4
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_38_K4_k0_s5",
+        "query": "K4",
+        "k": 0,
+        "seed": 20262300,
+        "update_index": 1,
+        "operation": "INSERT",
+        "endpoints": [
+          1,
+          2
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_38_K4_k0_s5",
+        "query": "K4",
+        "k": 0,
+        "seed": 20262300,
+        "update_index": 2,
+        "operation": "INSERT",
+        "endpoints": [
+          1,
+          3
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_38_K4_k0_s5",
+        "query": "K4",
+        "k": 0,
+        "seed": 20262300,
+        "update_index": 3,
+        "operation": "DELETE",
+        "endpoints": [
+          4,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_39_K4_k0_s6",
+        "query": "K4",
+        "k": 0,
+        "seed": 20262332,
+        "update_index": 0,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_39_K4_k0_s6",
+        "query": "K4",
+        "k": 0,
+        "seed": 20262332,
+        "update_index": 1,
+        "operation": "DELETE",
+        "endpoints": [
+          2,
+          4
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_39_K4_k0_s6",
+        "query": "K4",
+        "k": 0,
+        "seed": 20262332,
+        "update_index": 2,
+        "operation": "DELETE",
+        "endpoints": [
+          3,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_39_K4_k0_s6",
+        "query": "K4",
+        "k": 0,
+        "seed": 20262332,
+        "update_index": 3,
+        "operation": "DELETE",
+        "endpoints": [
+          5,
+          6
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_40_K4_k0_s7",
+        "query": "K4",
+        "k": 0,
+        "seed": 20262364,
+        "update_index": 0,
+        "operation": "INSERT",
+        "endpoints": [
+          2,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_40_K4_k0_s7",
+        "query": "K4",
+        "k": 0,
+        "seed": 20262364,
+        "update_index": 1,
+        "operation": "INSERT",
+        "endpoints": [
+          1,
+          4
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_40_K4_k0_s7",
+        "query": "K4",
+        "k": 0,
+        "seed": 20262364,
+        "update_index": 2,
+        "operation": "DELETE",
+        "endpoints": [
+          2,
+          4
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_40_K4_k0_s7",
+        "query": "K4",
+        "k": 0,
+        "seed": 20262364,
+        "update_index": 3,
+        "operation": "INSERT",
+        "endpoints": [
+          3,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_41_K4_k1_s0",
+        "query": "K4",
+        "k": 1,
+        "seed": 20262388,
+        "update_index": 0,
+        "operation": "DELETE",
+        "endpoints": [
+          5,
+          6
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_41_K4_k1_s0",
+        "query": "K4",
+        "k": 1,
+        "seed": 20262388,
+        "update_index": 1,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          2
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_41_K4_k1_s0",
+        "query": "K4",
+        "k": 1,
+        "seed": 20262388,
+        "update_index": 2,
+        "operation": "INSERT",
+        "endpoints": [
+          3,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_41_K4_k1_s0",
+        "query": "K4",
+        "k": 1,
+        "seed": 20262388,
+        "update_index": 3,
+        "operation": "INSERT",
+        "endpoints": [
+          2,
+          6
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_42_K4_k1_s1",
+        "query": "K4",
+        "k": 1,
+        "seed": 20262420,
+        "update_index": 0,
+        "operation": "DELETE",
+        "endpoints": [
+          2,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_42_K4_k1_s1",
+        "query": "K4",
+        "k": 1,
+        "seed": 20262420,
+        "update_index": 1,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          3
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_42_K4_k1_s1",
+        "query": "K4",
+        "k": 1,
+        "seed": 20262420,
+        "update_index": 2,
+        "operation": "DELETE",
+        "endpoints": [
+          2,
+          3
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_42_K4_k1_s1",
+        "query": "K4",
+        "k": 1,
+        "seed": 20262420,
+        "update_index": 3,
+        "operation": "DELETE",
+        "endpoints": [
+          5,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_43_K4_k1_s2",
+        "query": "K4",
+        "k": 1,
+        "seed": 20262452,
+        "update_index": 0,
+        "operation": "INSERT",
+        "endpoints": [
+          4,
+          5
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_43_K4_k1_s2",
+        "query": "K4",
+        "k": 1,
+        "seed": 20262452,
+        "update_index": 1,
+        "operation": "DELETE",
+        "endpoints": [
+          4,
+          5
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_43_K4_k1_s2",
+        "query": "K4",
+        "k": 1,
+        "seed": 20262452,
+        "update_index": 2,
+        "operation": "INSERT",
+        "endpoints": [
+          4,
+          6
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_43_K4_k1_s2",
+        "query": "K4",
+        "k": 1,
+        "seed": 20262452,
+        "update_index": 3,
+        "operation": "DELETE",
+        "endpoints": [
+          3,
+          5
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_44_K4_k1_s3",
+        "query": "K4",
+        "k": 1,
+        "seed": 20262484,
+        "update_index": 0,
+        "operation": "DELETE",
+        "endpoints": [
+          2,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_44_K4_k1_s3",
+        "query": "K4",
+        "k": 1,
+        "seed": 20262484,
+        "update_index": 1,
+        "operation": "INSERT",
+        "endpoints": [
+          1,
+          2
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_44_K4_k1_s3",
+        "query": "K4",
+        "k": 1,
+        "seed": 20262484,
+        "update_index": 2,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          3
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_44_K4_k1_s3",
+        "query": "K4",
+        "k": 1,
+        "seed": 20262484,
+        "update_index": 3,
+        "operation": "INSERT",
+        "endpoints": [
+          1,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_45_K4_k1_s4",
+        "query": "K4",
+        "k": 1,
+        "seed": 20262516,
+        "update_index": 0,
+        "operation": "DELETE",
+        "endpoints": [
+          3,
+          6
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_45_K4_k1_s4",
+        "query": "K4",
+        "k": 1,
+        "seed": 20262516,
+        "update_index": 1,
+        "operation": "DELETE",
+        "endpoints": [
+          2,
+          4
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_45_K4_k1_s4",
+        "query": "K4",
+        "k": 1,
+        "seed": 20262516,
+        "update_index": 2,
+        "operation": "INSERT",
+        "endpoints": [
+          3,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_45_K4_k1_s4",
+        "query": "K4",
+        "k": 1,
+        "seed": 20262516,
+        "update_index": 3,
+        "operation": "DELETE",
+        "endpoints": [
+          5,
+          6
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_46_K4_k1_s5",
+        "query": "K4",
+        "k": 1,
+        "seed": 20262548,
+        "update_index": 0,
+        "operation": "INSERT",
+        "endpoints": [
+          3,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_46_K4_k1_s5",
+        "query": "K4",
+        "k": 1,
+        "seed": 20262548,
+        "update_index": 1,
+        "operation": "DELETE",
+        "endpoints": [
+          2,
+          4
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_46_K4_k1_s5",
+        "query": "K4",
+        "k": 1,
+        "seed": 20262548,
+        "update_index": 2,
+        "operation": "INSERT",
+        "endpoints": [
+          2,
+          3
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_46_K4_k1_s5",
+        "query": "K4",
+        "k": 1,
+        "seed": 20262548,
+        "update_index": 3,
+        "operation": "INSERT",
+        "endpoints": [
+          1,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_47_K4_k1_s6",
+        "query": "K4",
+        "k": 1,
+        "seed": 20262580,
+        "update_index": 0,
+        "operation": "DELETE",
+        "endpoints": [
+          3,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_47_K4_k1_s6",
+        "query": "K4",
+        "k": 1,
+        "seed": 20262580,
+        "update_index": 1,
+        "operation": "INSERT",
+        "endpoints": [
+          1,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_47_K4_k1_s6",
+        "query": "K4",
+        "k": 1,
+        "seed": 20262580,
+        "update_index": 2,
+        "operation": "DELETE",
+        "endpoints": [
+          4,
+          6
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_47_K4_k1_s6",
+        "query": "K4",
+        "k": 1,
+        "seed": 20262580,
+        "update_index": 3,
+        "operation": "INSERT",
+        "endpoints": [
+          2,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_48_K4_k1_s7",
+        "query": "K4",
+        "k": 1,
+        "seed": 20262612,
+        "update_index": 0,
+        "operation": "DELETE",
+        "endpoints": [
+          3,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_48_K4_k1_s7",
+        "query": "K4",
+        "k": 1,
+        "seed": 20262612,
+        "update_index": 1,
+        "operation": "INSERT",
+        "endpoints": [
+          1,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_48_K4_k1_s7",
+        "query": "K4",
+        "k": 1,
+        "seed": 20262612,
+        "update_index": 2,
+        "operation": "INSERT",
+        "endpoints": [
+          5,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_48_K4_k1_s7",
+        "query": "K4",
+        "k": 1,
+        "seed": 20262612,
+        "update_index": 3,
+        "operation": "INSERT",
+        "endpoints": [
+          2,
+          3
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_49_K4_k2_s0",
+        "query": "K4",
+        "k": 2,
+        "seed": 20262636,
+        "update_index": 0,
+        "operation": "INSERT",
+        "endpoints": [
+          2,
+          3
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_49_K4_k2_s0",
+        "query": "K4",
+        "k": 2,
+        "seed": 20262636,
+        "update_index": 1,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_49_K4_k2_s0",
+        "query": "K4",
+        "k": 2,
+        "seed": 20262636,
+        "update_index": 2,
+        "operation": "DELETE",
+        "endpoints": [
+          4,
+          5
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_49_K4_k2_s0",
+        "query": "K4",
+        "k": 2,
+        "seed": 20262636,
+        "update_index": 3,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          4
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_50_K4_k2_s1",
+        "query": "K4",
+        "k": 2,
+        "seed": 20262668,
+        "update_index": 0,
+        "operation": "INSERT",
+        "endpoints": [
+          2,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_50_K4_k2_s1",
+        "query": "K4",
+        "k": 2,
+        "seed": 20262668,
+        "update_index": 1,
+        "operation": "INSERT",
+        "endpoints": [
+          2,
+          3
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_50_K4_k2_s1",
+        "query": "K4",
+        "k": 2,
+        "seed": 20262668,
+        "update_index": 2,
+        "operation": "DELETE",
+        "endpoints": [
+          2,
+          4
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_50_K4_k2_s1",
+        "query": "K4",
+        "k": 2,
+        "seed": 20262668,
+        "update_index": 3,
+        "operation": "DELETE",
+        "endpoints": [
+          4,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_51_K4_k2_s2",
+        "query": "K4",
+        "k": 2,
+        "seed": 20262700,
+        "update_index": 0,
+        "operation": "INSERT",
+        "endpoints": [
+          2,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_51_K4_k2_s2",
+        "query": "K4",
+        "k": 2,
+        "seed": 20262700,
+        "update_index": 1,
+        "operation": "DELETE",
+        "endpoints": [
+          2,
+          3
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_51_K4_k2_s2",
+        "query": "K4",
+        "k": 2,
+        "seed": 20262700,
+        "update_index": 2,
+        "operation": "DELETE",
+        "endpoints": [
+          5,
+          6
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_51_K4_k2_s2",
+        "query": "K4",
+        "k": 2,
+        "seed": 20262700,
+        "update_index": 3,
+        "operation": "DELETE",
+        "endpoints": [
+          2,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_52_K4_k2_s3",
+        "query": "K4",
+        "k": 2,
+        "seed": 20262732,
+        "update_index": 0,
+        "operation": "INSERT",
+        "endpoints": [
+          1,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_52_K4_k2_s3",
+        "query": "K4",
+        "k": 2,
+        "seed": 20262732,
+        "update_index": 1,
+        "operation": "DELETE",
+        "endpoints": [
+          2,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_52_K4_k2_s3",
+        "query": "K4",
+        "k": 2,
+        "seed": 20262732,
+        "update_index": 2,
+        "operation": "INSERT",
+        "endpoints": [
+          3,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_52_K4_k2_s3",
+        "query": "K4",
+        "k": 2,
+        "seed": 20262732,
+        "update_index": 3,
+        "operation": "INSERT",
+        "endpoints": [
+          2,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_53_K4_k2_s4",
+        "query": "K4",
+        "k": 2,
+        "seed": 20262764,
+        "update_index": 0,
+        "operation": "INSERT",
+        "endpoints": [
+          2,
+          3
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_53_K4_k2_s4",
+        "query": "K4",
+        "k": 2,
+        "seed": 20262764,
+        "update_index": 1,
+        "operation": "DELETE",
+        "endpoints": [
+          2,
+          5
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_53_K4_k2_s4",
+        "query": "K4",
+        "k": 2,
+        "seed": 20262764,
+        "update_index": 2,
+        "operation": "INSERT",
+        "endpoints": [
+          3,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_53_K4_k2_s4",
+        "query": "K4",
+        "k": 2,
+        "seed": 20262764,
+        "update_index": 3,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          2
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_54_K4_k2_s5",
+        "query": "K4",
+        "k": 2,
+        "seed": 20262796,
+        "update_index": 0,
+        "operation": "INSERT",
+        "endpoints": [
+          4,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_54_K4_k2_s5",
+        "query": "K4",
+        "k": 2,
+        "seed": 20262796,
+        "update_index": 1,
+        "operation": "DELETE",
+        "endpoints": [
+          3,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_54_K4_k2_s5",
+        "query": "K4",
+        "k": 2,
+        "seed": 20262796,
+        "update_index": 2,
+        "operation": "DELETE",
+        "endpoints": [
+          1,
+          2
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_54_K4_k2_s5",
+        "query": "K4",
+        "k": 2,
+        "seed": 20262796,
+        "update_index": 3,
+        "operation": "DELETE",
+        "endpoints": [
+          4,
+          6
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_55_K4_k2_s6",
+        "query": "K4",
+        "k": 2,
+        "seed": 20262828,
+        "update_index": 0,
+        "operation": "INSERT",
+        "endpoints": [
+          3,
+          4
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_55_K4_k2_s6",
+        "query": "K4",
+        "k": 2,
+        "seed": 20262828,
+        "update_index": 1,
+        "operation": "INSERT",
+        "endpoints": [
+          3,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_55_K4_k2_s6",
+        "query": "K4",
+        "k": 2,
+        "seed": 20262828,
+        "update_index": 2,
+        "operation": "INSERT",
+        "endpoints": [
+          4,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_55_K4_k2_s6",
+        "query": "K4",
+        "k": 2,
+        "seed": 20262828,
+        "update_index": 3,
+        "operation": "INSERT",
+        "endpoints": [
+          1,
+          3
+        ],
+        "label": 1,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_56_K4_k2_s7",
+        "query": "K4",
+        "k": 2,
+        "seed": 20262860,
+        "update_index": 0,
+        "operation": "INSERT",
+        "endpoints": [
+          4,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_56_K4_k2_s7",
+        "query": "K4",
+        "k": 2,
+        "seed": 20262860,
+        "update_index": 1,
+        "operation": "DELETE",
+        "endpoints": [
+          3,
+          4
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_56_K4_k2_s7",
+        "query": "K4",
+        "k": 2,
+        "seed": 20262860,
+        "update_index": 2,
+        "operation": "INSERT",
+        "endpoints": [
+          2,
+          4
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      },
+      {
+        "config_id": "CONFIG_56_K4_k2_s7",
+        "query": "K4",
+        "k": 2,
+        "seed": 20262860,
+        "update_index": 3,
+        "operation": "DELETE",
+        "endpoints": [
+          4,
+          5
+        ],
+        "label": 0,
+        "dstar_applied": true,
+        "legacy_applied": true,
+        "agreed": true,
+        "status": "PASS"
+      }
+    ],
     "failure_reasons": []
   }
 }

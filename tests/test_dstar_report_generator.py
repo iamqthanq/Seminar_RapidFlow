@@ -437,6 +437,97 @@ rep.main()
         self.assertEqual(data.get("overall_status"), "FAIL")
         self.assertTrue(any("total_configurations mismatch" in e for e in data["manifest_reconciliation"]["errors"]))
 
+    def test_expected_match_drift_rejected(self) -> None:
+        """R3-F01: Mutating expected_match in Case C must fail reconciliation."""
+        m = json.loads(json.dumps(self.valid_manifest))
+        for c in m["hand_cases"]:
+            if c["id"] == "CASE_HAND_C":
+                c["expected_match"] = [999, 999, 999, 999]
+        proc = self._run_generator_with_manifest(m)
+        self.assertNotEqual(proc.returncode, 0)
+        with open(self.output_path, "r") as f:
+            data = json.load(f)
+        self.assertEqual(data.get("overall_status"), "FAIL")
+        self.assertTrue(any("expected_match mismatch" in e for e in data["manifest_reconciliation"]["errors"]))
+
+    def test_expected_match_invalid_type_rejected(self) -> None:
+        """R3-F01: Setting expected_match to non-list/tuple must fail reconciliation."""
+        m = json.loads(json.dumps(self.valid_manifest))
+        for c in m["hand_cases"]:
+            if c["id"] == "CASE_HAND_C":
+                c["expected_match"] = 1234
+        proc = self._run_generator_with_manifest(m)
+        self.assertNotEqual(proc.returncode, 0)
+        with open(self.output_path, "r") as f:
+            data = json.load(f)
+        self.assertEqual(data.get("overall_status"), "FAIL")
+        self.assertTrue(any("invalid type" in e for e in data["manifest_reconciliation"]["errors"]))
+
+    def test_expected_matches_drift_rejected(self) -> None:
+        """R3-F01: Mutating expected_matches in Case G must fail reconciliation."""
+        m = json.loads(json.dumps(self.valid_manifest))
+        for c in m["hand_cases"]:
+            if c["id"] == "CASE_HAND_G":
+                c["expected_matches"] = [[999, 999, 999]]
+        proc = self._run_generator_with_manifest(m)
+        self.assertNotEqual(proc.returncode, 0)
+        with open(self.output_path, "r") as f:
+            data = json.load(f)
+        self.assertEqual(data.get("overall_status"), "FAIL")
+        self.assertTrue(any("expected_matches mismatch" in e for e in data["manifest_reconciliation"]["errors"]))
+
+    def test_expected_matches_missing_rejected(self) -> None:
+        """R3-F01: Omitting expected_matches in Case G must fail reconciliation."""
+        m = json.loads(json.dumps(self.valid_manifest))
+        for c in m["hand_cases"]:
+            if c["id"] == "CASE_HAND_G":
+                del c["expected_matches"]
+        proc = self._run_generator_with_manifest(m)
+        self.assertNotEqual(proc.returncode, 0)
+        with open(self.output_path, "r") as f:
+            data = json.load(f)
+        self.assertEqual(data.get("overall_status"), "FAIL")
+        self.assertTrue(any("missing required expected_matches" in e for e in data["manifest_reconciliation"]["errors"]))
+
+    def test_expected_public_rejection_drift_rejected(self) -> None:
+        """R3-F01: Mutating expected_public_rejection in Case L must fail reconciliation."""
+        m = json.loads(json.dumps(self.valid_manifest))
+        for c in m["hand_cases"]:
+            if c["id"] == "CASE_HAND_L":
+                c["expected_public_rejection"] = False
+        proc = self._run_generator_with_manifest(m)
+        self.assertNotEqual(proc.returncode, 0)
+        with open(self.output_path, "r") as f:
+            data = json.load(f)
+        self.assertEqual(data.get("overall_status"), "FAIL")
+        self.assertTrue(any("expected_public_rejection mismatch" in e for e in data["manifest_reconciliation"]["errors"]))
+
+    def test_expected_public_rejection_invalid_type_rejected(self) -> None:
+        """R3-F01: Setting expected_public_rejection to non-bool must fail reconciliation."""
+        m = json.loads(json.dumps(self.valid_manifest))
+        for c in m["hand_cases"]:
+            if c["id"] == "CASE_HAND_L":
+                c["expected_public_rejection"] = "true"  # String, not bool
+        proc = self._run_generator_with_manifest(m)
+        self.assertNotEqual(proc.returncode, 0)
+        with open(self.output_path, "r") as f:
+            data = json.load(f)
+        self.assertEqual(data.get("overall_status"), "FAIL")
+        self.assertTrue(any("invalid type" in e for e in data["manifest_reconciliation"]["errors"]))
+
+    def test_expected_rejected_drift_rejected(self) -> None:
+        """R3-F01: Mutating expected_rejected in Case D must fail reconciliation."""
+        m = json.loads(json.dumps(self.valid_manifest))
+        for c in m["hand_cases"]:
+            if c["id"] == "CASE_HAND_D":
+                c["expected_rejected"] = "WRONG_REASON"
+        proc = self._run_generator_with_manifest(m)
+        self.assertNotEqual(proc.returncode, 0)
+        with open(self.output_path, "r") as f:
+            data = json.load(f)
+        self.assertEqual(data.get("overall_status"), "FAIL")
+        self.assertTrue(any("expected_rejected mismatch" in e for e in data["manifest_reconciliation"]["errors"]))
+
 
 class TestDStarProvenanceAndPartialFailure(unittest.TestCase):
     """
@@ -510,6 +601,149 @@ rep.main()
         self.assertIn("atomic_checks", partial)
         self.assertIn("legacy_compatibility", partial)
         self.assertNotIn("boundary_diagnostics", partial)
+
+    def test_legacy_matrix_failure_at_5th_update_preserves_records_and_config(self) -> None:
+        """
+        R3-F02: When APXDynamicOracle.apply_update raises on the 5th call (after 4 completed updates),
+        the error artifact must preserve:
+        - 1 completed configuration
+        - 4 completed/agreed updates
+        - 5 step records (4 PASS, 1 ERROR)
+        - exact failing step details (config_id, update_index, operation, error_message)
+        - overall_status ERROR, failing_stage LEGACY_MATRIX, nonzero exit.
+        """
+        code = f"""
+import sys
+from pathlib import Path
+import scripts.generate_dstar01_report as rep
+from tests.test_dstar_legacy_compatibility import APXDynamicOracle
+
+orig_apply = APXDynamicOracle.apply_update
+call_count = [0]
+
+def monkey_apply(self, update):
+    call_count[0] += 1
+    if call_count[0] == 5:
+        raise RuntimeError("Simulated failure at 5th update")
+    return orig_apply(self, update)
+
+APXDynamicOracle.apply_update = monkey_apply
+
+sys.argv = ["generate_dstar01_report.py", "--output", "{self.output_path}"]
+rep.main()
+"""
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(REPO_ROOT)
+        proc = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=str(REPO_ROOT),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=env,
+        )
+        self.assertNotEqual(proc.returncode, 0, "Fatal mid-matrix error must exit nonzero")
+        self.assertTrue(self.output_path.is_file(), "Report artifact must be written on failure")
+
+        with open(self.output_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        self.assertEqual(data.get("overall_status"), "ERROR")
+        self.assertEqual(data.get("failing_stage"), "LEGACY_MATRIX")
+        self.assertTrue(bool(data.get("run_id")))
+        self.assertIn("Simulated failure at 5th update", data.get("fatal_error", ""))
+
+        partial = data.get("partial_results", {})
+        self.assertIn("hand_cases", partial)
+        self.assertIn("lambda_topologies", partial)
+        self.assertIn("atomic_checks", partial)
+        self.assertIn("legacy_compatibility", partial)
+
+        leg_part = partial["legacy_compatibility"]
+        self.assertEqual(leg_part.get("status"), "ERROR")
+        self.assertEqual(leg_part.get("total_configurations_completed"), 1)
+        self.assertEqual(leg_part.get("total_updates_attempted"), 5)
+        self.assertEqual(leg_part.get("total_updates_completed"), 4)
+        self.assertEqual(leg_part.get("total_updates_agreed"), 4)
+
+        # Check completed configs list has 1 config
+        configs = leg_part.get("configs", [])
+        self.assertEqual(len(configs), 1)
+        self.assertEqual(configs[0]["config_id"], "CONFIG_01_C4_k0_s0")
+        self.assertEqual(configs[0]["status"], "PASS")
+
+        # Check step records has 5 records
+        step_records = leg_part.get("step_records", [])
+        self.assertEqual(len(step_records), 5)
+        for i in range(4):
+            self.assertEqual(step_records[i]["status"], "PASS")
+            self.assertTrue(step_records[i]["dstar_applied"])
+            self.assertTrue(step_records[i]["legacy_applied"])
+            self.assertTrue(step_records[i]["agreed"])
+
+        failing_rec = step_records[4]
+        self.assertEqual(failing_rec["status"], "ERROR")
+        self.assertTrue(failing_rec["dstar_applied"])
+        self.assertFalse(failing_rec["legacy_applied"])
+        self.assertFalse(failing_rec["agreed"])
+        self.assertEqual(failing_rec["config_id"], "CONFIG_02_C4_k0_s1")
+        self.assertEqual(failing_rec["update_index"], 0)
+        self.assertIn("Simulated failure at 5th update", failing_rec["error_message"])
+
+        # Check top-level failing details
+        self.assertEqual(data.get("config_id"), "CONFIG_02_C4_k0_s1")
+        self.assertEqual(data.get("update_index"), 0)
+        self.assertEqual(data.get("failing_step", {}).get("config_id"), "CONFIG_02_C4_k0_s1")
+
+    def test_legacy_matrix_failure_at_update_2_preserves_prior_steps(self) -> None:
+        """
+        R3-F02: When failure occurs on 2nd update (before any configuration completes),
+        the error artifact must preserve 1 completed step and record 0 completed configs.
+        """
+        code = f"""
+import sys
+from pathlib import Path
+import scripts.generate_dstar01_report as rep
+from tests.test_dstar_legacy_compatibility import APXDynamicOracle
+
+orig_apply = APXDynamicOracle.apply_update
+call_count = [0]
+
+def monkey_apply(self, update):
+    call_count[0] += 1
+    if call_count[0] == 2:
+        raise RuntimeError("Simulated failure at update 2")
+    return orig_apply(self, update)
+
+APXDynamicOracle.apply_update = monkey_apply
+
+sys.argv = ["generate_dstar01_report.py", "--output", "{self.output_path}"]
+rep.main()
+"""
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(REPO_ROOT)
+        proc = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=str(REPO_ROOT),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=env,
+        )
+        self.assertNotEqual(proc.returncode, 0)
+        with open(self.output_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        self.assertEqual(data.get("overall_status"), "ERROR")
+        leg_part = data.get("partial_results", {}).get("legacy_compatibility", {})
+        self.assertEqual(leg_part.get("status"), "ERROR")
+        self.assertEqual(leg_part.get("total_configurations_completed"), 0)
+        self.assertEqual(leg_part.get("total_updates_attempted"), 2)
+        self.assertEqual(leg_part.get("total_updates_completed"), 1)
+        self.assertEqual(leg_part.get("total_updates_agreed"), 1)
+        self.assertEqual(len(leg_part.get("step_records", [])), 2)
+        self.assertEqual(leg_part["step_records"][0]["status"], "PASS")
+        self.assertEqual(leg_part["step_records"][1]["status"], "ERROR")
 
 
 if __name__ == "__main__":

@@ -76,6 +76,20 @@ from tests.test_dstar_legacy_compatibility import (
 )
 
 
+class LegacyMatrixExecutionError(Exception):
+    """
+    R3-F02: Raised when an exception occurs during legacy matrix execution.
+    Carries the partial matrix results and failing step details.
+    """
+    def __init__(self, message: str, partial_matrix: Dict[str, Any]):
+        super().__init__(message)
+        self.message = message
+        self.partial_matrix = partial_matrix
+
+
+_ACTIVE_MATRIX_TRACKER: Optional[Dict[str, Any]] = None
+
+
 def compute_file_sha256(path: Path) -> str:
     if not path.is_file():
         return "FILE_NOT_FOUND"
@@ -216,11 +230,14 @@ def run_hand_cases(fixtures_dir: Path) -> Tuple[List[Dict[str, Any]], bool]:
         G_c.add_edge(3, 4, 0)
         G_c.add_edge(4, 5, 0)
         matches_c = enumerate_snapshot(Q_c, G_c, k=1)
-        ok_c = (1, 2, 3, 4) in matches_c
+        expected_match_c = tuple(EXECUTABLE_CASE_SPEC["hand_cases"]["CASE_HAND_C"]["expected_match"])
+        ok_c = expected_match_c in matches_c
         cases.append({
             "case_id": "CASE_HAND_C",
             "name": "External tail does not penalize edge recall",
             "status": "PASS" if ok_c else "FAIL",
+            "expected_match": list(expected_match_c),
+            "match_found": ok_c,
             "accepted": ok_c,
         })
         if not ok_c:
@@ -312,11 +329,13 @@ def run_hand_cases(fixtures_dir: Path) -> Tuple[List[Dict[str, Any]], bool]:
         with open(fixtures_dir / "hand_sparse_data.json", "r") as f:
             G_g = DStarGraph.from_dict(json.load(f))
         matches_g = enumerate_snapshot(Q_g, G_g, k=0)
-        ok_g = matches_g == [(100, 200, 300)]
+        expected_matches_g = [tuple(t) for t in EXECUTABLE_CASE_SPEC["hand_cases"]["CASE_HAND_G"]["expected_matches"]]
+        ok_g = matches_g == expected_matches_g
         cases.append({
             "case_id": "CASE_HAND_G",
             "name": "Sparse query IDs preserve ascending canonical order",
             "status": "PASS" if ok_g else "FAIL",
+            "expected_matches": [list(t) for t in expected_matches_g],
             "matches": [list(t) for t in matches_g],
         })
         if not ok_g:
@@ -451,8 +470,9 @@ def run_hand_cases(fixtures_dir: Path) -> Tuple[List[Dict[str, Any]], bool]:
 
         # Diagnostic helper separates S1 and S2
         diag_l = diagnose_mapping_s1_s2(Q_l, G_l, [1, 2, 3, 4], k=1)
+        expected_pub_rej = EXECUTABLE_CASE_SPEC["hand_cases"]["CASE_HAND_L"]["expected_public_rejection"]
         ok_l = (
-            public_rejected
+            (public_rejected is expected_pub_rej)
             and (diag_l.s1_connected is True)
             and (diag_l.s2_connected is False)
             and (diag_l.mvp_accepted is False)
@@ -462,6 +482,7 @@ def run_hand_cases(fixtures_dir: Path) -> Tuple[List[Dict[str, Any]], bool]:
             "case_id": "CASE_HAND_L",
             "name": "S1 vs S2 distinction & public out-of-domain rejection",
             "status": "PASS" if ok_l else "FAIL",
+            "expected_public_rejection": expected_pub_rej,
             "public_rejected_properly": public_rejected,
             "diagnostic_s1": diag_l.s1_connected,
             "diagnostic_s2": diag_l.s2_connected,
@@ -638,7 +659,10 @@ def evaluate_legacy_matrix_success(matrix_summary: Dict[str, Any]) -> Tuple[bool
     return is_pass, errors
 
 
-def run_legacy_compatibility_matrix() -> Tuple[Dict[str, Any], bool]:
+def run_legacy_compatibility_matrix(
+    progress_sink: Optional[Dict[str, Any]] = None,
+) -> Tuple[Dict[str, Any], bool]:
+    sink = progress_sink if progress_sink is not None else _ACTIVE_MATRIX_TRACKER
     seed_base = 20261117
     matrix_specs = [
         ("C4", build_c4_query, [0, 1], 8),
@@ -647,8 +671,11 @@ def run_legacy_compatibility_matrix() -> Tuple[Dict[str, Any], bool]:
     ]
 
     configs: List[Dict[str, Any]] = []
+    step_records: List[Dict[str, Any]] = []
     total_configs = 0
-    total_updates = 0
+    total_updates_attempted = 0
+    total_updates_completed = 0
+    total_updates_agreed = 0
     total_insert_updates = 0
     total_delete_updates = 0
     total_entered_events = 0
@@ -656,12 +683,39 @@ def run_legacy_compatibility_matrix() -> Tuple[Dict[str, Any], bool]:
     total_entered_tuples = 0
     total_exited_tuples = 0
 
+    if sink is not None:
+        sink.update({
+            "status": "INCOMPLETE",
+            "stage": "LEGACY_MATRIX",
+            "total_configurations": 0,
+            "total_configurations_completed": 0,
+            "total_updates": 0,
+            "total_updates_attempted": 0,
+            "total_updates_completed": 0,
+            "total_updates_agreed": 0,
+            "completed_steps_count": 0,
+            "configs": configs,
+            "step_records": step_records,
+            "failing_step": None,
+        })
+
     for q_name, q_builder, k_values, seeds_count in matrix_specs:
         for k in k_values:
             for s_idx in range(seeds_count):
                 total_configs += 1
+                config_id = f"CONFIG_{total_configs:02d}_{q_name}_k{k}_s{s_idx}"
                 seed = seed_base + total_configs * 31 + s_idx
                 label_mode = "uniform" if (total_configs % 2 == 0) else "mixed"
+
+                if sink is not None:
+                    sink["total_configurations"] = total_configs
+                    sink["current_config"] = {
+                        "config_id": config_id,
+                        "query": q_name,
+                        "k": k,
+                        "seed": seed,
+                        "label_mode": label_mode,
+                    }
 
                 Q_dstar = q_builder(label_mode=label_mode)
                 G_dstar = generate_random_data_graph(
@@ -677,53 +731,178 @@ def run_legacy_compatibility_matrix() -> Tuple[Dict[str, Any], bool]:
                     label_mode=label_mode,
                 )
 
-                dstar_oracle = DStarDynamicOracle(Q_dstar, G_dstar, k=k)
-                Q_apx = dstar_to_apx_graph(Q_dstar)
-                G_apx = dstar_to_apx_graph(G_dstar)
-                apx_oracle = APXDynamicOracle(
-                    Q=Q_apx,
-                    G0=G_apx,
-                    eps_m=k,
-                    eps_x=None,
-                    mode=ConnectivityMode.STRICT,
-                )
-
-                init_match = (set(dstar_oracle.current_matches) == set(apx_oracle.current_matches))
+                try:
+                    dstar_oracle = DStarDynamicOracle(Q_dstar, G_dstar, k=k)
+                    Q_apx = dstar_to_apx_graph(Q_dstar)
+                    G_apx = dstar_to_apx_graph(G_dstar)
+                    apx_oracle = APXDynamicOracle(
+                        Q=Q_apx,
+                        G0=G_apx,
+                        eps_m=k,
+                        eps_x=None,
+                        mode=ConnectivityMode.STRICT,
+                    )
+                    init_match = (set(dstar_oracle.current_matches) == set(apx_oracle.current_matches))
+                except Exception as e:
+                    failing_step = {
+                        "config_id": config_id,
+                        "query": q_name,
+                        "k": k,
+                        "seed": seed,
+                        "label_mode": label_mode,
+                        "update_index": 0,
+                        "operation": "INIT",
+                        "endpoints": None,
+                        "label": None,
+                        "dstar_applied": False,
+                        "legacy_applied": False,
+                        "agreed": False,
+                        "status": "ERROR",
+                        "error_message": str(e),
+                    }
+                    step_records.append(failing_step)
+                    partial_summary = {
+                        "status": "ERROR",
+                        "stage": "LEGACY_MATRIX",
+                        "config_id": config_id,
+                        "query": q_name,
+                        "k": k,
+                        "seed": seed,
+                        "update_index": 0,
+                        "operation": "INIT",
+                        "endpoints": None,
+                        "label": None,
+                        "total_configurations_completed": len(configs),
+                        "total_updates_attempted": total_updates_attempted,
+                        "total_updates_completed": total_updates_completed,
+                        "total_updates_agreed": total_updates_agreed,
+                        "completed_steps_count": total_updates_completed,
+                        "configs": list(configs),
+                        "step_records": list(step_records),
+                        "failing_step": failing_step,
+                        "error_message": str(e),
+                    }
+                    if sink is not None:
+                        sink.update(partial_summary)
+                    raise LegacyMatrixExecutionError(
+                        f"Exception during legacy matrix initialization at config {config_id}: {e}",
+                        partial_matrix=partial_summary,
+                    ) from e
 
                 config_entered = 0
                 config_exited = 0
                 config_updates_agreed = 0
 
-                for up_dstar in updates:
-                    total_updates += 1
-                    if up_dstar.op == "INSERT":
-                        total_insert_updates += 1
-                    elif up_dstar.op == "DELETE":
-                        total_delete_updates += 1
-                    delta_dstar = dstar_oracle.apply_update(up_dstar)
+                for up_idx, up_dstar in enumerate(updates):
+                    total_updates_attempted += 1
+                    if sink is not None:
+                        sink["total_updates_attempted"] = total_updates_attempted
 
-                    up_apx = dstar_to_apx_update(up_dstar)
-                    delta_apx = apx_oracle.apply_update(up_apx)
+                    dstar_applied = False
+                    legacy_applied = False
+                    try:
+                        if up_dstar.op == "INSERT":
+                            total_insert_updates += 1
+                        elif up_dstar.op == "DELETE":
+                            total_delete_updates += 1
 
-                    entered_agreed = (set(delta_dstar.entered) == set(delta_apx.entered))
-                    exited_agreed = (set(delta_dstar.exited) == set(delta_apx.exited))
-                    snapshot_agreed = (set(dstar_oracle.current_matches) == set(apx_oracle.current_matches))
+                        delta_dstar = dstar_oracle.apply_update(up_dstar)
+                        dstar_applied = True
 
-                    if entered_agreed and exited_agreed and snapshot_agreed:
-                        config_updates_agreed += 1
+                        up_apx = dstar_to_apx_update(up_dstar)
+                        delta_apx = apx_oracle.apply_update(up_apx)
+                        legacy_applied = True
 
-                    if delta_dstar.entered:
-                        total_entered_events += 1
-                        total_entered_tuples += len(delta_dstar.entered)
-                        config_entered += len(delta_dstar.entered)
-                    if delta_dstar.exited:
-                        total_exited_events += 1
-                        total_exited_tuples += len(delta_dstar.exited)
-                        config_exited += len(delta_dstar.exited)
+                        entered_agreed = (set(delta_dstar.entered) == set(delta_apx.entered))
+                        exited_agreed = (set(delta_dstar.exited) == set(delta_apx.exited))
+                        snapshot_agreed = (set(dstar_oracle.current_matches) == set(apx_oracle.current_matches))
+
+                        step_agreed = (entered_agreed and exited_agreed and snapshot_agreed)
+                        if step_agreed:
+                            config_updates_agreed += 1
+                            total_updates_agreed += 1
+
+                        total_updates_completed += 1
+
+                        step_rec = {
+                            "config_id": config_id,
+                            "query": q_name,
+                            "k": k,
+                            "seed": seed,
+                            "update_index": up_idx,
+                            "operation": up_dstar.op,
+                            "endpoints": [up_dstar.u, up_dstar.v],
+                            "label": up_dstar.label,
+                            "dstar_applied": True,
+                            "legacy_applied": True,
+                            "agreed": step_agreed,
+                            "status": "PASS" if step_agreed else "FAIL",
+                        }
+                        step_records.append(step_rec)
+
+                        if delta_dstar.entered:
+                            total_entered_events += 1
+                            total_entered_tuples += len(delta_dstar.entered)
+                            config_entered += len(delta_dstar.entered)
+                        if delta_dstar.exited:
+                            total_exited_events += 1
+                            total_exited_tuples += len(delta_dstar.exited)
+                            config_exited += len(delta_dstar.exited)
+
+                        if sink is not None:
+                            sink["total_updates_completed"] = total_updates_completed
+                            sink["total_updates"] = total_updates_completed
+                            sink["total_updates_agreed"] = total_updates_agreed
+                            sink["completed_steps_count"] = total_updates_completed
+
+                    except Exception as e:
+                        failing_step = {
+                            "config_id": config_id,
+                            "query": q_name,
+                            "k": k,
+                            "seed": seed,
+                            "update_index": up_idx,
+                            "operation": up_dstar.op,
+                            "endpoints": [up_dstar.u, up_dstar.v],
+                            "label": up_dstar.label,
+                            "dstar_applied": dstar_applied,
+                            "legacy_applied": legacy_applied,
+                            "agreed": False,
+                            "status": "ERROR",
+                            "error_message": str(e),
+                        }
+                        step_records.append(failing_step)
+                        partial_summary = {
+                            "status": "ERROR",
+                            "stage": "LEGACY_MATRIX",
+                            "config_id": config_id,
+                            "query": q_name,
+                            "k": k,
+                            "seed": seed,
+                            "update_index": up_idx,
+                            "operation": up_dstar.op,
+                            "endpoints": [up_dstar.u, up_dstar.v],
+                            "label": up_dstar.label,
+                            "total_configurations_completed": len(configs),
+                            "total_updates_attempted": total_updates_attempted,
+                            "total_updates_completed": total_updates_completed,
+                            "total_updates_agreed": total_updates_agreed,
+                            "completed_steps_count": total_updates_completed,
+                            "configs": list(configs),
+                            "step_records": list(step_records),
+                            "failing_step": failing_step,
+                            "error_message": str(e),
+                        }
+                        if sink is not None:
+                            sink.update(partial_summary)
+                        raise LegacyMatrixExecutionError(
+                            f"Exception in legacy matrix at config {config_id}, update {up_idx}: {e}",
+                            partial_matrix=partial_summary,
+                        ) from e
 
                 config_pass = (config_updates_agreed == len(updates) and init_match and len(updates) >= 4)
-                configs.append({
-                    "config_id": f"CONFIG_{total_configs:02d}_{q_name}_k{k}_s{s_idx}",
+                cfg_dict = {
+                    "config_id": config_id,
                     "query": q_name,
                     "k": k,
                     "seed": seed,
@@ -733,11 +912,19 @@ def run_legacy_compatibility_matrix() -> Tuple[Dict[str, Any], bool]:
                     "entered_tuples": config_entered,
                     "exited_tuples": config_exited,
                     "status": "PASS" if config_pass else "FAIL",
-                })
+                }
+                configs.append(cfg_dict)
+                if sink is not None:
+                    sink["total_configurations_completed"] = len(configs)
 
     matrix_summary: Dict[str, Any] = {
+        "status": "INCOMPLETE",
         "total_configurations": total_configs,
-        "total_updates": total_updates,
+        "total_configurations_completed": len(configs),
+        "total_updates": total_updates_completed,
+        "total_updates_attempted": total_updates_attempted,
+        "total_updates_completed": total_updates_completed,
+        "total_updates_agreed": total_updates_agreed,
         "total_insert_updates": total_insert_updates,
         "total_delete_updates": total_delete_updates,
         "total_entered_events": total_entered_events,
@@ -745,11 +932,14 @@ def run_legacy_compatibility_matrix() -> Tuple[Dict[str, Any], bool]:
         "total_entered_tuples": total_entered_tuples,
         "total_exited_tuples": total_exited_tuples,
         "configs": configs,
+        "step_records": step_records,
     }
 
     is_success, failure_reasons = evaluate_legacy_matrix_success(matrix_summary)
     matrix_summary["status"] = "PASS" if is_success else "FAIL"
     matrix_summary["failure_reasons"] = failure_reasons
+    if sink is not None:
+        sink.update(matrix_summary)
 
     return matrix_summary, is_success
 
@@ -1036,16 +1226,16 @@ EXECUTABLE_CASE_SPEC: Dict[str, Any] = {
     "hand_cases": {
         "CASE_HAND_A": {"k": 0, "recipe": "python:triangle_k3_with_tail", "expected_count": 6},
         "CASE_HAND_B": {"k": 0, "query": "tests/fixtures/dstar01/hand_c4_query.json", "data": "tests/fixtures/dstar01/hand_c4_data_chord.json", "expected_count": 8},
-        "CASE_HAND_C": {"k": 1, "query": "tests/fixtures/dstar01/hand_diamond_query.json", "recipe_data": "python:diamond_external_tail"},
-        "CASE_HAND_D": {"k": 0, "recipe_query": "python:p2", "recipe_data": "python:v10"},
-        "CASE_HAND_E": {"k": 0, "recipe_query": "python:edge_ab", "recipe_data": "python:edge_ac"},
+        "CASE_HAND_C": {"k": 1, "query": "tests/fixtures/dstar01/hand_diamond_query.json", "recipe_data": "python:diamond_external_tail", "expected_match": [1, 2, 3, 4]},
+        "CASE_HAND_D": {"k": 0, "recipe_query": "python:p2", "recipe_data": "python:v10", "expected_rejected": "NON_INJECTIVE"},
+        "CASE_HAND_E": {"k": 0, "recipe_query": "python:edge_ab", "recipe_data": "python:edge_ac", "expected_rejected": "VERTEX_LABEL_MISMATCH"},
         "CASE_HAND_F": {"k_values": [0, 1], "recipe_query": "python:triangle_k3", "recipe_data": "python:triangle_k3_label_mismatch"},
-        "CASE_HAND_G": {"k": 0, "query": "tests/fixtures/dstar01/hand_sparse_query.json", "data": "tests/fixtures/dstar01/hand_sparse_data.json"},
+        "CASE_HAND_G": {"k": 0, "query": "tests/fixtures/dstar01/hand_sparse_query.json", "data": "tests/fixtures/dstar01/hand_sparse_data.json", "expected_matches": [[100, 200, 300]]},
         "CASE_HAND_H": {"k": 0, "query": "tests/fixtures/dstar01/hand_k4_query.json", "data": "tests/fixtures/dstar01/hand_k4_data.json", "expected_count": 24},
         "CASE_HAND_I": {"k": 1, "query": "tests/fixtures/dstar01/hand_diamond_query.json", "data_before": "tests/fixtures/dstar01/hand_diamond_data_before.json", "stream": "tests/fixtures/dstar01/hand_diamond_stream_event.json"},
         "CASE_HAND_J": {"k": 1, "query": "tests/fixtures/dstar01/hand_diamond_query.json", "data_before": "tests/fixtures/dstar01/hand_diamond_data_full.json", "stream": "tests/fixtures/dstar01/hand_diamond_stream_no_event.json"},
         "CASE_HAND_K": {"k": 1, "query": "tests/fixtures/dstar01/hand_diamond_query.json", "recipe_data": "python:diamond_unrelated"},
-        "CASE_HAND_L": {"k": 1, "query": "tests/fixtures/dstar01/hand_s1_vs_s2_query.json", "data": "tests/fixtures/dstar01/hand_s1_vs_s2_data.json"},
+        "CASE_HAND_L": {"k": 1, "query": "tests/fixtures/dstar01/hand_s1_vs_s2_query.json", "data": "tests/fixtures/dstar01/hand_s1_vs_s2_data.json", "expected_public_rejection": True},
     },
     "seeded_compatibility": {
         "seed_base": 20261117,
@@ -1126,10 +1316,78 @@ def reconcile_manifest(
             errors.append(f"Case {cid} k_values mismatch: manifest={c.get('k_values')} vs spec={spec_c['k_values']}")
 
         # Check expected_count
-        if "expected_count" in spec_c and c.get("expected_count") != spec_c["expected_count"]:
-            errors.append(
-                f"Case {cid} expected_count mismatch: manifest={c.get('expected_count')} vs spec={spec_c['expected_count']}"
-            )
+        if "expected_count" in spec_c:
+            val = c.get("expected_count")
+            if val is None:
+                errors.append(f"Case {cid} missing required expected_count in manifest")
+            elif type(val) is not int or isinstance(val, bool):
+                errors.append(f"Case {cid} expected_count has invalid type: {type(val).__name__} (expected int)")
+            elif val != spec_c["expected_count"]:
+                errors.append(
+                    f"Case {cid} expected_count mismatch: manifest={val} vs spec={spec_c['expected_count']}"
+                )
+        elif "expected_count" in c:
+            errors.append(f"Case {cid} unexpectedly declared expected_count in manifest")
+
+        # R3-F01: Check expected_match (single ordered tuple)
+        if "expected_match" in spec_c:
+            val = c.get("expected_match")
+            if val is None:
+                errors.append(f"Case {cid} missing required expected_match in manifest")
+            elif not isinstance(val, (list, tuple)) or isinstance(val, (str, bytes)):
+                errors.append(f"Case {cid} expected_match has invalid type: {type(val).__name__} (expected list/tuple)")
+            elif any(type(x) is not int or isinstance(x, bool) for x in val):
+                errors.append(f"Case {cid} expected_match elements must be integers")
+            elif list(val) != list(spec_c["expected_match"]):
+                errors.append(
+                    f"Case {cid} expected_match mismatch: manifest={val} vs spec={spec_c['expected_match']}"
+                )
+        elif "expected_match" in c:
+            errors.append(f"Case {cid} unexpectedly declared expected_match in manifest")
+
+        # R3-F01: Check expected_matches (set of ordered tuples)
+        if "expected_matches" in spec_c:
+            val = c.get("expected_matches")
+            if val is None:
+                errors.append(f"Case {cid} missing required expected_matches in manifest")
+            elif not isinstance(val, (list, tuple)) or isinstance(val, (str, bytes)):
+                errors.append(f"Case {cid} expected_matches has invalid type: {type(val).__name__} (expected list)")
+            elif any(not isinstance(sub, (list, tuple)) or any(type(x) is not int or isinstance(x, bool) for x in sub) for sub in val):
+                errors.append(f"Case {cid} expected_matches must be a list of lists/tuples of integers")
+            elif [list(x) for x in val] != [list(x) for x in spec_c["expected_matches"]]:
+                errors.append(
+                    f"Case {cid} expected_matches mismatch: manifest={val} vs spec={spec_c['expected_matches']}"
+                )
+        elif "expected_matches" in c:
+            errors.append(f"Case {cid} unexpectedly declared expected_matches in manifest")
+
+        # R3-F01: Check expected_public_rejection (boolean flag)
+        if "expected_public_rejection" in spec_c:
+            val = c.get("expected_public_rejection")
+            if val is None:
+                errors.append(f"Case {cid} missing required expected_public_rejection in manifest")
+            elif type(val) is not bool:
+                errors.append(f"Case {cid} expected_public_rejection has invalid type: {type(val).__name__} (expected bool)")
+            elif val != spec_c["expected_public_rejection"]:
+                errors.append(
+                    f"Case {cid} expected_public_rejection mismatch: manifest={val} vs spec={spec_c['expected_public_rejection']}"
+                )
+        elif "expected_public_rejection" in c:
+            errors.append(f"Case {cid} unexpectedly declared expected_public_rejection in manifest")
+
+        # Check expected_rejected (rejection error reason string)
+        if "expected_rejected" in spec_c:
+            val = c.get("expected_rejected")
+            if val is None:
+                errors.append(f"Case {cid} missing required expected_rejected in manifest")
+            elif not isinstance(val, str):
+                errors.append(f"Case {cid} expected_rejected has invalid type: {type(val).__name__} (expected str)")
+            elif val != spec_c["expected_rejected"]:
+                errors.append(
+                    f"Case {cid} expected_rejected mismatch: manifest={val} vs spec={spec_c['expected_rejected']}"
+                )
+        elif "expected_rejected" in c:
+            errors.append(f"Case {cid} unexpectedly declared expected_rejected in manifest")
 
         # Check declared fixtures vs recipes
         for field in ("query", "data", "data_before", "stream"):
@@ -1191,16 +1449,22 @@ def reconcile_manifest(
         )
 
     # 7. Check executed cases match specification
-    executed_hand_ids = {c["case_id"] for c in hand_cases}
+    executed_hand_ids = {c.get("case_id") for c in hand_cases if isinstance(c, dict)}
     if executed_hand_ids != spec_hand_set:
         errors.append(
             f"Executed hand cases {sorted(executed_hand_ids)} do not match spec {sorted(spec_hand_set)}"
         )
-    executed_lambda_names = {c["topology"] for c in lambda_topologies}
+    for c in hand_cases:
+        if isinstance(c, dict) and c.get("status") != "PASS":
+            errors.append(f"Executed hand case {c.get('case_id')} failed with status {c.get('status')}")
+    executed_lambda_names = {c.get("topology") for c in lambda_topologies if isinstance(c, dict)}
     if executed_lambda_names != set(s_lambda.keys()):
         errors.append(
             f"Executed lambda topologies {sorted(executed_lambda_names)} do not match spec {sorted(s_lambda.keys())}"
         )
+    for c in lambda_topologies:
+        if isinstance(c, dict) and c.get("status") != "PASS":
+            errors.append(f"Executed lambda topology {c.get('topology')} failed with status {c.get('status')}")
 
     is_reconciled = (len(errors) == 0)
     return {
@@ -1276,7 +1540,27 @@ def main() -> None:
 
         # 4. Legacy compatibility matrix
         current_stage = "LEGACY_MATRIX"
-        legacy_matrix, legacy_ok = run_legacy_compatibility_matrix()
+        matrix_tracker: Dict[str, Any] = {
+            "status": "INCOMPLETE",
+            "stage": "LEGACY_MATRIX",
+            "total_configurations": 0,
+            "total_configurations_completed": 0,
+            "total_updates": 0,
+            "total_updates_attempted": 0,
+            "total_updates_completed": 0,
+            "total_updates_agreed": 0,
+            "completed_steps_count": 0,
+            "configs": [],
+            "step_records": [],
+            "failing_step": None,
+        }
+        completed_stages["legacy_compatibility"] = matrix_tracker
+        global _ACTIVE_MATRIX_TRACKER
+        _ACTIVE_MATRIX_TRACKER = matrix_tracker
+        try:
+            legacy_matrix, legacy_ok = run_legacy_compatibility_matrix()
+        finally:
+            _ACTIVE_MATRIX_TRACKER = None
         completed_stages["legacy_compatibility"] = legacy_matrix
         print(
             f"[4/7] Legacy compatibility (56 configs, 224 updates): {'PASS' if legacy_ok else 'FAIL'} "
@@ -1374,7 +1658,7 @@ def main() -> None:
 
     except Exception as e:
         print(f"[FATAL] Uncaught exception during report generation in stage '{current_stage}': {e}", file=sys.stderr)
-        err_report = {
+        err_report: Dict[str, Any] = {
             "contract_version": "dstar-v1.0",
             "run_id": run_id,
             "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -1384,6 +1668,17 @@ def main() -> None:
             "partial_results": completed_stages,
             "provenance": git_meta,
         }
+        if isinstance(e, LegacyMatrixExecutionError):
+            err_report["config_id"] = e.partial_matrix.get("config_id")
+            err_report["query"] = e.partial_matrix.get("query")
+            err_report["k"] = e.partial_matrix.get("k")
+            err_report["seed"] = e.partial_matrix.get("seed")
+            err_report["update_index"] = e.partial_matrix.get("update_index")
+            err_report["operation"] = e.partial_matrix.get("operation")
+            err_report["endpoints"] = e.partial_matrix.get("endpoints")
+            err_report["label"] = e.partial_matrix.get("label")
+            err_report["failing_step"] = e.partial_matrix.get("failing_step")
+            err_report["completed_steps_count"] = e.partial_matrix.get("total_updates_completed")
         try:
             args.output.parent.mkdir(parents=True, exist_ok=True)
             tmp_err = args.output.with_suffix(".tmp")

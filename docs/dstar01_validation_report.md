@@ -1,18 +1,18 @@
 # DSTAR-01 Validation Report — D* Correctness Foundation
 
 **Issue:** [#22](https://github.com/iamqthanq/Seminar_RapidFlow/issues/22) — `[DSTAR-01] D* correctness foundation — working contract, independent M0 Oracle & legacy reuse audit`
-**Date:** 2026-11-17
+**Date:** 2026-11-18
 **Author:** Research Implementation Engineer (Antigravity)
-**Status:** READY_FOR_INDEPENDENT_REVIEW_ROUND_3
+**Status:** READY_FOR_INDEPENDENT_REVIEW_ROUND_4
 **Target Integration Branch:** `QuangThang` (**never main**)
 
 ---
 
 ## 1. Executive Summary
 
-This report delivers the foundational correctness artifacts for the **D* feasibility and validation route** in Continuous Subgraph Matching (CSM), updated following **Remediation Round 2** (resolving findings R2-F01 through R2-F05 from review comment 6954354170).
+This report delivers the foundational correctness artifacts for the **D* feasibility and validation route** in Continuous Subgraph Matching (CSM), updated following **Remediation Round 3** (resolving findings R3-F01 and R3-F02 from review comment 6954955064).
 
-Under Issue #22 and Remediation Rounds 1 and 2, we have:
+Under Issue #22 and Remediation Rounds 1, 2, and 3, we have:
 1. Frozen the **D* Working Contract v1** (`docs/dstar_problem_contract_v1.md`) specifying Edge Recall scoring, explicit S2 connectivity ($Q[E_Q \setminus R(f)]$ spanning connected), and the domain constraint $0 \le k < \lambda(Q)$.
 2. Implemented the standalone, zero-external-dependency **Independent M0 Oracle** (`scripts/dstar_oracle.py`) using exhaustive ordered permutation search, strict type validation, and dynamic snapshot-and-diff.
 3. Created comprehensive correctness suites:
@@ -25,8 +25,8 @@ Under Issue #22 and Remediation Rounds 1 and 2, we have:
 4. Audited and verified **Legacy Model C Compatibility**:
    - 56 configurations across $C_4$, Diamond, and $K_4$ with 224 valid dynamic updates.
    - 100.0% snapshot and delta event agreement with legacy APX-02 Oracle.
-5. Resolved all Round 1 (R1–R8) and Round 2 (R2-F01–R2-F05) review findings with fail-closed regression tests.
-6. Conducted full repository regression: **337 / 337 tests PASS (100%)**.
+5. Resolved all review findings from Round 1 (R1–R8), Round 2 (R2-F01–R2-F05), and Round 3 (R3-F01–R3-F02) with fail-closed regression tests.
+6. Conducted full repository regression: **346 / 346 tests PASS (100%)**.
 
 ---
 
@@ -101,14 +101,25 @@ All confirmed findings from the Round 2 review (review comment 6954354170) were 
 
 ### Technical and Methodological Clarifications
 1. **Connectivity Algorithm**: `compute_edge_connectivity` uses bounded exhaustive cut enumeration over all $2^{|V_Q|-1}-1$ non-trivial vertex partitions (bounded by $|V_Q| \le 6$ cap), rather than Ford-Fulkerson max-flow.
-2. **Execution Provenance**: Pre-commit report artifacts intentionally record the parent commit SHA (`execution_head_sha: d9da5cf...`) with `dirty: true` prior to creating the remediation commit. This provides accurate, auditable provenance of the exact execution environment that produced the report.
+2. **Execution Provenance**: Pre-commit report artifacts intentionally record the parent commit SHA (`execution_head_sha: dc7d44e...`) with `dirty: true` prior to creating the remediation commit. This provides accurate, auditable provenance of the exact execution environment that produced the report.
 3. **Gate 0A Question Clarification**: The `SCORE_CHANGED` design question addresses whether valid embeddings whose missing-edge score changes (e.g. from 1 missing edge to 0 missing edges) upon an update should be emitted as a distinct event type. Multigraph support is excluded from the current MVP.
 
 ---
 
-## 6. Verification Evidence Summary
+## 6. Remediation Round 3 (R3-F01 and R3-F02)
 
-### 6.1. Analytical Hand Cases (A through L)
+All confirmed findings from the Round 3 review (review comment 6954955064) were resolved in this iteration:
+
+| Ref | Finding ID | Severity | Root Cause | Remediation Applied | Regression Test |
+|---|---|---|---|---|---|
+| **R3-1** | **R3-F01** | Medium | `reconcile_manifest` checked `expected_count` but omitted `expected_match`, `expected_matches`, `expected_public_rejection`, and `expected_rejected`. Manifest mutations escaped reconciliation. | Declared all semantic expectations in `EXECUTABLE_CASE_SPEC` and added bidirectional type, structure, and value validation in `reconcile_manifest`. Cross-checked executed hand-cases. | 7 mutation tests in `TestDStarManifestReconciliationNegative` (`test_dstar_report_generator.py`) |
+| **R3-2** | **R3-F02** | Medium | Fatal exception inside legacy compatibility matrix lost within-matrix progress (completed configs, step records, failing update details). | Implemented live progress accumulator and structured `LegacyMatrixExecutionError` in `scripts/generate_dstar01_report.py`. Preserves completed configurations, attempted/completed/agreed step metrics, full step records, and failing step metadata in ERROR artifact upon fatal error. | 2 mid-matrix fault-injection tests in `TestDStarProvenanceAndPartialFailure` (`test_dstar_report_generator.py`) |
+
+---
+
+## 7. Verification Evidence Summary
+
+### 7.1. Analytical Hand Cases (A through L)
 
 | Case ID | Query Topology | $k$ | $\lambda(Q)$ | Expected Matches | Computed Matches | Status |
 |---|---|---|---|---|---|---|
@@ -125,7 +136,7 @@ All confirmed findings from the Round 2 review (review comment 6954354170) were 
 | `CASE_HAND_K` | Dynamic Edge Insertion | 1 | 2 | entered=1, exited=0 | entered=1, exited=0 | **PASS** |
 | `CASE_HAND_L` | Strict Domain Boundary ($k \ge \lambda$) | 1 | 1 | Public Domain Rejection | Public Domain Rejection | **PASS** |
 
-### 6.2. Edge Connectivity Reference Verification
+### 7.2. Edge Connectivity Reference Verification
 
 | Topology | $|V_Q|$ | $|E_Q|$ | Theoretical $\lambda$ | Computed $\lambda$ | Status |
 |---|---|---|---|---|---|
@@ -137,7 +148,7 @@ All confirmed findings from the Round 2 review (review comment 6954354170) were 
 | $K_4$ (Complete) | 4 | 6 | 3 | 3 | **PASS** |
 | $K_{3,3}$ (Bipartite) | 6 | 9 | 3 | 3 | **PASS** |
 
-### 6.3. Boundary Diagnostics (7 Cases: $k=0$ and $k=1$)
+### 7.3. Boundary Diagnostics (7 Cases: $k=0$ and $k=1$)
 
 | Diagnostic ID | Topology | $k$ | Operation | Anchor Edge | Property Holds | Status |
 |---|---|---|---|---|---|---|
@@ -149,7 +160,7 @@ All confirmed findings from the Round 2 review (review comment 6954354170) were 
 | `CASE_DIAG_04_DEL_NOEVENT`| Diamond | 1 | DELETE | (1, 3, 0) | Yes (0 event, retained $\le k$) | **PASS** |
 | `CASE_DIAG_05_WRONG_LABEL`| Diamond | 1 | INSERT | (2, 4, 99) | Yes (0 event, wrong label) | **PASS** |
 
-### 6.4. Legacy APX-02 Compatibility Matrix
+### 7.4. Legacy APX-02 Compatibility Matrix
 
 - **Configurations**: 56 configurations ($C_4, \text{Diamond}, K_4$; uniform and mixed labels; seeds 0–7)
 - **Updates**: 224 dynamic updates (112 INSERT, 112 DELETE)
@@ -158,23 +169,23 @@ All confirmed findings from the Round 2 review (review comment 6954354170) were 
 - **Agreement**: **224 / 224 updates (100.0%)** identical between D* M0 and Legacy APX-02.
 - **Status**: **PASS**
 
-### 6.5. Full Repository Test Suite
+### 7.5. Full Repository Test Suite
 
 | Test Suite / Category | Command | Tests | Status |
 |---|---|---|---|
 | **D* Oracle Suite** | `python3 -m unittest tests/test_dstar_oracle.py` | 55 tests | **PASS** |
 | **Legacy Compatibility** | `python3 -m unittest tests/test_dstar_legacy_compatibility.py` | 2 tests (56 configs, 224 updates) | **PASS** |
-| **Report Generator Suite** | `python3 -m unittest tests/test_dstar_report_generator.py` | 19 tests | **PASS** |
+| **Report Generator Suite** | `python3 -m unittest tests/test_dstar_report_generator.py` | 28 tests | **PASS** |
 | **Report Generator Main Execution** | `python3 scripts/generate_dstar01_report.py` | 7 verification groups | **PASS** |
 | **APX-02 Oracle Suite** | `python3 -m unittest tests/test_apx02_oracle.py` | 33 tests | **PASS** |
 | **APX-03 Native Baseline** | `python3 -m unittest tests/test_apx03_baseline.py` | 46 tests | **PASS** |
 | **APX-04 Preflight & Manifest** | `python3 -m unittest tests/test_apx04_preflight.py` | 62 tests | **PASS** |
 | **RF-02 Runner & Oracle** | `python3 -m unittest tests/test_rf02_runner.py tests/test_rf02_oracle.py` | 21 tests | **PASS** |
-| **Full Repository Regression** | `python3 -m unittest discover tests` | **337 tests** | **PASS** |
+| **Full Repository Regression** | `python3 -m unittest discover tests` | **346 tests** | **PASS** |
 
 ---
 
-## 7. Preservation and Non-Regression Evidence
+## 8. Preservation and Non-Regression Evidence
 
 - `baselines/rapidflow/source/`: pristine at pinned commit `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1`.
 - `data/netflow/`: untouched; `Ndata.graph` hash `bfedd2cab6d2c460141da945e77b0be39ae24c74d9a28b9394a38ee35b652fc6` preserved.
@@ -183,9 +194,9 @@ All confirmed findings from the Round 2 review (review comment 6954354170) were 
 
 ---
 
-## 8. Reproduction Instructions
+## 9. Reproduction Instructions
 
-### 8.1. Sibling Worktree Setup (Without Installing External Packages)
+### 9.1. Sibling Worktree Setup (Without Installing External Packages)
 
 In a new worktree branched from `origin/QuangThang`:
 
@@ -201,7 +212,7 @@ mkdir -p extensions/apx03/build
 export PATH="$PWD/external/tools/cmake-3.28.3-linux-x86_64/bin:$PATH"
 ```
 
-### 8.2. Test Execution Commands
+### 9.2. Test Execution Commands
 
 ```bash
 # 1. Run independent D* Oracle suite (55 tests)
@@ -210,7 +221,7 @@ python3 -m unittest tests/test_dstar_oracle.py
 # 2. Run legacy compatibility matrix (56 configs, 224 updates)
 python3 -m unittest tests/test_dstar_legacy_compatibility.py
 
-# 3. Run report generator negative & fault-injection regression (19 tests)
+# 3. Run report generator negative & fault-injection regression (28 tests)
 python3 -m unittest tests/test_dstar_report_generator.py
 
 # 4. Generate structured report artifact into temporary file (clean test)
@@ -219,6 +230,6 @@ python3 scripts/generate_dstar01_report.py --output /tmp/dstar01_test_summary.js
 # 5. Generate canonical tracked report
 python3 scripts/generate_dstar01_report.py
 
-# 6. Run full repository regression (337 tests)
+# 6. Run full repository regression (346 tests)
 python3 -m unittest discover tests
 ```
