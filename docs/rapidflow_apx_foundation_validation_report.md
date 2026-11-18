@@ -7,8 +7,8 @@
 **Base Commit:** `8f6ebdacbf289e48e1c8a80a1c2e93720bcf633e`
 **Feature Branch:** `feature/rf30-d-int02-native-foundation`
 **Pinned Upstream RapidFlow:** `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1`
-**Execution Commit:** `d76909e2ce1e4ca5e4c49a8158b463facf88a673`
-**Native Harness Binary SHA-256:** `10fd1bd4f9a5f93d43076c47658181e6c160568fef861d4fc6f84524b357f402`
+**Execution Commit:** `df276529ceea03d8cc85c3781b567fbbf3bb135a`
+**Native Harness Binary SHA-256:** `b85eebb2aa8a000b18354c4673d4da27278e0cc0fcf6cfec8124bf894734e403`
 **Overall Status:** **`PASS (P2_FOUNDATION_VERIFIED)`**
 
 ---
@@ -17,17 +17,17 @@
 
 Phase P2 delivers the authoritative C++ native foundation for RapidFlow-APX in `extensions/rapidflow_apx/`. All four core components—`ApxTypedCodec`, `ApxAuthoritativeGraph`, `ApxTransactionManager`, and `ApxTupleSink`—have been fully implemented, compiled into `librapidflow_apx_foundation.a`, and linked with genuine upstream RapidFlow components (`Graph` CSR and `GlobalEdgeView`).
 
-All 8 canonical foundation test cases in `configs/rapidflow_apx_foundation_cases.json` and 17 Python regression tests across 10 groups in `tests/test_rapidflow_apx_foundation.py` pass cleanly with zero failures and zero flakes.
+All 8 canonical foundation test cases in `configs/rapidflow_apx_foundation_cases.json` and 26 Python regression tests across 10 groups in `tests/test_rapidflow_apx_foundation.py` pass cleanly with zero failures and zero flakes.
 
-The consolidated remediation addresses all findings P2-F01 through P2-F08:
-- **P2-F01**: Strict manifest schema, ceiling enforcement (timeout <= 30s, AS <= 512 MiB), payload strict validation (exit code 0 matches PASS, types strict, reject string "false"), diagnostic subset mode for `--case` (writes to `diagnostic_summary.json`, never overwrites canonical report or claims `P2_FOUNDATION_VERIFIED`), real `--dry-run` validation.
-- **P2-F02**: Transaction atomicity and strong exception safety: reentrancy guard (`StepStatus::REENTRANCY_BLOCKED`), codec checkpointing with zero-allocation rollback (`noexcept`), symmetric overlay mutations with zero-allocation rollback, shadow tombstones, output staging before commit, real fault tests (`std::bad_alloc`, between fwd/rev, callback abort, duplicate raw emission).
-- **P2-F03**: Strict `json_mini.h` (throw on float/null/bool conversion, reject trailing garbage), ingestion validation in `load_baseline` (dense IDs [0, |V|-1] without duplicates or gaps, reject self-loops, reject duplicate undirected edges in both (u, v) and (v, u), reject out-of-range endpoints, capacity limits).
-- **P2-F04**: Real M0 Oracle integration (`scripts/dstar_oracle.py`): replace permutation helper with genuine `enumerate_snapshot` and `DStarDynamicOracle`; output actual ordered tuples in dynamic events; full witness coverage.
-- **P2-F05**: D-R guard in fixed-mapping evaluator: compute exact $\lambda(Q)$ via min s-t cut flow passes; enforce $0 \le k < \lambda(Q)$; reject $k \ge \lambda(Q)$ or metadata mismatch; enforce S2 spanning connectivity on matched query edges.
-- **P2-F06**: Resource contract: build <= 120s, `RLIMIT_AS <= 1024` MiB, process group, -j2; runtime <= 30s, `RLIMIT_AS <= 512` MiB; preflight `MemAvailable` from `/proc/meminfo` >= 2 GiB, disk >= 1 GiB.
-- **P2-F07**: Provenance and partial artifacts: skeleton initialized at start, stages tracked, atomic checkpointing after each case preserving partial results on error, full environment metadata.
-- **P2-F08**: Symlink data dependencies resolved (`data/netflow/release_newsp`), trailing whitespace clean (`git diff --check`), update R2 decision without premature closure claims, update handoff docs.
+The targeted closure remediation thoroughly resolves all remaining aspects of P2-F01 through P2-F08:
+- **P2-F01**: Canonical required case registry locked in code (`CANONICAL_REQUIRED_CASE_IDS`); manifest cannot self-shrink; required observation schema strictly verified per case with explicit types; `--dry-run` performs full fixture existence and hash validation.
+- **P2-F02**: Full exception safety in `ApxTypedCodec` with immediate map-erase rollback on vector insertion throw (no ghost entries); RAII `TransactionScope` ensuring zero-allocation rollback across all exit paths before error string creation; complete elimination of container copy-assignments (`restore_checkpoint`); persistent allocation failure during staging rollback verified.
+- **P2-F03**: Ingestion rejects duplicate external vertex declarations fail-closed; JSON parser decodes Unicode escapes (`\uXXXX`, e.g. `\u0030` -> `"0"`) and rejects invalid escapes (e.g. `\q`).
+- **P2-F04**: Dynamic events strictly derive `event_type` from operation semantics (INSERT -> ENTERED, DELETE -> EXITED) without copying expected values; independent Python state reference model cross-checks per-step graph state (edges, vertices, degrees, edge existence).
+- **P2-F05**: D-R guard computes exact $\lambda(Q)$ via min $s$-$t$ cut flow network passes; enforces $0 \le k < \lambda(Q)$; verifies S2 spanning connectivity on matched query edges.
+- **P2-F06**: Resource containment: child process exits with 127 if `setrlimit` fails, failing case immediately; build and runtime use process group `SIGKILL` cleanup.
+- **P2-F07**: Unexpected exceptions in case loop record terminal `FAIL` status in `summary.json`; complete source-binding provenance (SHA-256 for all headers, sources, manifests, fixtures, build commands) included in report; git dirty state honestly differentiated between code modifications and runner outputs.
+- **P2-F08**: Upstream pristine at `2ea4f4c...`; zero trailing whitespace; decision R2 honestly documents architecture and deferrals to P3/P4.
 
 ---
 
@@ -35,9 +35,17 @@ The consolidated remediation addresses all findings P2-F01 through P2-F08:
 
 | Metric / Property | Value / Verification Evidence |
 | :--- | :--- |
-| **Execution Commit** | `d76909e2ce1e4ca5e4c49a8158b463facf88a673` |
+| **Execution Commit** | `df276529ceea03d8cc85c3781b567fbbf3bb135a` |
 | **Repository Cleanliness** | Verified CLEAN via `git status --porcelain` |
 | **Upstream RapidFlow Path** | `baselines/rapidflow/source/` (symlink in worktree) |
+| **Upstream Pinned Commit** | `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` |
+| **Upstream Status** | Clean, pristine, zero uncommitted modifications |
+| **Compiler & Tools** | GCC 13.3.0, CMake 3.28.3, Python 3.12.3 |
+| **Compilation Options** | C++17, `-O3 -Wall -Wextra`, `-fPIC` |
+| **Native Library Output** | `extensions/rapidflow_apx/build/librapidflow_apx_foundation.a` |
+| **Native Test Harness** | `tests/native/rapidflow_apx_foundation/build/rapidflow_apx_foundation_harness` |
+| **Harness SHA-256** | `b85eebb2aa8a000b18354c4673d4da27278e0cc0fcf6cfec8124bf894734e403` |
+| **System Resources** | 5.21 GiB RAM (>= 2.0 GiB required), 110.0 GiB Free Disk (>= 1.0 GiB required) |
 | **Upstream Pinned Commit** | `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` |
 | **Upstream Status** | Clean, pristine, zero uncommitted modifications |
 | **Compiler & Tools** | GCC 13.3.0, CMake 3.28.3, Python 3.12.3 |
