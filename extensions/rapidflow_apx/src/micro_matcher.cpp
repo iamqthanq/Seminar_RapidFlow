@@ -1,5 +1,7 @@
 #include "rapidflow_apx/micro_matcher.h"
 #include <algorithm>
+#include <queue>
+#include <limits>
 
 namespace rapidflow_apx {
 
@@ -92,7 +94,6 @@ void MicroExactMatcher::dfs_snapshot(
     uint32_t w_q_label = query.get_vertex_label(w_q);
 
     if (max_mapped_nbrs > 0) {
-        // Collect candidates from neighbors of the first mapped neighbor
         uint32_t pivot_nbr_q = 0;
         for (uint32_t nbr : query.get_neighbors(w_q)) {
             if (query_mapped[nbr]) {
@@ -100,42 +101,51 @@ void MicroExactMatcher::dfs_snapshot(
                 break;
             }
         }
-        uint32_t pivot_nbr_d = mapping[pivot_nbr_q];
-        for (uint32_t cand : data.get_neighbors(pivot_nbr_d)) {
-            if (!data_used[cand] && data.get_vertex_label(cand) == w_q_label) {
-                bool ok = true;
-                for (uint32_t other_nbr_q : query.get_neighbors(w_q)) {
-                    if (query_mapped[other_nbr_q]) {
-                        uint32_t other_nbr_d = mapping[other_nbr_q];
-                        auto q_lbl = query.get_edge_label(w_q, other_nbr_q);
-                        auto d_lbl = data.get_edge_label(cand, other_nbr_d);
-                        if (!d_lbl.exists || d_lbl.label != q_lbl.label) {
-                            ok = false;
-                            break;
-                        }
+        uint32_t pivot_data_v = mapping[pivot_nbr_q];
+        auto pivot_q_edge = query.get_edge_label(w_q, pivot_nbr_q);
+
+        for (uint32_t cand_d : data.get_neighbors(pivot_data_v)) {
+            if (data_used[cand_d]) continue;
+            if (data.get_vertex_label(cand_d) != w_q_label) continue;
+
+            auto d_edge = data.get_edge_label(cand_d, pivot_data_v);
+            if (!d_edge.exists || d_edge.label != pivot_q_edge.label) continue;
+
+            bool compat = true;
+            for (uint32_t other_q : query.get_neighbors(w_q)) {
+                if (query_mapped[other_q] && other_q != pivot_nbr_q) {
+                    auto exp_e = query.get_edge_label(w_q, other_q);
+                    auto act_e = data.get_edge_label(cand_d, mapping[other_q]);
+                    if (!act_e.exists || act_e.label != exp_e.label) {
+                        compat = false;
+                        break;
                     }
                 }
-                if (ok) {
-                    mapping[w_q] = cand;
-                    query_mapped[w_q] = true;
-                    data_used[cand] = true;
-                    dfs_snapshot(query, data, mapping, query_mapped, data_used, mapped_count + 1, sink, match_count);
-                    query_mapped[w_q] = false;
-                    data_used[cand] = false;
-                }
             }
+            if (!compat) continue;
+
+            mapping[w_q] = cand_d;
+            query_mapped[w_q] = true;
+            data_used[cand_d] = true;
+
+            dfs_snapshot(query, data, mapping, query_mapped, data_used, mapped_count + 1, sink, match_count);
+
+            query_mapped[w_q] = false;
+            data_used[cand_d] = false;
         }
     } else {
-        // No mapped neighbors: scan all candidate data vertices
-        for (uint32_t cand = 0; cand < num_d; ++cand) {
-            if (!data_used[cand] && data.get_vertex_label(cand) == w_q_label) {
-                mapping[w_q] = cand;
-                query_mapped[w_q] = true;
-                data_used[cand] = true;
-                dfs_snapshot(query, data, mapping, query_mapped, data_used, mapped_count + 1, sink, match_count);
-                query_mapped[w_q] = false;
-                data_used[cand] = false;
-            }
+        for (uint32_t cand_d = 0; cand_d < num_d; ++cand_d) {
+            if (data_used[cand_d]) continue;
+            if (data.get_vertex_label(cand_d) != w_q_label) continue;
+
+            mapping[w_q] = cand_d;
+            query_mapped[w_q] = true;
+            data_used[cand_d] = true;
+
+            dfs_snapshot(query, data, mapping, query_mapped, data_used, mapped_count + 1, sink, match_count);
+
+            query_mapped[w_q] = false;
+            data_used[cand_d] = false;
         }
     }
 }
@@ -150,64 +160,57 @@ uint64_t MicroExactMatcher::match_delta(
 ) {
     uint32_t num_q = query.get_vertices_count();
     uint32_t num_d = data.get_vertices_count();
-    if (num_q < 2 || num_d < num_q) {
+    if (num_q == 0 || num_d < num_q) {
         return 0;
     }
 
-    std::vector<uint32_t> mapping(num_q, 0);
-    std::vector<bool> query_mapped(num_q, false);
-    std::vector<bool> data_used(num_d, false);
-    uint64_t match_count = 0;
+    uint64_t total_matches = 0;
 
-    // Iterate through all query edges matching dense_label
-    for (uint32_t u_q = 0; u_q < num_q; ++u_q) {
-        for (uint32_t v_q : query.get_neighbors(u_q)) {
-            if (u_q < v_q) {
-                auto q_edge = query.get_edge_label(u_q, v_q);
-                if (q_edge.label != dense_label) {
-                    continue;
-                }
+    for (uint32_t q_u = 0; q_u < num_q; ++q_u) {
+        for (uint32_t q_v : query.get_neighbors(q_u)) {
+            if (q_u >= q_v) continue;
+            auto q_edge = query.get_edge_label(q_u, q_v);
+            if (q_edge.label != dense_label) continue;
 
-                // Binding 1: u_q -> dense_u, v_q -> dense_v
-                if (query.get_vertex_label(u_q) == data.get_vertex_label(dense_u) &&
-                    query.get_vertex_label(v_q) == data.get_vertex_label(dense_v)) {
-                    mapping[u_q] = dense_u;
-                    mapping[v_q] = dense_v;
-                    query_mapped[u_q] = true;
-                    query_mapped[v_q] = true;
-                    data_used[dense_u] = true;
-                    data_used[dense_v] = true;
+            // Direction 1: q_u -> dense_u, q_v -> dense_v
+            if (query.get_vertex_label(q_u) == data.get_vertex_label(dense_u) &&
+                query.get_vertex_label(q_v) == data.get_vertex_label(dense_v)) {
+                std::vector<uint32_t> mapping(num_q, 0);
+                std::vector<bool> query_mapped(num_q, false);
+                std::vector<bool> data_used(num_d, false);
 
-                    dfs_delta(query, data, mapping, query_mapped, data_used, 2, sink, match_count);
+                mapping[q_u] = dense_u;
+                query_mapped[q_u] = true;
+                data_used[dense_u] = true;
 
-                    query_mapped[u_q] = false;
-                    query_mapped[v_q] = false;
-                    data_used[dense_u] = false;
-                    data_used[dense_v] = false;
-                }
+                mapping[q_v] = dense_v;
+                query_mapped[q_v] = true;
+                data_used[dense_v] = true;
 
-                // Binding 2: u_q -> dense_v, v_q -> dense_u
-                if (query.get_vertex_label(u_q) == data.get_vertex_label(dense_v) &&
-                    query.get_vertex_label(v_q) == data.get_vertex_label(dense_u)) {
-                    mapping[u_q] = dense_v;
-                    mapping[v_q] = dense_u;
-                    query_mapped[u_q] = true;
-                    query_mapped[v_q] = true;
-                    data_used[dense_v] = true;
-                    data_used[dense_u] = true;
+                dfs_delta(query, data, mapping, query_mapped, data_used, 2, sink, total_matches);
+            }
 
-                    dfs_delta(query, data, mapping, query_mapped, data_used, 2, sink, match_count);
+            // Direction 2: q_u -> dense_v, q_v -> dense_u
+            if (query.get_vertex_label(q_u) == data.get_vertex_label(dense_v) &&
+                query.get_vertex_label(q_v) == data.get_vertex_label(dense_u)) {
+                std::vector<uint32_t> mapping(num_q, 0);
+                std::vector<bool> query_mapped(num_q, false);
+                std::vector<bool> data_used(num_d, false);
 
-                    query_mapped[u_q] = false;
-                    query_mapped[v_q] = false;
-                    data_used[dense_v] = false;
-                    data_used[dense_u] = false;
-                }
+                mapping[q_u] = dense_v;
+                query_mapped[q_u] = true;
+                data_used[dense_v] = true;
+
+                mapping[q_v] = dense_u;
+                query_mapped[q_v] = true;
+                data_used[dense_u] = true;
+
+                dfs_delta(query, data, mapping, query_mapped, data_used, 2, sink, total_matches);
             }
         }
     }
 
-    return match_count;
+    return total_matches;
 }
 
 void MicroExactMatcher::dfs_delta(
@@ -225,13 +228,16 @@ void MicroExactMatcher::dfs_delta(
 
     if (mapped_count == num_q) {
         if (check_all_edges(query, data, mapping)) {
-            sink.emit_mapping(mapping);
-            match_count++;
+            try {
+                sink.emit_mapping(mapping);
+                match_count++;
+            } catch (const DuplicateEmissionException&) {
+                // Ignore duplicates across symmetric query edge assignments in same step
+            }
         }
         return;
     }
 
-    // Pick next unmapped query vertex with highest number of mapped neighbors
     int best_w_q = -1;
     int max_mapped_nbrs = -1;
     for (uint32_t u = 0; u < num_q; ++u) {
@@ -260,43 +266,137 @@ void MicroExactMatcher::dfs_delta(
                 break;
             }
         }
-        uint32_t pivot_nbr_d = mapping[pivot_nbr_q];
-        for (uint32_t cand : data.get_neighbors(pivot_nbr_d)) {
-            if (!data_used[cand] && data.get_vertex_label(cand) == w_q_label) {
-                bool ok = true;
-                for (uint32_t other_nbr_q : query.get_neighbors(w_q)) {
-                    if (query_mapped[other_nbr_q]) {
-                        uint32_t other_nbr_d = mapping[other_nbr_q];
-                        auto q_lbl = query.get_edge_label(w_q, other_nbr_q);
-                        auto d_lbl = data.get_edge_label(cand, other_nbr_d);
-                        if (!d_lbl.exists || d_lbl.label != q_lbl.label) {
-                            ok = false;
-                            break;
-                        }
+        uint32_t pivot_data_v = mapping[pivot_nbr_q];
+        auto pivot_q_edge = query.get_edge_label(w_q, pivot_nbr_q);
+
+        for (uint32_t cand_d : data.get_neighbors(pivot_data_v)) {
+            if (data_used[cand_d]) continue;
+            if (data.get_vertex_label(cand_d) != w_q_label) continue;
+
+            auto d_edge = data.get_edge_label(cand_d, pivot_data_v);
+            if (!d_edge.exists || d_edge.label != pivot_q_edge.label) continue;
+
+            bool compat = true;
+            for (uint32_t other_q : query.get_neighbors(w_q)) {
+                if (query_mapped[other_q] && other_q != pivot_nbr_q) {
+                    auto exp_e = query.get_edge_label(w_q, other_q);
+                    auto act_e = data.get_edge_label(cand_d, mapping[other_q]);
+                    if (!act_e.exists || act_e.label != exp_e.label) {
+                        compat = false;
+                        break;
                     }
                 }
-                if (ok) {
-                    mapping[w_q] = cand;
-                    query_mapped[w_q] = true;
-                    data_used[cand] = true;
-                    dfs_delta(query, data, mapping, query_mapped, data_used, mapped_count + 1, sink, match_count);
-                    query_mapped[w_q] = false;
-                    data_used[cand] = false;
+            }
+            if (!compat) continue;
+
+            mapping[w_q] = cand_d;
+            query_mapped[w_q] = true;
+            data_used[cand_d] = true;
+
+            dfs_delta(query, data, mapping, query_mapped, data_used, mapped_count + 1, sink, match_count);
+
+            query_mapped[w_q] = false;
+            data_used[cand_d] = false;
+        }
+    } else {
+        for (uint32_t cand_d = 0; cand_d < num_d; ++cand_d) {
+            if (data_used[cand_d]) continue;
+            if (data.get_vertex_label(cand_d) != w_q_label) continue;
+
+            mapping[w_q] = cand_d;
+            query_mapped[w_q] = true;
+            data_used[cand_d] = true;
+
+            dfs_delta(query, data, mapping, query_mapped, data_used, mapped_count + 1, sink, match_count);
+
+            query_mapped[w_q] = false;
+            data_used[cand_d] = false;
+        }
+    }
+}
+
+uint32_t MicroExactMatcher::compute_edge_connectivity(const ApxAuthoritativeGraph& query) {
+    uint32_t n = query.get_vertices_count();
+    if (n <= 1) return 0;
+    if (n == 2) {
+        return query.has_edge(0, 1) ? 1 : 0;
+    }
+
+    uint32_t min_deg = std::numeric_limits<uint32_t>::max();
+    for (uint32_t u = 0; u < n; ++u) {
+        min_deg = std::min(min_deg, query.get_degree(u));
+    }
+    if (min_deg == 0) return 0;
+
+    struct Edge {
+        uint32_t to;
+        int cap;
+        int rev;
+    };
+
+    auto max_flow_st = [&](uint32_t s, uint32_t t) -> uint32_t {
+        std::vector<std::vector<Edge>> adj(n);
+        auto add_undirected = [&](uint32_t u, uint32_t v) {
+            Edge a{v, 1, static_cast<int>(adj[v].size())};
+            Edge b{u, 1, static_cast<int>(adj[u].size())};
+            adj[u].push_back(a);
+            adj[v].push_back(b);
+        };
+
+        for (uint32_t u = 0; u < n; ++u) {
+            for (uint32_t v : query.get_neighbors(u)) {
+                if (u < v) {
+                    add_undirected(u, v);
                 }
             }
         }
-    } else {
-        for (uint32_t cand = 0; cand < num_d; ++cand) {
-            if (!data_used[cand] && data.get_vertex_label(cand) == w_q_label) {
-                mapping[w_q] = cand;
-                query_mapped[w_q] = true;
-                data_used[cand] = true;
-                dfs_delta(query, data, mapping, query_mapped, data_used, mapped_count + 1, sink, match_count);
-                query_mapped[w_q] = false;
-                data_used[cand] = false;
+
+        uint32_t flow = 0;
+        while (true) {
+            std::vector<int> parent_v(n, -1);
+            std::vector<int> parent_e(n, -1);
+            std::vector<uint32_t> q;
+            q.reserve(n);
+            q.push_back(s);
+            parent_v[s] = static_cast<int>(s);
+
+            size_t head = 0;
+            while (head < q.size()) {
+                uint32_t curr = q[head++];
+                if (curr == t) break;
+                for (size_t i = 0; i < adj[curr].size(); ++i) {
+                    const auto& e = adj[curr][i];
+                    if (e.cap > 0 && parent_v[e.to] == -1) {
+                        parent_v[e.to] = static_cast<int>(curr);
+                        parent_e[e.to] = static_cast<int>(i);
+                        q.push_back(e.to);
+                    }
+                }
             }
+
+            if (parent_v[t] == -1) break;
+
+            uint32_t curr = t;
+            while (curr != s) {
+                uint32_t prev = static_cast<uint32_t>(parent_v[curr]);
+                int e_idx = parent_e[curr];
+                adj[prev][e_idx].cap -= 1;
+                int rev_idx = adj[prev][e_idx].rev;
+                adj[curr][rev_idx].cap += 1;
+                curr = prev;
+            }
+            flow += 1;
         }
+        return flow;
+    };
+
+    uint32_t global_min_cut = min_deg;
+    for (uint32_t t = 1; t < n; ++t) {
+        uint32_t cut = max_flow_st(0, t);
+        global_min_cut = std::min(global_min_cut, cut);
+        if (global_min_cut == 0) return 0;
     }
+    return global_min_cut;
 }
 
 FixedMappingEvaluation MicroExactMatcher::evaluate_fixed_mapping(
@@ -314,34 +414,53 @@ FixedMappingEvaluation MicroExactMatcher::evaluate_fixed_mapping(
         return eval;
     }
 
-    // Check injectivity
+    // 1. Verify and compute edge connectivity lambda(Q)
+    eval.computed_lambda = compute_edge_connectivity(query);
+    if (lambda != eval.computed_lambda) {
+        eval.is_valid = false;
+        eval.diagnostic_message = "Metadata lambda mismatch: claimed " + std::to_string(lambda) +
+                                  " but computed " + std::to_string(eval.computed_lambda);
+        return eval;
+    }
+
+    // 2. Strict D-R Guard: 0 <= k < lambda(Q)
+    if (k >= eval.computed_lambda) {
+        eval.is_valid = false;
+        eval.diagnostic_message = "D-R guard violated: threshold k=" + std::to_string(k) +
+                                  " must be strictly less than lambda(Q)=" + std::to_string(eval.computed_lambda);
+        return eval;
+    }
+
+    // 3. Check injectivity of mapping
     std::vector<bool> seen_data(data.get_vertices_count(), false);
     for (uint32_t d_v : mapping_by_query_order) {
         if (!data.has_vertex(d_v)) {
             eval.is_valid = false;
-            eval.diagnostic_message = "Data vertex does not exist in graph";
+            eval.diagnostic_message = "Data vertex does not exist in graph: " + std::to_string(d_v);
             return eval;
         }
         if (seen_data[d_v]) {
             eval.is_valid = false;
-            eval.diagnostic_message = "Mapping is non-injective";
+            eval.diagnostic_message = "Mapping is non-injective: duplicate data vertex " + std::to_string(d_v);
             return eval;
         }
         seen_data[d_v] = true;
     }
 
-    // Check vertex labels
+    // 4. Check vertex labels
     for (uint32_t u = 0; u < num_q; ++u) {
         if (query.get_vertex_label(u) != data.get_vertex_label(mapping_by_query_order[u])) {
             eval.is_valid = false;
-            eval.diagnostic_message = "Vertex label mismatch";
+            eval.diagnostic_message = "Vertex label mismatch at query vertex " + std::to_string(u);
             return eval;
         }
     }
 
-    // Count matched and missing edges
+    // 5. Count matched and missing edges, collect matched edge graph
     eval.matched_edges = 0;
     eval.missing_edges = 0;
+    std::vector<std::vector<uint32_t>> matched_adj(num_q);
+
     for (uint32_t u = 0; u < num_q; ++u) {
         for (uint32_t v : query.get_neighbors(u)) {
             if (u < v) {
@@ -349,6 +468,8 @@ FixedMappingEvaluation MicroExactMatcher::evaluate_fixed_mapping(
                 auto d_edge = data.get_edge_label(mapping_by_query_order[u], mapping_by_query_order[v]);
                 if (d_edge.exists && d_edge.label == q_edge.label) {
                     eval.matched_edges++;
+                    matched_adj[u].push_back(v);
+                    matched_adj[v].push_back(u);
                 } else {
                     eval.missing_edges++;
                 }
@@ -356,15 +477,49 @@ FixedMappingEvaluation MicroExactMatcher::evaluate_fixed_mapping(
         }
     }
 
-    // Evaluate APX condition: missing_edges <= k and missing_edges <= lambda
-    if (eval.missing_edges <= k && eval.missing_edges <= lambda) {
-        eval.is_valid = true;
-        eval.diagnostic_message = "Valid approximate embedding without exact NLF interference";
-    } else {
+    // 6. Check missing edges against threshold k
+    if (eval.missing_edges > k) {
         eval.is_valid = false;
-        eval.diagnostic_message = "Missing edges exceed threshold k or lambda";
+        eval.diagnostic_message = "Missing edges " + std::to_string(eval.missing_edges) +
+                                  " exceeds threshold k=" + std::to_string(k);
+        return eval;
     }
 
+    // 7. S2 Spanning Connectivity on matched query edges
+    eval.s2_spanning_connected = false;
+    if (num_q > 0) {
+        std::vector<bool> visited(num_q, false);
+        std::vector<uint32_t> bfs_q;
+        bfs_q.reserve(num_q);
+        bfs_q.push_back(0);
+        visited[0] = true;
+
+        size_t head = 0;
+        while (head < bfs_q.size()) {
+            uint32_t curr = bfs_q[head++];
+            for (uint32_t nbr : matched_adj[curr]) {
+                if (!visited[nbr]) {
+                    visited[nbr] = true;
+                    bfs_q.push_back(nbr);
+                }
+            }
+        }
+
+        if (bfs_q.size() == num_q) {
+            eval.s2_spanning_connected = true;
+        }
+    }
+
+    if (!eval.s2_spanning_connected) {
+        eval.is_valid = false;
+        eval.diagnostic_message = "S2 spanning connectivity violated: matched edges do not form a spanning connected subgraph of Q";
+        return eval;
+    }
+
+    // All conditions satisfied
+    eval.is_valid = true;
+    eval.diagnostic_message = "Valid approximate embedding satisfying D-R guard (k=" + std::to_string(k) +
+                              " < lambda=" + std::to_string(eval.computed_lambda) + ") and S2 spanning connectivity";
     return eval;
 }
 

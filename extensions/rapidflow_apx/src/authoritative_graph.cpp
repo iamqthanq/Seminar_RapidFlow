@@ -1,4 +1,5 @@
 #include "rapidflow_apx/authoritative_graph.h"
+#include "rapidflow_apx/typed_codec.h"
 #include <iostream>
 
 namespace rapidflow_apx {
@@ -15,28 +16,52 @@ void ApxAuthoritativeGraph::load_baseline(
     const std::vector<std::pair<uint32_t, uint32_t>>& vertices,
     const std::vector<std::tuple<uint32_t, uint32_t, uint32_t>>& edges
 ) {
+    // 1. Capacity Limits Check
+    ApxTypedCodec::check_capacity_limits(vertices.size(), edges.size());
+
     vertices_count_ = static_cast<uint32_t>(vertices.size());
-    vertex_labels_.resize(vertices_count_, 0);
+    vertex_labels_.assign(vertices_count_, 0);
+
+    // 2. Dense Vertex ID Validation [0, |V|-1] without duplicates or gaps
+    std::vector<bool> seen_vertex(vertices_count_, false);
     for (const auto& v : vertices) {
         if (v.first >= vertices_count_) {
-            throw std::out_of_range("Vertex ID exceeds declared count in baseline");
+            throw std::out_of_range("Vertex ID " + std::to_string(v.first) + " out of dense range [0, " + std::to_string(vertices_count_ - 1) + "]");
         }
+        if (seen_vertex[v.first]) {
+            throw std::invalid_argument("Duplicate vertex ID in baseline: " + std::to_string(v.first));
+        }
+        seen_vertex[v.first] = true;
         vertex_labels_[v.first] = v.second;
     }
+    for (size_t i = 0; i < vertices_count_; ++i) {
+        if (!seen_vertex[i]) {
+            throw std::invalid_argument("Missing vertex ID in dense range [0, |V|-1]: " + std::to_string(i));
+        }
+    }
 
+    // 3. Edge Validation: endpoints in range, no self-loops, no duplicate undirected edges
     base_edge_labels_.clear();
     for (const auto& e : edges) {
         uint32_t u = std::get<0>(e);
         uint32_t v = std::get<1>(e);
         uint32_t l = std::get<2>(e);
+
         if (u >= vertices_count_ || v >= vertices_count_) {
-            throw std::out_of_range("Edge endpoint out of range in baseline");
+            throw std::out_of_range("Edge endpoint out of range in baseline: (" + std::to_string(u) + ", " + std::to_string(v) + ")");
         }
-        base_edge_labels_[make_edge_key(u, v)] = l;
+        if (u == v) {
+            throw std::invalid_argument("Self-loops are not permitted in baseline: (" + std::to_string(u) + ", " + std::to_string(v) + ")");
+        }
+        uint64_t key = make_edge_key(u, v);
+        if (base_edge_labels_.find(key) != base_edge_labels_.end()) {
+            throw std::invalid_argument("Duplicate undirected edge in baseline: (" + std::to_string(u) + ", " + std::to_string(v) + ")");
+        }
+        base_edge_labels_[key] = l;
     }
     current_edges_count_ = static_cast<uint32_t>(base_edge_labels_.size());
 
-    // Allocate genuine RapidFlow Graph CSR (pass enable_label_offset = false)
+    // Allocate genuine RapidFlow Graph CSR
     base_graph_ = std::make_unique<Graph>(false);
     base_graph_->is_edge_labeled = true;
 
@@ -51,6 +76,8 @@ void ApxAuthoritativeGraph::load_baseline(
     overlay_labels_.clear();
     tombstones_.clear();
     dynamic_edge_count_ = 0;
+    in_tx_ = false;
+    tx_record_ = TxRecord{};
 }
 
 bool ApxAuthoritativeGraph::has_vertex(uint32_t u) const {
@@ -149,7 +176,67 @@ const Graph* ApxAuthoritativeGraph::get_base_graph() const {
     return base_graph_.get();
 }
 
-bool ApxAuthoritativeGraph::apply_insert(uint32_t u, uint32_t v, uint32_t label) {
+void ApxAuthoritativeGraph::begin_transaction() noexcept {
+    in_tx_ = true;
+    tx_record_ = TxRecord{};
+}
+
+void ApxAuthoritativeGraph::commit_transaction() noexcept {
+    if (!in_tx_) return;
+    if (tx_record_.op == TxOpType::INSERT) {
+        // If inserted edge was previously tombstoned, finalize removal from tombstones
+        tombstones_.erase(tx_record_.key);
+    } else if (tx_record_.op == TxOpType::DELETE) {
+        // Finalize deletion
+        if (tx_record_.was_in_overlay) {
+            overlay_labels_.erase(tx_record_.key);
+            fwd_overlay_.remove(tx_record_.u, tx_record_.v);
+            fwd_overlay_.remove(tx_record_.v, tx_record_.u);
+            rev_overlay_.remove(tx_record_.v, tx_record_.u);
+            rev_overlay_.remove(tx_record_.u, tx_record_.v);
+            if (base_edge_labels_.find(tx_record_.key) == base_edge_labels_.end()) {
+                tombstones_.erase(tx_record_.key);
+            }
+        }
+    }
+    in_tx_ = false;
+    tx_record_ = TxRecord{};
+}
+
+void ApxAuthoritativeGraph::rollback_transaction() noexcept {
+    if (!in_tx_) return;
+    if (tx_record_.op == TxOpType::INSERT) {
+        // Zero-allocation rollback of overlay insertions
+        if (tx_record_.overlay_label_inserted) {
+            overlay_labels_.erase(tx_record_.key);
+        }
+        if (tx_record_.rev_uv_inserted) {
+            rev_overlay_.remove(tx_record_.u, tx_record_.v);
+        }
+        if (tx_record_.rev_vu_inserted) {
+            rev_overlay_.remove(tx_record_.v, tx_record_.u);
+        }
+        if (tx_record_.fwd_vu_inserted) {
+            fwd_overlay_.remove(tx_record_.v, tx_record_.u);
+        }
+        if (tx_record_.fwd_uv_inserted) {
+            fwd_overlay_.remove(tx_record_.u, tx_record_.v);
+        }
+        if (dynamic_edge_count_ > 0) dynamic_edge_count_--;
+        if (current_edges_count_ > 0) current_edges_count_--;
+    } else if (tx_record_.op == TxOpType::DELETE) {
+        // Zero-allocation rollback of deletion shadow
+        tombstones_.erase(tx_record_.key);
+        current_edges_count_++;
+        if (tx_record_.was_in_overlay) {
+            dynamic_edge_count_++;
+        }
+    }
+    in_tx_ = false;
+    tx_record_ = TxRecord{};
+}
+
+bool ApxAuthoritativeGraph::apply_insert(uint32_t u, uint32_t v, uint32_t label, bool simulate_rev_fail) {
     if (!has_vertex(u) || !has_vertex(v) || u == v) {
         return false;
     }
@@ -157,14 +244,56 @@ bool ApxAuthoritativeGraph::apply_insert(uint32_t u, uint32_t v, uint32_t label)
         return false; // Edge already exists
     }
     uint64_t key = make_edge_key(u, v);
-    tombstones_.erase(key);
-    fwd_overlay_.insert(u, v);
-    fwd_overlay_.insert(v, u);
-    rev_overlay_.insert(v, u);
-    rev_overlay_.insert(u, v);
-    overlay_labels_[key] = label;
+
+    bool fwd_uv = false;
+    bool fwd_vu = false;
+    bool rev_vu = false;
+    bool rev_uv = false;
+    bool lbl_ins = false;
+
+    try {
+        fwd_uv = fwd_overlay_.insert(u, v);
+
+        // Simulated or real failure point between forward and reverse
+        if (simulate_rev_fail) {
+            if (fwd_uv) fwd_overlay_.remove(u, v);
+            return false;
+        }
+
+        fwd_vu = fwd_overlay_.insert(v, u);
+        rev_vu = rev_overlay_.insert(v, u);
+        rev_uv = rev_overlay_.insert(u, v);
+        overlay_labels_[key] = label;
+        lbl_ins = true;
+    } catch (...) {
+        // Strong exception guarantee: undo all partial insertions with zero-allocation remove/erase
+        if (lbl_ins) overlay_labels_.erase(key);
+        if (rev_uv) rev_overlay_.remove(u, v);
+        if (rev_vu) rev_overlay_.remove(v, u);
+        if (fwd_vu) fwd_overlay_.remove(v, u);
+        if (fwd_uv) fwd_overlay_.remove(u, v);
+        throw;
+    }
+
     dynamic_edge_count_++;
     current_edges_count_++;
+
+    if (in_tx_) {
+        tx_record_.op = TxOpType::INSERT;
+        tx_record_.u = u;
+        tx_record_.v = v;
+        tx_record_.label = label;
+        tx_record_.key = key;
+        tx_record_.was_in_tombstones = (tombstones_.find(key) != tombstones_.end());
+        tx_record_.fwd_uv_inserted = fwd_uv;
+        tx_record_.fwd_vu_inserted = fwd_vu;
+        tx_record_.rev_vu_inserted = rev_vu;
+        tx_record_.rev_uv_inserted = rev_uv;
+        tx_record_.overlay_label_inserted = lbl_ins;
+    } else {
+        tombstones_.erase(key);
+    }
+
     return true;
 }
 
@@ -177,21 +306,35 @@ bool ApxAuthoritativeGraph::apply_delete(uint32_t u, uint32_t v, uint32_t label)
         return false; // Edge not found or label mismatch
     }
     uint64_t key = make_edge_key(u, v);
-    if (overlay_labels_.erase(key) > 0) {
+    bool in_overlay = (overlay_labels_.find(key) != overlay_labels_.end());
+
+    if (in_tx_) {
+        tx_record_.op = TxOpType::DELETE;
+        tx_record_.u = u;
+        tx_record_.v = v;
+        tx_record_.label = label;
+        tx_record_.key = key;
+        tx_record_.was_in_overlay = in_overlay;
+        tombstones_.insert(key);
+        if (in_overlay) {
+            dynamic_edge_count_--;
+        }
+        current_edges_count_--;
+        return true;
+    }
+
+    if (in_overlay) {
+        overlay_labels_.erase(key);
         fwd_overlay_.remove(u, v);
         fwd_overlay_.remove(v, u);
         rev_overlay_.remove(v, u);
         rev_overlay_.remove(u, v);
+        dynamic_edge_count_--;
     }
     if (base_edge_labels_.find(key) != base_edge_labels_.end()) {
         tombstones_.insert(key);
     }
-    if (dynamic_edge_count_ > 0) {
-        dynamic_edge_count_--;
-    }
-    if (current_edges_count_ > 0) {
-        current_edges_count_--;
-    }
+    current_edges_count_--;
     return true;
 }
 

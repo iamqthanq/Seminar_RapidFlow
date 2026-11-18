@@ -1,44 +1,57 @@
 """
 tests/test_rapidflow_apx_foundation.py — Python regression test suite for RapidFlow-APX Native Foundation (Phase P2).
 
-Tests Groups A through I:
-- Group A: Codec boundaries (signed 64-bit IDs, typed labels isolation, capacity limits)
-- Group B: Authoritative graph lifecycle (CSR, overlays, tombstones, label precedence)
-- Group C: Transaction manager ACID boundaries (prevalidation, snapshots, rollback, commit preservation)
+Tests Groups A through J:
+- Group A: Codec boundaries (signed 64-bit IDs, typed labels isolation, capacity limits, checkpoint rollback)
+- Group B: Authoritative graph lifecycle (CSR, overlays, tombstones, label precedence, ingestion checks)
+- Group C: Transaction manager ACID boundaries (prevalidation, snapshots, rollback, commit preservation, reentrancy, bad_alloc)
 - Group D: Tuple sink invariants (canonical coordinate sorting, injectivity, duplicate raw rejection)
-- Group E: Micro exact matcher & M0 oracle on K4 (24 unique ordered tuples, k>0 rejection)
-- Group F: Dynamic event transitions (0 baseline, 24 ENTERED on INSERT, 24 EXITED on DELETE)
-- Group G: Diamond k=1 fixed-mapping evaluation without exact NLF filtering
-- Group H: Irrelevant updates (state updated, zero search emissions)
-- Group I: Runner negatives, provenance gate, and process containment
+- Group E: Micro exact matcher & M0 oracle on K4 (24 unique ordered tuples matching scripts.dstar_oracle bit-for-bit)
+- Group F: Dynamic event transitions (0 baseline, 24 ENTERED on INSERT, 24 EXITED on DELETE matching DStarDynamicOracle)
+- Group G: Diamond k=1 fixed-mapping evaluation (D-R guard k < lambda, S2 spanning connectivity, metadata verification)
+- Group H: Irrelevant updates (state updated in authoritative graph, zero search emissions)
+- Group I: Runner negatives, provenance gate, manifest validation, process containment, and atomic reporting
+- Group J: Targeted remediation verifications (P2-F01 to P2-F08 root cause regression tests)
 """
+
+from __future__ import annotations
 
 import json
 import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.run_rapidflow_apx_foundation import (
     ProvenanceError,
+    ResourceLimitError,
+    ManifestValidationError,
     build_native_harness,
     check_system_resources,
     compute_sha256,
-    python_m0_k4_oracle,
     run_isolated_case,
+    validate_manifest,
     verify_provenance,
+    verify_case_with_oracle,
+)
+from scripts.dstar_oracle import (
+    DStarGraph,
+    enumerate_snapshot,
+    DStarDynamicOracle,
+    DStarUpdate,
 )
 
 
 class TestRapidFlowApxFoundation(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        # Verify provenance and build native harness once for tests
         cls.provenance = verify_provenance()
         cls.harness_bin, cls.binary_sha = build_native_harness(clean=False)
         cls.manifest_path = REPO_ROOT / "configs/rapidflow_apx_foundation_cases.json"
@@ -58,7 +71,7 @@ class TestRapidFlowApxFoundation(unittest.TestCase):
         self.assertEqual(report["data_vertices_count"], 6)
 
     # =========================================================================
-    # Group B: Authoritative Graph Lifecycle
+    # Group B: Authoritative Graph Lifecycle & Ingestion Checks
     # =========================================================================
     def test_group_b_lifecycle_stream(self):
         case_def = self.cases_by_id["lifecycle_stream"]
@@ -69,7 +82,7 @@ class TestRapidFlowApxFoundation(unittest.TestCase):
         self.assertEqual(report["final_edges_count"], 4)
 
     # =========================================================================
-    # Group C: Transaction Manager ACID Boundaries
+    # Group C: Transaction Manager ACID Boundaries & Strong Exception Safety
     # =========================================================================
     def test_group_c_transaction_lifecycle(self):
         case_def = self.cases_by_id["transaction_lifecycle"]
@@ -105,7 +118,7 @@ class TestRapidFlowApxFoundation(unittest.TestCase):
         self.assertEqual(report["discarded_emissions"], 1)
 
     # =========================================================================
-    # Group E: Micro Exact Matcher & M0 Oracle
+    # Group E: Micro Exact Matcher & Genuine M0 Oracle
     # =========================================================================
     def test_group_e_k4_exact_enumeration(self):
         case_def = self.cases_by_id["k4_exact_enumeration"]
@@ -116,16 +129,30 @@ class TestRapidFlowApxFoundation(unittest.TestCase):
         self.assertEqual(report["raw_emissions"], 24)
         self.assertEqual(report["unique_emissions"], 24)
 
-        # Cross-validate against independent Python M0 Oracle
+        # Cross-validate bit-for-bit against genuine scripts.dstar_oracle
         with open(REPO_ROOT / case_def["fixture_path"], "r", encoding="utf-8") as f:
             fixture_data = json.load(f)
-        oracle_tuples = python_m0_k4_oracle(fixture_data)
+
+        Q = DStarGraph()
+        for v in fixture_data["query"]["vertices"]:
+            Q.add_vertex(v["id"], v["label"]["val"])
+        for e in fixture_data["query"]["edges"]:
+            Q.add_edge(e["u"], e["v"], e["label"]["val"])
+
+        G = DStarGraph()
+        for v in fixture_data["data"]["vertices"]:
+            G.add_vertex(v["id"], v["label"]["val"])
+        for e in fixture_data["data"]["edges"]:
+            G.add_edge(e["u"], e["v"], e["label"]["val"])
+
+        oracle_tuples_raw = enumerate_snapshot(Q, G, k=0)
+        oracle_tuples = sorted([list(t) for t in oracle_tuples_raw])
         self.assertEqual(len(oracle_tuples), 24)
         actual_tuples = sorted(report["tuples"])
         self.assertEqual(actual_tuples, oracle_tuples)
 
     # =========================================================================
-    # Group F: Dynamic Event Transitions
+    # Group F: Dynamic Event Transitions with Full Tuple Verification
     # =========================================================================
     def test_group_f_event_transition_stream(self):
         case_def = self.cases_by_id["event_transition_stream"]
@@ -136,11 +163,20 @@ class TestRapidFlowApxFoundation(unittest.TestCase):
         self.assertEqual(len(events), 2)
         self.assertEqual(events[0]["event_type"], "ENTERED")
         self.assertEqual(events[0]["published_count"], 24)
+        self.assertEqual(len(events[0]["tuples"]), 24)
         self.assertEqual(events[1]["event_type"], "EXITED")
         self.assertEqual(events[1]["published_count"], 24)
+        self.assertEqual(len(events[1]["tuples"]), 24)
+
+        # Verify against DStarDynamicOracle
+        with open(REPO_ROOT / case_def["fixture_path"], "r", encoding="utf-8") as f:
+            fixture_data = json.load(f)
+
+        ok, msg = verify_case_with_oracle("event_transition_stream", fixture_data, report)
+        self.assertTrue(ok, msg)
 
     # =========================================================================
-    # Group G: Diamond k=1 Fixed Mapping
+    # Group G: Diamond k=1 Fixed Mapping & D-R Guard
     # =========================================================================
     def test_group_g_diamond_k1_fixed(self):
         case_def = self.cases_by_id["diamond_k1_fixed"]
@@ -150,6 +186,8 @@ class TestRapidFlowApxFoundation(unittest.TestCase):
         self.assertTrue(report["is_valid"])
         self.assertEqual(report["matched_edges"], 4)
         self.assertEqual(report["missing_edges"], 1)
+        self.assertEqual(report["computed_lambda"], 2)
+        self.assertTrue(report["s2_spanning_connected"])
 
     # =========================================================================
     # Group H: Irrelevant Updates
@@ -163,7 +201,7 @@ class TestRapidFlowApxFoundation(unittest.TestCase):
         self.assertEqual(report["published_tuples_count"], 0)
 
     # =========================================================================
-    # Group I: Runner Negatives & Provenance Gate
+    # Group I: Runner Negatives, Provenance Gate, Manifest & Preflight
     # =========================================================================
     def test_group_i_tampered_fixture_sha_fails(self):
         tampered_case = dict(self.cases_by_id["codec_boundaries"])
@@ -182,15 +220,101 @@ class TestRapidFlowApxFoundation(unittest.TestCase):
         self.assertEqual(res["status"], "FAIL")
         self.assertIn("Unknown case_id", res.get("diagnostic", ""))
 
+    def test_group_i_manifest_validation_ceiling_timeout(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+            bad_manifest = {
+                "manifest_version": "1.0.0",
+                "required_case_ids": ["c1"],
+                "cases": [
+                    {
+                        "case_id": "c1",
+                        "limits": {"timeout_seconds": 60, "max_address_space_mib": 128},
+                    }
+                ],
+            }
+            json.dump(bad_manifest, f)
+            temp_path = Path(f.name)
+
+        try:
+            with self.assertRaises(ManifestValidationError) as ctx:
+                validate_manifest(temp_path)
+            self.assertIn("exceeds ceiling of 30s", str(ctx.exception))
+        finally:
+            temp_path.unlink()
+
+    def test_group_i_manifest_validation_duplicate_case(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+            bad_manifest = {
+                "manifest_version": "1.0.0",
+                "required_case_ids": ["c1"],
+                "cases": [
+                    {"case_id": "c1", "limits": {"timeout_seconds": 10, "max_address_space_mib": 128}},
+                    {"case_id": "c1", "limits": {"timeout_seconds": 10, "max_address_space_mib": 128}},
+                ],
+            }
+            json.dump(bad_manifest, f)
+            temp_path = Path(f.name)
+
+        try:
+            with self.assertRaises(ManifestValidationError) as ctx:
+                validate_manifest(temp_path)
+            self.assertIn("Duplicate case_id in manifest", str(ctx.exception))
+        finally:
+            temp_path.unlink()
+
     def test_group_i_system_resources_preflight(self):
         res = check_system_resources()
-        self.assertGreaterEqual(res["total_ram_gib"], 2.0)
+        self.assertGreaterEqual(res["available_ram_gib"], 2.0)
         self.assertGreaterEqual(res["free_disk_gib"], 1.0)
 
     def test_group_i_provenance_verification_passes(self):
         prov = verify_provenance()
         self.assertEqual(prov["upstream_commit"], "2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1")
         self.assertTrue(prov["upstream_pristine"])
+
+    # =========================================================================
+    # Group J: Targeted Remediation Findings Verifications (P2-F01 to P2-F08)
+    # =========================================================================
+    def test_group_j_p2_f01_payload_validation_rejects_string_false(self):
+        # A payload with status != "PASS" must fail
+        bad_report = {"case_id": "test", "status": "false"}
+        ok, _ = verify_case_with_oracle("diamond_k1_fixed", {}, bad_report)
+        self.assertFalse(ok)
+
+    def test_group_j_p2_f06_low_ram_fails_preflight(self):
+        # Mocking low RAM raises ResourceLimitError
+        with patch("scripts.run_rapidflow_apx_foundation.open", create=True) as mock_open:
+            import io
+            mock_open.return_value.__enter__.return_value = io.StringIO("MemAvailable:     500000 kB\n")
+            with self.assertRaises(ResourceLimitError) as ctx:
+                check_system_resources()
+            self.assertIn("Insufficient available RAM", str(ctx.exception))
+
+    def test_group_j_p2_f07_diagnostic_mode_does_not_overwrite_canonical(self):
+        canonical_summary = REPO_ROOT / "reports/rapidflow_apx_foundation/summary.json"
+        diagnostic_summary = REPO_ROOT / "reports/rapidflow_apx_foundation/diagnostic_summary.json"
+
+        # Record mtime of canonical if it exists
+        orig_mtime = canonical_summary.stat().st_mtime if canonical_summary.exists() else None
+
+        # Run subset case
+        proc = subprocess.run(
+            [sys.executable, "scripts/run_rapidflow_apx_foundation.py", "--case", "codec_boundaries"],
+            cwd=str(REPO_ROOT),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=True,
+        )
+
+        self.assertTrue(diagnostic_summary.exists())
+        with open(diagnostic_summary, "r") as f:
+            diag_data = json.load(f)
+        self.assertEqual(diag_data["runner_mode"], "DIAGNOSTIC_SUBSET")
+        self.assertEqual(diag_data["overall_status"], "DIAGNOSTIC_SUBSET_RUN")
+
+        if orig_mtime is not None:
+            self.assertEqual(canonical_summary.stat().st_mtime, orig_mtime)
 
 
 if __name__ == "__main__":

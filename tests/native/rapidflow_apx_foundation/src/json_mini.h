@@ -54,18 +54,55 @@ struct Value {
     bool is_array() const { return type == Type::Array; }
     bool is_object() const { return type == Type::Object; }
 
-    bool as_bool() const { return b_val; }
-    int64_t as_int() const { return type == Type::Int ? i_val : static_cast<int64_t>(f_val); }
-    double as_float() const { return type == Type::Float ? f_val : static_cast<double>(i_val); }
-    const std::string& as_string() const { return s_val; }
-    const std::vector<Value>& as_array() const { return arr; }
-    const std::unordered_map<std::string, Value>& as_object() const { return obj; }
+    bool as_bool() const {
+        if (type != Type::Bool) {
+            throw std::runtime_error("JSON type error: expected Bool");
+        }
+        return b_val;
+    }
+
+    int64_t as_int() const {
+        if (type != Type::Int) {
+            throw std::runtime_error("JSON type error: expected Int");
+        }
+        return i_val;
+    }
+
+    double as_float() const {
+        if (type == Type::Float) return f_val;
+        if (type == Type::Int) return static_cast<double>(i_val);
+        throw std::runtime_error("JSON type error: expected Float/Number");
+    }
+
+    const std::string& as_string() const {
+        if (type != Type::String) {
+            throw std::runtime_error("JSON type error: expected String");
+        }
+        return s_val;
+    }
+
+    const std::vector<Value>& as_array() const {
+        if (type != Type::Array) {
+            throw std::runtime_error("JSON type error: expected Array");
+        }
+        return arr;
+    }
+
+    const std::unordered_map<std::string, Value>& as_object() const {
+        if (type != Type::Object) {
+            throw std::runtime_error("JSON type error: expected Object");
+        }
+        return obj;
+    }
 
     bool contains(const std::string& key) const {
         return type == Type::Object && obj.find(key) != obj.end();
     }
 
     const Value& operator[](const std::string& key) const {
+        if (type != Type::Object) {
+            throw std::runtime_error("JSON operator[] on non-object");
+        }
         auto it = obj.find(key);
         if (it == obj.end()) throw std::out_of_range("JSON key not found: " + key);
         return it->second;
@@ -80,6 +117,9 @@ struct Value {
     }
 
     const Value& operator[](size_t idx) const {
+        if (type != Type::Array) {
+            throw std::runtime_error("JSON operator[] on non-array");
+        }
         if (idx >= arr.size()) throw std::out_of_range("JSON array index out of range");
         return arr[idx];
     }
@@ -100,6 +140,9 @@ public:
         skip_whitespace(src, pos);
         Value result = parse_value(src, pos);
         skip_whitespace(src, pos);
+        if (pos < src.size()) {
+            throw std::runtime_error("JSON parse error: trailing characters after root value");
+        }
         return result;
     }
 
@@ -126,12 +169,13 @@ private:
     }
 
     static Value parse_object(const std::string& s, size_t& pos) {
-        pos++; // skip '{'
-        Value obj = Value::make_object();
+        Value val = Value::make_object();
+        pos++; // Skip '{'
         skip_whitespace(s, pos);
+
         if (pos < s.size() && s[pos] == '}') {
             pos++;
-            return obj;
+            return val;
         }
 
         while (pos < s.size()) {
@@ -139,97 +183,133 @@ private:
             if (pos >= s.size() || s[pos] != '"') {
                 throw std::runtime_error("Expected string key in object");
             }
-            std::string key = parse_string(s, pos).as_string();
-            skip_whitespace(s, pos);
-            if (pos >= s.size() || s[pos] != ':') {
-                throw std::runtime_error("Expected ':' after key");
-            }
-            pos++; // skip ':'
-            Value val = parse_value(s, pos);
-            obj.obj[key] = std::move(val);
+            Value key_val = parse_string(s, pos);
+            std::string key = key_val.s_val;
 
             skip_whitespace(s, pos);
-            if (pos < s.size() && s[pos] == ',') {
+            if (pos >= s.size() || s[pos] != ':') {
+                throw std::runtime_error("Expected ':' after key in object");
+            }
+            pos++; // Skip ':'
+
+            Value member = parse_value(s, pos);
+            val.obj[key] = member;
+
+            skip_whitespace(s, pos);
+            if (pos >= s.size()) throw std::runtime_error("Unterminated object");
+            if (s[pos] == '}') {
                 pos++;
-                continue;
-            } else if (pos < s.size() && s[pos] == '}') {
+                return val;
+            }
+            if (s[pos] == ',') {
                 pos++;
-                break;
             } else {
                 throw std::runtime_error("Expected ',' or '}' in object");
             }
         }
-        return obj;
+        throw std::runtime_error("Unterminated object");
     }
 
     static Value parse_array(const std::string& s, size_t& pos) {
-        pos++; // skip '['
-        Value arr = Value::make_array();
+        Value val = Value::make_array();
+        pos++; // Skip '['
         skip_whitespace(s, pos);
+
         if (pos < s.size() && s[pos] == ']') {
             pos++;
-            return arr;
+            return val;
         }
 
         while (pos < s.size()) {
-            Value val = parse_value(s, pos);
-            arr.arr.push_back(std::move(val));
+            val.arr.push_back(parse_value(s, pos));
             skip_whitespace(s, pos);
-            if (pos < s.size() && s[pos] == ',') {
+            if (pos >= s.size()) throw std::runtime_error("Unterminated array");
+            if (s[pos] == ']') {
                 pos++;
-                continue;
-            } else if (pos < s.size() && s[pos] == ']') {
+                return val;
+            }
+            if (s[pos] == ',') {
                 pos++;
-                break;
             } else {
                 throw std::runtime_error("Expected ',' or ']' in array");
             }
         }
-        return arr;
+        throw std::runtime_error("Unterminated array");
     }
 
     static Value parse_string(const std::string& s, size_t& pos) {
-        pos++; // skip opening '"'
-        std::string res;
+        pos++; // Skip opening '"'
+        std::string result;
         while (pos < s.size()) {
             char c = s[pos++];
-            if (c == '"') return Value(res);
+            if (c == '"') {
+                Value v;
+                v.type = Type::String;
+                v.s_val = result;
+                return v;
+            }
             if (c == '\\') {
-                if (pos >= s.size()) throw std::runtime_error("Unterminated escape sequence in string");
+                if (pos >= s.size()) throw std::runtime_error("Unterminated escape sequence");
                 char esc = s[pos++];
                 switch (esc) {
-                    case '"': res.push_back('"'); break;
-                    case '\\': res.push_back('\\'); break;
-                    case '/': res.push_back('/'); break;
-                    case 'b': res.push_back('\b'); break;
-                    case 'f': res.push_back('\f'); break;
-                    case 'n': res.push_back('\n'); break;
-                    case 'r': res.push_back('\r'); break;
-                    case 't': res.push_back('\t'); break;
-                    default: res.push_back(esc); break;
+                    case '"': result += '"'; break;
+                    case '\\': result += '\\'; break;
+                    case '/': result += '/'; break;
+                    case 'b': result += '\b'; break;
+                    case 'f': result += '\f'; break;
+                    case 'n': result += '\n'; break;
+                    case 'r': result += '\r'; break;
+                    case 't': result += '\t'; break;
+                    default: result += esc; break;
                 }
             } else {
-                res.push_back(c);
+                result += c;
             }
         }
         throw std::runtime_error("Unterminated string");
+    }
+
+    static Value parse_bool(const std::string& s, size_t& pos) {
+        if (s.compare(pos, 4, "true") == 0) {
+            pos += 4;
+            return Value(true);
+        }
+        if (s.compare(pos, 5, "false") == 0) {
+            pos += 5;
+            return Value(false);
+        }
+        throw std::runtime_error("Invalid boolean literal in JSON");
+    }
+
+    static Value parse_null(const std::string& s, size_t& pos) {
+        if (s.compare(pos, 4, "null") == 0) {
+            pos += 4;
+            return Value(nullptr);
+        }
+        throw std::runtime_error("Invalid null literal in JSON");
     }
 
     static Value parse_number(const std::string& s, size_t& pos) {
         size_t start = pos;
         if (s[pos] == '-') pos++;
         bool is_float = false;
-        while (pos < s.size() && std::isdigit(static_cast<unsigned char>(s[pos]))) pos++;
+        while (pos < s.size() && std::isdigit(static_cast<unsigned char>(s[pos]))) {
+            pos++;
+        }
         if (pos < s.size() && s[pos] == '.') {
             is_float = true;
             pos++;
-            while (pos < s.size() && std::isdigit(static_cast<unsigned char>(s[pos]))) pos++;
+            while (pos < s.size() && std::isdigit(static_cast<unsigned char>(s[pos]))) {
+                pos++;
+            }
         }
         if (pos < s.size() && (s[pos] == 'e' || s[pos] == 'E')) {
             is_float = true;
             pos++;
             if (pos < s.size() && (s[pos] == '+' || s[pos] == '-')) pos++;
-            while (pos < s.size() && std::isdigit(static_cast<unsigned char>(s[pos]))) pos++;
+            while (pos < s.size() && std::isdigit(static_cast<unsigned char>(s[pos]))) {
+                pos++;
+            }
         }
         std::string num_str = s.substr(start, pos - start);
         if (is_float) {
@@ -238,73 +318,64 @@ private:
             return Value(static_cast<int64_t>(std::stoll(num_str)));
         }
     }
-
-    static Value parse_bool(const std::string& s, size_t& pos) {
-        if (s.substr(pos, 4) == "true") {
-            pos += 4;
-            return Value(true);
-        }
-        if (s.substr(pos, 5) == "false") {
-            pos += 5;
-            return Value(false);
-        }
-        throw std::runtime_error("Expected bool at pos " + std::to_string(pos));
-    }
-
-    static Value parse_null(const std::string& s, size_t& pos) {
-        if (s.substr(pos, 4) == "null") {
-            pos += 4;
-            return Value(nullptr);
-        }
-        throw std::runtime_error("Expected null at pos " + std::to_string(pos));
-    }
 };
 
-inline std::string serialize(const Value& val) {
-    switch (val.type) {
-        case Type::Null: return "null";
-        case Type::Bool: return val.b_val ? "true" : "false";
-        case Type::Int: return std::to_string(val.i_val);
-        case Type::Float: {
-            std::ostringstream ss;
-            ss << std::setprecision(10) << val.f_val;
-            return ss.str();
-        }
-        case Type::String: {
-            std::string out = "\"";
-            for (char c : val.s_val) {
-                if (c == '"') out += "\\\"";
-                else if (c == '\\') out += "\\\\";
-                else if (c == '\n') out += "\\n";
-                else if (c == '\r') out += "\\r";
-                else if (c == '\t') out += "\\t";
-                else out += c;
-            }
-            out += "\"";
-            return out;
-        }
-        case Type::Array: {
-            std::string out = "[";
-            for (size_t i = 0; i < val.arr.size(); ++i) {
-                if (i > 0) out += ", ";
-                out += serialize(val.arr[i]);
-            }
-            out += "]";
-            return out;
-        }
-        case Type::Object: {
-            std::string out = "{";
-            bool first = true;
-            for (const auto& kv : val.obj) {
-                if (!first) out += ", ";
-                first = false;
-                out += "\"" + kv.first + "\": " + serialize(kv.second);
-            }
-            out += "}";
-            return out;
+inline std::string escape_string(const std::string& s) {
+    std::ostringstream ss;
+    ss << '"';
+    for (char c : s) {
+        switch (c) {
+            case '"': ss << "\\\""; break;
+            case '\\': ss << "\\\\"; break;
+            case '\b': ss << "\\b"; break;
+            case '\f': ss << "\\f"; break;
+            case '\n': ss << "\\n"; break;
+            case '\r': ss << "\\r"; break;
+            case '\t': ss << "\\t"; break;
+            default:
+                if (static_cast<unsigned char>(c) < 0x20) {
+                    ss << "\\u" << std::hex << std::setw(4) << std::setfill('0') << static_cast<int>(c);
+                } else {
+                    ss << c;
+                }
+                break;
         }
     }
-    return "null";
+    ss << '"';
+    return ss.str();
+}
+
+inline std::string serialize(const Value& val, int indent = 0) {
+    std::ostringstream ss;
+    switch (val.type) {
+        case Type::Null: ss << "null"; break;
+        case Type::Bool: ss << (val.b_val ? "true" : "false"); break;
+        case Type::Int: ss << val.i_val; break;
+        case Type::Float: ss << val.f_val; break;
+        case Type::String: ss << escape_string(val.s_val); break;
+        case Type::Array: {
+            ss << "[";
+            for (size_t i = 0; i < val.arr.size(); ++i) {
+                if (i > 0) ss << ", ";
+                ss << serialize(val.arr[i], indent);
+            }
+            ss << "]";
+            break;
+        }
+        case Type::Object: {
+            ss << "{\n";
+            std::string pad(indent + 2, ' ');
+            size_t i = 0;
+            for (const auto& kv : val.obj) {
+                if (i > 0) ss << ",\n";
+                ss << pad << escape_string(kv.first) << ": " << serialize(kv.second, indent + 2);
+                i++;
+            }
+            ss << "\n" << std::string(indent, ' ') << "}";
+            break;
+        }
+    }
+    return ss.str();
 }
 
 } // namespace mini_json

@@ -72,6 +72,13 @@ struct TypedLabel {
     }
 };
 
+struct CodecCheckpoint {
+    size_t query_vertices{0};
+    size_t data_vertices{0};
+    size_t vertex_labels{0};
+    size_t edge_labels{0};
+};
+
 } // namespace rapidflow_apx
 
 namespace std {
@@ -107,6 +114,10 @@ private:
 
 public:
     ApxTypedCodec() = default;
+
+    // --- Checkpoint / Rollback (Strong Exception Safety) ---
+    CodecCheckpoint create_checkpoint() const noexcept;
+    void restore_checkpoint(const CodecCheckpoint& cp) noexcept;
 
     // --- Vertex ID Management ---
     uint32_t intern_query_vertex(int64_t ext_id);

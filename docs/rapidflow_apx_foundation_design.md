@@ -1,11 +1,11 @@
 # RapidFlow-APX Native Foundation Architecture & Design (Phase P2)
 
-**Document ID:** `docs/rapidflow_apx_foundation_design.md`  
-**Milestone:** D-INT-02 / Phase P2  
-**Parent Issue:** Issue #30  
-**Base Commit:** `8f6ebdacbf289e48e1c8a80a1c2e93720bcf633e`  
-**Pinned Upstream RapidFlow:** `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1`  
-**Status:** APPROVED ARCHITECTURE DESIGN  
+**Document ID:** `docs/rapidflow_apx_foundation_design.md`
+**Milestone:** D-INT-02 / Phase P2
+**Parent Issue:** Issue #30
+**Base Commit:** `8f6ebdacbf289e48e1c8a80a1c2e93720bcf633e`
+**Pinned Upstream RapidFlow:** `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1`
+**Status:** APPROVED ARCHITECTURE DESIGN
 
 ---
 
@@ -57,6 +57,10 @@ public:
     TypedLabel decode_vertex_label(uint32_t internal_id) const;
     TypedLabel decode_edge_label(uint32_t internal_id) const;
 
+    // Zero-allocation checkpoint rollback for strong exception guarantee
+    CodecCheckpoint create_checkpoint() const noexcept;
+    void restore_checkpoint(const CodecCheckpoint& cp) noexcept;
+
     // Capacity Preflight Validation
     static void check_capacity_limits(size_t vertex_count, size_t edge_count);
 };
@@ -95,17 +99,15 @@ public:
     uint32_t get_edges_count() const;
 
     // Mutable Overlay Operations (Called by TransactionManager)
-    bool apply_insert(uint32_t u, uint32_t v, uint32_t label);
+    bool apply_insert(uint32_t u, uint32_t v, uint32_t label, bool simulate_rev_fail = false);
     bool apply_delete(uint32_t u, uint32_t v, uint32_t label);
 
+    // Transaction Management with Zero-Allocation Rollback (noexcept)
+    void begin_transaction() noexcept;
+    void commit_transaction() noexcept;
+    void rollback_transaction() noexcept;
+
     // Snapshot / Checkpoint for Strong Exception Guarantee
-    struct GraphOverlayCheckpoint {
-        GlobalEdgeView fwd_overlay;
-        GlobalEdgeView rev_overlay;
-        std::unordered_map<uint64_t, uint32_t> overlay_labels;
-        std::unordered_set<uint64_t> tombstones;
-        uint32_t dynamic_edge_count;
-    };
     GraphOverlayCheckpoint create_checkpoint() const;
     void restore_checkpoint(const GraphOverlayCheckpoint& cp);
 };
@@ -126,7 +128,13 @@ struct UpdateOperation {
     TypedLabel label;
 };
 
-enum class StepStatus { SUCCESS, PREVALIDATION_FAILED, CALLBACK_ABORTED, FAULT_INJECTED };
+enum class StepStatus {
+    SUCCESS,
+    PREVALIDATION_FAILED,
+    CALLBACK_ABORTED,
+    FAULT_INJECTED,
+    REENTRANCY_BLOCKED
+};
 
 struct StepResult {
     StepStatus status;
@@ -149,8 +157,17 @@ public:
     StepResult execute_update(const UpdateOperation& update, SearchCallback callback);
 
     // Fault injection hooks for regression testing
-    enum class FaultPoint { NONE, AFTER_MUTATION, DURING_CALLBACK, BEFORE_PUBLISH };
+    enum class FaultPoint {
+        NONE,
+        BEFORE_MUTATION,
+        BETWEEN_FORWARD_REVERSE_MUTATION,
+        AFTER_MUTATION,
+        DURING_CALLBACK,
+        BEFORE_PUBLISH,
+        ALLOCATION_FAILURE_MUTATION
+    };
     void set_fault_injection(FaultPoint point);
+    bool is_in_transaction() const noexcept;
 };
 
 } // namespace rapidflow_apx

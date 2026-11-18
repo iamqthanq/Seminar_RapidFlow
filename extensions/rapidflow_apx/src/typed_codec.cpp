@@ -2,6 +2,38 @@
 
 namespace rapidflow_apx {
 
+CodecCheckpoint ApxTypedCodec::create_checkpoint() const noexcept {
+    CodecCheckpoint cp;
+    cp.query_vertices = query_dense_to_ext_.size();
+    cp.data_vertices = data_dense_to_ext_.size();
+    cp.vertex_labels = vertex_id_to_label_.size();
+    cp.edge_labels = edge_id_to_label_.size();
+    return cp;
+}
+
+void ApxTypedCodec::restore_checkpoint(const CodecCheckpoint& cp) noexcept {
+    while (query_dense_to_ext_.size() > cp.query_vertices) {
+        int64_t ext = query_dense_to_ext_.back();
+        query_ext_to_dense_.erase(ext);
+        query_dense_to_ext_.pop_back();
+    }
+    while (data_dense_to_ext_.size() > cp.data_vertices) {
+        int64_t ext = data_dense_to_ext_.back();
+        data_ext_to_dense_.erase(ext);
+        data_dense_to_ext_.pop_back();
+    }
+    while (vertex_id_to_label_.size() > cp.vertex_labels) {
+        const auto& lbl = vertex_id_to_label_.back();
+        vertex_label_to_id_.erase(lbl);
+        vertex_id_to_label_.pop_back();
+    }
+    while (edge_id_to_label_.size() > cp.edge_labels) {
+        const auto& lbl = edge_id_to_label_.back();
+        edge_label_to_id_.erase(lbl);
+        edge_id_to_label_.pop_back();
+    }
+}
+
 uint32_t ApxTypedCodec::intern_query_vertex(int64_t ext_id) {
     auto it = query_ext_to_dense_.find(ext_id);
     if (it != query_ext_to_dense_.end()) {

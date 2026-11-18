@@ -42,7 +42,7 @@ public:
     ApxAuthoritativeGraph(ApxAuthoritativeGraph&&) noexcept;
     ApxAuthoritativeGraph& operator=(ApxAuthoritativeGraph&&) noexcept;
 
-    // Baseline Ingestion via genuine RapidFlow CSR
+    // Baseline Ingestion via genuine RapidFlow CSR with strict validation
     void load_baseline(
         const std::vector<std::pair<uint32_t, uint32_t>>& vertices,
         const std::vector<std::tuple<uint32_t, uint32_t, uint32_t>>& edges
@@ -62,10 +62,15 @@ public:
     const Graph* get_base_graph() const;
 
     // Mutable Overlay Operations (Called by TransactionManager)
-    bool apply_insert(uint32_t u, uint32_t v, uint32_t label);
+    bool apply_insert(uint32_t u, uint32_t v, uint32_t label, bool simulate_rev_fail = false);
     bool apply_delete(uint32_t u, uint32_t v, uint32_t label);
 
-    // Snapshot / Checkpoint for Strong Exception Guarantee
+    // Transaction Management with Zero-Allocation Rollback (noexcept)
+    void begin_transaction() noexcept;
+    void commit_transaction() noexcept;
+    void rollback_transaction() noexcept;
+
+    // Snapshot / Checkpoint for Compatibility
     GraphOverlayCheckpoint create_checkpoint() const;
     void restore_checkpoint(const GraphOverlayCheckpoint& cp);
 
@@ -76,6 +81,22 @@ public:
     }
 
 private:
+    enum class TxOpType { NONE, INSERT, DELETE };
+    struct TxRecord {
+        TxOpType op{TxOpType::NONE};
+        uint32_t u{0};
+        uint32_t v{0};
+        uint32_t label{0};
+        uint64_t key{0};
+        bool was_in_tombstones{false};
+        bool was_in_overlay{false};
+        bool fwd_uv_inserted{false};
+        bool fwd_vu_inserted{false};
+        bool rev_vu_inserted{false};
+        bool rev_uv_inserted{false};
+        bool overlay_label_inserted{false};
+    };
+
     std::unique_ptr<Graph> base_graph_;
     std::unordered_map<uint64_t, uint32_t> base_edge_labels_;
     std::vector<uint32_t> vertex_labels_;
@@ -88,6 +109,10 @@ private:
     uint32_t dynamic_edge_count_{0};
     uint32_t current_edges_count_{0};
     uint32_t vertices_count_{0};
+
+    // Active transaction state
+    bool in_tx_{false};
+    TxRecord tx_record_{};
 };
 
 } // namespace rapidflow_apx

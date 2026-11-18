@@ -1,30 +1,31 @@
 #include "harness_cases.h"
 #include "rapidflow_apx/typed_codec.h"
 #include "rapidflow_apx/authoritative_graph.h"
-#include "rapidflow_apx/tuple_sink.h"
 #include "rapidflow_apx/transaction_manager.h"
+#include "rapidflow_apx/tuple_sink.h"
 #include "rapidflow_apx/micro_matcher.h"
 #include <iostream>
-#include <cassert>
-
-using namespace rapidflow_apx;
+#include <sstream>
+#include <algorithm>
 
 namespace rapidflow_apx_harness {
 
-static TypedLabel parse_typed_label(const mini_json::Value& v) {
+using namespace rapidflow_apx;
+
+TypedLabel parse_typed_label(const mini_json::Value& v) {
     if (v.is_int()) {
         return TypedLabel::from_int(v.as_int());
     } else if (v.is_string()) {
         return TypedLabel::from_string(v.as_string());
     } else if (v.is_object()) {
-        std::string t = v["type"].as_string();
-        if (t == "string") {
-            return TypedLabel::from_string(v["val"].as_string());
-        } else {
+        std::string type = v["type"].as_string();
+        if (type == "int") {
             return TypedLabel::from_int(v["val"].as_int());
+        } else if (type == "string") {
+            return TypedLabel::from_string(v["val"].as_string());
         }
     }
-    throw std::runtime_error("Invalid label JSON");
+    throw std::runtime_error("Unknown typed label format");
 }
 
 mini_json::Value run_codec_boundaries(const mini_json::Value& fixture) {
@@ -91,6 +92,30 @@ mini_json::Value run_codec_boundaries(const mini_json::Value& fixture) {
         return report;
     }
 
+    // 5. Codec checkpoint and zero-allocation rollback verification
+    auto cp = codec.create_checkpoint();
+    size_t orig_q = codec.query_vertices_count();
+    size_t orig_d = codec.data_vertices_count();
+    size_t orig_vl = codec.vertex_labels_count();
+    size_t orig_el = codec.edge_labels_count();
+
+    codec.intern_query_vertex(9999999);
+    codec.intern_data_vertex(8888888);
+    codec.intern_vertex_label(TypedLabel::from_string("temp_v_lbl"));
+    codec.intern_edge_label(TypedLabel::from_string("temp_e_lbl"));
+
+    codec.restore_checkpoint(cp);
+    if (codec.query_vertices_count() != orig_q ||
+        codec.data_vertices_count() != orig_d ||
+        codec.vertex_labels_count() != orig_vl ||
+        codec.edge_labels_count() != orig_el ||
+        codec.has_query_vertex(9999999) ||
+        codec.has_data_vertex(8888888)) {
+        report["status"] = "FAIL";
+        report["diagnostic"] = "Codec checkpoint restore failed to restore clean state";
+        return report;
+    }
+
     report["status"] = "PASS";
     report["diagnostic"] = "Codec successfully roundtrips 64-bit signed IDs and maintains typed label isolation";
     report["query_vertices_count"] = static_cast<int64_t>(q_verts.size());
@@ -125,6 +150,61 @@ mini_json::Value run_lifecycle_stream(const mini_json::Value& fixture) {
         report["status"] = "FAIL";
         report["diagnostic"] = "Baseline graph loading dimension mismatch";
         return report;
+    }
+
+    // Verify Ingestion Validation Negative Cases:
+    // Negative 1: Duplicate undirected edge rejection
+    {
+        ApxAuthoritativeGraph bad_g;
+        std::vector<std::pair<uint32_t, uint32_t>> test_v = {{0, 0}, {1, 0}};
+        std::vector<std::tuple<uint32_t, uint32_t, uint32_t>> dup_e = {{0, 1, 0}, {1, 0, 0}};
+        bool dup_caught = false;
+        try {
+            bad_g.load_baseline(test_v, dup_e);
+        } catch (const std::invalid_argument&) {
+            dup_caught = true;
+        }
+        if (!dup_caught) {
+            report["status"] = "FAIL";
+            report["diagnostic"] = "Duplicate undirected edge in baseline was not rejected";
+            return report;
+        }
+    }
+
+    // Negative 2: Self-loop rejection
+    {
+        ApxAuthoritativeGraph bad_g;
+        std::vector<std::pair<uint32_t, uint32_t>> test_v = {{0, 0}};
+        std::vector<std::tuple<uint32_t, uint32_t, uint32_t>> loop_e = {{0, 0, 0}};
+        bool loop_caught = false;
+        try {
+            bad_g.load_baseline(test_v, loop_e);
+        } catch (const std::invalid_argument&) {
+            loop_caught = true;
+        }
+        if (!loop_caught) {
+            report["status"] = "FAIL";
+            report["diagnostic"] = "Self-loop in baseline was not rejected";
+            return report;
+        }
+    }
+
+    // Negative 3: Non-dense vertex ID rejection
+    {
+        ApxAuthoritativeGraph bad_g;
+        std::vector<std::pair<uint32_t, uint32_t>> gap_v = {{0, 0}, {2, 0}};
+        std::vector<std::tuple<uint32_t, uint32_t, uint32_t>> normal_e = {};
+        bool gap_caught = false;
+        try {
+            bad_g.load_baseline(gap_v, normal_e);
+        } catch (const std::exception&) {
+            gap_caught = true;
+        }
+        if (!gap_caught) {
+            report["status"] = "FAIL";
+            report["diagnostic"] = "Non-dense vertex IDs in baseline were not rejected";
+            return report;
+        }
     }
 
     const auto& mutations = fixture["mutations"].as_array();
@@ -194,6 +274,7 @@ mini_json::Value run_transaction_lifecycle(const mini_json::Value& fixture) {
         uint32_t dense_lbl = codec.intern_vertex_label(lbl);
         vertices.emplace_back(dense_id, dense_lbl);
     }
+
     std::vector<std::tuple<uint32_t, uint32_t, uint32_t>> edges;
     for (const auto& e : base_e) {
         uint32_t dense_u = codec.intern_data_vertex(e["u"].as_int());
@@ -205,7 +286,7 @@ mini_json::Value run_transaction_lifecycle(const mini_json::Value& fixture) {
 
     graph.load_baseline(vertices, edges);
 
-    std::vector<uint32_t> query_order; // Dummy query order for sink
+    std::vector<uint32_t> query_order;
     ApxTupleSink sink(codec, query_order);
     ApxTransactionManager tx_mgr(graph, codec, sink);
 
@@ -231,8 +312,6 @@ mini_json::Value run_transaction_lifecycle(const mini_json::Value& fixture) {
             tx_mgr.set_fault_injection(ApxTransactionManager::FaultPoint::NONE);
         }
 
-        // Search callback verifies snapshot visibility:
-        // INSERT sees edge exists; DELETE sees edge exists (before deletion)
         auto step_res = tx_mgr.execute_update(update, [&](
             const ApxAuthoritativeGraph& g_view,
             const UpdateOperation& u_op,
@@ -241,23 +320,15 @@ mini_json::Value run_transaction_lifecycle(const mini_json::Value& fixture) {
             uint32_t
         ) -> bool {
             if (u_op.op == UpdateOp::INSERT) {
-                // INSERT callback MUST see edge in G_after
                 if (!g_view.has_edge(du, dv)) return false;
             } else if (u_op.op == UpdateOp::DELETE) {
-                // DELETE callback MUST see edge in G_before
                 if (!g_view.has_edge(du, dv)) return false;
             }
             return true;
         });
 
         std::string exp_status = s["expected_status"].as_string();
-        std::string actual_status;
-        switch (step_res.status) {
-            case StepStatus::SUCCESS: actual_status = "SUCCESS"; break;
-            case StepStatus::PREVALIDATION_FAILED: actual_status = "PREVALIDATION_FAILED"; break;
-            case StepStatus::CALLBACK_ABORTED: actual_status = "CALLBACK_ABORTED"; break;
-            case StepStatus::FAULT_INJECTED: actual_status = "FAULT_INJECTED"; break;
-        }
+        std::string actual_status = step_status_to_string(step_res.status);
 
         if (actual_status != exp_status) {
             report["status"] = "FAIL";
@@ -271,8 +342,102 @@ mini_json::Value run_transaction_lifecycle(const mini_json::Value& fixture) {
         step_results.push_back(step_rec);
     }
 
-    // Verify commit preservation:
-    // Step 0 inserted (10, 40) successfully -> MUST remain in graph!
+    // Explicit Verification 1: Reentrancy Guard
+    {
+        bool reentrant_attempted = false;
+        bool reentrant_blocked = false;
+        UpdateOperation test_op;
+        test_op.op = UpdateOp::INSERT;
+        test_op.ext_u = 10;
+        test_op.ext_v = 30;
+        test_op.label = TypedLabel::from_int(100);
+
+        tx_mgr.set_fault_injection(ApxTransactionManager::FaultPoint::NONE);
+        tx_mgr.execute_update(test_op, [&](const ApxAuthoritativeGraph&, const UpdateOperation&, uint32_t, uint32_t, uint32_t) -> bool {
+            reentrant_attempted = true;
+            UpdateOperation nested_op = test_op;
+            nested_op.ext_v = 40;
+            auto nested_res = tx_mgr.execute_update(nested_op, [](const ApxAuthoritativeGraph&, const UpdateOperation&, uint32_t, uint32_t, uint32_t) -> bool { return true; });
+            if (nested_res.status == StepStatus::REENTRANCY_BLOCKED) {
+                reentrant_blocked = true;
+            }
+            return false; // abort outer transaction
+        });
+
+        if (!reentrant_attempted || !reentrant_blocked) {
+            report["status"] = "FAIL";
+            report["diagnostic"] = "Reentrancy guard failed to reject nested transaction";
+            return report;
+        }
+    }
+
+    // Explicit Verification 2: Codec Rollback on Abort
+    {
+        TypedLabel test_unique_lbl = TypedLabel::from_int(777777);
+        UpdateOperation codec_op;
+        codec_op.op = UpdateOp::INSERT;
+        codec_op.ext_u = 10;
+        codec_op.ext_v = 30;
+        codec_op.label = test_unique_lbl;
+
+        auto abort_res = tx_mgr.execute_update(codec_op, [](const ApxAuthoritativeGraph&, const UpdateOperation&, uint32_t, uint32_t, uint32_t) -> bool {
+            return false; // callback abort
+        });
+        if (abort_res.status != StepStatus::CALLBACK_ABORTED) {
+            report["status"] = "FAIL";
+            report["diagnostic"] = "Callback abort did not return CALLBACK_ABORTED";
+            return report;
+        }
+        if (codec.has_edge_label(test_unique_lbl)) {
+            report["status"] = "FAIL";
+            report["diagnostic"] = "Codec leaked interned label across aborted transaction";
+            return report;
+        }
+    }
+
+    // Explicit Verification 3: Symmetric Rollback Between Forward and Reverse
+    {
+        tx_mgr.set_fault_injection(ApxTransactionManager::FaultPoint::BETWEEN_FORWARD_REVERSE_MUTATION);
+        UpdateOperation fwd_rev_op;
+        fwd_rev_op.op = UpdateOp::INSERT;
+        fwd_rev_op.ext_u = 10;
+        fwd_rev_op.ext_v = 30;
+        fwd_rev_op.label = TypedLabel::from_int(100);
+
+        auto fwd_res = tx_mgr.execute_update(fwd_rev_op, [](const ApxAuthoritativeGraph&, const UpdateOperation&, uint32_t, uint32_t, uint32_t) -> bool { return true; });
+        if (fwd_res.status != StepStatus::FAULT_INJECTED) {
+            report["status"] = "FAIL";
+            report["diagnostic"] = "BETWEEN_FORWARD_REVERSE did not inject fault properly";
+            return report;
+        }
+        uint32_t du10 = codec.get_data_vertex(10);
+        uint32_t dv30 = codec.get_data_vertex(30);
+        if (graph.has_edge(du10, dv30)) {
+            report["status"] = "FAIL";
+            report["diagnostic"] = "Forward edge was leaked in overlay after reverse failure";
+            return report;
+        }
+    }
+
+    // Explicit Verification 4: Allocation Failure Simulation
+    {
+        tx_mgr.set_fault_injection(ApxTransactionManager::FaultPoint::ALLOCATION_FAILURE_MUTATION);
+        UpdateOperation alloc_op;
+        alloc_op.op = UpdateOp::INSERT;
+        alloc_op.ext_u = 10;
+        alloc_op.ext_v = 30;
+        alloc_op.label = TypedLabel::from_int(100);
+
+        auto alloc_res = tx_mgr.execute_update(alloc_op, [](const ApxAuthoritativeGraph&, const UpdateOperation&, uint32_t, uint32_t, uint32_t) -> bool { return true; });
+        if (alloc_res.status != StepStatus::FAULT_INJECTED) {
+            report["status"] = "FAIL";
+            report["diagnostic"] = "ALLOCATION_FAILURE did not inject fault properly";
+            return report;
+        }
+        tx_mgr.set_fault_injection(ApxTransactionManager::FaultPoint::NONE);
+    }
+
+    // Step 0 inserted (10, 40) successfully -> MUST remain in graph
     uint32_t du_10 = codec.intern_data_vertex(10);
     uint32_t dv_40 = codec.intern_data_vertex(40);
     if (!graph.has_edge(du_10, dv_40)) {
@@ -282,7 +447,7 @@ mini_json::Value run_transaction_lifecycle(const mini_json::Value& fixture) {
     }
 
     report["status"] = "PASS";
-    report["diagnostic"] = "Transaction manager ACID boundaries and fault rollback verified";
+    report["diagnostic"] = "Transaction manager ACID boundaries, reentrancy guard, and fault rollback verified";
     report["steps_executed"] = step_results;
     return report;
 }
@@ -301,7 +466,6 @@ mini_json::Value run_tuple_sink_invariants(const mini_json::Value& fixture) {
         codec.intern_data_vertex(dv["id"].as_int());
     }
 
-    // Query vertices in fixture: 300 (dense 0), 100 (dense 1), 200 (dense 2)
     // In ascending numerical order of original external IDs: 100, 200, 300
     // Their internal dense IDs: dense(100)=1, dense(200)=2, dense(300)=0
     std::vector<int64_t> sorted_ext_q = {100, 200, 300};
@@ -375,7 +539,7 @@ mini_json::Value run_tuple_sink_invariants(const mini_json::Value& fixture) {
     }
 
     report["status"] = "PASS";
-    report["diagnostic"] = "Tuple sink canonicalization, injectivity enforcement, and duplicate detection verified";
+    report["diagnostic"] = "TupleSink injectivity, duplicate rejection, and staging invariants verified";
     report["raw_emissions"] = static_cast<int64_t>(sink.raw_emissions());
     report["unique_emissions"] = static_cast<int64_t>(sink.unique_emissions());
     report["committed_emissions"] = static_cast<int64_t>(sink.committed_emissions());
@@ -391,7 +555,6 @@ mini_json::Value run_k4_exact_enumeration(const mini_json::Value& fixture) {
     ApxAuthoritativeGraph query_graph;
     ApxAuthoritativeGraph data_graph;
 
-    // Load Query K4
     const auto& q_verts = fixture["query"]["vertices"].as_array();
     const auto& q_edges = fixture["query"]["edges"].as_array();
     std::vector<std::pair<uint32_t, uint32_t>> qv;
@@ -409,7 +572,6 @@ mini_json::Value run_k4_exact_enumeration(const mini_json::Value& fixture) {
     }
     query_graph.load_baseline(qv, qe);
 
-    // Load Data K4
     const auto& d_verts = fixture["data"]["vertices"].as_array();
     const auto& d_edges = fixture["data"]["edges"].as_array();
     std::vector<std::pair<uint32_t, uint32_t>> dv;
@@ -427,7 +589,6 @@ mini_json::Value run_k4_exact_enumeration(const mini_json::Value& fixture) {
     }
     data_graph.load_baseline(dv, de);
 
-    // Query vertex order by ascending external ID: 1, 2, 3, 4
     std::vector<uint32_t> query_order;
     for (int64_t ext_id = 1; ext_id <= 4; ++ext_id) {
         query_order.push_back(codec.intern_query_vertex(ext_id));
@@ -472,7 +633,6 @@ mini_json::Value run_event_transition_stream(const mini_json::Value& fixture) {
     ApxAuthoritativeGraph query_graph;
     ApxAuthoritativeGraph data_graph;
 
-    // Load Query K4
     const auto& q_verts = fixture["query"]["vertices"].as_array();
     const auto& q_edges = fixture["query"]["edges"].as_array();
     std::vector<std::pair<uint32_t, uint32_t>> qv;
@@ -485,7 +645,6 @@ mini_json::Value run_event_transition_stream(const mini_json::Value& fixture) {
     }
     query_graph.load_baseline(qv, qe);
 
-    // Load Data K4 missing edge (30, 40)
     const auto& d_verts = fixture["baseline_data"]["vertices"].as_array();
     const auto& d_edges = fixture["baseline_data"]["edges"].as_array();
     std::vector<std::pair<uint32_t, uint32_t>> dv;
@@ -556,6 +715,18 @@ mini_json::Value run_event_transition_stream(const mini_json::Value& fixture) {
         rec["step"] = ev["step"].as_int();
         rec["event_type"] = ev["expected_event_type"].as_string();
         rec["published_count"] = static_cast<int64_t>(res.published_tuples.size());
+
+        // Materialize and serialize actual tuples for bit-for-bit Oracle verification
+        mini_json::Value tuples_arr = mini_json::Value::make_array();
+        for (const auto& tup : res.published_tuples) {
+            mini_json::Value tup_json = mini_json::Value::make_array();
+            for (int64_t vid : tup) {
+                tup_json.push_back(vid);
+            }
+            tuples_arr.push_back(tup_json);
+        }
+        rec["tuples"] = tuples_arr;
+
         event_records.push_back(rec);
     }
 
@@ -573,7 +744,6 @@ mini_json::Value run_diamond_k1_fixed(const mini_json::Value& fixture) {
     ApxAuthoritativeGraph query_graph;
     ApxAuthoritativeGraph data_graph;
 
-    // Load Query Diamond (5 edges)
     const auto& q_verts = fixture["query"]["vertices"].as_array();
     const auto& q_edges = fixture["query"]["edges"].as_array();
     std::vector<std::pair<uint32_t, uint32_t>> qv;
@@ -586,7 +756,6 @@ mini_json::Value run_diamond_k1_fixed(const mini_json::Value& fixture) {
     }
     query_graph.load_baseline(qv, qe);
 
-    // Load Data 4-cycle (4 edges)
     const auto& d_verts = fixture["data"]["vertices"].as_array();
     const auto& d_edges = fixture["data"]["edges"].as_array();
     std::vector<std::pair<uint32_t, uint32_t>> dv;
@@ -599,7 +768,6 @@ mini_json::Value run_diamond_k1_fixed(const mini_json::Value& fixture) {
     }
     data_graph.load_baseline(dv, de);
 
-    // Mapping by query order 1, 2, 3, 4
     std::vector<uint32_t> mapping_by_q_order;
     const auto& fix_map = fixture["fixed_mapping_ext"].as_array();
     for (const auto& m : fix_map) {
@@ -617,14 +785,32 @@ mini_json::Value run_diamond_k1_fixed(const mini_json::Value& fixture) {
 
     if (eval.matched_edges != exp_matched || eval.missing_edges != exp_missing || eval.is_valid != exp_valid) {
         report["status"] = "FAIL";
-        report["diagnostic"] = "Diamond k=1 evaluation mismatch";
+        report["diagnostic"] = "Diamond k=1 evaluation mismatch: " + eval.diagnostic_message;
+        return report;
+    }
+
+    // Negative 1: Strict D-R guard rejection (k >= lambda)
+    auto eval_k_eq_lambda = MicroExactMatcher::evaluate_fixed_mapping(query_graph, data_graph, mapping_by_q_order, 2, 2);
+    if (eval_k_eq_lambda.is_valid) {
+        report["status"] = "FAIL";
+        report["diagnostic"] = "D-R guard failed: k=2 >= lambda=2 was erroneously accepted as valid";
+        return report;
+    }
+
+    // Negative 2: Metadata lambda mismatch
+    auto eval_bad_lambda = MicroExactMatcher::evaluate_fixed_mapping(query_graph, data_graph, mapping_by_q_order, 1, 99);
+    if (eval_bad_lambda.is_valid) {
+        report["status"] = "FAIL";
+        report["diagnostic"] = "Metadata lambda mismatch was erroneously accepted as valid";
         return report;
     }
 
     report["status"] = "PASS";
-    report["diagnostic"] = "Diamond k=1 fixed-mapping successfully evaluated without exact NLF filtering";
+    report["diagnostic"] = "Diamond k=1 fixed-mapping successfully evaluated satisfying D-R guard (k < lambda) and S2 spanning connectivity";
     report["matched_edges"] = static_cast<int64_t>(eval.matched_edges);
     report["missing_edges"] = static_cast<int64_t>(eval.missing_edges);
+    report["computed_lambda"] = static_cast<int64_t>(eval.computed_lambda);
+    report["s2_spanning_connected"] = eval.s2_spanning_connected;
     report["is_valid"] = eval.is_valid;
     return report;
 }
@@ -683,7 +869,6 @@ mini_json::Value run_irrelevant_update_stream(const mini_json::Value& fixture) {
         uint32_t dense_v,
         uint32_t dense_label
     ) -> bool {
-        // Delta search with edge label 99 finds 0 matches because query only has label 1
         matcher.match_delta(query_graph, g_view, dense_u, dense_v, dense_label, sink);
         return true;
     });

@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <vector>
+#include <string>
 #include <stdexcept>
 #include "rapidflow_apx/authoritative_graph.h"
 #include "rapidflow_apx/tuple_sink.h"
@@ -13,6 +14,8 @@ struct FixedMappingEvaluation {
     bool is_valid{false};
     uint32_t matched_edges{0};
     uint32_t missing_edges{0};
+    uint32_t computed_lambda{0};
+    bool s2_spanning_connected{false};
     std::string diagnostic_message;
 };
 
@@ -38,7 +41,10 @@ public:
         ApxTupleSink& sink
     );
 
-    // Fixed-mapping evaluator for Diamond k=1 (APX Interface verification)
+    // Exact edge connectivity calculation for undirected query graph lambda(Q)
+    static uint32_t compute_edge_connectivity(const ApxAuthoritativeGraph& query);
+
+    // Fixed-mapping evaluator with strict D-R guard (k < lambda) and S2 spanning connectivity
     static FixedMappingEvaluation evaluate_fixed_mapping(
         const ApxAuthoritativeGraph& query,
         const ApxAuthoritativeGraph& data,

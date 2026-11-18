@@ -5,6 +5,16 @@
     "timeout_seconds": 15,
     "max_address_space_mib": 256
   },
+  "required_case_ids": [
+    "codec_boundaries",
+    "lifecycle_stream",
+    "transaction_lifecycle",
+    "tuple_sink_invariants",
+    "k4_exact_enumeration",
+    "event_transition_stream",
+    "diamond_k1_fixed",
+    "irrelevant_update_stream"
+  ],
   "cases": [
     {
       "case_id": "codec_boundaries",
@@ -52,7 +62,7 @@
     },
     {
       "case_id": "k4_exact_enumeration",
-      "description": "Exhaustive bare M2 exact enumeration on K4: exactly 24 unique ordered tuples matching M0 without scalar multiplication",
+      "description": "Exhaustive exact enumeration on K4: exactly 24 unique ordered tuples matching M0 without scalar multiplication",
       "fixture_path": "tests/fixtures/rapidflow_apx_foundation/k4_exact_fixture.json",
       "fixture_sha256": "b2e95b3ad0e0bb84e3aee1b40af13465b1686f1b2bd724a2808d5fa3c475713e",
       "expected_status": "PASS",

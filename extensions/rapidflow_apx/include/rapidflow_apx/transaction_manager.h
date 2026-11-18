@@ -20,7 +20,24 @@ struct UpdateOperation {
     TypedLabel label;
 };
 
-enum class StepStatus { SUCCESS, PREVALIDATION_FAILED, CALLBACK_ABORTED, FAULT_INJECTED };
+enum class StepStatus {
+    SUCCESS,
+    PREVALIDATION_FAILED,
+    CALLBACK_ABORTED,
+    FAULT_INJECTED,
+    REENTRANCY_BLOCKED
+};
+
+inline const char* step_status_to_string(StepStatus s) {
+    switch (s) {
+        case StepStatus::SUCCESS: return "SUCCESS";
+        case StepStatus::PREVALIDATION_FAILED: return "PREVALIDATION_FAILED";
+        case StepStatus::CALLBACK_ABORTED: return "CALLBACK_ABORTED";
+        case StepStatus::FAULT_INJECTED: return "FAULT_INJECTED";
+        case StepStatus::REENTRANCY_BLOCKED: return "REENTRANCY_BLOCKED";
+    }
+    return "UNKNOWN";
+}
 
 struct StepResult {
     StepStatus status;
@@ -38,7 +55,15 @@ using SearchCallback = std::function<bool(
 
 class ApxTransactionManager {
 public:
-    enum class FaultPoint { NONE, AFTER_MUTATION, DURING_CALLBACK, BEFORE_PUBLISH };
+    enum class FaultPoint {
+        NONE,
+        BEFORE_MUTATION,
+        BETWEEN_FORWARD_REVERSE_MUTATION,
+        AFTER_MUTATION,
+        DURING_CALLBACK,
+        BEFORE_PUBLISH,
+        ALLOCATION_FAILURE_MUTATION
+    };
 
     ApxTransactionManager(ApxAuthoritativeGraph& graph, ApxTypedCodec& codec, ApxTupleSink& sink);
 
@@ -47,11 +72,14 @@ public:
     void set_fault_injection(FaultPoint point) noexcept { fault_point_ = point; }
     FaultPoint get_fault_injection() const noexcept { return fault_point_; }
 
+    bool is_in_transaction() const noexcept { return is_in_transaction_; }
+
 private:
     ApxAuthoritativeGraph& graph_;
     ApxTypedCodec& codec_;
     ApxTupleSink& sink_;
     FaultPoint fault_point_{FaultPoint::NONE};
+    bool is_in_transaction_{false};
 };
 
 } // namespace rapidflow_apx
