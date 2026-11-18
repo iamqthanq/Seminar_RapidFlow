@@ -7,9 +7,9 @@
 **Feature Branch:** `feature/rf32-d-int03-native-engines`
 **Integration Target:** `QuangThang`
 **Base Commit:** `88fbe200ff9217f4dccbad08bfa448d067d2ce4e` (contains accepted P2 HEAD `ebe2894752dc45e2aeb3109c260a34e2f87a9d06`)
-**Logic Commit SHA:** `a023529206dcfa7d4c69af16e970b17eb25d021f`
+**Logic Commit SHA:** `40b5fd44387dca16eaf19cdff3838740fb35f166`
 **Pinned Upstream RapidFlow:** `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` (Pristine: `True`)
-**Verification Status:** **P3_ENGINES_VERIFIED (ROUND 3 REMEDIATED)**
+**Verification Status:** **P3_ENGINES_VERIFIED (ROUND 4 REMEDIATED)**
 **Target Handoff Verdict:** **READY_FOR_INDEPENDENT_FINAL_REVIEW**
 
 ---
@@ -31,8 +31,9 @@ Key achievements:
    - 25 Hand & Adversarial Witness Cases locked via `configs/rapidflow_apx_required_cases.json`: **25 / 25 PASS**.
    - 840 Correctness Corpus Cases: **840 / 840 M1 PASS**, **840 / 840 M2 PASS** (8,002 truth events, 330 cases with events, 239 with $k \ge 1$, zero duplicate emissions).
    - 56-Stream Dynamic Matrix locked via `configs/rapidflow_apx_stream_56_lock.json` (672 updates): **672 / 672 M1 PASS**, **672 / 672 M2 PASS**, active-set reconstruction **672 / 672 PASS**.
-   - Round 3 Adversarial Mutation Suite: **40 / 40 injected mutations detected (100.0% detection rate)** across Level A (validator unit), Level B (stage integration), and Level C (subprocess execution).
-   - Full Repository Regression: **PASS**.
+   - Round 4 Adversarial Mutation Suite: **59 / 59 injected mutations detected (100.0% detection rate)** across Level A (34 validator unit tests), Level B (3 stage integration tests), and Level C (22 raw native output interception tests).
+   - Multi-step transaction rollback preservation verified bit-for-bit against reference model.
+   - Full Repository Regression: **538 / 538 tests PASS (0 errors, 0 failures in 138.6s)**.
 
 ---
 
@@ -40,16 +41,16 @@ Key achievements:
 
 | Metric / Parameter | Value | Verification |
 | :--- | :--- | :--- |
-| **Repository Commit** | `a023529206dcfa7d4c69af16e970b17eb25d021f` | `git rev-parse HEAD` (Clean: `true`) |
+| **Repository Commit** | `40b5fd44387dca16eaf19cdff3838740fb35f166` | `git rev-parse HEAD` (Clean: `true`) |
 | **Upstream Pinned SHA** | `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` | Submodule/git check (Pristine: `true`) |
 | **Operating System** | Linux 6.8.0-49-generic x86_64 | Clean local environment |
 | **Compiler** | GNU GCC / G++ 13.3.0 | Standard Ubuntu 24.04 packages |
 | **Build System** | CMake 3.28.3, Make 4.3 | Portable toolchain `external/tools` |
 | **Harness Binary** | `tests/native/rapidflow_apx_engines/build/rapidflow_apx_native` | Rebuilt cleanly (`--clean-build`) |
 | **Harness SHA-256** | `487ec2c116c6f6ce2b5829401076b221e36f1d3608322765abefb79f7636b267` | Verified bit-for-bit |
-| **Required Cases Registry** | `configs/rapidflow_apx_required_cases.json` | Hash: `1bca9e069ff6fb819641c58e7a2f7f50bd69e05e1e73cb9a9f78535332c5cd35` |
+| **Required Cases Registry** | `configs/rapidflow_apx_required_cases.json` | Hash: `4608239c8f7ce4ca3cb7f3bf4d1bfcb4dedb21b9017035192d1cf2c5c129899c` |
 | **Stream Lock Registry** | `configs/rapidflow_apx_stream_56_lock.json` | Hash: `34f9c78220a3d578b8fb5e582107203404fe7dd9858621f110cac737761aa451` |
-| **Summary Artifact** | `reports/rapidflow_apx_engines/summary.json` | Hash: `016f581794d4bb872673307c25390a9d847cc410c2f8fd6e473b4f2bae14cd09` |
+| **Summary Artifact** | `reports/rapidflow_apx_engines/summary.json` | Hash: `93e54f2836b0044959f85783609a8ac2c562b11f4a6984ea2c72079f8995f3ad` |
 
 ---
 
@@ -121,31 +122,31 @@ All cases are cross-checked against the immutable denominator in `configs/rapidf
 
 | Case ID | Case Name | Query | Data Graph | $k$ | Expected Result | M1 | M2 | Status |
 | :--- | :--- | :--- | :--- | :---: | :--- | :---: | :---: | :---: |
-| `CASE_HAND_01` | `diamond_distinct_labels` | Diamond | 4 vertices, 5 edges | 0 | 1 ENTERED | MATCH | MATCH | **PASS** |
-| `CASE_HAND_02` | `diamond_uniform_labels` | Diamond | 4 vertices, 5 edges | 0 | 4 ENTERED | MATCH | MATCH | **PASS** |
-| `CASE_HAND_03` | `diamond_k1_single_missing` | Diamond | 4 vertices, 4 edges | 1 | 2 ENTERED | MATCH | MATCH | **PASS** |
-| `CASE_HAND_04` | `c4_k0_square` | $C_4$ | 4 vertices, 4 edges | 0 | 8 ENTERED | MATCH | MATCH | **PASS** |
-| `CASE_HAND_05` | `c4_k1_triangle_plus_edge` | $C_4$ | 4 vertices, 4 edges | 1 | 8 ENTERED | MATCH | MATCH | **PASS** |
-| `CASE_HAND_06` | `k4_k0_all_ones` | $K_4$ | 4 vertices, 6 edges | 0 | 24 ENTERED (Step 1: 0, Step 2: 24) | MATCH | MATCH | **PASS** |
-| `CASE_HAND_07` | `k4_k1_all_ones` | $K_4$ | 4 vertices, 5 edges | 1 | 24 ENTERED | MATCH | MATCH | **PASS** |
-| `CASE_HAND_08` | `k4_k2_all_ones` | $K_4$ | 4 vertices, 4 edges | 2 | 24 ENTERED | MATCH | MATCH | **PASS** |
-| `CASE_HAND_09` | `house_k0` | House | 5 vertices, 6 edges | 0 | 2 ENTERED | MATCH | MATCH | **PASS** |
-| `CASE_HAND_10` | `house_k1` | House | 5 vertices, 5 edges | 1 | 6 ENTERED | MATCH | MATCH | **PASS** |
-| `CASE_HAND_11` | `irrelevant_label_update` | Diamond | Incompatible label | 0 | 0 ENTERED | MATCH | MATCH | **PASS** |
-| `CASE_HAND_12` | `disconnected_induced_k1` | Diamond | Missing cut edge | 1 | Handled | MATCH | MATCH | **PASS** |
-| `CASE_HAND_13` | `delete_transition_k0` | Diamond | Remove edge (0, 1) | 0 | 1 EXITED | MATCH | MATCH | **PASS** |
-| `CASE_HAND_14` | `delete_transition_k1` | Diamond | Remove edge (1, 2) | 1 | 2 EXITED | MATCH | MATCH | **PASS** |
-| `CASE_HAND_15` | `empty_data_graph_insert` | $K_3$ | Empty $G_0$, insert edge | 0 | 0 ENTERED | MATCH | MATCH | **PASS** |
-| `CASE_HAND_16` | `self_loop_rejected` | $K_3$ | Self loop (1, 1) | 0 | REJECTED (Exit 2) | MATCH | MATCH | **PASS** |
-| `CASE_HAND_17` | `multigraph_rejected` | $K_3$ | Duplicate edge | 0 | REJECTED (Exit 2) | MATCH | MATCH | **PASS** |
-| `CASE_HAND_18` | `budget_exceeded` | $K_4$ | Tight work budget | 1 | BUDGET_EXCEEDED (Exit 4) | MATCH | MATCH | **PASS** |
-| `CASE_HAND_19` | `non_injective_pruned` | Diamond | Small data graph | 0 | 0 non-injective | MATCH | MATCH | **PASS** |
-| `CASE_HAND_20` | `caller_mutation_isolation` | Diamond | In-memory clone | 0 | Isolated | MATCH | MATCH | **PASS** |
-| `CASE_HAND_21` | `invalid_k_domain` | $C_4$ | $k=2 \ge \lambda(C_4)=2$ | 2 | REJECTED (Exit 3) | MATCH | MATCH | **PASS** |
-| `CASE_HAND_22` | `invalid_update_rollback` | Diamond | Transaction rollback | 0 | Clean rollback (Exit 6) | MATCH | MATCH | **PASS** |
-| `CASE_HAND_23` | `query_size_5_k5_minus_edge` | $K_5 - e$ | 5 vertices, 9 edges | 1 | Verified | MATCH | MATCH | **PASS** |
-| `CASE_HAND_24_Q6` | `c6_cycle_size_6` | $C_6$ | 6 vertices, 6 edges | 1 | Verified | MATCH | MATCH | **PASS** |
-| `CASE_HAND_ADV01` | `witness_k4_delete` | $K_4$ | Delete edge in $K_4$ | 0 | 24 EXITED | MATCH | MATCH | **PASS** |
+| `CASE_HAND_01` | `diamond_distinct_labels` | Diamond (4v, 5e, distinct labels) | 4 vertices, 4 edges | 0 | 1 ENTERED, 0 EXITED | MATCH | MATCH | **PASS** |
+| `CASE_HAND_02` | `diamond_k0_insert` | Diamond (4v, 5e, uniform labels) | 4 vertices, 4 edges | 0 | 4 ENTERED, 0 EXITED | MATCH | MATCH | **PASS** |
+| `CASE_HAND_03` | `diamond_k0_delete` | Diamond (4v, 5e, uniform labels) | 4 vertices, 5 edges (-edge) | 0 | 0 ENTERED, 4 EXITED | MATCH | MATCH | **PASS** |
+| `CASE_HAND_04` | `k4_k1` | $K_4$ (4v, 6e) | 4 vertices, 4 edges (+edge) | 1 | 24 ENTERED, 0 EXITED | MATCH | MATCH | **PASS** |
+| `CASE_HAND_05` | `k4_k2` | $K_4$ (4v, 6e) | 4 vertices, 3 edges (+edge) | 2 | 24 ENTERED, 0 EXITED | MATCH | MATCH | **PASS** |
+| `CASE_HAND_06_STEP1` | `diamond_2step_delete_step1` | Diamond (4v, 5e) | 4 vertices, 5 edges (-edge 0-3) | 1 | 0 ENTERED, 16 EXITED | MATCH | MATCH | **PASS** |
+| `CASE_HAND_06_STEP2` | `diamond_2step_delete_step2` | Diamond (4v, 5e) | 4 vertices, 4 edges (-edge 1-2) | 1 | 0 ENTERED, 8 EXITED | MATCH | MATCH | **PASS** |
+| `CASE_HAND_07` | `no_matching_label` | $K_3$ (3v, 3e, label 'X') | 3 vertices, 2 edges (label 'A') | 0 | 0 ENTERED, 0 EXITED (No Match) | MATCH | MATCH | **PASS** |
+| `CASE_HAND_08` | `non_induced_extra_chords` | $C_4$ (4v, 4e, chordless) | 4 vertices, 4 edges (extra chord) | 0 | 8 ENTERED, 0 EXITED (Non-induced) | MATCH | MATCH | **PASS** |
+| `CASE_HAND_09` | `edge_label_mismatch` | $K_3$ (3v, 3e) | 3 vertices, 2 edges (edge label mismatch) | 1 | 6 ENTERED, 0 EXITED | MATCH | MATCH | **PASS** |
+| `CASE_HAND_10` | `vertex_label_mismatch` | $P_2$ (2v, 1e, label 0/1) | 2 vertices, 0 edges (label mismatch) | 0 | 0 ENTERED, 0 EXITED | MATCH | MATCH | **PASS** |
+| `CASE_HAND_11` | `int_vs_str_labels` | $P_2$ (2v, 1e, int label 0) | 2 vertices, 0 edges (str label '0') | 0 | 0 ENTERED, 0 EXITED | MATCH | MATCH | **PASS** |
+| `CASE_HAND_12` | `sparse_negative_ids` | $K_3$ (3v, 3e) | Negative vertex IDs ({-10, -20, -30}) | 0 | 6 ENTERED, 0 EXITED | MATCH | MATCH | **PASS** |
+| `CASE_HAND_13` | `canonical_tuple_order` | $C_4$ (4v, 4e) | 4 vertices, 3 edges (+edge) | 0 | 1 ENTERED, 0 EXITED (Canonical Sort) | MATCH | MATCH | **PASS** |
+| `CASE_HAND_14` | `uniform_k4_k0_automorphisms` | $K_4$ (4v, 6e, uniform) | 4 vertices, 5 edges (+edge) | 0 | 24 ENTERED, 0 EXITED (\|Aut\|=24) | MATCH | MATCH | **PASS** |
+| `CASE_HAND_15` | `c4_k1_deferred_witness` | $C_4$ (4v, 4e) | 4 vertices, 2 edges (+edge) | 1 | 8 ENTERED, 0 EXITED (Deferred) | MATCH | MATCH | **PASS** |
+| `CASE_HAND_16` | `missing_commitment_violation` | Diamond (4v, 5e) | 4 vertices, 4 edges (+edge) | 1 | 16 ENTERED, 0 EXITED (Missing Com.) | MATCH | MATCH | **PASS** |
+| `CASE_HAND_17` | `no_double_charging` | $K_3$ (3v, 3e) | 3 vertices, 2 edges (+edge) | 0 | 6 ENTERED, 0 EXITED (No Double Charge) | MATCH | MATCH | **PASS** |
+| `CASE_HAND_18` | `rollback_isolation` | $C_4$ (4v, 4e) | 5 vertices, 5 edges (+edge) | 0 | 8 ENTERED, 0 EXITED (Rollback Iso) | MATCH | MATCH | **PASS** |
+| `CASE_HAND_19` | `reversed_endpoints` | Diamond (4v, 5e) | 4 vertices, 4 edges (+reversed edge) | 0 | 4 ENTERED, 0 EXITED (Undirected) | MATCH | MATCH | **PASS** |
+| `CASE_HAND_20` | `caller_mutation_isolation` | $K_3$ (3v, 3e) | 3 vertices, 3 edges (3-step seq) | 0 | 6 ENTERED, 12 EXITED (Isolation) | MATCH | MATCH | **PASS** |
+| `CASE_HAND_21` | `invalid_k_domain` | $P_4$ (4v, 3e, $\lambda=1$) | Domain D-R violation: $k=1 \ge \lambda=1$ | 1 | REJECTED (Exit 3, DOMAIN_ERROR) | MATCH | MATCH | **PASS** |
+| `CASE_HAND_22` | `invalid_update_rollback` | $P_2$ (2v, 1e) | Self-loop prevalidation rejection (1-1) | 0 | REJECTED (Exit 6, PREVALIDATION_ERROR) | MATCH | MATCH | **PASS** |
+| `CASE_HAND_23` | `query_size_5_k5_minus_edge` | $K_5 - e$ (5v, 9e, $\lambda=3$) | 5 vertices, 8 edges (+edge) | 1 | 96 ENTERED, 0 EXITED | MATCH | MATCH | **PASS** |
+| `CASE_HAND_24_Q6` | `c6_cycle_size_6` | $C_6$ (6v, 6e, $\lambda=2$) | 6 vertices, 4 edges (+edge) | 1 | 12 ENTERED, 0 EXITED | MATCH | MATCH | **PASS** |
 
 ### 4.2. 840-Case Correctness Corpus (Real M0 Recomputed)
 
@@ -175,7 +176,24 @@ Locked via `configs/rapidflow_apx_stream_56_lock.json` with embedded exact query
 
 ---
 
-## 5. Round 3 Independent Review Findings & Verification Matrix
+## 5. Round 4 Independent Review Findings & Remediation Matrix
+
+The Round 4 comprehensive remediation addresses findings R4-F01 through R4-F08:
+
+| Finding ID | Severity | Description & Root Cause | Technical Resolution | Independent Verification & Evidence | Status |
+| :--- | :--- | :--- | :--- | :--- | :---: |
+| **R4-F01** | BLOCKER | Output schema validation was bypassed when `schema_version` was missing or malformed rather than failing closed. | Refactored `run_workload_on_binary` and `validate_native_output_schema` to unconditionally enforce schema validation on all parsed JSON outputs, validating mandatory `schema_version == "1.1.0"` and `semantics_version == "D-R-1.0"`. | Reproducer missing `schema_version` confirmed rejected fail-closed; verified in Level C mutation tests 38-41. | **RESOLVED** |
+| **R4-F02** | BLOCKER | Cross-layer execution & transaction integrity lacked strict integer typing, allowed loose step statuses on root SUCCESS, and lacked tuple distinctness/injectivity checks. | Enforced strict signed int64 types for `step_index`, `u`, `v`, `op`, `label` in `validate_native_output_schema`. Required that on SUCCESS, every step must have `status == "SUCCESS"`, `commit_status == "COMMITTED"`, `error_category == "NONE"`. Enforced injectivity and unique tuple sets on all event emissions. | Reproducers for Mutations A, B, C, D confirmed rejected fail-closed; verified in Level C mutation tests 42-49. | **RESOLVED** |
+| **R4-F03** | BLOCKER | Negative stage allowed schema failures; negative test runs were accepted merely on exit code without enforcing fail-closed error payload schema invariants. | Updated `run_hand_and_witness_cases` to unconditionally require `eng_res.get("schema_valid", False) is True` on negative cases. Error JSON payloads must strictly satisfy lifecycle invariants, error category contracts, and unmutated graph state. | Reproducer `CASE_HAND_22` with corrupted `completed_steps = 123` confirmed rejected fail-closed; verified in Level C mutation tests 53-54. | **RESOLVED** |
+| **R4-F04** | BLOCKER | The 25 hand witness cases lacked cryptographic locking of their actual workload definitions and expected step events. | Upgraded `configs/rapidflow_apx_required_cases.json` to v2.0.0, cryptographically locking each case with `canonical_workload_sha256`, `expected_step_events`, vertex/edge counts, and exact $\lambda(Q)$. Runner preflight asserts hashes bit-for-bit. | Reproducer with mutated query labels on `CASE_HAND_04` confirmed rejected fail-closed; verified in Level C mutation test 55. | **RESOLVED** |
+| **R4-F05** | MAJOR | Stream lock registry lacked Cartesian completeness verification and explicit bijection between naming, query type, $k$, seed, and canonical input SHA-256. | Hardened `validate_stream_lock_registry` and `run_56_stream_matrix` enforcing 7 topologies $\times$ 8 seeds = 56 streams Cartesian product, naming template `stream_{q_type}_k{k}_{seed}_{label_mode}`, $\lambda(Q)$ consistency, and cross-checking generated workloads against lock item hashes. | Reproducer with mutated stream metadata confirmed rejected fail-closed; verified in Level C mutation test 56. | **RESOLVED** |
+| **R4-F06** | MAJOR | `validate_graph_state` allowed extra neighbor keys (e.g. `"999999999": []`) and lacked strict typing on vertex degrees and edge endpoints. | Hardened `validate_graph_state`: enforces exact set equality `set(obs_neighbors.keys()) == {str(vid) for vid in expected_graph.vertices}`, signed int64 range bounds, strict `type(deg) is int and not isinstance(deg, bool)`, and strict label typing. | Reproducers with extra neighbor keys, keys > INT64_MAX, and float/bool degrees confirmed rejected fail-closed; verified in Level C mutation tests 50-52. | **RESOLVED** |
+| **R4-F07** | MAJOR | Level C mutation test suite only tested 3 CLI options, failing to test runner interception and validation of real native binary outputs. | Rebuilt Level C mutation suite to intercept raw native outputs from binary runs with positive controls and inject 22 distinct corruptions across schema, lifecycle, typing, and graph state. Added dedicated `test_transaction_rollback_multistep_preservation`. | Suite achieves 100.0% mutation detection rate (59/59 detected); multi-step rollback preservation verified. | **RESOLVED** |
+| **R4-F08** | MAJOR | Validation report Section 4.1 had obsolete cases (`CASE_HAND_ADV01`, `CASE_HAND_06`), mismatched names, and outdated $k$ descriptions. | Rebuilt Section 4.1 table matching `configs/rapidflow_apx_required_cases.json` 1:1 across all 25 cases (0 mismatched names, 0 mismatched k, 0 missing IDs, 0 obsolete IDs). Added automated consistency audit test `test_validation_report_consistency_audit`. | Consistency audit test verifies 0 discrepancies between report markdown and JSON registry. | **RESOLVED** |
+
+---
+
+## 6. Round 3 Independent Review Findings & Verification Matrix
 
 The Round 3 remediation addresses findings R3-F01 through R3-F08:
 
@@ -192,7 +210,7 @@ The Round 3 remediation addresses findings R3-F01 through R3-F08:
 
 ---
 
-## 6. Previous Round 1 & Round 2 Summary
+## 7. Previous Round 1 & Round 2 Summary
 
 Prior findings from Round 1 (P3-F01 through P3-F09) addressed core execution mechanics:
 - **P3-F01**: Separated `step_counters_` (isolated per step) from `cumulative_counters_`.
@@ -209,7 +227,7 @@ All Round 1 and Round 2 fixes remain fully preserved and covered by regression t
 
 ---
 
-## 7. Decision Summary
+## 8. Decision Summary
 
 | Component | Status | Finding / Action |
 | :--- | :---: | :--- |
@@ -226,7 +244,7 @@ All Round 1 and Round 2 fixes remain fully preserved and covered by regression t
 
 ---
 
-## 8. Handoff & Next Steps
+## 9. Handoff & Next Steps
 
 1. **Reviewer Handover**:
    - PR target: `QuangThang`.
