@@ -86,9 +86,9 @@ Both native C++ engines (`ApxM1EnumEngine` and `ApxM2EventEngine`) compiled clea
 
 ### 4.3. R3-C: Final Gate Review
 
-The canonical clean build and complete verification runner were executed from commit `a7267e90c60723447e7acfc4613be2435b558c1b`:
-- **Native Binary**: `tests/native/rapidflow_apx_engines/build/rapidflow_apx_native` (SHA-256: `1983466500e00570a15dcb8f28b8d1bdee51f1cb5657dd3f21413d2211593654`).
-- **Git Provenance**: Repository commit `a7267e90c60723447e7acfc4613be2435b558c1b` (`CLEAN`), Upstream pinned `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` (`PRISTINE`).
+The canonical clean build and complete verification runner were executed from commit `c58038bd935c6868af669471cb8eec061ef7133b`:
+- **Native Binary**: `tests/native/rapidflow_apx_engines/build/rapidflow_apx_native` (SHA-256: `469d5209ed884eb02da9664cbc5966ffd6b76ff5b89d29bbbfdc9ad2cf960cb8`).
+- **Git Provenance**: Repository commit `c58038bd935c6868af669471cb8eec061ef7133b` (`CLEAN`), Upstream pinned `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` (`PRISTINE`).
 - **Hand Cases (24 hand + 1 adversarial witness = 25 total)**: 25/25 PASS (including fail-closed checks for $k \ge \lambda(Q)$, invalid transactions, disconnected queries, empty graphs).
 - **840-Case Correctness Corpus (Real M0 Recomputed)**:
   - 840/840 cases M1 agreed bit-for-bit with independent M0 Oracle.
@@ -99,7 +99,7 @@ The canonical clean build and complete verification runner were executed from co
   - 56 stream configurations across diverse query topologies ($K_3, K_4, C_4, C_5, \text{Diamond}, \text{House}, \text{Tree}_5, \text{Ladder}_6$), edge connectivity thresholds $k \in \{0, 1\}$, and stream rates.
   - 672/672 update steps matched M0 Oracle on M1; 672/672 on M2 (3,024 ENTERED events, 1,780 EXITED events).
   - Active-set reconstruction matched M0 snapshots 672/672 on both engines.
-- **Repository Regression Suite**: Ran `python3 -m unittest discover tests` — 528 tests passed with 0 failures and 0 errors in 119.184s.
+- **Repository Regression Suite**: Ran `python3 -m unittest discover tests` — 535 tests passed with 0 failures and 0 errors in 128.553s.
 
 ### 4.4. Round 1 Review Remediation Summary (P3-F01–P3-F09)
 

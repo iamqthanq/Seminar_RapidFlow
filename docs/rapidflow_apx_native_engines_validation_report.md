@@ -7,7 +7,7 @@
 **Feature Branch:** `feature/rf32-d-int03-native-engines`
 **Integration Target:** `QuangThang`
 **Base Commit:** `88fbe200ff9217f4dccbad08bfa448d067d2ce4e` (contains accepted P2 HEAD `ebe2894752dc45e2aeb3109c260a34e2f87a9d06`)
-**Logic Commit SHA:** `a7267e90c60723447e7acfc4613be2435b558c1b`
+**Logic Commit SHA:** `c58038bd935c6868af669471cb8eec061ef7133b`
 **Pinned Upstream RapidFlow:** `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` (Pristine: `True`)
 **Verification Status:** **P3_ENGINES_VERIFIED (REMEDIATED)**
 **Final Gate Verdict:** **ENGINES_VERIFIED_READY_FOR_P4_DESIGN (PENDING INDEPENDENT REVIEW)**
@@ -31,7 +31,7 @@ Key achievements:
    - 25 Hand & Adversarial Witness Cases: **25 / 25 PASS**.
    - 840 Correctness Corpus Cases: **840 / 840 M1 PASS**, **840 / 840 M2 PASS** (8,002 truth events, 330 cases with events, 239 with $k \ge 1$, zero duplicate emissions).
    - 56-Stream Dynamic Matrix (672 updates): **672 / 672 M1 PASS**, **672 / 672 M2 PASS**, active-set reconstruction **672 / 672 PASS**.
-   - Full Repository Regression: **528 / 528 tests PASS** in 119.184s.
+   - Full Repository Regression: **535 / 535 tests PASS** in 128.553s.
 
 ---
 
@@ -39,14 +39,14 @@ Key achievements:
 
 | Metric / Parameter | Value | Verification |
 | :--- | :--- | :--- |
-| **Repository Commit** | `a7267e90c60723447e7acfc4613be2435b558c1b` | `git rev-parse HEAD` (Clean: `true`) |
+| **Repository Commit** | `c58038bd935c6868af669471cb8eec061ef7133b` | `git rev-parse HEAD` (Clean: `true`) |
 | **Upstream Pinned SHA** | `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` | Submodule/git check (Pristine: `true`) |
 | **Operating System** | Linux 6.8.0-49-generic x86_64 | Clean local environment |
 | **Compiler** | GNU GCC / G++ 13.3.0 | Standard Ubuntu 24.04 packages |
 | **Build System** | CMake 3.28.3, Make 4.3 | Portable toolchain `external/tools` |
 | **Harness Binary** | `tests/native/rapidflow_apx_engines/build/rapidflow_apx_native` | Rebuilt cleanly (`--clean-build`) |
-| **Harness SHA-256** | `1983466500e00570a15dcb8f28b8d1bdee51f1cb5657dd3f21413d2211593654` | Verified bit-for-bit |
-| **Summary Artifact** | `reports/rapidflow_apx_engines/summary.json` | Hash: `6f224fbb477697af0c9f7d9f438c3e85b6cfd349dda99614bcc4f2f763d6c41d` |
+| **Harness SHA-256** | `469d5209ed884eb02da9664cbc5966ffd6b76ff5b89d29bbbfdc9ad2cf960cb8` | Verified bit-for-bit |
+| **Summary Artifact** | `reports/rapidflow_apx_engines/summary.json` | Hash: `95528081b89947e5726bdf3a255e226e94dad498db0bec63aee5dcb3aafff11a` |
 
 ---
 
