@@ -59,7 +59,7 @@ In continuous dynamic matching, an edge update $e = \{x, y\}$ alters the validit
     $$|R_{\text{before}}(f)| \le k \land |R_{\text{before}}(f)| + 1 > k \iff |R_{\text{before}}(f)| == k$$
 
 > [!IMPORTANT]
-> **No `|R| <= k` at Leaf Nodes in Event Enumeration**: Both M1 and M2 strictly enforce $|R| == k$ at leaf nodes. Testing $|R| \le k$ would erroneously emit embeddings that were already valid prior to the update, corrupting the delta event set.
+> **No `|R| <= k` at Leaf Nodes in Event Enumeration**: Both M1 and M2 strictly enforce $|R| == k$ at leaf nodes. Testing $|R| \le k$ would emit mappings that were already valid before the update (spurious / stale events that did not genuinely change validity status upon the update transition), corrupting the delta event set. Event enumeration requires exact boundary transitions.
 
 ---
 

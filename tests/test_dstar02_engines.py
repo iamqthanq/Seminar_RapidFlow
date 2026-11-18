@@ -23,7 +23,8 @@ import random
 import sys
 import unittest
 from pathlib import Path
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any, Dict, FrozenSet, List, Optional, Set, Tuple
+from unittest.mock import patch
 
 # Add scripts directory to path
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -33,6 +34,7 @@ from dstar_event_common import (
     DEFAULT_MAX_CANDIDATES,
     DEFAULT_MAX_DATA_VERTICES,
     DEFAULT_MAX_QUERY_VERTICES,
+    DEFAULT_MAX_STREAM_STEPS,
     DEFAULT_MAX_WORK,
     DStarEventError,
     DStarEventGraph,
@@ -53,9 +55,11 @@ from dstar_event_common import (
     canonical_ordered_tuple,
     compute_edge_connectivity,
     is_connected,
+    validate_run_contract,
 )
 from dstar_m1_enum import M1DynamicEngine, M1EnumEngine
 from dstar_m2_event import M2DynamicEngine, M2EventEngine
+from generate_dstar02_report import build_matrix_query, generate_structured_stream_instance
 
 # Test-side ground truth oracle only (forbidden in production engine modules)
 import dstar_oracle as M0
@@ -456,10 +460,15 @@ class TestHandAndAdversarialCorrectness(unittest.TestCase):
         res1, _ = self.m1.process_update(Q, G, upd, k=0)
         res2, _ = self.m2.process_update(Q, G, upd, k=0)
 
-        # Full K4 has 24 automorphisms; 4 of them map query edge (1,2) to data edge (1,2) in 2 orientations
-        self.assertEqual(len(res1.entered), len(set(res1.entered)))
-        self.assertEqual(len(res2.entered), len(set(res2.entered)))
+        # Full K4 has 24 automorphisms; all 24 become valid upon inserting edge (1,2)
+        all_24_perms = set(itertools.permutations((1, 2, 3, 4), 4))
+        self.assertEqual(len(res1.entered), 24)
+        self.assertEqual(len(res2.entered), 24)
+        self.assertEqual(set(res1.entered), all_24_perms)
+        self.assertEqual(set(res2.entered), all_24_perms)
         self.assertEqual(res1.entered, res2.entered)
+        self.assertEqual(res1.exited, [])
+        self.assertEqual(res2.exited, [])
 
     def test_case_15_c4_k1_deferred_witness(self) -> None:
         """C4 k=1 deferred witness: MISSING branch is taken, resolves at later step."""
@@ -599,8 +608,8 @@ class TestHandAndAdversarialCorrectness(unittest.TestCase):
             upd_dup.apply_transactional(G)
 
     def test_case_23_query_sizes_5_and_6(self) -> None:
-        """Query sizes 5 and 6 tested within resource bounds."""
-        # Size 5: K5 minus 1 edge
+        """Query sizes 5 and 6 tested within resource bounds (F07)."""
+        # Size 5: K5 minus 1 edge (lambda >= 3, k=1)
         Q5 = DStarEventGraph()
         for v in range(1, 6):
             Q5.add_vertex(v, 0)
@@ -618,8 +627,26 @@ class TestHandAndAdversarialCorrectness(unittest.TestCase):
             if (u, v) not in ((1, 2), (2, 3)):
                 G5.add_edge(u, v, 0)
 
-        upd = DStarEventUpdate("INSERT", (2, 3), 0)
-        self._assert_engines_agree_and_match_m0(Q5, G5, upd, k=1)
+        upd5 = DStarEventUpdate("INSERT", (2, 3), 0)
+        self._assert_engines_agree_and_match_m0(Q5, G5, upd5, k=1)
+
+        # Size 6: C6 cycle (lambda=2, k=1)
+        Q6 = DStarEventGraph()
+        for v in range(6):
+            Q6.add_vertex(v, 0)
+        for v in range(5):
+            Q6.add_edge(v, v + 1, 0)
+        Q6.add_edge(5, 0, 0)
+        self.assertEqual(compute_edge_connectivity(Q6), 2)
+
+        G6 = DStarEventGraph()
+        for v in range(6):
+            G6.add_vertex(v, 0)
+        for v in range(4):
+            G6.add_edge(v, v + 1, 0)
+
+        upd6 = DStarEventUpdate("INSERT", (4, 5), 0)
+        self._assert_engines_agree_and_match_m0(Q6, G6, upd6, k=1)
 
 
 # ============================================================================
@@ -681,28 +708,60 @@ class TestCorpus840Reference(unittest.TestCase):
                         label=upd_raw["label"],
                     )
 
-                    truth_events = [tuple(t) for t in case_data["oracle_events"]]
-                    if truth_events:
+                    # 1. Compute dynamic Ground Truth using REAL M0 Oracle (F01)
+                    q_m0 = M0.DStarGraph.from_dict(Q.to_dict())
+                    g_m0 = M0.DStarGraph.from_dict(G_before.to_dict())
+                    m0_oracle = M0.DStarDynamicOracle(q_m0, g_m0, k=k)
+                    upd_m0 = M0.DStarUpdate(
+                        op=upd.operation,
+                        u=upd.edge[0],
+                        v=upd.edge[1],
+                        label=upd.label,
+                    )
+                    delta_m0 = m0_oracle.apply_update(upd_m0)
+                    m0_entered = sorted(delta_m0.entered)
+                    m0_exited = sorted(delta_m0.exited)
+
+                    # 2. Run M1
+                    res1, g1_after = m1_engine.process_update(Q, G_before, upd, k)
+                    m1_entered = sorted(res1.entered)
+                    m1_exited = sorted(res1.exited)
+
+                    # 3. Run M2
+                    res2, g2_after = m2_engine.process_update(Q, G_before, upd, k)
+                    m2_entered = sorted(res2.entered)
+                    m2_exited = sorted(res2.exited)
+
+                    # Strict assertions against M0
+                    self.assertEqual(m1_entered, m0_entered, f"Case {case_data['case']}: M1 entered != M0")
+                    self.assertEqual(m2_entered, m0_entered, f"Case {case_data['case']}: M2 entered != M0")
+                    self.assertEqual(m1_exited, m0_exited, f"Case {case_data['case']}: M1 exited != M0")
+                    self.assertEqual(m2_exited, m0_exited, f"Case {case_data['case']}: M2 exited != M0")
+
+                    # Verify empty dimensions
+                    if upd.operation == "INSERT":
+                        self.assertEqual(m0_exited, [])
+                    else:
+                        self.assertEqual(m0_entered, [])
+
+                    # Cross-check reference oracle_events from fixture
+                    ref_events = sorted(tuple(t) for t in case_data["oracle_events"])
+                    active_events = m0_entered if upd.operation == "INSERT" else m0_exited
+                    self.assertEqual(active_events, ref_events, f"Case {case_data['case']}: M0 != fixture reference")
+
+                    # Cross-check graph state after update
+                    self.assertEqual(g1_after.edges, m0_oracle.G.edges)
+                    self.assertEqual(g2_after.edges, m0_oracle.G.edges)
+
+                    # Zero raw duplicates
+                    self.assertEqual(len(res1.entered), len(set(res1.entered)))
+                    self.assertEqual(len(res2.entered), len(set(res2.entered)))
+                    self.assertEqual(len(res1.exited), len(set(res1.exited)))
+                    self.assertEqual(len(res2.exited), len(set(res2.exited)))
+
+                    if active_events:
                         cases_with_events += 1
-                        total_events += len(truth_events)
-
-                    # Process M1
-                    res1, _ = m1_engine.process_update(Q, G_before, upd, k)
-                    actual1 = res1.entered if upd.operation == "INSERT" else res1.exited
-                    self.assertEqual(
-                        actual1,
-                        truth_events,
-                        f"Case {case_data['case']} seed {case_data['seed']}: M1 events {actual1} != truth {truth_events}",
-                    )
-
-                    # Process M2
-                    res2, _ = m2_engine.process_update(Q, G_before, upd, k)
-                    actual2 = res2.entered if upd.operation == "INSERT" else res2.exited
-                    self.assertEqual(
-                        actual2,
-                        truth_events,
-                        f"Case {case_data['case']} seed {case_data['seed']}: M2 events {actual2} != truth {truth_events}",
-                    )
+                        total_events += len(active_events)
 
         self.assertEqual(total_cases, 840, f"Expected 840 cases, got {total_cases}")
         self.assertEqual(total_events, 8002, f"Expected 8002 truth events, got {total_events}")
@@ -713,143 +772,90 @@ class TestCorpus840Reference(unittest.TestCase):
 # Test Suite 4: 56-Stream Stateful Matrix Verification
 # ============================================================================
 
-def build_query_by_name(name: str, label_mode: str) -> DStarEventGraph:
-    """Builds test query graph for 56-stream matrix."""
-    g = DStarEventGraph()
-    if name == "C4":
-        for v in range(4):
-            g.add_vertex(v, 0 if label_mode == "uniform" else v % 2)
-        for (u, v) in [(0, 1), (1, 2), (2, 3), (3, 0)]:
-            g.add_edge(u, v, 0 if label_mode == "uniform" else (u + v) % 2)
-    elif name == "Diamond":
-        for v in range(4):
-            g.add_vertex(v, 0 if label_mode == "uniform" else v % 2)
-        for (u, v) in [(0, 1), (0, 2), (1, 2), (1, 3), (2, 3)]:
-            g.add_edge(u, v, 0 if label_mode == "uniform" else (u + v) % 2)
-    elif name == "K4":
-        for v in range(4):
-            g.add_vertex(v, 0 if label_mode == "uniform" else v % 2)
-        for (u, v) in itertools.combinations(range(4), 2):
-            g.add_edge(u, v, 0 if label_mode == "uniform" else (u + v) % 2)
-    return g
-
-
-def generate_random_stream_instance(
-    seed: int,
-    n_vertices: int,
-    n_initial_edges: int,
-    n_updates: int,
-    label_mode: str,
-) -> Tuple[DStarEventGraph, List[DStarEventUpdate]]:
-    """Generates random data graph and sequence of valid updates."""
-    rng = random.Random(seed)
-    g = DStarEventGraph()
-    n_vlabels = 1 if label_mode == "uniform" else 2
-    n_elabels = 1 if label_mode == "uniform" else 2
-
-    for v in range(n_vertices):
-        g.add_vertex(v, rng.randrange(n_vlabels))
-
-    all_pairs = list(itertools.combinations(range(n_vertices), 2))
-    initial_pairs = rng.sample(all_pairs, min(n_initial_edges, len(all_pairs)))
-    for (u, v) in initial_pairs:
-        g.add_edge(u, v, rng.randrange(n_elabels))
-
-    # Generate sequence of updates that maintain graph validity
-    curr_edges = dict(g.edges)
-    updates: List[DStarEventUpdate] = []
-
-    for _ in range(n_updates):
-        can_insert = len(curr_edges) < len(all_pairs)
-        can_delete = len(curr_edges) > 1
-
-        op = "INSERT" if (can_insert and (not can_delete or rng.random() < 0.5)) else "DELETE"
-        if op == "INSERT":
-            available = [p for p in all_pairs if p not in curr_edges]
-            pair = rng.choice(available)
-            lbl = rng.randrange(n_elabels)
-            updates.append(DStarEventUpdate("INSERT", pair, lbl))
-            curr_edges[pair] = lbl
-        else:
-            pair = rng.choice(list(curr_edges.keys()))
-            lbl = curr_edges[pair]
-            updates.append(DStarEventUpdate("DELETE", pair, lbl))
-            del curr_edges[pair]
-
-    return g, updates
-
 
 class Test56StreamStatefulMatrix(unittest.TestCase):
-    """Executes the 56-stream stateful matrix (672 updates total)."""
+    """Executes the 56-stream stateful matrix (672 updates total) with F07 specifications."""
 
     def test_56_stream_matrix_against_m0_and_active_set_reconstruction(self) -> None:
-        seed_base = 20261117
-        matrix_specs = [
-            ("C4", [0, 1], 8),
-            ("Diamond", [0, 1], 8),
-            ("K4", [0, 1, 2], 8),
+        matrix_combinations = [
+            ("C4", 0),
+            ("C4", 1),
+            ("Diamond", 0),
+            ("Diamond", 1),
+            ("K4", 0),
+            ("K4", 1),
+            ("K4", 2),
         ]
+        seeds = [20261118, 20261119, 20261120, 20261121, 20261122, 20261123, 20261124, 20261125]
 
         total_configs = 0
         total_steps = 0
 
-        for q_name, k_values, seeds_count in matrix_specs:
-            for k in k_values:
-                for s_idx in range(seeds_count):
-                    total_configs += 1
-                    seed = seed_base + total_configs * 37 + s_idx
-                    label_mode = "uniform" if (total_configs % 2 == 0) else "mixed"
+        for q_name, k in matrix_combinations:
+            for s_idx, seed in enumerate(seeds):
+                total_configs += 1
+                label_mode = "uniform" if s_idx < 4 else "mixed"
 
-                    Q = build_query_by_name(q_name, label_mode)
-                    G0, updates = generate_random_stream_instance(
-                        seed=seed,
-                        n_vertices=6,
-                        n_initial_edges=6,
-                        n_updates=12,
-                        label_mode=label_mode,
+                Q = build_matrix_query(q_name, label_mode)
+                G0, updates = generate_structured_stream_instance(
+                    seed=seed,
+                    n_vertices=6,
+                    label_mode=label_mode,
+                )
+
+                # Instantiate stateful engines
+                m1_dyn = M1DynamicEngine(Q, G0, k)
+                m2_dyn = M2DynamicEngine(Q, G0, k)
+
+                # Test-side M0 Oracle
+                q_m0 = M0.DStarGraph.from_dict(Q.to_dict())
+                g_m0 = M0.DStarGraph.from_dict(G0.to_dict())
+                m0_dyn = M0.DStarDynamicOracle(q_m0, g_m0, k=k)
+
+                active_set_m1: Set[Tuple[int, ...]] = set(m0_dyn.current_matches)
+                active_set_m2: Set[Tuple[int, ...]] = set(m0_dyn.current_matches)
+
+                for up in updates:
+                    total_steps += 1
+                    res1 = m1_dyn.step(up)
+                    res2 = m2_dyn.step(up)
+
+                    up_m0 = M0.DStarUpdate(
+                        op=up.operation,
+                        u=up.edge[0],
+                        v=up.edge[1],
+                        label=up.label,
                     )
+                    delta_m0 = m0_dyn.apply_update(up_m0)
 
-                    # Instantiate stateful engines
-                    m1_dyn = M1DynamicEngine(Q, G0, k)
-                    m2_dyn = M2DynamicEngine(Q, G0, k)
+                    m0_ent = sorted(delta_m0.entered)
+                    m0_ext = sorted(delta_m0.exited)
 
-                    # Test-side M0 Oracle
-                    q_m0 = M0.DStarGraph.from_dict(Q.to_dict())
-                    g_m0 = M0.DStarGraph.from_dict(G0.to_dict())
-                    m0_dyn = M0.DStarDynamicOracle(q_m0, g_m0, k=k)
+                    # Check step agreement
+                    self.assertEqual(res1.entered, m0_ent)
+                    self.assertEqual(res2.entered, m0_ent)
+                    self.assertEqual(res1.exited, m0_ext)
+                    self.assertEqual(res2.exited, m0_ext)
 
-                    active_set: Set[Tuple[int, ...]] = set(m0_dyn.current_matches)
+                    # Check graph edges agreement
+                    self.assertEqual(m1_dyn.graph.edges, m0_dyn.G.edges)
+                    self.assertEqual(m2_dyn.graph.edges, m0_dyn.G.edges)
 
-                    for up in updates:
-                        total_steps += 1
-                        res1 = m1_dyn.step(up)
-                        res2 = m2_dyn.step(up)
+                    # Reconstruct active set: M_t = (M_{t-1} \ exited) U entered
+                    active_set_m1 = (active_set_m1 - set(res1.exited)) | set(res1.entered)
+                    active_set_m2 = (active_set_m2 - set(res2.exited)) | set(res2.entered)
+                    current_m0_set = set(m0_dyn.current_matches)
 
-                        up_m0 = M0.DStarUpdate(
-                            op=up.operation,
-                            u=up.edge[0],
-                            v=up.edge[1],
-                            label=up.label,
-                        )
-                        delta_m0 = m0_dyn.apply_update(up_m0)
-
-                        m0_ent = sorted(delta_m0.entered)
-                        m0_ext = sorted(delta_m0.exited)
-
-                        # Check step agreement
-                        self.assertEqual(res1.entered, m0_ent)
-                        self.assertEqual(res2.entered, m0_ent)
-                        self.assertEqual(res1.exited, m0_ext)
-                        self.assertEqual(res2.exited, m0_ext)
-
-                        # Reconstruct active set: M_t = (M_{t-1} \ exited) U entered
-                        active_set = (active_set - set(res2.exited)) | set(res2.entered)
-                        # Snapshot verification against M0 current matches
-                        self.assertEqual(
-                            active_set,
-                            set(m0_dyn.current_matches),
-                            f"Active set reconstruction mismatch at config {total_configs}, step {total_steps}",
-                        )
+                    self.assertEqual(
+                        active_set_m1,
+                        current_m0_set,
+                        f"M1 active set mismatch at config {total_configs}, step {total_steps}",
+                    )
+                    self.assertEqual(
+                        active_set_m2,
+                        current_m0_set,
+                        f"M2 active set mismatch at config {total_configs}, step {total_steps}",
+                    )
 
         self.assertEqual(total_configs, 56)
         self.assertEqual(total_steps, 56 * 12)  # 672 updates
@@ -863,61 +869,45 @@ class TestInvariantViolation(unittest.TestCase):
     """Verifies that violating internal algorithm invariants raises InvariantViolationError and fails closed."""
 
     def test_empty_frontier_invariant_violation(self) -> None:
-        """When k >= lambda (simulated via _skip_domain_check seam), M2 raises InvariantViolationError."""
-        # Query C4 (lambda = 2). If k=2 (outside MVP domain), the cut between mapped and unmapped vertices
-        # can have cut size 2 == k. If both cut edges are marked MISSING, the frontier becomes empty!
+        """When k >= lambda is tested via private seam, M2 raises InvariantViolationError (F02.3)."""
         Q = DStarEventGraph()
         for v in range(4):
             Q.add_vertex(v, 0)
         for (u, v) in [(0, 1), (1, 2), (2, 3), (3, 0)]:
             Q.add_edge(u, v, 0)
 
-        # Build data graph with isolated edges where C4 with 2 missing edges hits empty frontier
-        G = DStarEventGraph()
-        for v in range(6):
-            G.add_vertex(v, 0)
-        G.add_edge(0, 1, 0)
-        G.add_edge(2, 3, 0)
-
-        upd = DStarEventUpdate("INSERT", (0, 1), 0)
-
-        # Standard check should reject with InvalidThresholdError
+        # 1. Public API strictly forbids k >= lambda(Q)
         m2 = M2EventEngine()
         with self.assertRaises(InvalidThresholdError):
-            m2.find_events(Q, G, upd, k=2)
+            m2.find_events(Q, Q, DStarEventUpdate("INSERT", (0, 1), 0), k=2)
 
-        # With _skip_domain_check=True, empty frontier triggers InvariantViolationError!
-        # Search multiple random topologies until empty frontier is encountered
-        rng = random.Random(5)
-        found_invariant_violation = False
-        for _ in range(50):
-            G_test = DStarEventGraph()
-            for v in range(6):
-                G_test.add_vertex(v, 0)
-            for (u, v) in itertools.combinations(range(6), 2):
-                if rng.random() < 0.3:
-                    G_test.add_edge(u, v, 0)
-            if not G_test.has_edge(0, 1):
-                G_test.add_edge(0, 1, 0)
-            test_upd = DStarEventUpdate("INSERT", (0, 1), 0)
-            try:
-                m2.find_events(Q, G_test, test_upd, k=2, _skip_domain_check=True)
-            except InvariantViolationError:
-                found_invariant_violation = True
-                break
+        # 2. Private seam triggers InvariantViolationError when empty frontier condition is hit
+        f_partial: List[Optional[int]] = [10, 20, None, None]
+        status_partial: List[Optional[str]] = ["PRESENT", "MISSING", "MISSING", "MISSING"]
+        Rp_partial = frozenset({1, 2, 3})
 
-        self.assertTrue(
-            found_invariant_violation,
-            "Expected InvariantViolationError to be triggered when empty frontier invariant is hit",
-        )
+        G_dummy = DStarEventGraph()
+        for v in (10, 20):
+            G_dummy.add_vertex(v, 0)
+        G_dummy.add_edge(10, 20, 0)
+
+        with self.assertRaises(InvariantViolationError):
+            m2._private_test_seam_check_empty_frontier(
+                query=Q,
+                snapshot=G_dummy,
+                f=f_partial,
+                status=status_partial,
+                Rp=Rp_partial,
+                k=3,
+            )
 
 
 # ============================================================================
-# Test Suite 6: Resource Limits
+# Test Suite 6: Resource Limits (F03)
 # ============================================================================
 
 class TestResourceLimits(unittest.TestCase):
-    """Verifies that exceeding max_work, vertex caps, or candidate space fails closed with ResourceLimitError."""
+    """Verifies resource limit enforcement (work, vertex caps, stream cap) (F03)."""
 
     def test_max_work_exceeded(self) -> None:
         Q = DStarEventGraph()
@@ -943,6 +933,32 @@ class TestResourceLimits(unittest.TestCase):
         with self.assertRaises(ResourceLimitError):
             m2.find_events(Q, G, upd, k=1, limits=limits)
 
+    def test_max_work_counts_attempted_candidates_f03_2(self) -> None:
+        """Attempted candidates consume work budget even when rejected by label or used (F03.2)."""
+        Q = DStarEventGraph()
+        for v in (1, 2, 3, 4):
+            Q.add_vertex(v, 0)
+        for (u, v) in [(1, 2), (2, 3), (3, 4), (4, 1)]:
+            Q.add_edge(u, v, 0)
+
+        # Graph has 20 vertices with mismatched label (1 instead of 0)
+        G = DStarEventGraph()
+        for v in range(20):
+            G.add_vertex(v, 1)  # Mismatched vertex label
+        for (u, v) in itertools.combinations(range(20), 2):
+            G.add_edge(u, v, 0)
+
+        upd = DStarEventUpdate("INSERT", (0, 1), 0)
+        # Work limit 1 stops on the very first candidate evaluation
+        limits = {"max_work": 1}
+        m1 = M1EnumEngine(limits)
+        m2 = M2EventEngine(limits)
+
+        with self.assertRaises(ResourceLimitError):
+            m1.find_events(Q, G, upd, k=1, limits=limits)
+        with self.assertRaises(ResourceLimitError):
+            m2.find_events(Q, G, upd, k=1, limits=limits)
+
     def test_vertex_caps_exceeded(self) -> None:
         Q = DStarEventGraph()
         for v in range(10):
@@ -960,6 +976,206 @@ class TestResourceLimits(unittest.TestCase):
         m1 = M1EnumEngine()
         with self.assertRaises(ResourceLimitError):
             m1.find_events(Q, G, upd, k=0)
+
+    def test_query_cap_checked_before_mincut_f03_1(self) -> None:
+        """Query vertex cap check executes before min-cut computation (F03.1)."""
+        Q = DStarEventGraph()
+        for v in range(10):
+            Q.add_vertex(v, 0)
+        for v in range(9):
+            Q.add_edge(v, v + 1, 0)
+        Q.add_edge(9, 0, 0)
+
+        G = DStarEventGraph()
+        G.add_vertex(0, 0)
+        G.add_vertex(1, 0)
+        G.add_edge(0, 1, 0)
+
+        with patch("dstar_event_common.compute_edge_connectivity") as mock_conn:
+            mock_conn.side_effect = RuntimeError("Min-cut should not have been called!")
+            with self.assertRaises(ResourceLimitError):
+                validate_run_contract(Q, G, k=0)
+            mock_conn.assert_not_called()
+
+    def test_stream_cap_enforced_f03_3(self) -> None:
+        """Stream length > 100 raises ResourceLimitError (F03.3)."""
+        Q = DStarEventGraph()
+        for v in range(4):
+            Q.add_vertex(v, 0)
+        for (u, v) in [(0, 1), (1, 2), (2, 3), (3, 0)]:
+            Q.add_edge(u, v, 0)
+
+        G = DStarEventGraph()
+        for v in range(4):
+            G.add_vertex(v, 0)
+        G.add_edge(0, 1, 0)
+
+        # 100 steps OK
+        validate_run_contract(Q, G, k=1, stream_length=100)
+
+        # 101 steps raises ResourceLimitError
+        with self.assertRaises(ResourceLimitError):
+            validate_run_contract(Q, G, k=1, stream_length=101)
+
+
+# ============================================================================
+# Test Suite 7: Validation and Isolation Remediations (F02, F05, F06)
+# ============================================================================
+
+class TestValidationAndIsolationRemediations(unittest.TestCase):
+    """Regressions for F02 (validation bypasses), F05 (progressive failure), F06 (isolation)."""
+
+    def test_missing_label_rejects_f02_1(self) -> None:
+        """Missing or None label in DStarEventUpdate raises InvalidUpdateError (F02.1)."""
+        with self.assertRaises(InvalidUpdateError):
+            DStarEventUpdate.from_dict({"operation": "INSERT", "edge": [1, 2]})
+
+        with self.assertRaises(InvalidUpdateError):
+            DStarEventUpdate.from_dict({"operation": "DELETE", "edge": [1, 2]})
+
+        with self.assertRaises(InvalidUpdateError):
+            DStarEventUpdate.from_dict({"operation": "INSERT", "edge": [1, 2], "label": None})
+
+    def test_run_contract_validation_before_stream_f02_2(self) -> None:
+        """Empty stream must not bypass domain check or graph validation (F02.2)."""
+        # C4 has lambda = 2. k = 2 violates 0 <= k < lambda
+        Q_c4 = DStarEventGraph()
+        for v in range(4):
+            Q_c4.add_vertex(v, 0)
+        for (u, v) in [(0, 1), (1, 2), (2, 3), (3, 0)]:
+            Q_c4.add_edge(u, v, 0)
+
+        G = DStarEventGraph()
+        for v in range(4):
+            G.add_vertex(v, 0)
+
+        with self.assertRaises(InvalidThresholdError):
+            validate_run_contract(Q_c4, G, k=2, stream_length=0)
+
+        # Disconnected query raises InvalidGraphError even with empty stream
+        Q_disc = DStarEventGraph()
+        for v in range(4):
+            Q_disc.add_vertex(v, 0)
+        Q_disc.add_edge(0, 1, 0)
+        Q_disc.add_edge(2, 3, 0)
+
+        with self.assertRaises(InvalidGraphError):
+            validate_run_contract(Q_disc, G, k=0, stream_length=0)
+
+        # Empty query raises InvalidGraphError
+        Q_empty = DStarEventGraph()
+        with self.assertRaises(InvalidGraphError):
+            validate_run_contract(Q_empty, G, k=0, stream_length=0)
+
+        # Single vertex query (lambda=0) strictly rejects k=0 with InvalidThresholdError
+        Q_single = DStarEventGraph()
+        Q_single.add_vertex(0, 0)
+        with self.assertRaises(InvalidThresholdError):
+            validate_run_contract(Q_single, G, k=0, stream_length=0)
+
+    def test_cli_mid_stream_failure_preserves_partial_progress_f05(self) -> None:
+        """CLI captures completed steps and exact failure metadata upon mid-stream failure (F05)."""
+        import io
+        import tempfile
+        from dstar_event_cli import run_cli
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            q_file = Path(tmpdir) / "query.json"
+            g_file = Path(tmpdir) / "graph.json"
+            s_file = Path(tmpdir) / "stream.json"
+            out_file = Path(tmpdir) / "out.json"
+
+            Q = DStarEventGraph()
+            for v in range(4):
+                Q.add_vertex(v, 0)
+            for (u, v) in [(0, 1), (1, 2), (2, 3), (3, 0)]:
+                Q.add_edge(u, v, 0)
+            with open(q_file, "w") as f:
+                json.dump(Q.to_dict(), f)
+
+            G = DStarEventGraph()
+            for v in range(4):
+                G.add_vertex(v, 0)
+            with open(g_file, "w") as f:
+                json.dump(G.to_dict(), f)
+
+            stream = [
+                {"operation": "INSERT", "edge": [0, 1], "label": 0},  # Step 0: valid
+                {"operation": "DELETE", "edge": [2, 3], "label": 0},  # Step 1: fails (edge doesn't exist)
+            ]
+            with open(s_file, "w") as f:
+                json.dump(stream, f)
+
+            args = [
+                "dstar_event_cli.py",
+                "--engine", "m2",
+                "--query", str(q_file),
+                "--graph", str(g_file),
+                "--stream", str(s_file),
+                "--k", "1",
+                "--output", str(out_file),
+            ]
+            with patch("sys.argv", args), patch("sys.stderr", io.StringIO()):
+                exit_code = run_cli()
+
+            self.assertEqual(exit_code, 1)
+            self.assertTrue(out_file.is_file())
+            with open(out_file) as f:
+                result = json.load(f)
+
+            self.assertEqual(result.get("status"), "ERROR")
+            self.assertEqual(result.get("error_type"), "NonexistentEdgeDeletionError")
+            self.assertEqual(result.get("failing_step_index"), 1)
+            self.assertEqual(result.get("attempted_steps_count"), 2)
+            self.assertIsNotNone(result.get("failing_update"))
+            self.assertEqual(result["failing_update"]["operation"], "DELETE")
+            self.assertEqual(len(result.get("completed_steps", [])), 1)
+            self.assertEqual(result["completed_steps"][0]["step_index"], 0)
+
+    def test_query_and_graph_isolation_f06(self) -> None:
+        """Dynamic engines isolate caller mutations to query, graph, or limits (F06)."""
+        Q = DStarEventGraph()
+        for v in range(4):
+            Q.add_vertex(v, 0)
+        for (u, v) in [(0, 1), (1, 2), (2, 3), (3, 0)]:
+            Q.add_edge(u, v, 0)
+
+        G = DStarEventGraph()
+        for v in range(4):
+            G.add_vertex(v, 0)
+        G.add_edge(0, 1, 0)
+
+        limits = {"max_work": 100000}
+        m1_dyn = M1DynamicEngine(Q, G, k=1, limits=limits)
+        m2_dyn = M2DynamicEngine(Q, G, k=1, limits=limits)
+
+        # Mutate caller's Q, G, limits
+        Q.add_vertex(99, 0)
+        Q.add_edge(0, 99, 0)
+        G.add_edge(2, 3, 0)
+        limits["max_work"] = 1
+
+        # Engines internal state unaffected
+        self.assertNotIn(99, m1_dyn.query.vertices)
+        self.assertNotIn(99, m2_dyn.query.vertices)
+        self.assertNotIn((2, 3), m1_dyn.graph.edges)
+        self.assertNotIn((2, 3), m2_dyn.graph.edges)
+        self.assertEqual(m1_dyn.limits["max_work"], 100000)
+        self.assertEqual(m2_dyn.limits["max_work"], 100000)
+
+        # Test failure rollback in step()
+        bad_upd = DStarEventUpdate("DELETE", (2, 3), 0)  # Edge (2,3) not in graph
+        g_before_edges_m1 = dict(m1_dyn.graph.edges)
+        with self.assertRaises(NonexistentEdgeDeletionError):
+            m1_dyn.step(bad_upd)
+        self.assertEqual(m1_dyn.graph.edges, g_before_edges_m1)
+        self.assertEqual(m1_dyn.step_count, 0)
+
+        g_before_edges_m2 = dict(m2_dyn.graph.edges)
+        with self.assertRaises(NonexistentEdgeDeletionError):
+            m2_dyn.step(bad_upd)
+        self.assertEqual(m2_dyn.graph.edges, g_before_edges_m2)
+        self.assertEqual(m2_dyn.step_count, 0)
 
 
 if __name__ == "__main__":

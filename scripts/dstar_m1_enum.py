@@ -22,6 +22,7 @@ from dstar_event_common import (
     DEFAULT_MAX_CANDIDATES,
     DEFAULT_MAX_DATA_VERTICES,
     DEFAULT_MAX_QUERY_VERTICES,
+    DEFAULT_MAX_STREAM_STEPS,
     DEFAULT_MAX_WORK,
     DStarEventError,
     DStarEventGraph,
@@ -31,12 +32,14 @@ from dstar_event_common import (
     EventSink,
     InvalidGraphError,
     InvalidThresholdError,
+    InvariantViolationError,
     ResourceLimitError,
     UnknownVertexError,
     canonical_ordered_tuple,
     compute_edge_connectivity,
     is_connected,
     validate_resource_caps,
+    validate_run_contract,
 )
 
 
@@ -53,11 +56,13 @@ class M1EnumEngine:
         self.max_data_vertices = limits.get("max_data_vertices", DEFAULT_MAX_DATA_VERTICES)
         self.max_query_vertices = limits.get("max_query_vertices", DEFAULT_MAX_QUERY_VERTICES)
         self.max_work = limits.get("max_work", DEFAULT_MAX_WORK)
+        self.max_stream_steps = limits.get("max_stream_steps", DEFAULT_MAX_STREAM_STEPS)
         validate_resource_caps(
             self.max_candidates,
             self.max_data_vertices,
             self.max_query_vertices,
             self.max_work,
+            self.max_stream_steps,
         )
 
     def find_events(
@@ -73,55 +78,32 @@ class M1EnumEngine:
         snapshot must be G_after for INSERT and G_before for DELETE.
         In both cases, the anchor edge update.edge must exist in snapshot with update.label.
         """
-        # Merge limits if provided
-        max_work = self.max_work
-        max_candidates = self.max_candidates
-        max_data_vertices = self.max_data_vertices
-        max_query_vertices = self.max_query_vertices
+        effective_limits = {
+            "max_work": self.max_work,
+            "max_candidates": self.max_candidates,
+            "max_data_vertices": self.max_data_vertices,
+            "max_query_vertices": self.max_query_vertices,
+            "max_stream_steps": self.max_stream_steps,
+        }
         if limits:
-            max_work = limits.get("max_work", max_work)
-            max_candidates = limits.get("max_candidates", max_candidates)
-            max_data_vertices = limits.get("max_data_vertices", max_data_vertices)
-            max_query_vertices = limits.get("max_query_vertices", max_query_vertices)
-            validate_resource_caps(max_candidates, max_data_vertices, max_query_vertices, max_work)
+            effective_limits.update(limits)
+            validate_resource_caps(
+                effective_limits["max_candidates"],
+                effective_limits["max_data_vertices"],
+                effective_limits["max_query_vertices"],
+                effective_limits["max_work"],
+                effective_limits["max_stream_steps"],
+            )
 
-        # 1. Validate query graph
+        max_work = effective_limits["max_work"]
+
+        # Run-level contract validation (cheap resource guards run before min-cut)
+        validate_run_contract(query, snapshot, k, effective_limits)
+
+        # Candidate permutation space upper bound / early size check
         n_q = len(query.vertices)
-        if n_q == 0:
-            raise InvalidGraphError("Query graph has no vertices")
-        if not is_connected(query):
-            raise InvalidGraphError("Query graph must be connected")
-
-        # 2. Validate domain 0 <= k < lambda(Q)
-        if isinstance(k, bool) or not isinstance(k, int) or k < 0:
-            raise InvalidThresholdError(f"Threshold k must be a non-negative integer, got {k!r}")
-
-        lambda_q = compute_edge_connectivity(query)
-        if k >= lambda_q:
-            raise InvalidThresholdError(
-                f"Threshold k={k} violates domain condition k < lambda(Q)={lambda_q}"
-            )
-
-        # 3. Validate snapshot and resource bounds
         n_g = len(snapshot.vertices)
-        if n_q > max_query_vertices:
-            raise ResourceLimitError(
-                f"Query vertex count {n_q} exceeds cap {max_query_vertices}"
-            )
-        if n_g > max_data_vertices:
-            raise ResourceLimitError(
-                f"Data graph vertex count {n_g} exceeds cap {max_data_vertices}"
-            )
-
-        # Candidate permutation space upper bound
-        if n_g >= n_q:
-            perm_count = math.perm(n_g, n_q)
-            if perm_count > max_candidates:
-                raise ResourceLimitError(
-                    f"Candidate space P({n_g}, {n_q})={perm_count} exceeds limit {max_candidates}"
-                )
-        else:
-            # Not enough data vertices to map query
+        if n_g < n_q:
             counters = EventCounters()
             return EventResult(
                 operation=update.operation,
@@ -133,7 +115,7 @@ class M1EnumEngine:
                 status="SUCCESS",
             )
 
-        # 4. Verify anchor edge exists in snapshot
+        # Verify anchor edge exists in snapshot
         u_upd, v_upd = update.edge
         if not snapshot.has_edge(u_upd, v_upd):
             raise UnknownVertexError(
@@ -145,7 +127,7 @@ class M1EnumEngine:
                 f"expected {update.label!r}, got {snapshot.get_edge_label(u_upd, v_upd)!r}"
             )
 
-        # 5. Execute M1 search
+        # Execute M1 search
         counters = EventCounters()
         sink = EventSink()
 
@@ -173,6 +155,8 @@ class M1EnumEngine:
                 other_edges = [e for e in q_edges if e != q_edge]
                 for missing_subset in itertools.combinations(other_edges, k):
                     counters.variants_started += 1
+                    counters.check_work_limit(max_work)
+
                     D = set(missing_subset)
                     keep_edges = [e for e in q_edges if e not in D]
 
@@ -180,7 +164,6 @@ class M1EnumEngine:
                     order = self._build_connected_search_order(sorted_q_vertices, qa, qb, keep_edges)
 
                     # Prepare kept incident edges for each vertex along search order
-                    order_set: Set[int] = set()
                     kept_incident: Dict[int, List[Tuple[int, Any]]] = {v: [] for v in sorted_q_vertices}
                     for e in keep_edges:
                         kept_incident[e[0]].append((e[1], q_edge_labels[e]))
@@ -206,7 +189,7 @@ class M1EnumEngine:
                         sink=sink,
                     )
 
-        # 6. Finalize emissions
+        # Finalize emissions
         raw_events = sink.finalize()
         counters.emitted_tuples = len(raw_events)
 
@@ -264,7 +247,6 @@ class M1EnumEngine:
             adj_keep[v].append(u)
 
         while len(order) < len(all_vertices):
-            # Pick unmapped vertex with at least one neighbor in order_set, tie-breaking by smallest ID
             best_candidate: Optional[int] = None
             for v in all_vertices:
                 if v not in order_set:
@@ -273,7 +255,6 @@ class M1EnumEngine:
                         if best_candidate is None or v < best_candidate:
                             best_candidate = v
             if best_candidate is None:
-                # Should be impossible when k < lambda(Q) because Q - D is connected
                 raise InvariantViolationError(
                     f"Variant Q - D disconnected with keep_edges: {keep_edges}"
                 )
@@ -305,9 +286,7 @@ class M1EnumEngine:
                 da, db = d_edge
                 pa, pb = f[da], f[db]
                 if snapshot.has_edge(pa, pb) and snapshot.get_edge_label(pa, pb) == q_edge_labels[d_edge]:
-                    # Not missing! Mapping does not have R(f) == D
                     return
-            # Valid embedding!
             mapping_tuple = canonical_ordered_tuple(f, query)
             sink.emit(mapping_tuple)
             return
@@ -315,16 +294,16 @@ class M1EnumEngine:
         curr_q = order[idx]
         curr_q_label = query.vertices[curr_q]
 
-        # Invariant: curr_q has at least one neighbor already mapped in order[0..idx-1]
-        # Intersect candidate sets from mapped neighbors in kept_incident
         mapped_nbrs = [(nbr, lbl) for (nbr, lbl) in kept_incident[curr_q] if nbr in f]
-
-        # Use first mapped neighbor's adjacency in snapshot to generate candidate pool
         first_nbr, first_lbl = mapped_nbrs[0]
         first_mapped_data = f[first_nbr]
 
         candidates = snapshot.get_neighbors(first_mapped_data)
         for (cand_data, edge_lbl) in candidates:
+            # F03.2: Increment attempted candidate evaluations and check budget IMMEDIATELY
+            counters.candidate_evaluations += 1
+            counters.check_work_limit(max_work)
+
             counters.edge_lookups += 1
             if edge_lbl != first_lbl:
                 continue
@@ -351,7 +330,6 @@ class M1EnumEngine:
                 continue
 
             counters.candidate_extensions += 1
-            counters.check_work_limit(max_work)
 
             # Assign and recurse
             f[curr_q] = cand_data
@@ -366,7 +344,10 @@ class M1EnumEngine:
 
 
 class M1DynamicEngine:
-    """Stateful dynamic streaming wrapper around M1EnumEngine."""
+    """
+    Stateful dynamic streaming wrapper around M1EnumEngine.
+    Enforces deep isolation from caller mutations (F06).
+    """
 
     def __init__(
         self,
@@ -375,14 +356,20 @@ class M1DynamicEngine:
         k: int,
         limits: Optional[Dict[str, Any]] = None,
     ) -> None:
-        self.query = query
-        self.graph = initial_graph.clone()
+        self.limits = dict(limits) if limits else {}
         self.k = k
-        self.limits = limits or {}
+        # Validate run-level contract at engine initialization
+        validate_run_contract(query, initial_graph, k, self.limits)
+        # Deep clone query and graph to isolate from caller mutation (F06)
+        self.query = query.clone()
+        self.graph = initial_graph.clone()
         self.engine = M1EnumEngine(self.limits)
+        self.step_count = 0
 
     def step(self, update: DStarEventUpdate) -> EventResult:
-        result, self.graph = self.engine.process_update(
+        result, new_graph = self.engine.process_update(
             self.query, self.graph, update, self.k, self.limits
         )
+        self.graph = new_graph
+        self.step_count += 1
         return result

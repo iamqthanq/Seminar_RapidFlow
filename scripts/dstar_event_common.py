@@ -3,7 +3,8 @@
 scripts/dstar_event_common.py — Shared Primitives for D* Event Enumeration Engines.
 
 Implements shared data structures, validations, update transactions, counters,
-and duplicate-checking event sinks for M1-enum and M2-Event-k engines.
+run-level contract verification, and duplicate-checking event sinks for M1-enum
+and M2-Event-k engines.
 Zero dependencies outside the Python 3 standard library.
 Strictly isolated from legacy or oracle modules.
 """
@@ -77,7 +78,7 @@ class InvalidThresholdError(DStarEventError):
 
 
 class ResourceLimitError(DStarEventError):
-    """Raised when candidate space, graph size, or work counters exceed safety bounds."""
+    """Raised when candidate space, graph size, stream length, or work counters exceed safety bounds."""
     pass
 
 
@@ -137,6 +138,7 @@ def validate_resource_caps(
     max_data_vertices: int,
     max_query_vertices: int,
     max_work: int = DEFAULT_MAX_WORK,
+    max_stream_steps: int = DEFAULT_MAX_STREAM_STEPS,
 ) -> None:
     """Validates that resource safety caps are positive finite integers."""
     for name, val in [
@@ -144,6 +146,7 @@ def validate_resource_caps(
         ("max_data_vertices", max_data_vertices),
         ("max_query_vertices", max_query_vertices),
         ("max_work", max_work),
+        ("max_stream_steps", max_stream_steps),
     ]:
         if isinstance(val, bool) or not isinstance(val, int) or val <= 0:
             raise ResourceLimitError(f"{name} must be a positive integer, got {type(val).__name__}: {val!r}")
@@ -357,6 +360,84 @@ def compute_edge_connectivity(graph: DStarEventGraph) -> int:
 
 
 # ============================================================================
+# Run-Level Contract Validation (F02.2, F03.1, F03.3)
+# ============================================================================
+
+def validate_run_contract(
+    query: DStarEventGraph,
+    graph: DStarEventGraph,
+    k: Any,
+    limits: Optional[Dict[str, Any]] = None,
+    stream_length: Optional[int] = None,
+) -> int:
+    """
+    Validates the complete run-level contract for D* event engines and CLI.
+    Enforces cheap size and resource guards BEFORE any combinatorial min-cut computation.
+    Returns lambda(Q).
+    """
+    limits = limits or {}
+    max_candidates = limits.get("max_candidates", DEFAULT_MAX_CANDIDATES)
+    max_data_vertices = limits.get("max_data_vertices", DEFAULT_MAX_DATA_VERTICES)
+    max_query_vertices = limits.get("max_query_vertices", DEFAULT_MAX_QUERY_VERTICES)
+    max_work = limits.get("max_work", DEFAULT_MAX_WORK)
+    max_stream_steps = limits.get("max_stream_steps", DEFAULT_MAX_STREAM_STEPS)
+
+    validate_resource_caps(
+        max_candidates,
+        max_data_vertices,
+        max_query_vertices,
+        max_work,
+        max_stream_steps,
+    )
+
+    # 1. Cheap Query Size Cap check FIRST before any cut computation (F03.1)
+    n_q = len(query.vertices)
+    if n_q == 0:
+        raise InvalidGraphError("Query graph has no vertices")
+    if n_q > max_query_vertices:
+        raise ResourceLimitError(f"Query vertex count {n_q} exceeds cap {max_query_vertices}")
+
+    # 2. Cheap Data Size Cap check
+    n_g = len(graph.vertices)
+    if n_g > max_data_vertices:
+        raise ResourceLimitError(f"Data graph vertex count {n_g} exceeds cap {max_data_vertices}")
+
+    # 3. Stream length cap check (F03.3)
+    if stream_length is not None:
+        if isinstance(stream_length, bool) or not isinstance(stream_length, int) or stream_length < 0:
+            raise InvalidUpdateError(f"Stream length must be a non-negative integer, got {stream_length!r}")
+        if stream_length > max_stream_steps:
+            raise ResourceLimitError(
+                f"Stream length {stream_length} exceeds max_stream_steps cap {max_stream_steps}"
+            )
+
+    # 4. Query topology validation
+    if not is_connected(query):
+        raise InvalidGraphError("Query graph must be connected")
+
+    # 5. Threshold k validation (integer, non-negative)
+    if isinstance(k, bool) or not isinstance(k, int) or k < 0:
+        raise InvalidThresholdError(f"Threshold k must be a non-negative integer, got {k!r}")
+
+    # 6. Candidate space cap check
+    if n_g >= n_q:
+        perm_count = math.perm(n_g, n_q)
+        if perm_count > max_candidates:
+            raise ResourceLimitError(
+                f"Candidate space P({n_g}, {n_q})={perm_count} exceeds limit {max_candidates}"
+            )
+
+    # 7. Compute edge connectivity lambda(Q) (only reached after cheap guards pass)
+    lambda_q = compute_edge_connectivity(query)
+    if k >= lambda_q:
+        raise InvalidThresholdError(
+            f"Threshold k={k} violates domain condition k < lambda(Q)={lambda_q}"
+        )
+
+    return lambda_q
+
+
+# ============================================================================
 # Update Data Structure & Transaction Support
 # ============================================================================
 
@@ -366,7 +447,7 @@ class DStarEventUpdate:
     Discrete edge update representation for stream processing.
     operation: 'INSERT' or 'DELETE'
     edge: canonical (min(u, v), max(u, v))
-    label: edge label (int or str)
+    label: edge label (int or str) - MANDATORY (F02.1)
     """
     operation: str
     edge: Tuple[int, int]
@@ -408,7 +489,10 @@ class DStarEventUpdate:
         edge = data.get("edge")
         if edge is None:
             raise InvalidUpdateError(f"Missing edge field in update: {data!r}")
-        label = data.get("label", 0)
+        # F02.1: Label is mandatory. Reject if missing or None!
+        if "label" not in data or data["label"] is None:
+            raise InvalidUpdateError(f"Missing required 'label' field in update: {data!r}")
+        label = data["label"]
         return cls(operation=op, edge=tuple(edge), label=label)
 
     def apply(self, graph: DStarEventGraph) -> None:
@@ -455,14 +539,18 @@ class DStarEventUpdate:
 
 
 # ============================================================================
-# Work Counters
+# Work Counters (F03.2)
 # ============================================================================
 
 @dataclass
 class EventCounters:
-    """Instrumentation counters tracking search effort and emissions."""
+    """
+    Instrumentation counters tracking search effort and emissions.
+    Distinguishes attempted candidate expansions from accepted extensions (F03.2).
+    """
+    candidate_evaluations: int = 0  # Attempted candidate evaluations (work units)
+    candidate_extensions: int = 0   # Accepted candidate extensions
     anchors_started: int = 0
-    candidate_extensions: int = 0
     edge_lookups: int = 0
     vertex_label_checks: int = 0
     emitted_tuples: int = 0
@@ -475,11 +563,14 @@ class EventCounters:
     commitment_checks: int = 0
 
     def check_work_limit(self, max_work: int) -> None:
-        """Enforces execution work limit and fails closed."""
-        total_work = self.candidate_extensions + self.edge_decisions
+        """
+        Enforces execution work limit and fails closed.
+        Total budget work units = attempted candidate evaluations + edge decisions + variants started.
+        """
+        total_work = self.candidate_evaluations + self.edge_decisions + self.variants_started
         if total_work > max_work:
             raise ResourceLimitError(
-                f"Work limit exceeded: candidate_extensions + edge_decisions ({total_work}) > max_work ({max_work})"
+                f"Work limit exceeded: budget work units ({total_work}) > max_work ({max_work})"
             )
 
     def to_dict(self) -> Dict[str, int]:
@@ -557,7 +648,6 @@ def canonical_ordered_tuple(
     if isinstance(f, dict):
         return tuple(f[u] for u in sorted_q_vertices)
     elif isinstance(f, (list, tuple)):
-        # If sequence mapping, assume indices correspond to sorted_q_vertices order
         return tuple(f[i] for i in range(len(sorted_q_vertices)))
     else:
         raise InvalidGraphError(f"Unsupported mapping type: {type(f).__name__}")

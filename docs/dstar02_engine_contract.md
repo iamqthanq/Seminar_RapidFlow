@@ -61,7 +61,7 @@ For any discrete edge update $e = \{x, y\}$ with label $L$:
 - **Search Execution**: Runs on $G_{\text{before}}$ anchored at $\{x, y\}$, requiring leaf condition $|R(f)| == k$.
 
 > [!IMPORTANT]
-> **No `|R| <= k` Leaf Condition in Event Search**: Event engines enforce $|R| == k$ at leaf evaluation. Evaluating $|R| \le k$ at leaves would falsely include embeddings that were already valid before the update, corrupting the delta event set.
+> **No `|R| <= k` Leaf Condition in Event Search**: Event engines strictly enforce $|R| == k$ at leaf evaluation. Evaluating $|R| \le k$ at leaves would emit mappings that were already valid before the update (spurious / stale events that did not genuinely change validity status upon the update transition), corrupting the delta event set. Event enumeration requires exact boundary transitions.
 
 ---
 

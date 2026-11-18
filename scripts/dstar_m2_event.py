@@ -22,6 +22,7 @@ from dstar_event_common import (
     DEFAULT_MAX_CANDIDATES,
     DEFAULT_MAX_DATA_VERTICES,
     DEFAULT_MAX_QUERY_VERTICES,
+    DEFAULT_MAX_STREAM_STEPS,
     DEFAULT_MAX_WORK,
     DStarEventError,
     DStarEventGraph,
@@ -38,6 +39,7 @@ from dstar_event_common import (
     compute_edge_connectivity,
     is_connected,
     validate_resource_caps,
+    validate_run_contract,
 )
 
 
@@ -53,11 +55,13 @@ class M2EventEngine:
         self.max_data_vertices = limits.get("max_data_vertices", DEFAULT_MAX_DATA_VERTICES)
         self.max_query_vertices = limits.get("max_query_vertices", DEFAULT_MAX_QUERY_VERTICES)
         self.max_work = limits.get("max_work", DEFAULT_MAX_WORK)
+        self.max_stream_steps = limits.get("max_stream_steps", DEFAULT_MAX_STREAM_STEPS)
         validate_resource_caps(
             self.max_candidates,
             self.max_data_vertices,
             self.max_query_vertices,
             self.max_work,
+            self.max_stream_steps,
         )
 
     def find_events(
@@ -67,62 +71,38 @@ class M2EventEngine:
         update: DStarEventUpdate,
         k: int,
         limits: Optional[Dict[str, Any]] = None,
-        _skip_domain_check: bool = False,
     ) -> EventResult:
         """
         Executes anchored bare M2-Event-k search for a single update.
         snapshot must be G_after for INSERT and G_before for DELETE.
         In both cases, the anchor edge update.edge must exist in snapshot with update.label.
         """
-        # Merge limits if provided
-        max_work = self.max_work
-        max_candidates = self.max_candidates
-        max_data_vertices = self.max_data_vertices
-        max_query_vertices = self.max_query_vertices
+        effective_limits = {
+            "max_work": self.max_work,
+            "max_candidates": self.max_candidates,
+            "max_data_vertices": self.max_data_vertices,
+            "max_query_vertices": self.max_query_vertices,
+            "max_stream_steps": self.max_stream_steps,
+        }
         if limits:
-            max_work = limits.get("max_work", max_work)
-            max_candidates = limits.get("max_candidates", max_candidates)
-            max_data_vertices = limits.get("max_data_vertices", max_data_vertices)
-            max_query_vertices = limits.get("max_query_vertices", max_query_vertices)
-            validate_resource_caps(max_candidates, max_data_vertices, max_query_vertices, max_work)
+            effective_limits.update(limits)
+            validate_resource_caps(
+                effective_limits["max_candidates"],
+                effective_limits["max_data_vertices"],
+                effective_limits["max_query_vertices"],
+                effective_limits["max_work"],
+                effective_limits["max_stream_steps"],
+            )
 
-        # 1. Validate query graph
+        max_work = effective_limits["max_work"]
+
+        # Run-level contract validation (cheap resource guards run before min-cut)
+        validate_run_contract(query, snapshot, k, effective_limits)
+
+        # Candidate permutation space upper bound / early size check
         n_q = len(query.vertices)
-        if n_q == 0:
-            raise InvalidGraphError("Query graph has no vertices")
-        if not is_connected(query):
-            raise InvalidGraphError("Query graph must be connected")
-
-        # 2. Validate domain 0 <= k < lambda(Q)
-        if isinstance(k, bool) or not isinstance(k, int) or k < 0:
-            raise InvalidThresholdError(f"Threshold k must be a non-negative integer, got {k!r}")
-
-        lambda_q = compute_edge_connectivity(query)
-        if not _skip_domain_check and k >= lambda_q:
-            raise InvalidThresholdError(
-                f"Threshold k={k} violates domain condition k < lambda(Q)={lambda_q}"
-            )
-
-        # 3. Validate snapshot and resource bounds
         n_g = len(snapshot.vertices)
-        if n_q > max_query_vertices:
-            raise ResourceLimitError(
-                f"Query vertex count {n_q} exceeds cap {max_query_vertices}"
-            )
-        if n_g > max_data_vertices:
-            raise ResourceLimitError(
-                f"Data graph vertex count {n_g} exceeds cap {max_data_vertices}"
-            )
-
-        # Candidate permutation space upper bound
-        if n_g >= n_q:
-            perm_count = math.perm(n_g, n_q)
-            if perm_count > max_candidates:
-                raise ResourceLimitError(
-                    f"Candidate space P({n_g}, {n_q})={perm_count} exceeds limit {max_candidates}"
-                )
-        else:
-            # Not enough data vertices to map query
+        if n_g < n_q:
             counters = EventCounters()
             return EventResult(
                 operation=update.operation,
@@ -134,7 +114,7 @@ class M2EventEngine:
                 status="SUCCESS",
             )
 
-        # 4. Verify anchor edge exists in snapshot
+        # Verify anchor edge exists in snapshot
         u_upd, v_upd = update.edge
         if not snapshot.has_edge(u_upd, v_upd):
             raise UnknownVertexError(
@@ -146,7 +126,7 @@ class M2EventEngine:
                 f"expected {update.label!r}, got {snapshot.get_edge_label(u_upd, v_upd)!r}"
             )
 
-        # 5. Prepare indexing for query elements
+        # Prepare indexing for query elements
         sorted_q_vertices = sorted(query.vertices.keys())
         v_to_idx = {v: i for i, v in enumerate(sorted_q_vertices)}
         q_edges = sorted(query.edges.keys())
@@ -158,7 +138,6 @@ class M2EventEngine:
         counters = EventCounters()
         sink = EventSink()
 
-        # Precompute query incident edge indices for each query vertex index
         incident_edges: List[List[int]] = [[] for _ in range(n_q)]
         for i, (a, b) in enumerate(QE):
             incident_edges[a].append(i)
@@ -170,8 +149,6 @@ class M2EventEngine:
             status: List[Optional[str]],
             Rp: FrozenSet[int],
         ) -> None:
-            counters.check_work_limit(max_work)
-
             # Pruning if missing count exceeds k
             if len(Rp) > k:
                 return
@@ -194,12 +171,11 @@ class M2EventEngine:
 
                 # Strict event boundary lemma: |R| == k
                 if len(Rp) == k:
-                    # Construct canonical ordered tuple (f[0], f[1], ..., f[n-1])
                     mapping_tuple = tuple(f[i] for i in range(n_q))
                     sink.emit(mapping_tuple)
                 return
 
-            # Frontier: query edges with UNKNOWN status across cut (one endpoint mapped, one unmapped)
+            # Frontier: query edges with UNKNOWN status across cut
             frontier = [
                 i for i, (a, b) in enumerate(QE)
                 if status[i] is None and ((f[a] is None) != (f[b] is None))
@@ -215,6 +191,8 @@ class M2EventEngine:
             # Deterministic selection: pick edge with minimum index
             e = min(frontier)
             counters.edge_decisions += 1
+            counters.check_work_limit(max_work)
+
             a, b = QE[e]
             u, v = (a, b) if f[a] is not None else (b, a)
             u_data = f[u]
@@ -223,9 +201,12 @@ class M2EventEngine:
             used = set(z for z in f if z is not None)
 
             # --- PRESENT (CO) Branch ---
-            # Explore candidate data vertices for unmapped endpoint v
             candidates = snapshot.get_neighbors(u_data)
             for (cand_data, edge_lbl) in candidates:
+                # F03.2: Count attempted candidate evaluation and check budget immediately
+                counters.candidate_evaluations += 1
+                counters.check_work_limit(max_work)
+
                 counters.edge_lookups += 1
                 if edge_lbl != qel[e]:
                     continue
@@ -237,7 +218,6 @@ class M2EventEngine:
                     continue
 
                 counters.candidate_extensions += 1
-                counters.check_work_limit(max_work)
 
                 # Tentatively assign v -> cand_data
                 f_next = list(f)
@@ -254,7 +234,6 @@ class M2EventEngine:
                     c, d = QE[j]
                     other = c if d == v else d
                     if f_next[other] is not None:
-                        # Edge j now has both endpoints mapped
                         counters.edge_lookups += 1
                         other_data = f_next[other]
                         assert other_data is not None
@@ -309,7 +288,6 @@ class M2EventEngine:
 
                 counters.anchors_started += 1
 
-                # Initialize partial mapping
                 f_init: List[Optional[int]] = [None] * n_q
                 f_init[qa] = pa
                 f_init[qb] = pb
@@ -319,7 +297,7 @@ class M2EventEngine:
 
                 dfs(f_init, status_init, frozenset())
 
-        # 6. Finalize emissions
+        # Finalize emissions
         raw_events = sink.finalize()
         counters.emitted_tuples = len(raw_events)
 
@@ -351,7 +329,6 @@ class M2EventEngine:
         update: DStarEventUpdate,
         k: int,
         limits: Optional[Dict[str, Any]] = None,
-        _skip_domain_check: bool = False,
     ) -> Tuple[EventResult, DStarEventGraph]:
         """
         Transactionally applies update to graph_before, selects proper snapshot,
@@ -359,12 +336,43 @@ class M2EventEngine:
         """
         g_before, g_after = update.apply_transactional(graph_before)
         target_snapshot = g_after if update.operation == "INSERT" else g_before
-        result = self.find_events(query, target_snapshot, update, k, limits, _skip_domain_check)
+        result = self.find_events(query, target_snapshot, update, k, limits)
         return result, g_after
+
+    def _private_test_seam_check_empty_frontier(
+        self,
+        query: DStarEventGraph,
+        snapshot: DStarEventGraph,
+        f: List[Optional[int]],
+        status: List[Optional[str]],
+        Rp: FrozenSet[int],
+        k: int,
+    ) -> None:
+        """
+        Private testing seam (F02.3): allows test code to invoke the frontier invariant check
+        directly on an internal state without bypassing public run contract.
+        """
+        sorted_q_vertices = sorted(query.vertices.keys())
+        v_to_idx = {v: i for i, v in enumerate(sorted_q_vertices)}
+        q_edges = sorted(query.edges.keys())
+        QE = [(v_to_idx[e[0]], v_to_idx[e[1]]) for e in q_edges]
+
+        frontier = [
+            i for i, (a, b) in enumerate(QE)
+            if status[i] is None and ((f[a] is None) != (f[b] is None))
+        ]
+        if not frontier and any(v is None for v in f) and len(Rp) <= k:
+            raise InvariantViolationError(
+                f"M2 invariant violation: empty frontier while unmapped vertices remain "
+                f"and |R_p|={len(Rp)} <= k={k}. Domain condition k < lambda(Q) required."
+            )
 
 
 class M2DynamicEngine:
-    """Stateful dynamic streaming wrapper around M2EventEngine."""
+    """
+    Stateful dynamic streaming wrapper around M2EventEngine.
+    Enforces deep isolation from caller mutations (F06).
+    """
 
     def __init__(
         self,
@@ -373,14 +381,20 @@ class M2DynamicEngine:
         k: int,
         limits: Optional[Dict[str, Any]] = None,
     ) -> None:
-        self.query = query
-        self.graph = initial_graph.clone()
+        self.limits = dict(limits) if limits else {}
         self.k = k
-        self.limits = limits or {}
+        # Validate run-level contract at engine initialization
+        validate_run_contract(query, initial_graph, k, self.limits)
+        # Deep clone query and graph to isolate from caller mutation (F06)
+        self.query = query.clone()
+        self.graph = initial_graph.clone()
         self.engine = M2EventEngine(self.limits)
+        self.step_count = 0
 
     def step(self, update: DStarEventUpdate) -> EventResult:
-        result, self.graph = self.engine.process_update(
+        result, new_graph = self.engine.process_update(
             self.query, self.graph, update, self.k, self.limits
         )
+        self.graph = new_graph
+        self.step_count += 1
         return result
