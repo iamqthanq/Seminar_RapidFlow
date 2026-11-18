@@ -3,7 +3,8 @@
 **Document ID:** `docs/rapidflow_apx_integration_map.md`
 **Date:** 2026-11-18
 **Context:** Seminar RapidFlow / Continuous Subgraph Matching (CSM) — Direction D
-**Associated Issue:** Issue #28 (`D-INT-01 / P0–P1`)
+**Associated Issue:** Issue #32 (`D-INT-03 / P3`; previously Issue #28 `P0–P1`, Issue #30 `P2` merged)
+**Current Status:** Phase P2 merged into `QuangThang` (PR #31), Phase P3 active (`M1-enum` and `bare M2` native engines)
 **Pinned Upstream Commit:** `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1`
 **Base Commit:** `03be8b56a9479609adf87d213122eabefc9162fb`
 

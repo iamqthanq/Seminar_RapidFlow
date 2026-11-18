@@ -12,6 +12,7 @@ baselines/rapidflow/source/
 baselines/rapidflow/build/
 tests/native/rapidflow_apx_audit/build/
 tests/native/rapidflow_apx_foundation/build/
+tests/native/rapidflow_apx_engines/build/
 extensions/rapidflow_apx/build/
 results/raw/*
 !results/raw/.gitkeep
@@ -27,3 +28,4 @@ __pycache__/
 .env
 *.log
 reports/rapidflow_apx_foundation/diagnostic_summary.json
+reports/rapidflow_apx_engines/diagnostic_summary.json

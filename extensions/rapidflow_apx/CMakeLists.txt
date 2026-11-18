@@ -25,6 +25,10 @@ set(FOUNDATION_SRCS
     src/tuple_sink.cpp
     src/transaction_manager.cpp
     src/micro_matcher.cpp
+    src/query_plan.cpp
+    src/m1_enum_engine.cpp
+    src/m2_event_engine.cpp
+    src/streaming_engine.cpp
     "${RAPIDFLOW_SOURCE_DIR}/graph/graph.cpp"
     "${RAPIDFLOW_SOURCE_DIR}/utility/graphoperations.cpp"
 )

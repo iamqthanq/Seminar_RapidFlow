@@ -4,10 +4,10 @@
 **Date:** 2026-11-18
 **Plan Version:** 1.1 (Realigned with Direction D Master Protocol & Remediation F01–F06)
 **Context:** Seminar RapidFlow / Continuous Subgraph Matching (CSM) — Direction D
-**Parent Document:** Issue #28 (`[D-INT-01 / P0–P1] Đồng bộ hợp đồng D và kiểm chứng kiến trúc mở rộng RapidFlow gốc`)
-**Base Commit:** `03be8b56a9479609adf87d213122eabefc9162fb`
-**Current Phase:** Phase P0–P1 (Active)
-**Next Gate:** Decision R1 Review
+**Associated Issue:** Issue #32 (`D-INT-03 / P3`; previously Issue #28 `P0–P1`, Issue #30 `P2` merged)
+**Base Commit:** `88fbe200ff9217f4dccbad08bfa448d067d2ce4e` (contains accepted P2 HEAD `ebe2894752dc45e2aeb3109c260a34e2f87a9d06`)
+**Current Phase:** Phase P3: Native M1-enum and bare M2 integration (Active; P2 merged in PR #31, Issue #30 closed)
+**Next Gate:** Decision R3 Review (Issue #32)
 
 ---
 
@@ -46,28 +46,29 @@ The final research product must be a **demonstrably integrated C++ system** deri
                                        |
                                        v
 +---------------------------------------------------------------------------------+
-| Phase P1: Integration Audit & Native Probes [ACTIVE: Issue #28]                 |
+| Phase P1: Integration Audit & Native Probes [COMPLETED: Issue #28 / PR #29]     |
 | - RapidFlow source line-by-line audit (Graph, GlobalView, StreamingEngine, etc.)|
 | - Build & run native harness: Probes A–F (build, typed, view, NLF, rollback, K4)|
-| - Gate Decision R1: READY_FOR_P2_DESIGN / NEEDS_ADJUSTMENT / BLOCKED             |
+| - Gate Decision R1: READY_FOR_P2_DESIGN (Approved)                              |
 +---------------------------------------------------------------------------------+
                                        |
                                        v
 +---------------------------------------------------------------------------------+
-| Phase P2: Native Engine Foundation & Tuple Materialization                      |
+| Phase P2: Native Engine Foundation & Tuple Materialization [COMPLETED: PR #31]  |
 | - Authoritative graph state (immutable CSR snapshot + mutable overlay)          |
 | - Transactional pre-validation and atomic rollback wrapper                      |
 | - External-to-internal dense ID / typed-label codec                             |
-| - OrderManager adaptation: representative orbit expansion / symmetry breaking    |
-| - SearchEngine leaf loop unrolling & canonical tuple sink                       |
+| - Canonical tuple sink with exact step-by-step verification                     |
+| - Gate Decision R2: READY_FOR_P3_ENGINES (Approved & Merged)                    |
 +---------------------------------------------------------------------------------+
                                        |
                                        v
 +---------------------------------------------------------------------------------+
-| Phase P3: Integrated Native Bare M1 & M2 Engines                                |
+| Phase P3: Integrated Native Bare M1 & M2 Engines [ACTIVE: Issue #32]            |
 | - Native M1-enum-Exact-k baseline on variant queries Q - D                      |
 | - Native Bare M2-Event-k DFS (PRESENT/MISSING branching, deferred vertices)     |
 | - Bit-for-bit M0 verification across 840 corpus cases and stream matrices        |
+| - Gate Decision R3: Design review, corpus verification, and next-gate verdict   |
 +---------------------------------------------------------------------------------+
                                        |
                                        v

@@ -1,0 +1,222 @@
+{
+  "contract_version": "rapidflow_apx-p3-v1.0",
+  "manifest_version": "1.0",
+  "target_engines": ["m1", "m2"],
+  "resource_guards": {
+    "max_data_vertices": 8,
+    "max_query_vertices": 6,
+    "max_candidates": 100000,
+    "max_work": 500000,
+    "max_stream_steps": 100,
+    "timeout_seconds": 30,
+    "address_space_mib": 512
+  },
+  "corpus_840": {
+    "description": "840 independent validation cases from corpus_840",
+    "files": [
+      "tests/fixtures/dstar02/corpus_840/seed1_cases.jsonl",
+      "tests/fixtures/dstar02/corpus_840/seed7_cases.jsonl"
+    ],
+    "total_cases": 840,
+    "total_truth_events": 8002,
+    "cases_with_events": 330,
+    "cases_with_events_k_ge_1": 239
+  },
+  "stream_56_matrix": {
+    "description": "56 stream configurations x 12 updates = 672 steps with M0 active-set reconstruction",
+    "total_configurations": 56,
+    "updates_per_stream": 12,
+    "total_updates": 672,
+    "seeds": [20261118, 20261119, 20261120, 20261121, 20261122, 20261123, 20261124, 20261125],
+    "label_regimes_per_combination": [
+      "uniform", "uniform", "uniform", "uniform",
+      "mixed", "mixed", "mixed", "mixed"
+    ],
+    "combinations": [
+      {"query": "C4", "k": 0, "lambda": 2},
+      {"query": "C4", "k": 1, "lambda": 2},
+      {"query": "Diamond", "k": 0, "lambda": 2},
+      {"query": "Diamond", "k": 1, "lambda": 2},
+      {"query": "K4", "k": 0, "lambda": 3},
+      {"query": "K4", "k": 1, "lambda": 3},
+      {"query": "K4", "k": 2, "lambda": 3}
+    ]
+  },
+  "hand_cases": [
+    {
+      "id": "CASE_HAND_01",
+      "name": "diamond_distinct_labels",
+      "description": "Diamond with distinct edge labels; selective anchor & label match",
+      "expected_entered_count": 1,
+      "expected_exited_count": 0
+    },
+    {
+      "id": "CASE_HAND_02",
+      "name": "diamond_k0_insert",
+      "description": "Diamond k=0 INSERT with 4 automorphisms",
+      "expected_entered_count": 4,
+      "expected_exited_count": 0
+    },
+    {
+      "id": "CASE_HAND_03",
+      "name": "diamond_k0_delete",
+      "description": "Diamond k=0 DELETE with 4 automorphisms",
+      "expected_entered_count": 0,
+      "expected_exited_count": 4
+    },
+    {
+      "id": "CASE_HAND_04",
+      "name": "k4_k1",
+      "description": "K4 (m=6, lambda=3) k=1 edge insert and delete",
+      "expected_entered_count": 24,
+      "expected_exited_count": 0
+    },
+    {
+      "id": "CASE_HAND_05",
+      "name": "k4_k2",
+      "description": "K4 (m=6, lambda=3) k=2 missing edge combinations",
+      "expected_entered_count": 24,
+      "expected_exited_count": 0
+    },
+    {
+      "id": "CASE_HAND_06_STEP1",
+      "name": "diamond_2step_delete_step1",
+      "description": "Diamond consecutive 2-step delete: step 1 delta tracking",
+      "expected_entered_count": 0,
+      "expected_exited_count": 16
+    },
+    {
+      "id": "CASE_HAND_06_STEP2",
+      "name": "diamond_2step_delete_step2",
+      "description": "Diamond consecutive 2-step delete: step 2 delta tracking",
+      "expected_entered_count": 0,
+      "expected_exited_count": 8
+    },
+    {
+      "id": "CASE_HAND_07",
+      "name": "no_matching_label",
+      "description": "Update edge label does not match any query edge label -> 0 events",
+      "expected_entered_count": 0,
+      "expected_exited_count": 0
+    },
+    {
+      "id": "CASE_HAND_08",
+      "name": "non_induced_extra_chords",
+      "description": "Data graph extra chords do not invalidate non-induced embeddings",
+      "expected_entered_count": 8,
+      "expected_exited_count": 0
+    },
+    {
+      "id": "CASE_HAND_09",
+      "name": "edge_label_mismatch",
+      "description": "Edge label mismatch counted as missing edge in R(f)",
+      "expected_entered_count": 6,
+      "expected_exited_count": 0
+    },
+    {
+      "id": "CASE_HAND_10",
+      "name": "vertex_label_mismatch",
+      "description": "Vertex label mismatch strictly forbids candidate assignment",
+      "expected_entered_count": 0,
+      "expected_exited_count": 0
+    },
+    {
+      "id": "CASE_HAND_11",
+      "name": "int_vs_str_labels",
+      "description": "Distinguish int 0 and str '0' without type coercion",
+      "expected_entered_count": 0,
+      "expected_exited_count": 0
+    },
+    {
+      "id": "CASE_HAND_12",
+      "name": "sparse_negative_ids",
+      "description": "Sparse and negative vertex IDs handled properly",
+      "expected_entered_count": 6,
+      "expected_exited_count": 0
+    },
+    {
+      "id": "CASE_HAND_13",
+      "name": "canonical_tuple_order",
+      "description": "Original query vertex IDs ascending order determines canonical tuple order",
+      "expected_entered_count": 1,
+      "expected_exited_count": 0
+    },
+    {
+      "id": "CASE_HAND_14",
+      "name": "uniform_k4_k0_automorphisms",
+      "description": "Uniform K4 k=0 yields all 24 automorphisms with zero raw duplicates",
+      "expected_entered_count": 24,
+      "expected_exited_count": 0
+    },
+    {
+      "id": "CASE_HAND_15",
+      "name": "c4_k1_deferred_witness",
+      "description": "C4 k=1 deferred witness: MISSING branch taken, resolves at later step",
+      "expected_entered_count": 8,
+      "expected_exited_count": 0
+    },
+    {
+      "id": "CASE_HAND_16",
+      "name": "missing_commitment_violation",
+      "description": "Commitment violation: edge marked MISSING, but exists in G -> pruned",
+      "expected_entered_count": 16,
+      "expected_exited_count": 0
+    },
+    {
+      "id": "CASE_HAND_17",
+      "name": "no_double_charging",
+      "description": "Update edge is not double counted or charged twice",
+      "expected_entered_count": 6,
+      "expected_exited_count": 0
+    },
+    {
+      "id": "CASE_HAND_18",
+      "name": "rollback_isolation",
+      "description": "Failed search branch completely rolls back state; no contamination",
+      "expected_entered_count": 8,
+      "expected_exited_count": 0
+    },
+    {
+      "id": "CASE_HAND_19",
+      "name": "reversed_endpoints",
+      "description": "Edge update with reversed endpoints (y, x) canonicalized identically",
+      "expected_entered_count": 0,
+      "expected_exited_count": 0
+    },
+    {
+      "id": "CASE_HAND_20",
+      "name": "caller_mutation_isolation",
+      "description": "Modifying returned lists does not mutate engine state",
+      "expected_entered_count": 0,
+      "expected_exited_count": 0
+    },
+    {
+      "id": "CASE_HAND_21",
+      "name": "invalid_k_domain",
+      "description": "Threshold k >= lambda(Q) strictly rejected with InvalidThresholdError",
+      "expected_entered_count": 0,
+      "expected_exited_count": 0
+    },
+    {
+      "id": "CASE_HAND_22",
+      "name": "invalid_update_rollback",
+      "description": "Invalid update (self-loop, duplicate edge) rejects without mutating graph",
+      "expected_entered_count": 0,
+      "expected_exited_count": 0
+    },
+    {
+      "id": "CASE_HAND_23",
+      "name": "query_size_5_k5_minus_edge",
+      "description": "Query size 5 tested within resource bounds",
+      "expected_entered_count": 96,
+      "expected_exited_count": 0
+    },
+    {
+      "id": "CASE_HAND_24_Q6",
+      "name": "c6_cycle_size_6",
+      "description": "Query size 6 tested within resource bounds",
+      "expected_entered_count": 12,
+      "expected_exited_count": 0
+    }
+  ]
+}

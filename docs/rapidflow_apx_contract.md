@@ -4,7 +4,8 @@
 **Date:** 2026-11-18
 **Contract Version:** 1.0 (Working Contract for Native RapidFlow Integration)
 **Context:** Seminar RapidFlow / Continuous Subgraph Matching (CSM) — Direction D
-**Associated Issue:** Issue #28 (`D-INT-01 / P0–P1`)
+**Associated Issue:** Issue #32 (`D-INT-03 / P3`; previously Issue #28 `P0–P1`, Issue #30 `P2` merged)
+**Current Status:** Phase P2 merged into `QuangThang` (PR #31), Phase P3 active (`M1-enum` and `bare M2` native engines)
 **Parent Contract:** `docs/dstar_problem_contract_v1.md` (Issue #22, Preserved Working Baseline)
 
 ---
