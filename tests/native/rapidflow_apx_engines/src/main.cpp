@@ -8,8 +8,11 @@
 #include <cstring>
 #include <algorithm>
 #include <limits>
+#include <charconv>
+#include <iomanip>
 #include <sys/resource.h>
 #include <unistd.h>
+#include <openssl/sha.h>
 
 #include "rapidflow_apx/json_mini.h"
 #include "rapidflow_apx/typed_codec.h"
@@ -32,6 +35,61 @@ enum class ExitCode : int {
     IO_ERROR = 7,
     UNCAUGHT_ERROR = 8
 };
+
+static bool parse_positive_uint64_exact(const std::string& s, uint64_t& out, std::string& err) {
+    if (s.empty()) {
+        err = "Empty numeric string";
+        return false;
+    }
+    for (char c : s) {
+        if (c < '0' || c > '9') {
+            err = "Invalid character in integer: '" + std::string(1, c) + "'";
+            return false;
+        }
+    }
+    const char* start = s.data();
+    const char* end = s.data() + s.size();
+    auto res = std::from_chars(start, end, out);
+    if (res.ec != std::errc{} || res.ptr != end) {
+        err = "Failed to parse unsigned integer or overflow";
+        return false;
+    }
+    if (out == 0) {
+        err = "Work budget must be strictly positive (got 0)";
+        return false;
+    }
+    return true;
+}
+
+static std::string compute_sha256_hex(const std::string& data) {
+    unsigned char hash[SHA256_DIGEST_LENGTH];
+    SHA256(reinterpret_cast<const unsigned char*>(data.data()), data.size(), hash);
+    std::ostringstream oss;
+    for (int i = 0; i < SHA256_DIGEST_LENGTH; ++i) {
+        oss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(hash[i]);
+    }
+    return oss.str();
+}
+
+static bool write_json_file_safe(const std::string& path, const std::string& content, std::string& err_msg) {
+    std::ofstream out(path, std::ios::out | std::ios::trunc);
+    if (!out.is_open()) {
+        err_msg = "Cannot open output file: " + path;
+        return false;
+    }
+    out << content << "\n";
+    out.flush();
+    if (!out.good() || out.fail() || out.bad()) {
+        err_msg = "Stream write or flush error on: " + path;
+        return false;
+    }
+    out.close();
+    if (out.fail()) {
+        err_msg = "Stream close error on: " + path;
+        return false;
+    }
+    return true;
+}
 
 static TypedLabel parse_typed_label(const json::Value& v) {
     if (v.is_int()) {
@@ -64,40 +122,168 @@ static void apply_process_caps() {
     alarm(30);
 }
 
+static json::Value build_graph_state_json(const ApxAuthoritativeGraph& graph, const ApxTypedCodec& codec) {
+    json::Value g_state = json::Value::make_object();
+    g_state["vertices_count"] = json::Value(graph.get_vertices_count());
+    g_state["edges_count"] = json::Value(graph.get_edges_count());
+
+    uint32_t num_dverts = codec.data_vertices_count();
+    struct VertDiag {
+        int64_t id;
+        TypedLabel label;
+        uint32_t degree;
+        std::vector<int64_t> neighbors;
+    };
+    std::vector<VertDiag> sorted_verts;
+    for (uint32_t du = 0; du < num_dverts; ++du) {
+        if (graph.has_vertex(du)) {
+            int64_t ext_id = codec.decode_data_vertex(du);
+            TypedLabel vlbl = codec.decode_vertex_label(graph.get_vertex_label(du));
+            uint32_t deg = graph.get_degree(du);
+            std::vector<uint32_t> d_nbrs = graph.get_neighbors(du);
+            std::vector<int64_t> ext_nbrs;
+            ext_nbrs.reserve(d_nbrs.size());
+            for (uint32_t dn : d_nbrs) {
+                ext_nbrs.push_back(codec.decode_data_vertex(dn));
+            }
+            std::sort(ext_nbrs.begin(), ext_nbrs.end());
+            sorted_verts.push_back({ext_id, vlbl, deg, std::move(ext_nbrs)});
+        }
+    }
+    std::sort(sorted_verts.begin(), sorted_verts.end(), [](const VertDiag& a, const VertDiag& b) {
+        return a.id < b.id;
+    });
+
+    json::Value v_arr = json::Value::make_array();
+    json::Value nbr_obj = json::Value::make_object();
+    for (const auto& vd : sorted_verts) {
+        json::Value v_item = json::Value::make_object();
+        v_item["id"] = json::Value(vd.id);
+        v_item["label"] = typed_label_to_json(vd.label);
+        v_item["degree"] = json::Value(vd.degree);
+        v_arr.push_back(v_item);
+
+        json::Value n_list = json::Value::make_array();
+        for (int64_t nid : vd.neighbors) {
+            n_list.push_back(json::Value(nid));
+        }
+        nbr_obj[std::to_string(vd.id)] = n_list;
+    }
+    g_state["vertices"] = v_arr;
+    g_state["neighbors"] = nbr_obj;
+
+    struct EdgeDiag {
+        int64_t u;
+        int64_t v;
+        TypedLabel label;
+    };
+    std::vector<EdgeDiag> sorted_edges;
+    for (uint32_t du = 0; du < num_dverts; ++du) {
+        if (!graph.has_vertex(du)) continue;
+        int64_t ext_u_node = codec.decode_data_vertex(du);
+        for (uint32_t dv : graph.get_neighbors(du)) {
+            if (du < dv) {
+                int64_t ext_v_node = codec.decode_data_vertex(dv);
+                auto el = graph.get_edge_label(du, dv);
+                if (el.exists) {
+                    TypedLabel elbl = codec.decode_edge_label(el.label);
+                    int64_t mn = std::min(ext_u_node, ext_v_node);
+                    int64_t mx = std::max(ext_u_node, ext_v_node);
+                    sorted_edges.push_back({mn, mx, elbl});
+                }
+            }
+        }
+    }
+    std::sort(sorted_edges.begin(), sorted_edges.end(), [](const EdgeDiag& a, const EdgeDiag& b) {
+        if (a.u != b.u) return a.u < b.u;
+        return a.v < b.v;
+    });
+
+    json::Value e_arr = json::Value::make_array();
+    for (const auto& ed : sorted_edges) {
+        json::Value e_item = json::Value::make_object();
+        e_item["u"] = json::Value(ed.u);
+        e_item["v"] = json::Value(ed.v);
+        e_item["label"] = typed_label_to_json(ed.label);
+        e_arr.push_back(e_item);
+    }
+    g_state["edges"] = e_arr;
+    return g_state;
+}
+
 int main(int argc, char* argv[]) {
     std::string engine_str = "m2";
     std::string workload_path = "";
     std::string output_path = "";
-    uint64_t max_work = 500000;
     bool cli_max_work_set = false;
     uint64_t cli_max_work = 500000;
-    bool enable_caps = true;
+
+    bool seen_engine = false;
+    bool seen_workload = false;
+    bool seen_output = false;
+    bool seen_max_work = false;
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
-        if (arg == "--engine" && i + 1 < argc) {
-            engine_str = argv[++i];
-        } else if (arg == "--workload" && i + 1 < argc) {
-            workload_path = argv[++i];
-        } else if (arg == "--output" && i + 1 < argc) {
-            output_path = argv[++i];
-        } else if (arg == "--max-work" && i + 1 < argc) {
-            try {
-                cli_max_work = std::stoull(argv[++i]);
-                cli_max_work_set = true;
-            } catch (const std::exception& e) {
-                std::cerr << "Error: Invalid --max-work argument: " << e.what() << "\n";
+        if (arg == "--engine") {
+            if (seen_engine) {
+                std::cerr << "Error: Duplicate --engine argument\n";
                 return static_cast<int>(ExitCode::CLI_ARG_ERROR);
             }
-        } else if (arg == "--no-caps") {
-            enable_caps = false;
+            if (i + 1 >= argc) {
+                std::cerr << "Error: Missing argument for --engine\n";
+                return static_cast<int>(ExitCode::CLI_ARG_ERROR);
+            }
+            engine_str = argv[++i];
+            seen_engine = true;
+        } else if (arg == "--workload") {
+            if (seen_workload) {
+                std::cerr << "Error: Duplicate --workload argument\n";
+                return static_cast<int>(ExitCode::CLI_ARG_ERROR);
+            }
+            if (i + 1 >= argc) {
+                std::cerr << "Error: Missing argument for --workload\n";
+                return static_cast<int>(ExitCode::CLI_ARG_ERROR);
+            }
+            workload_path = argv[++i];
+            seen_workload = true;
+        } else if (arg == "--output") {
+            if (seen_output) {
+                std::cerr << "Error: Duplicate --output argument\n";
+                return static_cast<int>(ExitCode::CLI_ARG_ERROR);
+            }
+            if (i + 1 >= argc) {
+                std::cerr << "Error: Missing argument for --output\n";
+                return static_cast<int>(ExitCode::CLI_ARG_ERROR);
+            }
+            output_path = argv[++i];
+            seen_output = true;
+        } else if (arg == "--max-work") {
+            if (seen_max_work) {
+                std::cerr << "Error: Duplicate --max-work argument\n";
+                return static_cast<int>(ExitCode::CLI_ARG_ERROR);
+            }
+            if (i + 1 >= argc) {
+                std::cerr << "Error: Missing argument for --max-work\n";
+                return static_cast<int>(ExitCode::CLI_ARG_ERROR);
+            }
+            std::string parse_err;
+            if (!parse_positive_uint64_exact(argv[++i], cli_max_work, parse_err)) {
+                std::cerr << "Error: Invalid --max-work argument: " << parse_err << "\n";
+                return static_cast<int>(ExitCode::CLI_ARG_ERROR);
+            }
+            cli_max_work_set = true;
+            seen_max_work = true;
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "Usage: rapidflow_apx_native --engine <m1|m2> --workload <INPUT.json> --output <OUTPUT.json> [--max-work <N>]\n";
             return static_cast<int>(ExitCode::SUCCESS);
+        } else {
+            std::cerr << "Error: Unknown or unsupported option: " << arg << "\n";
+            return static_cast<int>(ExitCode::CLI_ARG_ERROR);
         }
     }
 
-    if (workload_path.empty() || output_path.empty()) {
+    if (!seen_workload || !seen_output) {
         std::cerr << "Error: --workload and --output are required.\n";
         return static_cast<int>(ExitCode::CLI_ARG_ERROR);
     }
@@ -112,30 +298,43 @@ int main(int argc, char* argv[]) {
         return static_cast<int>(ExitCode::CLI_ARG_ERROR);
     }
 
-    if (enable_caps) {
-        try {
-            apply_process_caps();
-        } catch (const std::exception& e) {
-            std::cerr << "Resource containment error: " << e.what() << "\n";
-            return static_cast<int>(ExitCode::RESOURCE_LIMIT_ERROR);
-        }
+    try {
+        apply_process_caps();
+    } catch (const std::exception& e) {
+        std::cerr << "Resource containment error: " << e.what() << "\n";
+        return static_cast<int>(ExitCode::RESOURCE_LIMIT_ERROR);
     }
 
     // Read input file
-    std::ifstream in_file(workload_path);
+    std::ifstream in_file(workload_path, std::ios::in | std::ios::binary);
     if (!in_file.is_open()) {
         std::cerr << "Error: Cannot open workload file: " << workload_path << "\n";
         return static_cast<int>(ExitCode::IO_ERROR);
     }
-    std::stringstream buffer;
-    buffer << in_file.rdbuf();
-    std::string input_src = buffer.str();
+    std::string input_src((std::istreambuf_iterator<char>(in_file)), std::istreambuf_iterator<char>());
     in_file.close();
 
+    std::string input_sha256 = compute_sha256_hex(input_src);
+
     json::Value root_out = json::Value::make_object();
+    root_out["schema_version"] = json::Value("1.1.0");
+    root_out["semantics_version"] = json::Value("D-R-1.0");
+    root_out["raw_input_sha256"] = json::Value(input_sha256);
+    root_out["engine_name"] = json::Value(engine_str);
     root_out["engine"] = json::Value(engine_str);
+    root_out["case_id"] = json::Value("UNKNOWN");
     root_out["status"] = json::Value("FAIL");
+    root_out["error_category"] = json::Value("NONE");
     root_out["error_message"] = json::Value("");
+    root_out["steps"] = json::Value::make_array();
+
+    json::Value exec_init = json::Value::make_object();
+    exec_init["total_steps"] = json::Value(static_cast<int64_t>(0));
+    exec_init["attempted_steps"] = json::Value(static_cast<int64_t>(0));
+    exec_init["completed_steps"] = json::Value(static_cast<int64_t>(0));
+    exec_init["failed_steps"] = json::Value(static_cast<int64_t>(0));
+    exec_init["unattempted_steps"] = json::Value(static_cast<int64_t>(0));
+    root_out["execution"] = exec_init;
 
     ExitCode final_exit_code = ExitCode::SUCCESS;
 
@@ -161,22 +360,19 @@ int main(int argc, char* argv[]) {
             k = static_cast<uint32_t>(raw_k);
         }
 
+        uint64_t max_work = 500000;
         if (root_in.contains("max_work")) {
             const auto& mw_val = root_in["max_work"];
             if (!mw_val.is_int()) {
                 throw std::invalid_argument("Field 'max_work' must be integer, got non-integer type");
             }
             int64_t raw_mw = mw_val.as_int();
-            if (raw_mw < 0) {
+            if (raw_mw <= 0) {
                 throw std::invalid_argument("Negative max_work rejected: " + std::to_string(raw_mw));
             }
-            uint64_t workload_mw = static_cast<uint64_t>(raw_mw);
-            if (cli_max_work_set) {
-                max_work = std::min(cli_max_work, workload_mw);
-            } else {
-                max_work = workload_mw;
-            }
-        } else if (cli_max_work_set) {
+            max_work = static_cast<uint64_t>(raw_mw);
+        }
+        if (cli_max_work_set) {
             max_work = cli_max_work;
         }
 
@@ -193,85 +389,66 @@ int main(int argc, char* argv[]) {
 
         std::vector<int64_t> q_ext_vids;
         std::vector<TypedLabel> q_v_labels;
-        for (const auto& v_val : q_v_arr) {
-            if (!v_val.contains("id") || !v_val["id"].is_int()) {
-                throw std::invalid_argument("Query vertex 'id' must be integer");
+        for (const auto& v : q_v_arr) {
+            if (!v.contains("id") || !v["id"].is_int()) {
+                throw std::invalid_argument("Query vertex 'id' must be an integer");
             }
-            int64_t ext_v = v_val["id"].as_int();
-            TypedLabel lbl = parse_typed_label(v_val["label"]);
-            q_ext_vids.push_back(ext_v);
+            int64_t vid = v["id"].as_int();
+            TypedLabel lbl = parse_typed_label(v["label"]);
+            q_ext_vids.push_back(vid);
             q_v_labels.push_back(lbl);
-            codec.intern_query_vertex(ext_v);
+            codec.intern_query_vertex(vid);
             codec.intern_vertex_label(lbl);
         }
 
-        struct ExtEdge {
-            int64_t u;
-            int64_t v;
-            TypedLabel label;
-        };
+        struct ExtEdge { int64_t u; int64_t v; TypedLabel label; };
         std::vector<ExtEdge> q_ext_edges;
-        for (const auto& e_val : q_e_arr) {
-            if (!e_val.contains("u") || !e_val["u"].is_int() || !e_val.contains("v") || !e_val["v"].is_int()) {
+        for (const auto& e : q_e_arr) {
+            if (!e.contains("u") || !e["u"].is_int() || !e.contains("v") || !e["v"].is_int()) {
                 throw std::invalid_argument("Query edge endpoints 'u' and 'v' must be integers");
             }
-            int64_t u = e_val["u"].as_int();
-            int64_t v = e_val["v"].as_int();
-            TypedLabel lbl = parse_typed_label(e_val["label"]);
+            int64_t u = e["u"].as_int();
+            int64_t v = e["v"].as_int();
+            TypedLabel lbl = parse_typed_label(e["label"]);
             q_ext_edges.push_back({u, v, lbl});
             codec.intern_edge_label(lbl);
         }
 
-        // Parse Initial Data Graph
+        // 2. Initialize Data Graph from Initial Graph
+        ApxAuthoritativeGraph graph;
         if (!root_in.contains("initial_graph")) {
             throw std::invalid_argument("Workload missing required 'initial_graph' object");
         }
-        const auto& g_obj = root_in["initial_graph"];
-        const auto& g_v_arr = g_obj["vertices"].as_array();
-        const auto& g_e_arr = g_obj["edges"].as_array();
+        const auto& init_g = root_in["initial_graph"];
+        const auto& init_v_arr = init_g["vertices"].as_array();
+        const auto& init_e_arr = init_g["edges"].as_array();
 
-        std::vector<int64_t> g_ext_vids;
-        std::vector<TypedLabel> g_v_labels;
-        for (const auto& v_val : g_v_arr) {
-            if (!v_val.contains("id") || !v_val["id"].is_int()) {
-                throw std::invalid_argument("Data vertex 'id' must be integer");
-            }
-            int64_t ext_v = v_val["id"].as_int();
-            TypedLabel lbl = parse_typed_label(v_val["label"]);
-            g_ext_vids.push_back(ext_v);
-            g_v_labels.push_back(lbl);
-            codec.intern_data_vertex(ext_v);
-            codec.intern_vertex_label(lbl);
-        }
-
-        std::vector<ExtEdge> g_ext_edges;
-        for (const auto& e_val : g_e_arr) {
-            if (!e_val.contains("u") || !e_val["u"].is_int() || !e_val.contains("v") || !e_val["v"].is_int()) {
-                throw std::invalid_argument("Data edge endpoints 'u' and 'v' must be integers");
-            }
-            int64_t u = e_val["u"].as_int();
-            int64_t v = e_val["v"].as_int();
-            TypedLabel lbl = parse_typed_label(e_val["label"]);
-            g_ext_edges.push_back({u, v, lbl});
-            codec.intern_edge_label(lbl);
-        }
-
-        // 2. Build Authoritative Baseline Graph
-        ApxAuthoritativeGraph graph;
         std::vector<std::pair<uint32_t, uint32_t>> base_vertices;
-        for (size_t i = 0; i < g_ext_vids.size(); ++i) {
-            uint32_t dense_u = codec.get_data_vertex(g_ext_vids[i]);
-            uint32_t dense_lbl = codec.get_vertex_label_id(g_v_labels[i]);
+        for (const auto& v : init_v_arr) {
+            if (!v.contains("id") || !v["id"].is_int()) {
+                throw std::invalid_argument("Initial graph vertex 'id' must be an integer");
+            }
+            int64_t vid = v["id"].as_int();
+            TypedLabel lbl = parse_typed_label(v["label"]);
+            uint32_t dense_u = codec.intern_data_vertex(vid);
+            uint32_t dense_lbl = codec.intern_vertex_label(lbl);
             base_vertices.emplace_back(dense_u, dense_lbl);
         }
 
         std::vector<std::tuple<uint32_t, uint32_t, uint32_t>> base_edges;
-        for (const auto& e : g_ext_edges) {
-            uint32_t dense_u = codec.get_data_vertex(e.u);
-            uint32_t dense_v = codec.get_data_vertex(e.v);
-            uint32_t dense_lbl = codec.get_edge_label_id(e.label);
+        for (const auto& e : init_e_arr) {
+            if (!e.contains("u") || !e["u"].is_int() || !e.contains("v") || !e["v"].is_int()) {
+                throw std::invalid_argument("Initial graph edge endpoints 'u' and 'v' must be integers");
+            }
+            int64_t u = e["u"].as_int();
+            int64_t v = e["v"].as_int();
+            TypedLabel lbl = parse_typed_label(e["label"]);
+            uint32_t dense_u = codec.intern_data_vertex(u);
+            uint32_t dense_v = codec.intern_data_vertex(v);
+            uint32_t dense_lbl = codec.intern_edge_label(lbl);
             base_edges.emplace_back(dense_u, dense_v, dense_lbl);
         }
+
         graph.load_baseline(base_vertices, base_edges);
 
         // 3. Build Query Plan
@@ -312,196 +489,188 @@ int main(int argc, char* argv[]) {
         }
         q_info["query_canonical_order"] = can_order_arr;
         root_out["query_info"] = q_info;
+        root_out["computed_lambda"] = json::Value(query_plan.get_lambda());
+        root_out["query_canonical_order"] = can_order_arr;
 
         // 5. Execute Updates
-        if (!root_in.contains("updates")) {
+        if (!root_in.contains("updates") || !root_in["updates"].is_array()) {
             throw std::invalid_argument("Workload missing required 'updates' array");
         }
         const auto& upd_arr = root_in["updates"].as_array();
+        size_t total_steps = upd_arr.size();
+        size_t completed_steps = 0;
+        size_t failed_steps = 0;
         json::Value steps_arr = json::Value::make_array();
+
         bool any_failure = false;
-        StepStatus first_failing_status = StepStatus::SUCCESS;
         std::string first_failing_error = "";
+        std::string first_failing_category = "NONE";
+        ExitCode first_failing_exit = ExitCode::SUCCESS;
 
-        for (size_t step_idx = 0; step_idx < upd_arr.size(); ++step_idx) {
+        for (size_t step_idx = 0; step_idx < total_steps; ++step_idx) {
             const auto& upd_val = upd_arr[step_idx];
-            if (!upd_val.contains("op") || !upd_val["op"].is_string()) {
-                throw std::invalid_argument("Update 'op' must be a string");
-            }
-            std::string op_str = upd_val["op"].as_string();
-            UpdateOp op;
-            if (op_str == "+" || op_str == "INSERT" || op_str == "INS") {
-                op = UpdateOp::INSERT;
-            } else if (op_str == "-" || op_str == "DELETE" || op_str == "DEL") {
-                op = UpdateOp::DELETE;
-            } else {
-                throw std::invalid_argument("Invalid update operation '" + op_str + "': must be '+', '-', 'INSERT', or 'DELETE'");
-            }
-
-            if (!upd_val.contains("u") || !upd_val["u"].is_int() || !upd_val.contains("v") || !upd_val["v"].is_int()) {
-                throw std::invalid_argument("Update edge endpoints 'u' and 'v' must be integers");
-            }
-            int64_t ext_u = upd_val["u"].as_int();
-            int64_t ext_v = upd_val["v"].as_int();
-            TypedLabel lbl = parse_typed_label(upd_val["label"]);
-
-            UpdateOperation upd{op, ext_u, ext_v, lbl};
-            StreamStepResult step_res = streaming_engine.execute_step(upd, static_cast<uint32_t>(step_idx));
-
             json::Value step_json = json::Value::make_object();
-            step_json["step_index"] = json::Value(step_res.step_index);
-            step_json["op"] = json::Value(op == UpdateOp::INSERT ? "+" : "-");
-            step_json["u"] = json::Value(ext_u);
-            step_json["v"] = json::Value(ext_v);
-            step_json["label"] = typed_label_to_json(lbl);
-            step_json["status"] = json::Value(step_status_to_string(step_res.status));
-            step_json["error"] = json::Value(step_res.error_message);
+            step_json["step_index"] = json::Value(static_cast<int64_t>(step_idx));
+            step_json["commit_status"] = json::Value("NOT_COMMITTED");
+            step_json["status"] = json::Value("NOT_EXECUTED");
+            step_json["error"] = json::Value("");
+            step_json["error_category"] = json::Value("NONE");
+            step_json["entered_tuples"] = json::Value::make_array();
+            step_json["exited_tuples"] = json::Value::make_array();
 
-            json::Value ent_arr = json::Value::make_array();
-            for (const auto& tup : step_res.entered_tuples) {
-                json::Value t_arr = json::Value::make_array();
-                for (int64_t coord : tup) t_arr.push_back(json::Value(coord));
-                ent_arr.push_back(t_arr);
-            }
-            step_json["entered_tuples"] = ent_arr;
+            try {
+                if (!upd_val.contains("op") || !upd_val["op"].is_string()) {
+                    throw std::invalid_argument("Update 'op' must be a string");
+                }
+                std::string op_str = upd_val["op"].as_string();
+                UpdateOp op;
+                if (op_str == "+" || op_str == "INSERT" || op_str == "INS") {
+                    op = UpdateOp::INSERT;
+                } else if (op_str == "-" || op_str == "DELETE" || op_str == "DEL") {
+                    op = UpdateOp::DELETE;
+                } else {
+                    throw std::invalid_argument("Invalid update operation '" + op_str + "': must be '+', '-', 'INSERT', or 'DELETE'");
+                }
 
-            json::Value exit_arr = json::Value::make_array();
-            for (const auto& tup : step_res.exited_tuples) {
-                json::Value t_arr = json::Value::make_array();
-                for (int64_t coord : tup) t_arr.push_back(json::Value(coord));
-                exit_arr.push_back(t_arr);
-            }
-            step_json["exited_tuples"] = exit_arr;
+                if (!upd_val.contains("u") || !upd_val["u"].is_int() || !upd_val.contains("v") || !upd_val["v"].is_int()) {
+                    throw std::invalid_argument("Update edge endpoints 'u' and 'v' must be integers");
+                }
+                int64_t ext_u = upd_val["u"].as_int();
+                int64_t ext_v = upd_val["v"].as_int();
+                TypedLabel lbl = parse_typed_label(upd_val["label"]);
 
-            // Per-step counters
-            json::Value step_cnt = json::Value::make_object();
-            step_cnt["work_units"] = json::Value(step_res.step_counters.work_units);
-            step_cnt["max_work"] = json::Value(step_res.step_counters.max_work);
-            step_cnt["dfs_states"] = json::Value(step_res.step_counters.dfs_states);
-            step_cnt["candidate_evaluations"] = json::Value(step_res.step_counters.candidate_evaluations);
-            step_cnt["candidate_extensions"] = json::Value(step_res.step_counters.candidate_extensions);
-            step_cnt["edge_lookups"] = json::Value(step_res.step_counters.edge_lookups);
-            step_cnt["vertex_label_checks"] = json::Value(step_res.step_counters.vertex_label_checks);
-            step_cnt["anchors_started"] = json::Value(step_res.step_counters.anchors_started);
-            if (engine_type == EngineType::M1) {
-                step_cnt["variants_started"] = json::Value(step_res.step_counters.variants_started);
-                step_cnt["raw_exact_results"] = json::Value(step_res.step_counters.raw_exact_results);
-                step_cnt["missing_set_rejections"] = json::Value(step_res.step_counters.missing_set_rejections);
-            } else {
-                step_cnt["edge_decisions"] = json::Value(step_res.step_counters.edge_decisions);
-                step_cnt["missing_branches"] = json::Value(step_res.step_counters.missing_branches);
-                step_cnt["commitment_checks"] = json::Value(step_res.step_counters.commitment_checks);
-                step_cnt["commitment_rejections"] = json::Value(step_res.step_counters.commitment_rejections);
-            }
-            step_json["step_counters"] = step_cnt;
+                step_json["op"] = json::Value(op == UpdateOp::INSERT ? "+" : "-");
+                step_json["u"] = json::Value(ext_u);
+                step_json["v"] = json::Value(ext_v);
+                step_json["label"] = typed_label_to_json(lbl);
 
-            // Codec state
-            json::Value c_state = json::Value::make_object();
-            c_state["query_vertices_count"] = json::Value(codec.query_vertices_count());
-            c_state["data_vertices_count"] = json::Value(codec.data_vertices_count());
-            c_state["vertex_labels_count"] = json::Value(codec.vertex_labels_count());
-            c_state["edge_labels_count"] = json::Value(codec.edge_labels_count());
-            step_json["codec_state"] = c_state;
+                UpdateOperation upd{op, ext_u, ext_v, lbl};
+                StreamStepResult step_res = streaming_engine.execute_step(upd, static_cast<uint32_t>(step_idx));
 
-            // Deep graph state: vertices, degrees, sorted edges, neighbors
-            json::Value g_state = json::Value::make_object();
-            g_state["vertices_count"] = json::Value(graph.get_vertices_count());
-            g_state["edges_count"] = json::Value(graph.get_edges_count());
+                step_json["status"] = json::Value(step_status_to_string(step_res.status));
+                step_json["error"] = json::Value(step_res.error_message);
+                step_json["commit_status"] = json::Value(step_res.status == StepStatus::SUCCESS ? "COMMITTED" : "NOT_COMMITTED");
 
-            uint32_t num_dverts = codec.data_vertices_count();
-            struct VertDiag {
-                int64_t id;
-                TypedLabel label;
-                uint32_t degree;
-                std::vector<int64_t> neighbors;
-            };
-            std::vector<VertDiag> sorted_verts;
-            for (uint32_t du = 0; du < num_dverts; ++du) {
-                if (graph.has_vertex(du)) {
-                    int64_t ext_id = codec.decode_data_vertex(du);
-                    TypedLabel vlbl = codec.decode_vertex_label(graph.get_vertex_label(du));
-                    uint32_t deg = graph.get_degree(du);
-                    std::vector<uint32_t> d_nbrs = graph.get_neighbors(du);
-                    std::vector<int64_t> ext_nbrs;
-                    ext_nbrs.reserve(d_nbrs.size());
-                    for (uint32_t dn : d_nbrs) {
-                        ext_nbrs.push_back(codec.decode_data_vertex(dn));
+                json::Value ent_arr = json::Value::make_array();
+                for (const auto& tup : step_res.entered_tuples) {
+                    json::Value t_arr = json::Value::make_array();
+                    for (int64_t coord : tup) t_arr.push_back(json::Value(coord));
+                    ent_arr.push_back(t_arr);
+                }
+                step_json["entered_tuples"] = ent_arr;
+
+                json::Value exit_arr = json::Value::make_array();
+                for (const auto& tup : step_res.exited_tuples) {
+                    json::Value t_arr = json::Value::make_array();
+                    for (int64_t coord : tup) t_arr.push_back(json::Value(coord));
+                    exit_arr.push_back(t_arr);
+                }
+                step_json["exited_tuples"] = exit_arr;
+
+                // Per-step counters
+                json::Value step_cnt = json::Value::make_object();
+                step_cnt["work_units"] = json::Value(step_res.step_counters.work_units);
+                step_cnt["max_work"] = json::Value(step_res.step_counters.max_work);
+                step_cnt["dfs_states"] = json::Value(step_res.step_counters.dfs_states);
+                step_cnt["candidate_evaluations"] = json::Value(step_res.step_counters.candidate_evaluations);
+                step_cnt["candidate_extensions"] = json::Value(step_res.step_counters.candidate_extensions);
+                step_cnt["edge_lookups"] = json::Value(step_res.step_counters.edge_lookups);
+                step_cnt["vertex_label_checks"] = json::Value(step_res.step_counters.vertex_label_checks);
+                step_cnt["anchors_started"] = json::Value(step_res.step_counters.anchors_started);
+                if (engine_type == EngineType::M1) {
+                    step_cnt["variants_started"] = json::Value(step_res.step_counters.variants_started);
+                    step_cnt["raw_exact_results"] = json::Value(step_res.step_counters.raw_exact_results);
+                    step_cnt["missing_set_rejections"] = json::Value(step_res.step_counters.missing_set_rejections);
+                } else {
+                    step_cnt["edge_decisions"] = json::Value(step_res.step_counters.edge_decisions);
+                    step_cnt["missing_branches"] = json::Value(step_res.step_counters.missing_branches);
+                    step_cnt["commitment_checks"] = json::Value(step_res.step_counters.commitment_checks);
+                    step_cnt["commitment_rejections"] = json::Value(step_res.step_counters.commitment_rejections);
+                }
+                step_json["step_counters"] = step_cnt;
+
+                // Codec state
+                json::Value c_state = json::Value::make_object();
+                c_state["query_vertices_count"] = json::Value(codec.query_vertices_count());
+                c_state["data_vertices_count"] = json::Value(codec.data_vertices_count());
+                c_state["vertex_labels_count"] = json::Value(codec.vertex_labels_count());
+                c_state["edge_labels_count"] = json::Value(codec.edge_labels_count());
+                step_json["codec_state"] = c_state;
+
+                // Deep graph state
+                step_json["graph_state"] = build_graph_state_json(graph, codec);
+
+                if (step_res.status != StepStatus::SUCCESS) {
+                    any_failure = true;
+                    failed_steps = 1;
+                    first_failing_error = step_res.error_message;
+                    if (step_res.status == StepStatus::CALLBACK_ABORTED &&
+                        step_res.error_message.find("Work budget exceeded") != std::string::npos) {
+                        first_failing_category = "WORK_BUDGET_EXCEEDED";
+                        first_failing_exit = ExitCode::WORK_BUDGET_EXCEEDED;
+                    } else if (step_res.status == StepStatus::PREVALIDATION_FAILED) {
+                        first_failing_category = "PREVALIDATION_ERROR";
+                        first_failing_exit = ExitCode::STEP_FAILURE;
+                    } else {
+                        first_failing_category = "STEP_FAILURE";
+                        first_failing_exit = ExitCode::STEP_FAILURE;
                     }
-                    std::sort(ext_nbrs.begin(), ext_nbrs.end());
-                    sorted_verts.push_back({ext_id, vlbl, deg, std::move(ext_nbrs)});
-                }
-            }
-            std::sort(sorted_verts.begin(), sorted_verts.end(), [](const VertDiag& a, const VertDiag& b) {
-                return a.id < b.id;
-            });
+                    step_json["error_category"] = json::Value(first_failing_category);
+                    steps_arr.push_back(step_json);
 
-            json::Value v_arr = json::Value::make_array();
-            json::Value nbr_obj = json::Value::make_object();
-            for (const auto& vd : sorted_verts) {
-                json::Value v_item = json::Value::make_object();
-                v_item["id"] = json::Value(vd.id);
-                v_item["label"] = typed_label_to_json(vd.label);
-                v_item["degree"] = json::Value(vd.degree);
-                v_arr.push_back(v_item);
-
-                json::Value n_list = json::Value::make_array();
-                for (int64_t nid : vd.neighbors) {
-                    n_list.push_back(json::Value(nid));
-                }
-                nbr_obj[std::to_string(vd.id)] = n_list;
-            }
-            g_state["vertices"] = v_arr;
-            g_state["neighbors"] = nbr_obj;
-
-            struct EdgeDiag {
-                int64_t u;
-                int64_t v;
-                TypedLabel label;
-            };
-            std::vector<EdgeDiag> sorted_edges;
-            for (uint32_t du = 0; du < num_dverts; ++du) {
-                if (!graph.has_vertex(du)) continue;
-                int64_t ext_u_node = codec.decode_data_vertex(du);
-                for (uint32_t dv : graph.get_neighbors(du)) {
-                    if (du < dv) {
-                        int64_t ext_v_node = codec.decode_data_vertex(dv);
-                        auto el = graph.get_edge_label(du, dv);
-                        if (el.exists) {
-                            TypedLabel elbl = codec.decode_edge_label(el.label);
-                            int64_t mn = std::min(ext_u_node, ext_v_node);
-                            int64_t mx = std::max(ext_u_node, ext_v_node);
-                            sorted_edges.push_back({mn, mx, elbl});
-                        }
+                    for (size_t rem = step_idx + 1; rem < total_steps; ++rem) {
+                        json::Value un_step = json::Value::make_object();
+                        un_step["step_index"] = json::Value(static_cast<int64_t>(rem));
+                        un_step["status"] = json::Value("UNATTEMPTED");
+                        un_step["commit_status"] = json::Value("NOT_COMMITTED");
+                        un_step["error"] = json::Value("");
+                        un_step["error_category"] = json::Value("NONE");
+                        un_step["entered_tuples"] = json::Value::make_array();
+                        un_step["exited_tuples"] = json::Value::make_array();
+                        steps_arr.push_back(un_step);
                     }
+                    break;
                 }
-            }
-            std::sort(sorted_edges.begin(), sorted_edges.end(), [](const EdgeDiag& a, const EdgeDiag& b) {
-                if (a.u != b.u) return a.u < b.u;
-                return a.v < b.v;
-            });
 
-            json::Value e_arr = json::Value::make_array();
-            for (const auto& ed : sorted_edges) {
-                json::Value e_item = json::Value::make_object();
-                e_item["u"] = json::Value(ed.u);
-                e_item["v"] = json::Value(ed.v);
-                e_item["label"] = typed_label_to_json(ed.label);
-                e_arr.push_back(e_item);
-            }
-            g_state["edges"] = e_arr;
-            step_json["graph_state"] = g_state;
-
-            steps_arr.push_back(step_json);
-
-            if (step_res.status != StepStatus::SUCCESS) {
+                steps_arr.push_back(step_json);
+                completed_steps++;
+            } catch (const std::exception& e) {
                 any_failure = true;
-                first_failing_status = step_res.status;
-                first_failing_error = step_res.error_message;
-                break; // Stop after first failing step, preserve prior steps
+                failed_steps = 1;
+                first_failing_error = e.what();
+                first_failing_category = "INPUT_SCHEMA_ERROR";
+                first_failing_exit = ExitCode::INPUT_PARSE_ERROR;
+
+                step_json["status"] = json::Value("ERROR");
+                step_json["commit_status"] = json::Value("NOT_COMMITTED");
+                step_json["error"] = json::Value(e.what());
+                step_json["error_category"] = json::Value("INPUT_SCHEMA_ERROR");
+                steps_arr.push_back(step_json);
+
+                for (size_t rem = step_idx + 1; rem < total_steps; ++rem) {
+                    json::Value un_step = json::Value::make_object();
+                    un_step["step_index"] = json::Value(static_cast<int64_t>(rem));
+                    un_step["status"] = json::Value("UNATTEMPTED");
+                    un_step["commit_status"] = json::Value("NOT_COMMITTED");
+                    un_step["error"] = json::Value("");
+                    un_step["error_category"] = json::Value("NONE");
+                    un_step["entered_tuples"] = json::Value::make_array();
+                    un_step["exited_tuples"] = json::Value::make_array();
+                    steps_arr.push_back(un_step);
+                }
+                break;
             }
         }
 
         root_out["steps"] = steps_arr;
+
+        json::Value exec_obj = json::Value::make_object();
+        exec_obj["total_steps"] = json::Value(static_cast<int64_t>(total_steps));
+        exec_obj["attempted_steps"] = json::Value(static_cast<int64_t>(completed_steps + failed_steps));
+        exec_obj["completed_steps"] = json::Value(static_cast<int64_t>(completed_steps));
+        exec_obj["failed_steps"] = json::Value(static_cast<int64_t>(failed_steps));
+        exec_obj["unattempted_steps"] = json::Value(static_cast<int64_t>(total_steps - (completed_steps + failed_steps)));
+        root_out["execution"] = exec_obj;
 
         // Cumulative Counters across run
         const auto& counters = streaming_engine.get_cumulative_counters();
@@ -533,48 +702,49 @@ int main(int argc, char* argv[]) {
 
         if (any_failure) {
             root_out["status"] = json::Value("FAIL");
+            root_out["error_category"] = json::Value(first_failing_category);
             root_out["error_message"] = json::Value(first_failing_error);
-            if (first_failing_status == StepStatus::CALLBACK_ABORTED &&
-                first_failing_error.find("Work budget exceeded") != std::string::npos) {
-                final_exit_code = ExitCode::WORK_BUDGET_EXCEEDED;
-            } else {
-                final_exit_code = ExitCode::STEP_FAILURE;
-            }
+            final_exit_code = first_failing_exit;
         } else {
             root_out["status"] = json::Value("SUCCESS");
+            root_out["error_category"] = json::Value("NONE");
             final_exit_code = ExitCode::SUCCESS;
         }
 
     } catch (const InvalidThresholdException& e) {
         root_out["status"] = json::Value("FAIL");
+        root_out["error_category"] = json::Value("DOMAIN_ERROR");
         root_out["error_message"] = json::Value(e.what());
         final_exit_code = ExitCode::DOMAIN_REJECTION;
     } catch (const InvalidQueryException& e) {
         root_out["status"] = json::Value("FAIL");
+        root_out["error_category"] = json::Value("DOMAIN_ERROR");
         root_out["error_message"] = json::Value(e.what());
         final_exit_code = ExitCode::DOMAIN_REJECTION;
     } catch (const WorkBudgetExceededException& e) {
         root_out["status"] = json::Value("FAIL");
+        root_out["error_category"] = json::Value("WORK_BUDGET_EXCEEDED");
         root_out["error_message"] = json::Value(e.what());
         final_exit_code = ExitCode::WORK_BUDGET_EXCEEDED;
     } catch (const std::invalid_argument& e) {
         root_out["status"] = json::Value("ERROR");
+        root_out["error_category"] = json::Value("INPUT_SCHEMA_ERROR");
         root_out["error_message"] = json::Value(e.what());
         final_exit_code = ExitCode::INPUT_PARSE_ERROR;
     } catch (const std::exception& e) {
         root_out["status"] = json::Value("ERROR");
+        root_out["error_category"] = json::Value("UNCAUGHT_ERROR");
         root_out["error_message"] = json::Value(e.what());
         final_exit_code = ExitCode::UNCAUGHT_ERROR;
     }
 
-    // Write output JSON
-    std::ofstream out_file(output_path);
-    if (!out_file.is_open()) {
-        std::cerr << "Error: Cannot open output file: " << output_path << "\n";
+    // Write output JSON safely
+    std::string err_msg;
+    std::string serialized = json::serialize(root_out, 0);
+    if (!write_json_file_safe(output_path, serialized, err_msg)) {
+        std::cerr << "Error: Output write failure: " << err_msg << "\n";
         return static_cast<int>(ExitCode::IO_ERROR);
     }
-    out_file << json::serialize(root_out, 0) << "\n";
-    out_file.close();
 
     return static_cast<int>(final_exit_code);
 }

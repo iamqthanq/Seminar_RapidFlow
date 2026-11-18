@@ -3,6 +3,7 @@
 #include <limits>
 #include <stdexcept>
 #include <functional>
+#include <algorithm>
 
 namespace rapidflow_apx {
 
@@ -141,8 +142,39 @@ void ApxQueryPlan::build(
     k_ = k;
     lambda_ = computed_lambda;
     vertex_labels_ = vertex_labels;
-    edges_ = edges;
     canonical_order_ = canonical_order;
+
+    // Canonicalize and sort query edges deterministically (P3-R2-F11)
+    std::vector<uint32_t> vertex_rank(num_vertices, 0);
+    for (uint32_t r = 0; r < canonical_order.size(); ++r) {
+        if (canonical_order[r] < num_vertices) {
+            vertex_rank[canonical_order[r]] = r;
+        }
+    }
+
+    std::vector<QueryEdge> canonical_edges;
+    canonical_edges.reserve(edges.size());
+    for (const auto& e : edges) {
+        QueryEdge ce = e;
+        if (vertex_rank[ce.u] > vertex_rank[ce.v]) {
+            std::swap(ce.u, ce.v);
+        }
+        canonical_edges.push_back(ce);
+    }
+
+    std::sort(canonical_edges.begin(), canonical_edges.end(),
+        [&](const QueryEdge& a, const QueryEdge& b) {
+            uint32_t ra_u = vertex_rank[a.u];
+            uint32_t ra_v = vertex_rank[a.v];
+            uint32_t rb_u = vertex_rank[b.u];
+            uint32_t rb_v = vertex_rank[b.v];
+            if (ra_u != rb_u) return ra_u < rb_u;
+            if (ra_v != rb_v) return ra_v < rb_v;
+            return a.label < b.label;
+        }
+    );
+
+    edges_ = std::move(canonical_edges);
 
     relevant_edge_labels_.clear();
     label_to_edges_.clear();
@@ -154,6 +186,14 @@ void ApxQueryPlan::build(
         label_to_edges_[e.label].push_back(static_cast<uint32_t>(i));
         vertex_incident_edges_[e.u].emplace_back(e.v, static_cast<uint32_t>(i));
         vertex_incident_edges_[e.v].emplace_back(e.u, static_cast<uint32_t>(i));
+    }
+
+    for (uint32_t u = 0; u < num_vertices; ++u) {
+        std::sort(vertex_incident_edges_[u].begin(), vertex_incident_edges_[u].end(),
+            [&](const std::pair<uint32_t, uint32_t>& a, const std::pair<uint32_t, uint32_t>& b) {
+                return vertex_rank[a.first] < vertex_rank[b.first];
+            }
+        );
     }
 }
 

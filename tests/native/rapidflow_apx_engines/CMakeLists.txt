@@ -19,9 +19,11 @@ include_directories(
 # Add foundation library subdirectory
 add_subdirectory("${RAPIDFLOW_APX_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/rapidflow_apx_lib")
 
+find_package(OpenSSL REQUIRED COMPONENTS Crypto)
+
 add_executable(rapidflow_apx_native
     src/main.cpp
 )
 
-target_link_libraries(rapidflow_apx_native PRIVATE rapidflow_apx_foundation)
+target_link_libraries(rapidflow_apx_native PRIVATE rapidflow_apx_foundation OpenSSL::Crypto)
 target_compile_options(rapidflow_apx_native PRIVATE -O3 -Wall -Wextra)
