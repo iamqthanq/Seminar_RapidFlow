@@ -1218,21 +1218,178 @@ class TestRapidFlowApxEngines(unittest.TestCase):
                 tf_path.unlink()
 
         # -----------------------------------------------------------------
-        # Level C: Runner End-to-End Subprocess Tests
+        # Level C: Runner End-to-End Interception & Subprocess Rejection Tests
         # -----------------------------------------------------------------
-        runner_script = REPO_ROOT / "scripts" / "run_rapidflow_apx_engines.py"
+        # Intercept real native binary outputs on positive and negative cases (R4-F07)
+        wl_hand01 = next(w for w in hand_wls if w["case_id"] == "CASE_HAND_01")
+        wl_hand22 = next(w for w in hand_wls if w["case_id"] == "CASE_HAND_22")
 
-        # 38. Runner invoked with unknown case ID rejected fail-closed (Level C)
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as wf, \
+             tempfile.NamedTemporaryFile("r", suffix=".json", delete=False) as of:
+            json.dump(wl_hand01, wf)
+            wf.flush()
+            wf_path = Path(wf.name)
+            of_path = Path(of.name)
+        try:
+            cmd = [str(self.binary_path), "--engine", "m1", "--workload", str(wf_path), "--output", str(of_path)]
+            subprocess.run(cmd, check=True, cwd=REPO_ROOT)
+            with open(of_path, "r", encoding="utf-8") as f:
+                base_raw_output = json.load(f)
+        finally:
+            if wf_path.exists(): wf_path.unlink()
+            if of_path.exists(): of_path.unlink()
+
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as wf, \
+             tempfile.NamedTemporaryFile("r", suffix=".json", delete=False) as of:
+            json.dump(wl_hand22, wf)
+            wf.flush()
+            wf_path = Path(wf.name)
+            of_path = Path(of.name)
+        try:
+            cmd = [str(self.binary_path), "--engine", "m1", "--workload", str(wf_path), "--output", str(of_path)]
+            subprocess.run(cmd, cwd=REPO_ROOT)
+            with open(of_path, "r", encoding="utf-8") as f:
+                base_neg_output = json.load(f)
+        finally:
+            if wf_path.exists(): wf_path.unlink()
+            if of_path.exists(): of_path.unlink()
+
+        # Positive controls sanity check
+        p_ok, p_diag = validate_native_output_schema(base_raw_output, "m1", "CASE_HAND_01", None, workload=wl_hand01, is_success=True)
+        self.assertTrue(p_ok, f"Positive control failed: {p_diag}")
+        n_ok, n_diag = validate_native_output_schema(base_neg_output, "m1", "CASE_HAND_22", None, workload=wl_hand22, is_success=False)
+        self.assertTrue(n_ok, f"Negative control failed: {n_diag}")
+
+        # 38. Missing schema_version in raw output (R4-F01)
+        m = copy.deepcopy(base_raw_output); del m["schema_version"]
+        ok, _ = validate_native_output_schema(m, "m1", "CASE_HAND_01", None, workload=wl_hand01, is_success=True)
+        record_mutation("Level C: Missing schema_version rejected fail-closed", not ok)
+
+        # 39. Unsupported schema_version in raw output (R4-F01)
+        m = copy.deepcopy(base_raw_output); m["schema_version"] = "2.0.0"
+        ok, _ = validate_native_output_schema(m, "m1", "CASE_HAND_01", None, workload=wl_hand01, is_success=True)
+        record_mutation("Level C: Unsupported schema_version rejected fail-closed", not ok)
+
+        # 40. Float schema_version in raw output (R4-F01)
+        m = copy.deepcopy(base_raw_output); m["schema_version"] = 1.1
+        ok, _ = validate_native_output_schema(m, "m1", "CASE_HAND_01", None, workload=wl_hand01, is_success=True)
+        record_mutation("Level C: Float schema_version rejected fail-closed", not ok)
+
+        # 41. Missing semantics_version in raw output (R4-F01)
+        m = copy.deepcopy(base_raw_output); del m["semantics_version"]
+        ok, _ = validate_native_output_schema(m, "m1", "CASE_HAND_01", None, workload=wl_hand01, is_success=True)
+        record_mutation("Level C: Missing semantics_version rejected fail-closed", not ok)
+
+        # 42. Float step_index in raw step (R4-F02)
+        m = copy.deepcopy(base_raw_output); m["steps"][0]["step_index"] = 0.0
+        ok, _ = validate_native_output_schema(m, "m1", "CASE_HAND_01", None, workload=wl_hand01, is_success=True)
+        record_mutation("Level C: Float step_index rejected fail-closed", not ok)
+
+        # 43. Boolean endpoint u in raw step (R4-F02)
+        m = copy.deepcopy(base_raw_output); m["steps"][0]["u"] = True
+        ok, _ = validate_native_output_schema(m, "m1", "CASE_HAND_01", None, workload=wl_hand01, is_success=True)
+        record_mutation("Level C: Boolean endpoint u rejected fail-closed", not ok)
+
+        # 44. Boolean endpoint v in raw step (R4-F02)
+        m = copy.deepcopy(base_raw_output); m["steps"][0]["v"] = False
+        ok, _ = validate_native_output_schema(m, "m1", "CASE_HAND_01", None, workload=wl_hand01, is_success=True)
+        record_mutation("Level C: Boolean endpoint v rejected fail-closed", not ok)
+
+        # 45. Root SUCCESS with step status CALLBACK_ABORTED (R4-F02)
+        m = copy.deepcopy(base_raw_output); m["steps"][0]["status"] = "CALLBACK_ABORTED"
+        ok, _ = validate_native_output_schema(m, "m1", "CASE_HAND_01", None, workload=wl_hand01, is_success=True)
+        record_mutation("Level C: Root SUCCESS with CALLBACK_ABORTED step rejected", not ok)
+
+        # 46. Root SUCCESS with step status UNATTEMPTED (R4-F02)
+        m = copy.deepcopy(base_raw_output); m["steps"][0]["status"] = "UNATTEMPTED"
+        ok, _ = validate_native_output_schema(m, "m1", "CASE_HAND_01", None, workload=wl_hand01, is_success=True)
+        record_mutation("Level C: Root SUCCESS with UNATTEMPTED step rejected", not ok)
+
+        # 47. Root SUCCESS with PREVALIDATION_ERROR (R4-F02)
+        m = copy.deepcopy(base_raw_output); m["error_category"] = "PREVALIDATION_ERROR"
+        ok, _ = validate_native_output_schema(m, "m1", "CASE_HAND_01", None, workload=wl_hand01, is_success=True)
+        record_mutation("Level C: Root SUCCESS with non-NONE error_category rejected", not ok)
+
+        # 48. Duplicate tuple in entered_tuples (R4-F02)
+        m = copy.deepcopy(base_raw_output); m["steps"][0]["entered_tuples"] = [[0, 1, 2, 3], [0, 1, 2, 3]]
+        ok, _ = validate_native_output_schema(m, "m1", "CASE_HAND_01", None, workload=wl_hand01, is_success=True)
+        record_mutation("Level C: Duplicate tuple in entered_tuples rejected", not ok)
+
+        # 49. Non-injective tuple in entered_tuples (R4-F02)
+        m = copy.deepcopy(base_raw_output); m["steps"][0]["entered_tuples"] = [[0, 0, 2, 3]]
+        ok, _ = validate_native_output_schema(m, "m1", "CASE_HAND_01", None, workload=wl_hand01, is_success=True)
+        record_mutation("Level C: Non-injective tuple in entered_tuples rejected", not ok)
+
+        # 50. Extra neighbor key in graph_state (R4-F06)
+        m_gs = copy.deepcopy(base_raw_output["steps"][0]["graph_state"])
+        m_gs["neighbors"]["999999999"] = []
+        G_exp = DStarGraph()
+        for v in base_raw_output["steps"][0]["graph_state"]["vertices"]:
+            G_exp.add_vertex(v["id"], v["label"])
+        for e in base_raw_output["steps"][0]["graph_state"]["edges"]:
+            G_exp.add_edge(e["u"], e["v"], e["label"])
+        ok, _ = validate_graph_state(m_gs, G_exp)
+        record_mutation("Level C: Extra neighbor key in graph_state rejected", not ok)
+
+        # 51. Float string neighbor key in graph_state (R4-F06)
+        first_k = next(iter(base_raw_output["steps"][0]["graph_state"]["neighbors"].keys()))
+        m_gs = copy.deepcopy(base_raw_output["steps"][0]["graph_state"])
+        m_gs["neighbors"][f"{first_k}.0"] = m_gs["neighbors"].pop(first_k)
+        ok, _ = validate_graph_state(m_gs, G_exp)
+        record_mutation("Level C: Float string neighbor key in graph_state rejected", not ok)
+
+        # 52. Neighbor key > INT64_MAX in graph_state (R4-F06)
+        m_gs = copy.deepcopy(base_raw_output["steps"][0]["graph_state"])
+        m_gs["neighbors"]["999999999999999999999"] = m_gs["neighbors"].pop(first_k)
+        ok, _ = validate_graph_state(m_gs, G_exp)
+        record_mutation("Level C: Neighbor key > INT64_MAX in graph_state rejected", not ok)
+
+        # 53. Corrupted completed_steps = 123 on negative test (R4-F03)
+        m_neg = copy.deepcopy(base_neg_output)
+        m_neg["execution"]["completed_steps"] = 123
+        ok, _ = validate_native_output_schema(m_neg, "m1", "CASE_HAND_22", None, workload=wl_hand22, is_success=False)
+        record_mutation("Level C: Corrupted negative lifecycle totals rejected", not ok)
+
+        # 54. Negative case treated as success (R4-F03)
+        m_neg = copy.deepcopy(base_neg_output)
+        ok, _ = validate_native_output_schema(m_neg, "m1", "CASE_HAND_22", None, workload=wl_hand22, is_success=True)
+        record_mutation("Level C: Negative case treated as success rejected", not ok)
+
+        # 55. Workload hash mismatch (R4-F04)
+        mut_req_wls = copy.deepcopy(hand_wls)
+        for w in mut_req_wls:
+            if w["case_id"] == "CASE_HAND_04":
+                w["query"]["vertices"][0]["label"] = "TAMPERED_LABEL"
+        req_ok, _ = validate_required_hand_cases(mut_req_wls, REQUIRED_HAND_CASES_PATH)
+        record_mutation("Level C: Workload hash mismatch rejected", not req_ok)
+
+        # 56. Tampered stream lock entry (R4-F05)
+        with open(STREAM_56_LOCK_PATH, "r", encoding="utf-8") as f:
+            stream_lock_data = json.load(f)
+        mut_stream_lock = copy.deepcopy(stream_lock_data)
+        mut_stream_lock["streams"][0]["label_mode"] = "INVALID_MODE"
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tf:
+            json.dump(mut_stream_lock, tf)
+            tf.flush()
+            tf_path = Path(tf.name)
+        try:
+            lock_ok, _ = validate_stream_lock_registry(tf_path)
+            record_mutation("Level C: Tampered stream label_mode rejected", not lock_ok)
+        finally:
+            if tf_path.exists(): tf_path.unlink()
+
+        # 57. CLI: Runner invoked with unknown case ID rejected fail-closed (Level C)
+        runner_script = REPO_ROOT / "scripts" / "run_rapidflow_apx_engines.py"
         cmd_unknown = [sys.executable, str(runner_script), "--case", "NON_EXISTENT_CASE_999"]
         proc_unk = subprocess.run(cmd_unknown, capture_output=True, text=True, cwd=REPO_ROOT)
         record_mutation("Level C: Unknown case filter rejected with non-zero exit", proc_unk.returncode != 0)
 
-        # 39. Runner invoked with stage mismatch rejected fail-closed (Level C)
+        # 58. CLI: Runner invoked with stage mismatch rejected fail-closed (Level C)
         cmd_mismatch = [sys.executable, str(runner_script), "--stage", "stream", "--case", "CASE_HAND_01"]
         proc_mis = subprocess.run(cmd_mismatch, capture_output=True, text=True, cwd=REPO_ROOT)
         record_mutation("Level C: Case stage mismatch rejected with non-zero exit", proc_mis.returncode != 0)
 
-        # 40. Runner invoked with invalid engine option rejected fail-closed (Level C)
+        # 59. CLI: Runner invoked with invalid engine option rejected fail-closed (Level C)
         cmd_invalid_eng = [sys.executable, str(runner_script), "--engine", "invalid_engine_name"]
         proc_eng = subprocess.run(cmd_invalid_eng, capture_output=True, text=True, cwd=REPO_ROOT)
         record_mutation("Level C: Invalid engine option rejected with non-zero exit", proc_eng.returncode != 0)
@@ -1251,6 +1408,103 @@ class TestRapidFlowApxEngines(unittest.TestCase):
 
         self.assertEqual(incorrectly_accepted, 0, "No mutation may be incorrectly accepted!")
         self.assertEqual(detection_rate, 100.0, "Mutation detection rate must be strictly 100.0%!")
+
+    # =========================================================================
+    # Group V: Multi-Step Transaction Rollback & Report Consistency Audit
+    # =========================================================================
+    def test_transaction_rollback_multistep_preservation(self):
+        """Verifies multi-step transaction rollback preservation (R4-F07).
+        Step 0: Valid insertion (+edge) commits successfully and is preserved in graph state.
+        Step 1: Invalid update (self-loop) fails prevalidation, rolls back, and does NOT contaminate graph state.
+        Step 2: Subsequent update remains UNATTEMPTED with NOT_COMMITTED status.
+        Verifies bit-for-bit graph state preservation against DStarGraph reference model at every step."""
+        wl = {
+            "case_id": "test_multistep_rollback_preservation",
+            "query": {
+                "vertices": [{"id": i, "label": 0} for i in range(4)],
+                "edges": [{"u": 0, "v": 1, "label": 0}, {"u": 0, "v": 2, "label": 0}, {"u": 1, "v": 3, "label": 0}, {"u": 2, "v": 3, "label": 0}, {"u": 1, "v": 2, "label": 0}]
+            },
+            "k": 0,
+            "initial_graph": {
+                "vertices": [{"id": i, "label": 0} for i in range(4)],
+                "edges": [{"u": 0, "v": 1, "label": 0}, {"u": 0, "v": 2, "label": 0}, {"u": 1, "v": 3, "label": 0}]
+            },
+            "updates": [
+                {"op": "+", "u": 2, "v": 3, "label": 0},
+                {"op": "+", "u": 0, "v": 0, "label": 0},
+                {"op": "+", "u": 1, "v": 2, "label": 0}
+            ]
+        }
+        for eng in ["m1", "m2"]:
+            res, dur, _ = run_workload_on_binary(self.binary_path, eng, wl)
+            self.assertEqual(res.get("status"), "FAIL")
+            self.assertEqual(res.get("exit_code"), 6)
+            self.assertTrue(res.get("schema_valid"), f"Schema must be valid on negative run: {res.get('schema_error')}")
+
+            exec_info = res.get("execution", {})
+            self.assertEqual(exec_info.get("total_steps"), 3)
+            self.assertEqual(exec_info.get("completed_steps"), 1)
+            self.assertEqual(exec_info.get("failed_steps"), 1)
+            self.assertEqual(exec_info.get("unattempted_steps"), 1)
+            self.assertEqual(exec_info.get("attempted_steps"), 2)
+
+            steps = res.get("steps", [])
+            self.assertEqual(len(steps), 3)
+
+            # Step 0: Committed
+            self.assertEqual(steps[0]["status"], "SUCCESS")
+            self.assertEqual(steps[0]["commit_status"], "COMMITTED")
+            self.assertEqual(steps[0]["graph_state"]["edges_count"], 4)
+
+            # Step 1: Prevalidation failed, transaction rolled back
+            self.assertEqual(steps[1]["status"], "PREVALIDATION_FAILED")
+            self.assertEqual(steps[1]["commit_status"], "NOT_COMMITTED")
+            self.assertEqual(steps[1]["graph_state"]["edges_count"], 4)
+            self.assertEqual(steps[1]["graph_state"]["vertices_count"], 4)
+            self.assertNotIn(0, steps[1]["graph_state"]["neighbors"].get("0", []))
+
+            # Step 2: Unattempted
+            self.assertEqual(steps[2]["status"], "UNATTEMPTED")
+            self.assertEqual(steps[2]["commit_status"], "NOT_COMMITTED")
+
+    def test_validation_report_consistency_audit(self):
+        """Audits docs/rapidflow_apx_native_engines_validation_report.md Section 4.1 against
+        configs/rapidflow_apx_required_cases.json: ensures 0 mismatched names, 0 mismatched k,
+        0 missing IDs, and 0 obsolete IDs (R4-F08)."""
+        report_path = REPO_ROOT / "docs" / "rapidflow_apx_native_engines_validation_report.md"
+        self.assertTrue(report_path.exists(), "Validation report must exist")
+        with open(report_path, "r", encoding="utf-8") as f:
+            report_text = f.read()
+
+        import re
+        sec_match = re.search(r"### 4\.1\..*?\n(.*?)(?=\n### 4\.2|\Z)", report_text, re.DOTALL)
+        self.assertIsNotNone(sec_match, "Section 4.1 must exist in validation report")
+
+        table_lines = [l.strip() for l in sec_match.group(1).splitlines() if l.strip().startswith("| `CASE_HAND_")]
+        self.assertEqual(len(table_lines), 25, f"Section 4.1 table must have exactly 25 rows, found {len(table_lines)}")
+
+        with open(REQUIRED_HAND_CASES_PATH, "r", encoding="utf-8") as f:
+            registry_data = json.load(f)
+        reg_cases = {c["case_id"]: c for c in registry_data["cases"]}
+        self.assertEqual(len(reg_cases), 25, "Registry must contain exactly 25 cases")
+
+        parsed_case_ids = set()
+        for line in table_lines:
+            cols = [col.strip() for col in line.split("|")[1:-1]]
+            case_id = cols[0].replace("`", "")
+            case_name = cols[1].replace("`", "")
+            k_val = int(cols[4])
+
+            self.assertIn(case_id, reg_cases, f"Report has obsolete or unapproved case_id: {case_id}")
+            reg_entry = reg_cases[case_id]
+            self.assertEqual(case_name, reg_entry["case_name"], f"Case name mismatch for {case_id}: report={case_name} vs reg={reg_entry['case_name']}")
+            self.assertEqual(k_val, reg_entry["k"], f"k value mismatch for {case_id}: report={k_val} vs reg={reg_entry['k']}")
+            parsed_case_ids.add(case_id)
+
+        missing_from_report = set(reg_cases.keys()) - parsed_case_ids
+        self.assertEqual(len(missing_from_report), 0, f"Cases missing from report: {missing_from_report}")
+        obsolete_in_report = parsed_case_ids - set(reg_cases.keys())
+        self.assertEqual(len(obsolete_in_report), 0, f"Obsolete cases in report: {obsolete_in_report}")
 
 
 if __name__ == "__main__":

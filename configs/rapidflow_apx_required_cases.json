@@ -1,282 +1,605 @@
 {
-  "registry_version": "1.0.0",
+  "registry_version": "2.0.0",
   "contract": "rapidflow_apx-p3-required-hand-cases",
   "total_required_cases": 25,
   "cases": [
     {
       "case_id": "CASE_HAND_01",
-      "name": "diamond_distinct_labels",
+      "case_name": "diamond_distinct_labels",
       "k": 0,
+      "lambda": 2,
       "is_negative": false,
       "expected_exit_code": 0,
       "expected_error_category": null,
       "required_engines": "both",
+      "query_vertices_count": 4,
+      "query_edges_count": 5,
+      "updates_count": 1,
+      "canonical_workload_sha256": "a568b3d4f4650cc562ab9d15b9d225e92e1990e56ef939a469681fbe9954890c",
       "expected_entered_count": 1,
-      "expected_exited_count": 0
+      "expected_exited_count": 0,
+      "expected_step_events": [
+        {
+          "step_index": 0,
+          "op": "+",
+          "entered_count": 1,
+          "exited_count": 0
+        }
+      ]
     },
     {
       "case_id": "CASE_HAND_02",
-      "name": "diamond_k0_insert",
+      "case_name": "diamond_k0_insert",
       "k": 0,
+      "lambda": 2,
       "is_negative": false,
       "expected_exit_code": 0,
       "expected_error_category": null,
       "required_engines": "both",
+      "query_vertices_count": 4,
+      "query_edges_count": 5,
+      "updates_count": 1,
+      "canonical_workload_sha256": "05ff535bb2f57b5fcee76b0c8f50b447b4f65684652d193aa59d0d6cd387695a",
       "expected_entered_count": 4,
-      "expected_exited_count": 0
+      "expected_exited_count": 0,
+      "expected_step_events": [
+        {
+          "step_index": 0,
+          "op": "+",
+          "entered_count": 4,
+          "exited_count": 0
+        }
+      ]
     },
     {
       "case_id": "CASE_HAND_03",
-      "name": "diamond_k0_delete",
+      "case_name": "diamond_k0_delete",
       "k": 0,
+      "lambda": 2,
       "is_negative": false,
       "expected_exit_code": 0,
       "expected_error_category": null,
       "required_engines": "both",
+      "query_vertices_count": 4,
+      "query_edges_count": 5,
+      "updates_count": 1,
+      "canonical_workload_sha256": "1eba83218d5bb816ae7e42cd3078f59a9f10ad91909f13aa69993394e56cb06a",
       "expected_entered_count": 0,
-      "expected_exited_count": 4
+      "expected_exited_count": 4,
+      "expected_step_events": [
+        {
+          "step_index": 0,
+          "op": "-",
+          "entered_count": 0,
+          "exited_count": 4
+        }
+      ]
     },
     {
       "case_id": "CASE_HAND_04",
-      "name": "k4_k1",
+      "case_name": "k4_k1",
       "k": 1,
+      "lambda": 3,
       "is_negative": false,
       "expected_exit_code": 0,
       "expected_error_category": null,
       "required_engines": "both",
+      "query_vertices_count": 4,
+      "query_edges_count": 6,
+      "updates_count": 1,
+      "canonical_workload_sha256": "6877af42688abbba4d9dd52ccab9a19ddce7b16f4564dcccd51c4af7089eea83",
       "expected_entered_count": 24,
-      "expected_exited_count": 0
+      "expected_exited_count": 0,
+      "expected_step_events": [
+        {
+          "step_index": 0,
+          "op": "+",
+          "entered_count": 24,
+          "exited_count": 0
+        }
+      ]
     },
     {
       "case_id": "CASE_HAND_05",
-      "name": "k4_k2",
+      "case_name": "k4_k2",
       "k": 2,
+      "lambda": 3,
       "is_negative": false,
       "expected_exit_code": 0,
       "expected_error_category": null,
       "required_engines": "both",
+      "query_vertices_count": 4,
+      "query_edges_count": 6,
+      "updates_count": 1,
+      "canonical_workload_sha256": "ee6a0e7e9e9de79a109834ff1207c529bb2d6bf1188e281776a76b3d8301abc1",
       "expected_entered_count": 24,
-      "expected_exited_count": 0
+      "expected_exited_count": 0,
+      "expected_step_events": [
+        {
+          "step_index": 0,
+          "op": "+",
+          "entered_count": 24,
+          "exited_count": 0
+        }
+      ]
     },
     {
       "case_id": "CASE_HAND_06_STEP1",
-      "name": "diamond_2step_delete_step1",
+      "case_name": "diamond_2step_delete_step1",
       "k": 1,
+      "lambda": 2,
       "is_negative": false,
       "expected_exit_code": 0,
       "expected_error_category": null,
       "required_engines": "both",
+      "query_vertices_count": 4,
+      "query_edges_count": 5,
+      "updates_count": 1,
+      "canonical_workload_sha256": "bfa5bd439b345dee561c77f9e2a2c0fbf0e6ff3edebacdb6559e1463668ab62a",
       "expected_entered_count": 0,
-      "expected_exited_count": 16
+      "expected_exited_count": 16,
+      "expected_step_events": [
+        {
+          "step_index": 0,
+          "op": "-",
+          "entered_count": 0,
+          "exited_count": 16
+        }
+      ]
     },
     {
       "case_id": "CASE_HAND_06_STEP2",
-      "name": "diamond_2step_delete_step2",
+      "case_name": "diamond_2step_delete_step2",
       "k": 1,
+      "lambda": 2,
       "is_negative": false,
       "expected_exit_code": 0,
       "expected_error_category": null,
       "required_engines": "both",
+      "query_vertices_count": 4,
+      "query_edges_count": 5,
+      "updates_count": 1,
+      "canonical_workload_sha256": "187a70a7655e4c7a8034142fda016c9e6c4e55436f5bf44fddcc806760f8a072",
       "expected_entered_count": 0,
-      "expected_exited_count": 8
+      "expected_exited_count": 8,
+      "expected_step_events": [
+        {
+          "step_index": 0,
+          "op": "-",
+          "entered_count": 0,
+          "exited_count": 8
+        }
+      ]
     },
     {
       "case_id": "CASE_HAND_07",
-      "name": "no_matching_label",
+      "case_name": "no_matching_label",
       "k": 0,
+      "lambda": 2,
       "is_negative": false,
       "expected_exit_code": 0,
       "expected_error_category": null,
       "required_engines": "both",
+      "query_vertices_count": 3,
+      "query_edges_count": 3,
+      "updates_count": 1,
+      "canonical_workload_sha256": "5af2dfaae47c0ee776c09e49e546eeaf3631e6d34de4acc8723d2b53cdd62383",
       "expected_entered_count": 0,
-      "expected_exited_count": 0
+      "expected_exited_count": 0,
+      "expected_step_events": [
+        {
+          "step_index": 0,
+          "op": "+",
+          "entered_count": 0,
+          "exited_count": 0
+        }
+      ]
     },
     {
       "case_id": "CASE_HAND_08",
-      "name": "non_induced_extra_chords",
+      "case_name": "non_induced_extra_chords",
       "k": 0,
+      "lambda": 2,
       "is_negative": false,
       "expected_exit_code": 0,
       "expected_error_category": null,
       "required_engines": "both",
+      "query_vertices_count": 4,
+      "query_edges_count": 4,
+      "updates_count": 1,
+      "canonical_workload_sha256": "ec20b77aebf3fca7e25f1055878d22bf4a3e70337d87349a1a90fa8edcec4dcd",
       "expected_entered_count": 8,
-      "expected_exited_count": 0
+      "expected_exited_count": 0,
+      "expected_step_events": [
+        {
+          "step_index": 0,
+          "op": "+",
+          "entered_count": 8,
+          "exited_count": 0
+        }
+      ]
     },
     {
       "case_id": "CASE_HAND_09",
-      "name": "edge_label_mismatch",
+      "case_name": "edge_label_mismatch",
       "k": 1,
+      "lambda": 2,
       "is_negative": false,
       "expected_exit_code": 0,
       "expected_error_category": null,
       "required_engines": "both",
+      "query_vertices_count": 3,
+      "query_edges_count": 3,
+      "updates_count": 1,
+      "canonical_workload_sha256": "ccd27a76f1ae6e2ddf11b39e7ac437ce792624ae85222a5b933bf5e01fb31beb",
       "expected_entered_count": 6,
-      "expected_exited_count": 0
+      "expected_exited_count": 0,
+      "expected_step_events": [
+        {
+          "step_index": 0,
+          "op": "+",
+          "entered_count": 6,
+          "exited_count": 0
+        }
+      ]
     },
     {
       "case_id": "CASE_HAND_10",
-      "name": "vertex_label_mismatch",
+      "case_name": "vertex_label_mismatch",
       "k": 0,
+      "lambda": 1,
       "is_negative": false,
       "expected_exit_code": 0,
       "expected_error_category": null,
       "required_engines": "both",
+      "query_vertices_count": 2,
+      "query_edges_count": 1,
+      "updates_count": 1,
+      "canonical_workload_sha256": "d417253ae536919175161cd9cc1e6c4f25518e0cc40a7a274e153789eb576a0e",
       "expected_entered_count": 0,
-      "expected_exited_count": 0
+      "expected_exited_count": 0,
+      "expected_step_events": [
+        {
+          "step_index": 0,
+          "op": "+",
+          "entered_count": 0,
+          "exited_count": 0
+        }
+      ]
     },
     {
       "case_id": "CASE_HAND_11",
-      "name": "int_vs_str_labels",
+      "case_name": "int_vs_str_labels",
       "k": 0,
+      "lambda": 1,
       "is_negative": false,
       "expected_exit_code": 0,
       "expected_error_category": null,
       "required_engines": "both",
+      "query_vertices_count": 2,
+      "query_edges_count": 1,
+      "updates_count": 1,
+      "canonical_workload_sha256": "ab324abd5883b450c0248014492bc53d76421b97a831c58c4bafa1ae08748ec7",
       "expected_entered_count": 0,
-      "expected_exited_count": 0
+      "expected_exited_count": 0,
+      "expected_step_events": [
+        {
+          "step_index": 0,
+          "op": "+",
+          "entered_count": 0,
+          "exited_count": 0
+        }
+      ]
     },
     {
       "case_id": "CASE_HAND_12",
-      "name": "sparse_negative_ids",
+      "case_name": "sparse_negative_ids",
       "k": 0,
+      "lambda": 2,
       "is_negative": false,
       "expected_exit_code": 0,
       "expected_error_category": null,
       "required_engines": "both",
+      "query_vertices_count": 3,
+      "query_edges_count": 3,
+      "updates_count": 1,
+      "canonical_workload_sha256": "1ce6ce47a4c148fa64ff3ff18a3a8ba54547c585b5b837a2ddd103e90a520539",
       "expected_entered_count": 6,
-      "expected_exited_count": 0
+      "expected_exited_count": 0,
+      "expected_step_events": [
+        {
+          "step_index": 0,
+          "op": "+",
+          "entered_count": 6,
+          "exited_count": 0
+        }
+      ]
     },
     {
       "case_id": "CASE_HAND_13",
-      "name": "canonical_tuple_order",
+      "case_name": "canonical_tuple_order",
       "k": 0,
+      "lambda": 2,
       "is_negative": false,
       "expected_exit_code": 0,
       "expected_error_category": null,
       "required_engines": "both",
+      "query_vertices_count": 4,
+      "query_edges_count": 4,
+      "updates_count": 1,
+      "canonical_workload_sha256": "528d6a9c29b94ecc7659683996a00234d7d1e17d28570fdcc0c15a13da8e4dba",
       "expected_entered_count": 1,
-      "expected_exited_count": 0
+      "expected_exited_count": 0,
+      "expected_step_events": [
+        {
+          "step_index": 0,
+          "op": "+",
+          "entered_count": 1,
+          "exited_count": 0
+        }
+      ]
     },
     {
       "case_id": "CASE_HAND_14",
-      "name": "uniform_k4_k0_automorphisms",
+      "case_name": "uniform_k4_k0_automorphisms",
       "k": 0,
+      "lambda": 3,
       "is_negative": false,
       "expected_exit_code": 0,
       "expected_error_category": null,
       "required_engines": "both",
+      "query_vertices_count": 4,
+      "query_edges_count": 6,
+      "updates_count": 1,
+      "canonical_workload_sha256": "4d621c06e92e4a5fddf645c8b7886b0428889ca579713efeea641510ced301e0",
       "expected_entered_count": 24,
-      "expected_exited_count": 0
+      "expected_exited_count": 0,
+      "expected_step_events": [
+        {
+          "step_index": 0,
+          "op": "+",
+          "entered_count": 24,
+          "exited_count": 0
+        }
+      ]
     },
     {
       "case_id": "CASE_HAND_15",
-      "name": "c4_k1_deferred_witness",
+      "case_name": "c4_k1_deferred_witness",
       "k": 1,
+      "lambda": 2,
       "is_negative": false,
       "expected_exit_code": 0,
       "expected_error_category": null,
       "required_engines": "both",
+      "query_vertices_count": 4,
+      "query_edges_count": 4,
+      "updates_count": 1,
+      "canonical_workload_sha256": "6a7d71421a38f77357c3ff6fd480c64c5d6393a7d727d51891e2645df9cc83c4",
       "expected_entered_count": 8,
-      "expected_exited_count": 0
+      "expected_exited_count": 0,
+      "expected_step_events": [
+        {
+          "step_index": 0,
+          "op": "+",
+          "entered_count": 8,
+          "exited_count": 0
+        }
+      ]
     },
     {
       "case_id": "CASE_HAND_16",
-      "name": "missing_commitment_violation",
+      "case_name": "missing_commitment_violation",
       "k": 1,
+      "lambda": 2,
       "is_negative": false,
       "expected_exit_code": 0,
       "expected_error_category": null,
       "required_engines": "both",
+      "query_vertices_count": 4,
+      "query_edges_count": 5,
+      "updates_count": 1,
+      "canonical_workload_sha256": "b3b685610681033551a5eb4bc616c73eb8af94d045260c1cac13949cff98b868",
       "expected_entered_count": 16,
-      "expected_exited_count": 0
+      "expected_exited_count": 0,
+      "expected_step_events": [
+        {
+          "step_index": 0,
+          "op": "+",
+          "entered_count": 16,
+          "exited_count": 0
+        }
+      ]
     },
     {
       "case_id": "CASE_HAND_17",
-      "name": "no_double_charging",
+      "case_name": "no_double_charging",
       "k": 0,
+      "lambda": 2,
       "is_negative": false,
       "expected_exit_code": 0,
       "expected_error_category": null,
       "required_engines": "both",
+      "query_vertices_count": 3,
+      "query_edges_count": 3,
+      "updates_count": 1,
+      "canonical_workload_sha256": "2594625eea84a5e5004357b1ebc8156e56e54048feb406d9b74ba3e3a58d1cb5",
       "expected_entered_count": 6,
-      "expected_exited_count": 0
+      "expected_exited_count": 0,
+      "expected_step_events": [
+        {
+          "step_index": 0,
+          "op": "+",
+          "entered_count": 6,
+          "exited_count": 0
+        }
+      ]
     },
     {
       "case_id": "CASE_HAND_18",
-      "name": "rollback_isolation",
+      "case_name": "rollback_isolation",
       "k": 0,
+      "lambda": 2,
       "is_negative": false,
       "expected_exit_code": 0,
       "expected_error_category": null,
       "required_engines": "both",
+      "query_vertices_count": 4,
+      "query_edges_count": 4,
+      "updates_count": 1,
+      "canonical_workload_sha256": "34ad5aa213a5a996a97fc2d4d4eae33be3907d552f4070590b39afbf35fc6cd7",
       "expected_entered_count": 8,
-      "expected_exited_count": 0
+      "expected_exited_count": 0,
+      "expected_step_events": [
+        {
+          "step_index": 0,
+          "op": "+",
+          "entered_count": 8,
+          "exited_count": 0
+        }
+      ]
     },
     {
       "case_id": "CASE_HAND_19",
-      "name": "reversed_endpoints",
+      "case_name": "reversed_endpoints",
       "k": 0,
+      "lambda": 2,
       "is_negative": false,
       "expected_exit_code": 0,
       "expected_error_category": null,
       "required_engines": "both",
-      "expected_entered_count": 0,
-      "expected_exited_count": 0
+      "query_vertices_count": 4,
+      "query_edges_count": 5,
+      "updates_count": 1,
+      "canonical_workload_sha256": "f4d56f371ef301024ce81fa766f769d3bf7fc1555c95b04ca4a75f8b4649c4d4",
+      "expected_entered_count": 4,
+      "expected_exited_count": 0,
+      "expected_step_events": [
+        {
+          "step_index": 0,
+          "op": "+",
+          "entered_count": 4,
+          "exited_count": 0
+        }
+      ]
     },
     {
       "case_id": "CASE_HAND_20",
-      "name": "caller_mutation_isolation",
+      "case_name": "caller_mutation_isolation",
       "k": 0,
+      "lambda": 2,
       "is_negative": false,
       "expected_exit_code": 0,
       "expected_error_category": null,
       "required_engines": "both",
-      "expected_entered_count": 0,
-      "expected_exited_count": 0
+      "query_vertices_count": 3,
+      "query_edges_count": 3,
+      "updates_count": 3,
+      "canonical_workload_sha256": "47bb51882fdbb6dfaf50eb42107665d318836d9a2646080ce4f3b345fe120429",
+      "expected_entered_count": 6,
+      "expected_exited_count": 12,
+      "expected_step_events": [
+        {
+          "step_index": 0,
+          "op": "-",
+          "entered_count": 0,
+          "exited_count": 6
+        },
+        {
+          "step_index": 1,
+          "op": "+",
+          "entered_count": 6,
+          "exited_count": 0
+        },
+        {
+          "step_index": 2,
+          "op": "-",
+          "entered_count": 0,
+          "exited_count": 6
+        }
+      ]
     },
     {
       "case_id": "CASE_HAND_21",
-      "name": "invalid_k_domain",
+      "case_name": "invalid_k_domain",
       "k": 1,
+      "lambda": 1,
       "is_negative": true,
       "expected_exit_code": 3,
       "expected_error_category": "DOMAIN_ERROR",
       "required_engines": "both",
+      "query_vertices_count": 4,
+      "query_edges_count": 3,
+      "updates_count": 1,
+      "canonical_workload_sha256": "38a3df0d01db725f30949ea27169039b316f98c19f0b6d575b505ebc8dc8490d",
       "expected_entered_count": 0,
-      "expected_exited_count": 0
+      "expected_exited_count": 0,
+      "expected_step_events": []
     },
     {
       "case_id": "CASE_HAND_22",
-      "name": "invalid_update_rollback",
+      "case_name": "invalid_update_rollback",
       "k": 0,
+      "lambda": 1,
       "is_negative": true,
       "expected_exit_code": 6,
       "expected_error_category": "PREVALIDATION_ERROR",
       "required_engines": "both",
+      "query_vertices_count": 2,
+      "query_edges_count": 1,
+      "updates_count": 1,
+      "canonical_workload_sha256": "db07600552817c34f2ccb20310d76558415de0c3b70e05f67d6c49fa81e3fd00",
       "expected_entered_count": 0,
-      "expected_exited_count": 0
+      "expected_exited_count": 0,
+      "expected_step_events": []
     },
     {
       "case_id": "CASE_HAND_23",
-      "name": "query_size_5_k5_minus_edge",
+      "case_name": "query_size_5_k5_minus_edge",
       "k": 1,
+      "lambda": 3,
       "is_negative": false,
       "expected_exit_code": 0,
       "expected_error_category": null,
       "required_engines": "both",
+      "query_vertices_count": 5,
+      "query_edges_count": 9,
+      "updates_count": 1,
+      "canonical_workload_sha256": "f36179dd1276922814c5465921b26a3cf6ffa2c3bd70c94c3352d61f8ef03a52",
       "expected_entered_count": 96,
-      "expected_exited_count": 0
+      "expected_exited_count": 0,
+      "expected_step_events": [
+        {
+          "step_index": 0,
+          "op": "+",
+          "entered_count": 96,
+          "exited_count": 0
+        }
+      ]
     },
     {
       "case_id": "CASE_HAND_24_Q6",
-      "name": "c6_cycle_size_6",
+      "case_name": "c6_cycle_size_6",
       "k": 1,
+      "lambda": 2,
       "is_negative": false,
       "expected_exit_code": 0,
       "expected_error_category": null,
       "required_engines": "both",
+      "query_vertices_count": 6,
+      "query_edges_count": 6,
+      "updates_count": 1,
+      "canonical_workload_sha256": "0a03f6d7a8cc43bed0f524e1668b0cfa62aa76140722205b2f95029e7fc20196",
       "expected_entered_count": 12,
-      "expected_exited_count": 0
+      "expected_exited_count": 0,
+      "expected_step_events": [
+        {
+          "step_index": 0,
+          "op": "+",
+          "entered_count": 12,
+          "exited_count": 0
+        }
+      ]
     }
   ]
 }

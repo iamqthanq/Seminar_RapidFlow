@@ -172,8 +172,12 @@ def check_git_provenance() -> Tuple[Dict[str, Any], bool]:
                     allowed = False
                     break
                 fpath = parts[1].strip()
-                # Only execution reports under reports/rapidflow_apx_engines/ are allowed during runs
-                if not (fpath.startswith("reports/rapidflow_apx_engines/") or fpath.startswith("reports\\rapidflow_apx_engines\\")):
+                # Only execution reports under reports/rapidflow_apx_engines/ and the validation report are allowed during runs
+                if not (
+                    fpath.startswith("reports/rapidflow_apx_engines/")
+                    or fpath.startswith("reports\\rapidflow_apx_engines\\")
+                    or fpath == "docs/rapidflow_apx_native_engines_validation_report.md"
+                ):
                     allowed = False
                     break
             if allowed:
@@ -340,12 +344,18 @@ def validate_micro_workload_bounds(workload: Dict[str, Any]) -> Tuple[bool, str]
     return True, ""
 
 
+def compute_canonical_workload_sha256(workload: Dict[str, Any]) -> str:
+    """Computes stable cryptographic SHA-256 hash of a workload dictionary (P3-R4-F04)."""
+    canonical_bytes = json.dumps(workload, sort_keys=True).encode("utf-8")
+    return hashlib.sha256(canonical_bytes).hexdigest()
+
+
 def validate_required_hand_cases(
     workloads: List[Dict[str, Any]],
     registry_path: Path = REQUIRED_HAND_CASES_PATH,
 ) -> Tuple[bool, str]:
-    """Validates that hand and witness workloads strictly match the immutable required registry (P3-R3-F03).
-    Ensures exact set match, prevents self-authorizing denominators or dropped cases."""
+    """Validates that hand and witness workloads strictly match the immutable required registry (P3-R3-F03, P3-R4-F04).
+    Ensures exact set match, canonical input content hashes, and prevents self-authorizing denominators or dropped cases."""
     if not registry_path.is_file():
         return False, f"Required hand cases registry not found: {registry_path}"
 
@@ -357,6 +367,9 @@ def validate_required_hand_cases(
 
     if not isinstance(reg, dict):
         return False, "Required hand cases registry is not an object"
+
+    if reg.get("registry_version") not in ("1.0.0", "1.0", "2.0.0"):
+        return False, f"Registry version mismatch: {reg.get('registry_version')}"
 
     if reg.get("total_required_cases") != 25:
         return False, f"Registry total_required_cases mismatch: {reg.get('total_required_cases')} (expected 25)"
@@ -393,8 +406,34 @@ def validate_required_hand_cases(
     for w in workloads:
         cid = w["case_id"]
         req = reg_map[cid]
+        c_name = req.get("case_name") or req.get("name")
+        if w.get("name") != c_name:
+            return False, f"Case {cid} name mismatch: obs='{w.get('name')}' vs exp='{c_name}'"
         if w.get("k") != req.get("k"):
             return False, f"Case {cid} threshold k mismatch: obs={w.get('k')} vs exp={req.get('k')}"
+        if "query_vertices_count" in req:
+            exp_qv = req["query_vertices_count"]
+            obs_qv = len(w.get("query", {}).get("vertices", []))
+            if obs_qv != exp_qv:
+                return False, f"Case {cid} query vertices count mismatch: obs={obs_qv} vs exp={exp_qv}"
+        if "query_edges_count" in req:
+            exp_qe = req["query_edges_count"]
+            obs_qe = len(w.get("query", {}).get("edges", []))
+            if obs_qe != exp_qe:
+                return False, f"Case {cid} query edges count mismatch: obs={obs_qe} vs exp={exp_qe}"
+        if "updates_count" in req:
+            exp_upd = req["updates_count"]
+            obs_upd = len(w.get("updates", []))
+            if obs_upd != exp_upd:
+                return False, f"Case {cid} updates count mismatch: obs={obs_upd} vs exp={exp_upd}"
+
+        # Cryptographic content locking (P3-R4-F04)
+        if "canonical_workload_sha256" in req:
+            exp_w_sha = req["canonical_workload_sha256"]
+            obs_w_sha = compute_canonical_workload_sha256(w)
+            if obs_w_sha != exp_w_sha:
+                return False, f"Case {cid} canonical workload SHA-256 mismatch: obs={obs_w_sha} vs locked={exp_w_sha}"
+
         is_neg = w.get("expected_error", False)
         if is_neg != req.get("is_negative"):
             return False, f"Case {cid} is_negative mismatch: obs={is_neg} vs exp={req.get('is_negative')}"
@@ -408,8 +447,8 @@ def validate_required_hand_cases(
 
 
 def validate_stream_lock_registry(lock_path: Path = STREAM_56_LOCK_PATH) -> Tuple[bool, str]:
-    """Validates the complete integrity of the stream 56 lock registry (P3-R3-F05).
-    Verifies cardinality (56), uniqueness (no duplicates), metadata fields, exact canonical set, and global consistency sums."""
+    """Validates the complete integrity of the stream 56 lock registry (P3-R3-F05, P3-R4-F05).
+    Verifies cardinality (56), uniqueness (no duplicates), metadata fields, exact canonical matrix identity relations, and global consistency sums."""
     if not lock_path.is_file():
         return False, f"Stream lock registry file not found: {lock_path}"
 
@@ -445,8 +484,29 @@ def validate_stream_lock_registry(lock_path: Path = STREAM_56_LOCK_PATH) -> Tupl
     if len(set(stream_ids)) != 56:
         return False, f"Lock registry contains duplicate case_ids: unique={len(set(stream_ids))} vs total=56"
 
-    matrix_seeds = {20261118, 20261119, 20261120, 20261121, 20261122, 20261123, 20261124, 20261125}
-    valid_qtypes = {"C4": 2, "Diamond": 2, "K4": 3}
+    matrix_seeds_list = [20261118, 20261119, 20261120, 20261121, 20261122, 20261123, 20261124, 20261125]
+    matrix_seeds = set(matrix_seeds_list)
+    valid_configs = {
+        ("C4", 0): 2,
+        ("C4", 1): 2,
+        ("Diamond", 0): 2,
+        ("Diamond", 1): 2,
+        ("K4", 0): 3,
+        ("K4", 1): 3,
+        ("K4", 2): 3,
+    }
+
+    # Strict canonical matrix identity relation check (P3-R4-F05)
+    expected_stream_ids = set()
+    for (qt, qk) in valid_configs.keys():
+        for s_idx, s_val in enumerate(matrix_seeds_list):
+            l_mode = "uniform" if s_idx < 4 else "mixed"
+            expected_stream_ids.add(f"stream_{qt}_k{qk}_{s_val}_{l_mode}")
+
+    if set(stream_ids) != expected_stream_ids:
+        missing_ids = expected_stream_ids - set(stream_ids)
+        extra_ids = set(stream_ids) - expected_stream_ids
+        return False, f"Stream IDs set mismatch with canonical matrix specification: missing={missing_ids}, extra={extra_ids}"
 
     sum_updates = 0
     sum_entered = 0
@@ -457,20 +517,26 @@ def validate_stream_lock_registry(lock_path: Path = STREAM_56_LOCK_PATH) -> Tupl
         if not isinstance(cid, str) or not cid:
             return False, f"Stream {idx} invalid case_id: {cid}"
         q_type = s.get("q_type")
-        if q_type not in valid_qtypes:
-            return False, f"Stream {cid} invalid q_type: {q_type}"
         k = s.get("k")
-        if type(k) is not int or k < 0:
-            return False, f"Stream {cid} invalid k: {k}"
+        if (q_type, k) not in valid_configs:
+            return False, f"Stream {cid} invalid (q_type, k) configuration: ({q_type}, {k})"
         seed = s.get("seed")
         if seed not in matrix_seeds:
             return False, f"Stream {cid} unknown seed: {seed}"
+        seed_idx = matrix_seeds_list.index(seed)
+        exp_label_mode = "uniform" if seed_idx < 4 else "mixed"
         label_mode = s.get("label_mode")
-        if label_mode not in ("uniform", "mixed"):
-            return False, f"Stream {cid} invalid label_mode: {label_mode}"
+        if label_mode != exp_label_mode:
+            return False, f"Stream {cid} label_mode mismatch: obs='{label_mode}' vs exp='{exp_label_mode}'"
+        exp_cid = f"stream_{q_type}_k{k}_{seed}_{label_mode}"
+        if cid != exp_cid:
+            return False, f"Stream {cid} case_id mismatch with metadata: obs='{cid}' vs exp='{exp_cid}'"
         lam = s.get("lambda")
-        if lam != valid_qtypes[q_type]:
-            return False, f"Stream {cid} lambda mismatch: obs={lam} vs exp={valid_qtypes[q_type]}"
+        exp_lam = valid_configs[(q_type, k)]
+        if lam != exp_lam:
+            return False, f"Stream {cid} lambda mismatch: obs={lam} vs exp={exp_lam}"
+        if k >= lam:
+            return False, f"Stream {cid} violates Domain D-R: k={k} >= lambda={lam}"
         upd_cnt = s.get("update_count")
         if upd_cnt != 12:
             return False, f"Stream {cid} update_count mismatch: {upd_cnt} != 12"
@@ -535,7 +601,7 @@ def validate_graph_state(
         if not isinstance(v_obj, dict):
             return False, f"[{case_id}:{engine}:s{step_index}] vertex item is not a dict: {v_obj}"
         vid = v_obj.get("id")
-        if type(vid) is not int or vid < -9223372036854775808 or vid > 9223372036854775807:
+        if type(vid) is not int or isinstance(vid, bool) or vid < -9223372036854775808 or vid > 9223372036854775807:
             return False, f"[{case_id}:{engine}:s{step_index}] invalid vertex id: {vid} (type={type(vid)})"
         if vid in obs_v_map:
             return False, f"[{case_id}:{engine}:s{step_index}] duplicate vertex id in graph_state: {vid}"
@@ -547,12 +613,12 @@ def validate_graph_state(
             return False, f"[{case_id}:{engine}:s{step_index}] expected vertex {exp_vid} missing from observed vertices"
         v_obj = obs_v_map[exp_vid]
         obs_lbl = v_obj.get("label")
-        if type(obs_lbl) is not type(exp_lbl) or obs_lbl != exp_lbl:
+        if type(obs_lbl) is not type(exp_lbl) or (isinstance(obs_lbl, bool) != isinstance(exp_lbl, bool)) or obs_lbl != exp_lbl:
             return False, f"[{case_id}:{engine}:s{step_index}] vertex {exp_vid} label mismatch: obs={obs_lbl} ({type(obs_lbl)}) vs exp={exp_lbl} ({type(exp_lbl)})"
         exp_nbrs = set(expected_graph.adj.get(exp_vid, {}).keys())
         exp_deg = len(exp_nbrs)
         obs_deg = v_obj.get("degree")
-        if type(obs_deg) is not int or obs_deg < 0:
+        if type(obs_deg) is not int or isinstance(obs_deg, bool) or obs_deg < 0:
             return False, f"[{case_id}:{engine}:s{step_index}] vertex {exp_vid} degree is not non-negative int: {obs_deg} (type={type(obs_deg)})"
         if obs_deg != exp_deg:
             return False, f"[{case_id}:{engine}:s{step_index}] vertex {exp_vid} degree mismatch: obs={obs_deg} vs exp={exp_deg}"
@@ -569,10 +635,12 @@ def validate_graph_state(
         u = e_obj.get("u")
         v = e_obj.get("v")
         lbl = e_obj.get("label")
-        if type(u) is not int or type(v) is not int or u < -9223372036854775808 or u > 9223372036854775807 or v < -9223372036854775808 or v > 9223372036854775807:
+        if type(u) is not int or type(v) is not int or isinstance(u, bool) or isinstance(v, bool) or u < -9223372036854775808 or u > 9223372036854775807 or v < -9223372036854775808 or v > 9223372036854775807:
             return False, f"[{case_id}:{engine}:s{step_index}] invalid edge endpoints: u={u} (type={type(u)}), v={v} (type={type(v)})"
         if u == v:
             return False, f"[{case_id}:{engine}:s{step_index}] self-loop in observed edges: ({u}, {v})"
+        if type(lbl) is int and isinstance(lbl, bool):
+            return False, f"[{case_id}:{engine}:s{step_index}] edge label is boolean: {lbl}"
         canonical_edge = (min(u, v), max(u, v), lbl, type(lbl))
         if canonical_edge in obs_edge_set:
             return False, f"[{case_id}:{engine}:s{step_index}] duplicate edge in observed edges: {canonical_edge}"
@@ -583,10 +651,17 @@ def validate_graph_state(
         if can_exp not in obs_edge_set:
             return False, f"[{case_id}:{engine}:s{step_index}] expected edge {can_exp} missing from observed edges"
 
-    # Check neighbors
+    # Check neighbors (P3-R4-F06: exact equality of neighbor keys set, int64 range, no extra vertices)
     obs_neighbors = observed.get("neighbors")
     if not isinstance(obs_neighbors, dict):
         return False, f"[{case_id}:{engine}:s{step_index}] neighbors is not a dict: {type(obs_neighbors)}"
+
+    exp_nbr_keys = {str(vid) for vid in expected_graph.vertices}
+    obs_nbr_keys = set(obs_neighbors.keys())
+    if obs_nbr_keys != exp_nbr_keys:
+        extra_keys = obs_nbr_keys - exp_nbr_keys
+        missing_keys = exp_nbr_keys - obs_nbr_keys
+        return False, f"[{case_id}:{engine}:s{step_index}] neighbor keys mismatch with graph vertices: extra={extra_keys}, missing={missing_keys}"
 
     for k_str, obs_nbr_list in obs_neighbors.items():
         if not isinstance(k_str, str):
@@ -597,10 +672,12 @@ def validate_graph_state(
             return False, f"[{case_id}:{engine}:s{step_index}] neighbor key not an integer string: {k_str}"
         if str(k_int) != k_str:
             return False, f"[{case_id}:{engine}:s{step_index}] neighbor key round-trip failed: '{k_str}' vs '{str(k_int)}'"
+        if k_int < -9223372036854775808 or k_int > 9223372036854775807:
+            return False, f"[{case_id}:{engine}:s{step_index}] neighbor key out of int64 range: {k_int}"
         if not isinstance(obs_nbr_list, list):
             return False, f"[{case_id}:{engine}:s{step_index}] neighbor list for {k_str} is not a list"
         for nid in obs_nbr_list:
-            if type(nid) is not int or nid < -9223372036854775808 or nid > 9223372036854775807:
+            if type(nid) is not int or isinstance(nid, bool) or nid < -9223372036854775808 or nid > 9223372036854775807:
                 return False, f"[{case_id}:{engine}:s{step_index}] neighbor ID is not int64: {nid} (type={type(nid)})"
             if nid == k_int:
                 return False, f"[{case_id}:{engine}:s{step_index}] self-loop neighbor detected for {k_str}"
@@ -722,16 +799,25 @@ def validate_native_output_schema(
     if not isinstance(res_data, dict):
         return False, "Output JSON root is not an object"
 
-    # 1. Identity & Versions
-    if res_data.get("schema_version") != "1.1.0":
-        return False, f"Invalid schema_version: {res_data.get('schema_version')} (expected '1.1.0')"
-    if res_data.get("semantics_version") != "D-R-1.0":
-        return False, f"Invalid semantics_version: {res_data.get('semantics_version')} (expected 'D-R-1.0')"
+    # 1. Identity & Versions (P3-R4-F01)
+    if "schema_version" not in res_data:
+        return False, "Missing required field 'schema_version' in native output"
+    if type(res_data["schema_version"]) is not str or res_data["schema_version"] != "1.1.0":
+        return False, f"Invalid schema_version: {res_data.get('schema_version')} (expected string '1.1.0')"
 
-    if res_data.get("engine_name") != expected_engine or res_data.get("engine") != expected_engine:
+    if "semantics_version" not in res_data:
+        return False, "Missing required field 'semantics_version' in native output"
+    if type(res_data["semantics_version"]) is not str or res_data["semantics_version"] != "D-R-1.0":
+        return False, f"Invalid semantics_version: {res_data.get('semantics_version')} (expected string 'D-R-1.0')"
+
+    if "engine_name" not in res_data or type(res_data["engine_name"]) is not str:
+        return False, f"Missing or invalid engine_name: {res_data.get('engine_name')}"
+    if res_data["engine_name"] != expected_engine or res_data.get("engine") != expected_engine:
         return False, f"Engine mismatch: {res_data.get('engine_name')} != {expected_engine}"
 
-    obs_case_id = res_data.get("case_id")
+    if "case_id" not in res_data or type(res_data["case_id"]) is not str:
+        return False, f"Missing or invalid case_id: {res_data.get('case_id')}"
+    obs_case_id = res_data["case_id"]
     if is_success:
         if obs_case_id != expected_case_id:
             return False, f"Case ID mismatch on SUCCESS: obs={obs_case_id} vs exp={expected_case_id}"
@@ -739,19 +825,23 @@ def validate_native_output_schema(
         if expected_case_id and obs_case_id not in (expected_case_id, "UNKNOWN"):
             return False, f"Case ID mismatch on failure: obs={obs_case_id} vs exp={expected_case_id}"
 
+    if "raw_input_sha256" not in res_data or type(res_data["raw_input_sha256"]) is not str:
+        return False, "Missing or invalid 'raw_input_sha256' in native output"
     if raw_input_path and raw_input_path.is_file():
         exp_sha = compute_sha256(raw_input_path)
         obs_sha = res_data.get("raw_input_sha256")
         if obs_sha != exp_sha:
             return False, f"raw_input_sha256 mismatch: obs={obs_sha} vs exp={exp_sha}"
 
-    # 2. Execution Lifecycle Invariants
+    # 2. Execution Lifecycle Invariants (P3-R4-F02)
     exec_info = res_data.get("execution")
     if not isinstance(exec_info, dict):
         return False, "Missing or invalid 'execution' summary object"
     for ef in ["total_steps", "attempted_steps", "completed_steps", "failed_steps", "unattempted_steps"]:
+        if ef not in exec_info:
+            return False, f"Execution summary missing required field '{ef}'"
         val = exec_info.get(ef)
-        if type(val) is not int or val < 0:
+        if type(val) is not int or isinstance(val, bool) or val < 0:
             return False, f"Execution summary field '{ef}' missing or not non-negative integer: {val} (type={type(val)})"
 
     total_steps = exec_info["total_steps"]
@@ -770,25 +860,31 @@ def validate_native_output_schema(
         if total_steps != exp_total:
             return False, f"Execution total_steps mismatch: obs={total_steps} vs exp={exp_total}"
 
+    root_status = res_data.get("status")
+    if type(root_status) is not str:
+        return False, f"Root status is not string: {root_status}"
+
     if is_success:
-        if res_data.get("status") != "SUCCESS":
-            return False, f"Expected root status SUCCESS, got: {res_data.get('status')}"
+        if root_status != "SUCCESS":
+            return False, f"Expected root status SUCCESS, got: {root_status}"
         if res_data.get("error_category") != "NONE":
             return False, f"Expected error_category NONE on SUCCESS, got: {res_data.get('error_category')}"
-        if completed_steps != total_steps or failed_steps != 0 or unattempted_steps != 0:
-            return False, f"Inconsistent execution lifecycle on SUCCESS: completed={completed_steps}, failed={failed_steps}, unattempted={unattempted_steps}, total={total_steps}"
+        if completed_steps != total_steps or failed_steps != 0 or unattempted_steps != 0 or attempted_steps != total_steps:
+            return False, f"Inconsistent execution lifecycle on SUCCESS: completed={completed_steps}, failed={failed_steps}, unattempted={unattempted_steps}, attempted={attempted_steps}, total={total_steps}"
     else:
-        if res_data.get("status") == "SUCCESS":
+        if root_status == "SUCCESS":
             return False, "Expected failing status, got SUCCESS"
         if res_data.get("error_category") in (None, "", "NONE"):
             return False, f"Expected non-NONE error_category on failure, got: {res_data.get('error_category')}"
+        if attempted_steps > 0 and failed_steps == 0:
+            return False, f"Failing execution with attempted_steps={attempted_steps} must have failed_steps > 0"
 
-    # 3. Steps Array Structural Integrity
+    # 3. Steps Array Structural Integrity & Strict Typing (P3-R4-F02, P3-R4-F06)
     steps = res_data.get("steps")
     if not isinstance(steps, list):
         return False, "Missing or invalid 'steps' array"
     if is_success:
-        if total_steps > 0 and len(steps) != total_steps:
+        if len(steps) != total_steps:
             return False, f"Steps array length mismatch on SUCCESS: obs={len(steps)} vs total_steps={total_steps}"
     else:
         if attempted_steps > 0 and len(steps) != total_steps:
@@ -798,34 +894,81 @@ def validate_native_output_schema(
     for s_idx, step in enumerate(steps):
         if not isinstance(step, dict):
             return False, f"Step item {s_idx} is not an object: {step}"
-        if step.get("step_index") != s_idx:
-            return False, f"Step item {s_idx} has mismatched step_index: {step.get('step_index')}"
+        s_step_index = step.get("step_index")
+        if type(s_step_index) is not int or isinstance(s_step_index, bool) or s_step_index != s_idx:
+            return False, f"Step item {s_idx} has mismatched or non-integer step_index: {s_step_index} (type={type(s_step_index)})"
 
         step_stat = step.get("status")
         commit_stat = step.get("commit_status")
+        err_cat = step.get("error_category")
 
-        if step_stat == "SUCCESS":
+        if is_success:
+            if step_stat != "SUCCESS":
+                return False, f"Root status is SUCCESS but step {s_idx} status is not SUCCESS: {step_stat}"
             if commit_stat != "COMMITTED":
-                return False, f"Step {s_idx} status SUCCESS must have commit_status COMMITTED, got: {commit_stat}"
-            if step.get("error_category") != "NONE":
-                return False, f"Step {s_idx} status SUCCESS must have error_category NONE, got: {step.get('error_category')}"
-            if s_idx < len(workload_updates):
-                upd = workload_updates[s_idx]
-                exp_op = "+" if upd.get("op") in ("+", "INSERT", "INS") else "-"
-                if step.get("op") != exp_op:
-                    return False, f"Step {s_idx} operation mismatch: obs={step.get('op')} vs exp={exp_op}"
-                if step.get("u") != upd.get("u") or step.get("v") != upd.get("v"):
-                    return False, f"Step {s_idx} endpoint mismatch: obs=({step.get('u')}, {step.get('v')}) vs exp=({upd.get('u')}, {upd.get('v')})"
-                if step.get("label") != upd.get("label"):
-                    return False, f"Step {s_idx} label mismatch: obs={step.get('label')} vs exp={upd.get('label')}"
-        elif step_stat == "UNATTEMPTED":
-            if commit_stat != "NOT_COMMITTED":
-                return False, f"Step {s_idx} status UNATTEMPTED must have commit_status NOT_COMMITTED, got: {commit_stat}"
+                return False, f"Root status is SUCCESS but step {s_idx} commit_status is not COMMITTED: {commit_stat}"
+            if err_cat != "NONE":
+                return False, f"Root status is SUCCESS but step {s_idx} error_category is not NONE: {err_cat}"
         else:
-            if commit_stat != "NOT_COMMITTED":
-                return False, f"Failed step {s_idx} must have commit_status NOT_COMMITTED, got: {commit_stat}"
-            if step.get("error_category") in (None, "", "NONE"):
-                return False, f"Failed step {s_idx} missing error_category: {step.get('error_category')}"
+            if s_idx < completed_steps:
+                if step_stat != "SUCCESS":
+                    return False, f"Prior step {s_idx} before failure must have status SUCCESS: {step_stat}"
+                if commit_stat != "COMMITTED":
+                    return False, f"Prior step {s_idx} before failure must have commit_status COMMITTED: {commit_stat}"
+            elif s_idx == completed_steps:
+                if step_stat == "SUCCESS":
+                    return False, f"Failing step {s_idx} must not have status SUCCESS"
+                if commit_stat != "NOT_COMMITTED":
+                    return False, f"Failing step {s_idx} must have commit_status NOT_COMMITTED: {commit_stat}"
+                if err_cat in (None, "", "NONE"):
+                    return False, f"Failing step {s_idx} missing error_category: {err_cat}"
+            else:
+                if step_stat != "UNATTEMPTED":
+                    return False, f"Future step {s_idx} after failure must have status UNATTEMPTED: {step_stat}"
+                if commit_stat != "NOT_COMMITTED":
+                    return False, f"Future step {s_idx} after failure must have commit_status NOT_COMMITTED: {commit_stat}"
+
+        if s_idx < len(workload_updates) and step_stat != "UNATTEMPTED":
+            upd = workload_updates[s_idx]
+            exp_op = "+" if upd.get("op") in ("+", "INSERT", "INS") else "-"
+            if step.get("op") != exp_op:
+                return False, f"Step {s_idx} operation mismatch: obs={step.get('op')} vs exp={exp_op}"
+            u_val = step.get("u")
+            v_val = step.get("v")
+            if type(u_val) is not int or isinstance(u_val, bool) or u_val < -9223372036854775808 or u_val > 9223372036854775807:
+                return False, f"Step {s_idx} endpoint u not signed int64: {u_val} (type={type(u_val)})"
+            if type(v_val) is not int or isinstance(v_val, bool) or v_val < -9223372036854775808 or v_val > 9223372036854775807:
+                return False, f"Step {s_idx} endpoint v not signed int64: {v_val} (type={type(v_val)})"
+            if u_val != upd.get("u") or v_val != upd.get("v"):
+                return False, f"Step {s_idx} endpoint mismatch: obs=({u_val}, {v_val}) vs exp=({upd.get('u')}, {upd.get('v')})"
+
+            obs_lbl = step.get("label")
+            exp_lbl = upd.get("label")
+            if type(obs_lbl) is not type(exp_lbl) or (isinstance(obs_lbl, bool) != isinstance(exp_lbl, bool)) or obs_lbl != exp_lbl:
+                return False, f"Step {s_idx} label mismatch: obs={obs_lbl} ({type(obs_lbl)}) vs exp={exp_lbl} ({type(exp_lbl)})"
+
+        # Event tuples strict validation (P3-R4-F02, P3-R4-F06)
+        for event_type in ["entered_tuples", "exited_tuples"]:
+            t_list = step.get(event_type)
+            if not isinstance(t_list, list):
+                return False, f"Step {s_idx} '{event_type}' is not a list: {type(t_list)}"
+            seen_tuples = set()
+            for t_idx, tup in enumerate(t_list):
+                if not isinstance(tup, list):
+                    return False, f"Step {s_idx} {event_type}[{t_idx}] is not a list: {tup}"
+                if workload and "query" in workload:
+                    exp_q_len = len(workload["query"].get("vertices", []))
+                    if len(tup) != exp_q_len:
+                        return False, f"Step {s_idx} {event_type}[{t_idx}] length mismatch: {len(tup)} != |V(Q)| ({exp_q_len})"
+                for el_idx, el in enumerate(tup):
+                    if type(el) is not int or isinstance(el, bool) or el < -9223372036854775808 or el > 9223372036854775807:
+                        return False, f"Step {s_idx} {event_type}[{t_idx}][{el_idx}] not signed int64: {el} (type={type(el)})"
+                if len(set(tup)) != len(tup):
+                    return False, f"Step {s_idx} {event_type}[{t_idx}] non-injective (duplicate vertex in tuple): {tup}"
+                t_tuple = tuple(tup)
+                if t_tuple in seen_tuples:
+                    return False, f"Step {s_idx} duplicate tuple in {event_type}: {tup}"
+                seen_tuples.add(t_tuple)
 
     # 4. Query Metadata & Independent Cut Oracle (P3-R3-F01)
     if is_success and workload and "query" in workload:
@@ -928,33 +1071,46 @@ def run_workload_on_binary(
 
         res_data: Dict[str, Any] = {}
         output_file_exists = os.path.exists(of.name)
+        json_parse_ok = False
         if not timed_out and output_file_exists and os.path.getsize(of.name) > 0:
             try:
                 with open(of.name, "r", encoding="utf-8") as rf:
                     res_data = json.load(rf)
+                json_parse_ok = isinstance(res_data, dict)
             except Exception as e:
                 res_data = {"status": "ERROR", "error_category": "JSON_PARSE_ERROR", "error_message": f"Output parse error: {e}"}
+                json_parse_ok = False
 
-        if not res_data:
+        if not res_data or not json_parse_ok:
             status = "TIMEOUT" if timed_out else "EXEC_ERROR"
-            cat = "TIMEOUT" if timed_out else "SUBPROCESS_ERROR"
+            cat = "TIMEOUT" if timed_out else ("JSON_PARSE_ERROR" if output_file_exists and not json_parse_ok else "SUBPROCESS_ERROR")
             res_data = {"status": status, "error_category": cat, "error_message": err or out}
 
         res_data["exit_code"] = ret
 
-        # Validate schema on both success and failure (P3-R3-F01, P3-R3-F04)
+        # Validate schema on both success and failure (P3-R3-F01, P3-R3-F04, P3-R4-F01, P3-R4-F03)
         is_success_run = (ret == 0 and not timed_out and res_data.get("status") == "SUCCESS")
         schema_ok = True
-        if not timed_out and isinstance(res_data, dict) and "schema_version" in res_data:
+        schema_diag = ""
+
+        if not timed_out and json_parse_ok:
             s_ok, s_diag = validate_native_output_schema(
                 res_data, engine, workload.get("case_id", ""), wf_path, workload=workload, is_success=is_success_run
             )
             if not s_ok:
                 schema_ok = False
+                schema_diag = s_diag
                 res_data["schema_error"] = s_diag
                 if is_success_run:
                     res_data["status"] = "SCHEMA_ERROR"
                     res_data["error_message"] = s_diag
+        else:
+            schema_ok = False
+            schema_diag = f"Execution failed before valid output JSON (timed_out={timed_out}, json_parse_ok={json_parse_ok})"
+            res_data["schema_error"] = schema_diag
+
+        res_data["schema_valid"] = schema_ok
+        res_data["contract_valid"] = schema_ok
 
         try:
             os.remove(wf.name)
@@ -1469,7 +1625,7 @@ def run_hand_and_witness_cases(
     """Executes hand and adversarial cases on selected engine(s), strictly verifying against M0 Oracle and negative contract."""
     all_workloads = build_hand_workloads()
 
-    # Strict denominator integrity validation (P3-R3-F03)
+    # Strict denominator integrity validation (P3-R3-F03, P3-R4-F04)
     val_hand_ok, val_hand_diag = validate_required_hand_cases(all_workloads, REQUIRED_HAND_CASES_PATH)
     if not val_hand_ok:
         return [{
@@ -1483,6 +1639,15 @@ def run_hand_and_witness_cases(
             "duration_ms_m2": None,
         }], False
 
+    reg_map = {}
+    if REQUIRED_HAND_CASES_PATH.is_file():
+        try:
+            with open(REQUIRED_HAND_CASES_PATH, "r", encoding="utf-8") as rf:
+                reg_json = json.load(rf)
+                reg_map = {c["case_id"]: c for c in reg_json.get("cases", []) if isinstance(c, dict) and "case_id" in c}
+        except Exception:
+            pass
+
     if case_filter:
         workloads = [w for w in all_workloads if w["case_id"] == case_filter]
     else:
@@ -1493,6 +1658,7 @@ def run_hand_and_witness_cases(
 
     for w in workloads:
         cid = w["case_id"]
+        req_entry = reg_map.get(cid)
         expected_err = w.get("expected_error", False)
 
         # Build M0 Oracle for expected events on positive cases
@@ -1537,7 +1703,7 @@ def run_hand_and_witness_cases(
         diag = ""
 
         if expected_err:
-            # Strict negative verification (P3-R2-F07, P3-R3-F04): exact exit code, error category, schema, rollback
+            # Strict negative verification (P3-R2-F07, P3-R3-F04, P3-R4-F03): exact exit code, error category, schema, rollback
             exp_code = w.get("expected_exit_code")
             exp_cat = w.get("expected_error_category")
 
@@ -1548,6 +1714,10 @@ def run_hand_and_witness_cases(
                 engines_neg.append(("m2", res_m2))
 
             for eng_name, eng_res in engines_neg:
+                if not eng_res.get("schema_valid", False):
+                    case_ok = False
+                    diag += f"{eng_name} schema validation failed on negative test: {eng_res.get('schema_error')}. "
+
                 c_code = eng_res.get("exit_code")
                 c_cat = eng_res.get("error_category")
                 c_stat = eng_res.get("status")
@@ -1585,12 +1755,12 @@ def run_hand_and_witness_cases(
                             case_ok = False
                             diag += f"{eng_name} CASE_HAND_22 graph mutated despite rollback: v={g_state.get('vertices_count')}, e={g_state.get('edges_count')}. "
         else:
-            if run_m1 and not ok_m1:
+            if run_m1 and (not ok_m1 or not res_m1.get("schema_valid", False)):
                 case_ok = False
-                diag += f"M1 execution failed: status={res_m1.get('status')}, err={res_m1.get('error_message')}. "
-            if run_m2 and not ok_m2:
+                diag += f"M1 execution or schema failed: status={res_m1.get('status')}, err={res_m1.get('error_message')}, schema_err={res_m1.get('schema_error')}. "
+            if run_m2 and (not ok_m2 or not res_m2.get("schema_valid", False)):
                 case_ok = False
-                diag += f"M2 execution failed: status={res_m2.get('status')}, err={res_m2.get('error_message')}. "
+                diag += f"M2 execution or schema failed: status={res_m2.get('status')}, err={res_m2.get('error_message')}, schema_err={res_m2.get('schema_error')}. "
 
             if case_ok:
                 engines_to_verify = []
@@ -1620,6 +1790,20 @@ def run_hand_and_witness_cases(
                             case_ok = False
                             diag += f"{eng_name} step {s_idx} exited mismatch: obs={ext_obs} vs exp={ext_exp}. "
                             break
+
+                        # Independent lock against required registry expected_step_events (P3-R4-F04)
+                        if req_entry and req_entry.get("expected_step_events"):
+                            exp_steps_ev = req_entry["expected_step_events"]
+                            if s_idx < len(exp_steps_ev):
+                                exp_step_ev = exp_steps_ev[s_idx]
+                                if len(ent_obs) != exp_step_ev.get("entered_count", 0):
+                                    case_ok = False
+                                    diag += f"{eng_name} step {s_idx} entered count mismatch with locked registry: obs={len(ent_obs)} vs locked={exp_step_ev.get('entered_count')}. "
+                                    break
+                                if len(ext_obs) != exp_step_ev.get("exited_count", 0):
+                                    case_ok = False
+                                    diag += f"{eng_name} step {s_idx} exited count mismatch with locked registry: obs={len(ext_obs)} vs locked={exp_step_ev.get('exited_count')}. "
+                                    break
 
                         # Deep graph state validation (P3-R2-F01)
                         g_ok, g_diag = validate_graph_state(
@@ -1779,7 +1963,7 @@ def run_corpus_840(
                 # Execute Native M1 if selected
                 if run_m1:
                     res_m1, _, ok_m1 = run_workload_on_binary(binary_path, "m1", workload)
-                    if ok_m1:
+                    if ok_m1 and res_m1.get("schema_valid", False):
                         s0 = res_m1["steps"][0]
                         if sorted(s0.get("entered_tuples", [])) == exp_ent and sorted(s0.get("exited_tuples", [])) == exp_ext:
                             stats["m1_agreed"] += 1
@@ -1789,7 +1973,7 @@ def run_corpus_840(
                 # Execute Native M2 if selected
                 if run_m2:
                     res_m2, _, ok_m2 = run_workload_on_binary(binary_path, "m2", workload)
-                    if ok_m2:
+                    if ok_m2 and res_m2.get("schema_valid", False):
                         s0 = res_m2["steps"][0]
                         if sorted(s0.get("entered_tuples", [])) == exp_ent and sorted(s0.get("exited_tuples", [])) == exp_ext:
                             stats["m2_agreed"] += 1
@@ -1991,6 +2175,27 @@ def run_56_stream_matrix(
                 return stats, False
 
             lock_item = lock_map[cid]
+            if lock_item.get("q_type") != q_type:
+                stats["status"] = "FAIL"
+                stats["error"] = f"Stream {cid} q_type mismatch in lock: obs={lock_item.get('q_type')} vs spec={q_type}"
+                return stats, False
+            if lock_item.get("k") != k:
+                stats["status"] = "FAIL"
+                stats["error"] = f"Stream {cid} k mismatch in lock: obs={lock_item.get('k')} vs spec={k}"
+                return stats, False
+            if lock_item.get("seed") != seed:
+                stats["status"] = "FAIL"
+                stats["error"] = f"Stream {cid} seed mismatch in lock: obs={lock_item.get('seed')} vs spec={seed}"
+                return stats, False
+            if lock_item.get("label_mode") != label_mode:
+                stats["status"] = "FAIL"
+                stats["error"] = f"Stream {cid} label_mode mismatch in lock: obs={lock_item.get('label_mode')} vs spec={label_mode}"
+                return stats, False
+            if lock_item.get("lambda") != lambda_val:
+                stats["status"] = "FAIL"
+                stats["error"] = f"Lambda mismatch for {cid}: locked {lock_item.get('lambda')} != spec {lambda_val}"
+                return stats, False
+
             workload_canonical_bytes = json.dumps(workload, sort_keys=True).encode("utf-8")
             workload_sha = hashlib.sha256(workload_canonical_bytes).hexdigest()
             if workload_sha != lock_item["canonical_input_sha256"]:
@@ -2071,9 +2276,9 @@ def run_56_stream_matrix(
             if run_m2:
                 res_m2, _, ok_m2 = run_workload_on_binary(binary_path, "m2", workload)
 
-            if not ok_m1 or not ok_m2:
+            if not ok_m1 or not ok_m2 or (run_m1 and not res_m1.get("schema_valid", False)) or (run_m2 and not res_m2.get("schema_valid", False)):
                 stats["status"] = "FAIL"
-                stats["error"] = f"Native run failed for {cid}: M1_ok={ok_m1}, M2_ok={ok_m2}"
+                stats["error"] = f"Native run or schema failed for {cid}: M1_ok={ok_m1} (schema={res_m1.get('schema_valid')}), M2_ok={ok_m2} (schema={res_m2.get('schema_valid')})"
                 return stats, False
 
             steps_m1 = res_m1.get("steps", []) if run_m1 else []
