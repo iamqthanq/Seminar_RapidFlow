@@ -405,7 +405,7 @@ class TestRapidFlowApxFoundation(unittest.TestCase):
         corrupt_report["steps_executed"][0]["current_edges_count"] = 9999
         ok, msg = verify_case_with_oracle("transaction_lifecycle", fix_data, corrupt_report)
         self.assertFalse(ok)
-        self.assertIn("edges_count mismatch", msg)
+        self.assertTrue("edges_count' mismatch" in msg or "current_edges_count' mismatch" in msg)
 
     def test_group_j_p2_f06_low_ram_fails_preflight(self):
         # Mocking low RAM raises ResourceLimitError
@@ -473,6 +473,214 @@ class TestRapidFlowApxFoundation(unittest.TestCase):
 
         if orig_mtime is not None:
             self.assertEqual(canonical_summary.stat().st_mtime, orig_mtime)
+
+    # ==========================================================================
+    # Group K: Targeted Closure Remediation Tests (P2-F01, P2-F04)
+    # ==========================================================================
+
+    def test_group_k_reproducer_a_codec_boundaries_negative_counts_rejected(self):
+        with open(REPO_ROOT / self.cases_by_id["codec_boundaries"]["fixture_path"]) as f:
+            fix_data = json.load(f)
+
+        from scripts.run_rapidflow_apx_foundation import validate_case_observations, verify_case_with_oracle
+        fake_report = {
+            "case_id": "codec_boundaries",
+            "status": "PASS",
+            "diagnostic": "ok",
+            "query_vertices_count": -1,
+            "data_vertices_count": -1,
+            "query_vertex_ids": [-100, 0, 5000000000],
+            "data_vertex_ids": [-999999999999, -42, 0, 1000000, 5000000000, 9007199254740993],
+            "vertex_labels_count": 2,
+            "edge_labels_count": 0,
+        }
+        obs_ok, obs_msg = validate_case_observations("codec_boundaries", fix_data, fake_report)
+        self.assertFalse(obs_ok)
+        self.assertIn("must be non-negative, got -1", obs_msg)
+
+        or_ok, or_msg = verify_case_with_oracle("codec_boundaries", fix_data, fake_report)
+        self.assertFalse(or_ok)
+        self.assertIn("query_vertices_count mismatch", or_msg)
+
+    def test_group_k_reproducer_b_transaction_lifecycle_corrupted_fields_rejected(self):
+        with open(REPO_ROOT / self.cases_by_id["transaction_lifecycle"]["fixture_path"]) as f:
+            fix_data = json.load(f)
+
+        from scripts.run_rapidflow_apx_foundation import (
+            simulate_transaction_stream,
+            validate_case_observations,
+            verify_case_with_oracle,
+        )
+        ref_steps = simulate_transaction_stream(fix_data)
+
+        # B1: degree_u = 999999
+        c_deg_u = [dict(s) for s in ref_steps]
+        c_deg_u[0]["degree_u"] = 999999
+        ok, msg = verify_case_with_oracle("transaction_lifecycle", fix_data, {"status": "PASS", "steps_executed": c_deg_u})
+        self.assertFalse(ok)
+        self.assertIn("field 'degree_u' mismatch: expected 2, got 999999", msg)
+
+        # B2: degree_v = 999999
+        c_deg_v = [dict(s) for s in ref_steps]
+        c_deg_v[0]["degree_v"] = 999999
+        ok, msg = verify_case_with_oracle("transaction_lifecycle", fix_data, {"status": "PASS", "steps_executed": c_deg_v})
+        self.assertFalse(ok)
+        self.assertIn("field 'degree_v' mismatch: expected 1, got 999999", msg)
+
+        # B3: current_vertices_count = -1
+        c_vc = [dict(s) for s in ref_steps]
+        c_vc[0]["current_vertices_count"] = -1
+        ok, msg = verify_case_with_oracle("transaction_lifecycle", fix_data, {"status": "PASS", "steps_executed": c_vc})
+        self.assertFalse(ok)
+        self.assertIn("field 'current_vertices_count' mismatch: expected 4, got -1", msg)
+
+        # B4: step_index = -1
+        c_si = [dict(s) for s in ref_steps]
+        c_si[0]["step_index"] = -1
+        ok, msg = verify_case_with_oracle("transaction_lifecycle", fix_data, {"status": "PASS", "steps_executed": c_si})
+        self.assertFalse(ok)
+        self.assertIn("field 'step_index' mismatch: expected 0, got -1", msg)
+
+        # B5: omitted has_edge_uv
+        # Load genuine report
+        proc = subprocess.run(
+            [str(self.harness_bin), "--case", "transaction_lifecycle", "--fixture", str(REPO_ROOT / self.cases_by_id["transaction_lifecycle"]["fixture_path"])],
+            capture_output=True,
+            text=True,
+        )
+        real_report = json.loads(proc.stdout.strip())
+        del real_report["steps_executed"][0]["has_edge_uv"]
+        ok, msg = validate_case_observations("transaction_lifecycle", fix_data, real_report)
+        self.assertFalse(ok)
+        self.assertIn("missing required nested observation 'has_edge_uv'", msg)
+
+    def test_group_k_reproducer_c_lifecycle_stream_corrupted_mutations_rejected(self):
+        with open(REPO_ROOT / self.cases_by_id["lifecycle_stream"]["fixture_path"]) as f:
+            fix_data = json.load(f)
+
+        from scripts.run_rapidflow_apx_foundation import (
+            simulate_lifecycle_stream,
+            validate_case_observations,
+            verify_case_with_oracle,
+        )
+        ref_lc = simulate_lifecycle_stream(fix_data)
+
+        # C1: Inverted has_edge
+        c_has_e = [dict(m) for m in ref_lc]
+        c_has_e[0]["has_edge"] = not c_has_e[0]["has_edge"]
+        ok, msg = verify_case_with_oracle("lifecycle_stream", fix_data, {"final_vertices_count": 5, "final_edges_count": 4, "mutations_executed": c_has_e})
+        self.assertFalse(ok)
+        self.assertIn("field 'has_edge' mismatch", msg)
+
+        # C2: edges_count = -1
+        c_ec = [dict(m) for m in ref_lc]
+        c_ec[0]["edges_count"] = -1
+        ok, msg = verify_case_with_oracle("lifecycle_stream", fix_data, {"final_vertices_count": 5, "final_edges_count": 4, "mutations_executed": c_ec})
+        self.assertFalse(ok)
+        self.assertIn("field 'edges_count' mismatch: expected 4, got -1", msg)
+
+        # C3: modified endpoint u = 999
+        c_ep = [dict(m) for m in ref_lc]
+        c_ep[0]["u"] = 999
+        ok, msg = verify_case_with_oracle("lifecycle_stream", fix_data, {"final_vertices_count": 5, "final_edges_count": 4, "mutations_executed": c_ep})
+        self.assertFalse(ok)
+        self.assertIn("field 'u' mismatch: expected 0, got 999", msg)
+
+    def test_group_k_missing_nested_observation_rejected(self):
+        with open(REPO_ROOT / self.cases_by_id["transaction_lifecycle"]["fixture_path"]) as f:
+            fix_data = json.load(f)
+
+        from scripts.run_rapidflow_apx_foundation import validate_case_observations
+        proc = subprocess.run(
+            [str(self.harness_bin), "--case", "transaction_lifecycle", "--fixture", str(REPO_ROOT / self.cases_by_id["transaction_lifecycle"]["fixture_path"])],
+            capture_output=True,
+            text=True,
+        )
+        real_report = json.loads(proc.stdout.strip())
+        del real_report["steps_executed"][0]["sink_counters"]
+        ok, msg = validate_case_observations("transaction_lifecycle", fix_data, real_report)
+        self.assertFalse(ok)
+        self.assertIn("missing required nested observation 'sink_counters'", msg)
+
+    def test_group_k_wrong_type_nested_field_rejected(self):
+        with open(REPO_ROOT / self.cases_by_id["transaction_lifecycle"]["fixture_path"]) as f:
+            fix_data = json.load(f)
+
+        from scripts.run_rapidflow_apx_foundation import validate_case_observations
+        proc = subprocess.run(
+            [str(self.harness_bin), "--case", "transaction_lifecycle", "--fixture", str(REPO_ROOT / self.cases_by_id["transaction_lifecycle"]["fixture_path"])],
+            capture_output=True,
+            text=True,
+        )
+        real_report = json.loads(proc.stdout.strip())
+        real_report["steps_executed"][0]["current_edges_count"] = True
+        ok, msg = validate_case_observations("transaction_lifecycle", fix_data, real_report)
+        self.assertFalse(ok)
+        self.assertIn("field 'current_edges_count' must be integer, got bool", msg)
+
+    def test_group_k_wrong_edge_label_keeping_count_degrees_rejected(self):
+        with open(REPO_ROOT / self.cases_by_id["transaction_lifecycle"]["fixture_path"]) as f:
+            fix_data = json.load(f)
+
+        from scripts.run_rapidflow_apx_foundation import verify_case_with_oracle
+        proc = subprocess.run(
+            [str(self.harness_bin), "--case", "transaction_lifecycle", "--fixture", str(REPO_ROOT / self.cases_by_id["transaction_lifecycle"]["fixture_path"])],
+            capture_output=True,
+            text=True,
+        )
+        real_report = json.loads(proc.stdout.strip())
+        for e in real_report["steps_executed"][0]["edges"]:
+            if (e["u"], e["v"]) == (10, 40):
+                e["label"] = {"type": "int", "val": 999}
+        ok, msg = verify_case_with_oracle("transaction_lifecycle", fix_data, real_report)
+        self.assertFalse(ok)
+        self.assertIn("field 'edges' mismatch", msg)
+
+    def test_group_k_wrong_adjacency_keeping_count_rejected(self):
+        with open(REPO_ROOT / self.cases_by_id["transaction_lifecycle"]["fixture_path"]) as f:
+            fix_data = json.load(f)
+
+        from scripts.run_rapidflow_apx_foundation import verify_case_with_oracle
+        proc = subprocess.run(
+            [str(self.harness_bin), "--case", "transaction_lifecycle", "--fixture", str(REPO_ROOT / self.cases_by_id["transaction_lifecycle"]["fixture_path"])],
+            capture_output=True,
+            text=True,
+        )
+        real_report = json.loads(proc.stdout.strip())
+        for e in real_report["steps_executed"][0]["edges"]:
+            if (e["u"], e["v"]) == (10, 40):
+                e["u"] = 20
+                e["v"] = 40
+        ok, msg = verify_case_with_oracle("transaction_lifecycle", fix_data, real_report)
+        self.assertFalse(ok)
+        self.assertIn("field 'edges' mismatch", msg)
+
+    def test_group_k_wrong_state_after_abort_rejected(self):
+        with open(REPO_ROOT / self.cases_by_id["transaction_lifecycle"]["fixture_path"]) as f:
+            fix_data = json.load(f)
+
+        from scripts.run_rapidflow_apx_foundation import verify_case_with_oracle
+        proc = subprocess.run(
+            [str(self.harness_bin), "--case", "transaction_lifecycle", "--fixture", str(REPO_ROOT / self.cases_by_id["transaction_lifecycle"]["fixture_path"])],
+            capture_output=True,
+            text=True,
+        )
+        real_report = json.loads(proc.stdout.strip())
+        real_report["steps_executed"][2]["current_edges_count"] = 4
+        ok, msg = verify_case_with_oracle("transaction_lifecycle", fix_data, real_report)
+        self.assertFalse(ok)
+        self.assertIn("field 'current_edges_count' mismatch: expected 3, got 4", msg)
+
+    def test_group_k_subsequent_step_after_abort_preserves_committed_state(self):
+        # Native execution verification that step 7 preserves edge (10, 40) committed in step 0
+        proc = subprocess.run(
+            [str(self.harness_bin), "--case", "transaction_lifecycle", "--fixture", str(REPO_ROOT / self.cases_by_id["transaction_lifecycle"]["fixture_path"])],
+            capture_output=True,
+            text=True,
+        )
+        real_report = json.loads(proc.stdout.strip())
+        s7_edges = [(e["u"], e["v"]) for e in real_report["steps_executed"][7]["edges"]]
+        self.assertIn((10, 40), s7_edges)
 
 
 if __name__ == "__main__":

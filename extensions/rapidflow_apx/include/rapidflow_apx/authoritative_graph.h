@@ -61,6 +61,18 @@ public:
     // Direct access to underlying CSR for read-only inspections
     const Graph* get_base_graph() const;
 
+    // Overlay & Tombstone Inspection (for differential graph-state verification)
+    bool is_in_tombstones(uint32_t u, uint32_t v) const {
+        if (!has_vertex(u) || !has_vertex(v) || u == v) return false;
+        uint64_t key = make_edge_key(u, v);
+        return tombstones_.find(key) != tombstones_.end();
+    }
+    bool is_in_overlay(uint32_t u, uint32_t v) const {
+        if (!has_vertex(u) || !has_vertex(v) || u == v) return false;
+        uint64_t key = make_edge_key(u, v);
+        return overlay_labels_.find(key) != overlay_labels_.end();
+    }
+
     // Mutable Overlay Operations (Called by TransactionManager)
     bool apply_insert(uint32_t u, uint32_t v, uint32_t label, bool simulate_rev_fail = false);
     bool apply_delete(uint32_t u, uint32_t v, uint32_t label);

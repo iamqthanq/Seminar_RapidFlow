@@ -157,7 +157,18 @@ mini_json::Value run_codec_boundaries(const mini_json::Value& fixture) {
     report["diagnostic"] = "Codec successfully roundtrips 64-bit signed IDs and maintains typed label isolation";
     report["query_vertices_count"] = static_cast<int64_t>(codec.query_vertices_count());
     report["data_vertices_count"] = static_cast<int64_t>(codec.data_vertices_count());
-    return report;
+    mini_json::Value q_ids = mini_json::Value::make_array();
+    for (const auto& qv : q_verts) {
+        q_ids.push_back(qv["id"].as_int());
+    }
+    mini_json::Value d_ids = mini_json::Value::make_array();
+    for (const auto& dv : d_verts) {
+        d_ids.push_back(dv["id"].as_int());
+    }
+    report["query_vertex_ids"] = q_ids;
+    report["data_vertex_ids"] = d_ids;
+    report["vertex_labels_count"] = static_cast<int64_t>(codec.vertex_labels_count());
+    report["edge_labels_count"] = static_cast<int64_t>(codec.edge_labels_count());
     return report;
 }
 
@@ -293,7 +304,53 @@ mini_json::Value run_lifecycle_stream(const mini_json::Value& fixture) {
         mut_rec["u"] = static_cast<int64_t>(u);
         mut_rec["v"] = static_cast<int64_t>(v);
         mut_rec["edges_count"] = static_cast<int64_t>(graph.get_edges_count());
-        mut_rec["has_edge"] = graph.has_edge(u, v);
+        mut_rec["vertices_count"] = static_cast<int64_t>(graph.get_vertices_count());
+        bool has_e = graph.has_edge(u, v);
+        mut_rec["has_edge"] = has_e;
+        auto edge_lbl_res = graph.get_edge_label(u, v);
+        mut_rec["edge_label"] = edge_lbl_res.exists ? static_cast<int64_t>(edge_lbl_res.label) : -1;
+        mut_rec["in_tombstones"] = graph.is_in_tombstones(u, v);
+        mut_rec["in_overlay"] = graph.is_in_overlay(u, v);
+
+        // Full edge list with labels
+        mini_json::Value edges_arr = mini_json::Value::make_array();
+        for (uint32_t eu = 0; eu < graph.get_vertices_count(); ++eu) {
+            for (uint32_t ev = eu + 1; ev < graph.get_vertices_count(); ++ev) {
+                if (graph.has_edge(eu, ev)) {
+                    auto lbl_lookup = graph.get_edge_label(eu, ev);
+                    mini_json::Value e_obj = mini_json::Value::make_object();
+                    e_obj["u"] = static_cast<int64_t>(eu);
+                    e_obj["v"] = static_cast<int64_t>(ev);
+                    e_obj["label"] = static_cast<int64_t>(lbl_lookup.label);
+                    edges_arr.push_back(e_obj);
+                }
+            }
+        }
+        mut_rec["edges"] = edges_arr;
+
+        // Neighbors and degrees
+        mini_json::Value nbrs_obj = mini_json::Value::make_object();
+        mini_json::Value degs_obj = mini_json::Value::make_object();
+        for (uint32_t vx = 0; vx < graph.get_vertices_count(); ++vx) {
+            std::vector<uint32_t> nbr_list = graph.get_neighbors(vx);
+            // Explicitly check sorted & unique in C++
+            for (size_t ni = 1; ni < nbr_list.size(); ++ni) {
+                if (nbr_list[ni] <= nbr_list[ni - 1]) {
+                    report["status"] = "FAIL";
+                    report["diagnostic"] = "Neighbor list for vertex " + std::to_string(vx) + " is not strictly sorted and unique";
+                    return report;
+                }
+            }
+            mini_json::Value nbr_arr = mini_json::Value::make_array();
+            for (uint32_t nv : nbr_list) {
+                nbr_arr.push_back(static_cast<int64_t>(nv));
+            }
+            nbrs_obj[std::to_string(vx)] = nbr_arr;
+            degs_obj[std::to_string(vx)] = static_cast<int64_t>(graph.get_degree(vx));
+        }
+        mut_rec["neighbors"] = nbrs_obj;
+        mut_rec["degrees"] = degs_obj;
+
         mut_records.push_back(mut_rec);
     }
 
@@ -393,17 +450,98 @@ mini_json::Value run_transaction_lifecycle(const mini_json::Value& fixture) {
         step_rec["v"] = update.ext_v;
         step_rec["current_edges_count"] = static_cast<int64_t>(graph.get_edges_count());
         step_rec["current_vertices_count"] = static_cast<int64_t>(graph.get_vertices_count());
-        if (codec.has_data_vertex(update.ext_u)) {
-            step_rec["degree_u"] = static_cast<int64_t>(graph.get_degree(codec.get_data_vertex(update.ext_u)));
+        bool u_exists = codec.has_data_vertex(update.ext_u);
+        bool v_exists = codec.has_data_vertex(update.ext_v);
+        step_rec["vertex_u_exists"] = u_exists;
+        step_rec["vertex_v_exists"] = v_exists;
+        step_rec["degree_u"] = u_exists ? static_cast<int64_t>(graph.get_degree(codec.get_data_vertex(update.ext_u))) : 0;
+        step_rec["degree_v"] = v_exists ? static_cast<int64_t>(graph.get_degree(codec.get_data_vertex(update.ext_v))) : 0;
+        bool has_edge_uv = (u_exists && v_exists) ? graph.has_edge(codec.get_data_vertex(update.ext_u), codec.get_data_vertex(update.ext_v)) : false;
+        step_rec["has_edge_uv"] = has_edge_uv;
+
+        // Full edge list with external IDs and typed labels
+        mini_json::Value edges_arr = mini_json::Value::make_array();
+        for (uint32_t du = 0; du < graph.get_vertices_count(); ++du) {
+            for (uint32_t dv = du + 1; dv < graph.get_vertices_count(); ++dv) {
+                if (graph.has_edge(du, dv)) {
+                    int64_t ext_u = codec.decode_data_vertex(du);
+                    int64_t ext_v = codec.decode_data_vertex(dv);
+                    int64_t min_ext = std::min(ext_u, ext_v);
+                    int64_t max_ext = std::max(ext_u, ext_v);
+                    auto lbl_lookup = graph.get_edge_label(du, dv);
+                    TypedLabel tl = codec.decode_edge_label(lbl_lookup.label);
+                    mini_json::Value e_obj = mini_json::Value::make_object();
+                    e_obj["u"] = min_ext;
+                    e_obj["v"] = max_ext;
+                    mini_json::Value tl_json = mini_json::Value::make_object();
+                    tl_json["type"] = (tl.type == LabelType::INT64) ? "int" : "string";
+                    if (tl.type == LabelType::INT64) {
+                        tl_json["val"] = tl.int_val;
+                    } else {
+                        tl_json["val"] = tl.str_val;
+                    }
+                    e_obj["label"] = tl_json;
+                    edges_arr.push_back(e_obj);
+                }
+            }
         }
-        if (codec.has_data_vertex(update.ext_v)) {
-            step_rec["degree_v"] = static_cast<int64_t>(graph.get_degree(codec.get_data_vertex(update.ext_v)));
+        step_rec["edges"] = edges_arr;
+
+        // Neighbors and degrees using external IDs
+        mini_json::Value nbrs_obj = mini_json::Value::make_object();
+        mini_json::Value degs_obj = mini_json::Value::make_object();
+        for (uint32_t du = 0; du < graph.get_vertices_count(); ++du) {
+            int64_t ext_x = codec.decode_data_vertex(du);
+            std::vector<uint32_t> nbr_list = graph.get_neighbors(du);
+            // Explicitly check sorted & unique in C++
+            for (size_t ni = 1; ni < nbr_list.size(); ++ni) {
+                if (nbr_list[ni] <= nbr_list[ni - 1]) {
+                    report["status"] = "FAIL";
+                    report["diagnostic"] = "Neighbor list for vertex " + std::to_string(ext_x) + " is not strictly sorted and unique";
+                    return report;
+                }
+            }
+            std::vector<int64_t> ext_nbrs;
+            for (uint32_t dv : nbr_list) {
+                ext_nbrs.push_back(codec.decode_data_vertex(dv));
+            }
+            std::sort(ext_nbrs.begin(), ext_nbrs.end());
+            mini_json::Value nbr_arr = mini_json::Value::make_array();
+            for (int64_t nx : ext_nbrs) {
+                nbr_arr.push_back(nx);
+            }
+            nbrs_obj[std::to_string(ext_x)] = nbr_arr;
+            degs_obj[std::to_string(ext_x)] = static_cast<int64_t>(graph.get_degree(du));
         }
-        if (codec.has_data_vertex(update.ext_u) && codec.has_data_vertex(update.ext_v)) {
-            uint32_t du = codec.get_data_vertex(update.ext_u);
-            uint32_t dv = codec.get_data_vertex(update.ext_v);
-            step_rec["has_edge_uv"] = graph.has_edge(du, dv);
+        step_rec["neighbors"] = nbrs_obj;
+        step_rec["degrees"] = degs_obj;
+
+        // Codec state
+        mini_json::Value codec_st = mini_json::Value::make_object();
+        codec_st["data_vertices_count"] = static_cast<int64_t>(codec.data_vertices_count());
+        codec_st["vertex_labels_count"] = static_cast<int64_t>(codec.vertex_labels_count());
+        codec_st["edge_labels_count"] = static_cast<int64_t>(codec.edge_labels_count());
+        step_rec["codec_state"] = codec_st;
+
+        // Sink counters
+        mini_json::Value sink_st = mini_json::Value::make_object();
+        sink_st["raw_emissions"] = static_cast<int64_t>(sink.raw_emissions());
+        sink_st["unique_emissions"] = static_cast<int64_t>(sink.unique_emissions());
+        sink_st["committed_emissions"] = static_cast<int64_t>(sink.committed_emissions());
+        sink_st["discarded_emissions"] = static_cast<int64_t>(sink.discarded_emissions());
+        step_rec["sink_counters"] = sink_st;
+
+        // Published tuples at this step
+        mini_json::Value pub_arr = mini_json::Value::make_array();
+        for (const auto& tup : step_res.published_tuples) {
+            mini_json::Value tup_json = mini_json::Value::make_array();
+            for (int64_t coord : tup) {
+                tup_json.push_back(coord);
+            }
+            pub_arr.push_back(tup_json);
         }
+        step_rec["published_tuples"] = pub_arr;
+
         step_results.push_back(step_rec);
     }
 

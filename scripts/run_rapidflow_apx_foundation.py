@@ -60,6 +60,10 @@ REQUIRED_CASE_OBSERVATIONS = {
     "codec_boundaries": [
         ("query_vertices_count", int),
         ("data_vertices_count", int),
+        ("query_vertex_ids", list),
+        ("data_vertex_ids", list),
+        ("vertex_labels_count", int),
+        ("edge_labels_count", int),
         ("status", str),
         ("diagnostic", str),
     ],
@@ -459,46 +463,373 @@ def build_native_harness(clean: bool = False) -> Tuple[Path, str]:
 # Independent Python Reference Models & Genuine M0 Oracle
 # ==============================================================================
 
+def simulate_lifecycle_stream(fixture_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Independent pure-Python reference model that simulates graph lifecycle mutations
+    (baseline CSR, dynamic overlay additions, deletions, tombstones, and label precedence).
+    Computes exact expected topological and label state after each mutation.
+    """
+    base_v = {v["id"]: v["label"] for v in fixture_data["baseline"]["vertices"]}
+    base_edges = {}
+    for e in fixture_data["baseline"]["edges"]:
+        u, v = min(e["u"], e["v"]), max(e["u"], e["v"])
+        base_edges[(u, v)] = e["label"]
+
+    tombstones = set()
+    overlay = {}
+
+    expected_records = []
+    for i, m in enumerate(fixture_data["mutations"]):
+        op = m["op"]
+        u, v = m["u"], m["v"]
+        lbl = m["label"]
+        key = (min(u, v), max(u, v))
+
+        # Determine operation type from semantics
+        is_delete = op.startswith("delete")
+        if is_delete:
+            if key in overlay:
+                del overlay[key]
+            if key in base_edges:
+                tombstones.add(key)
+        else:
+            if key in tombstones:
+                tombstones.remove(key)
+            overlay[key] = lbl
+
+        # Authoritative edge view calculation
+        current_edges = {}
+        for (bu, bv), blbl in base_edges.items():
+            if (bu, bv) not in tombstones and (bu, bv) not in overlay:
+                current_edges[(bu, bv)] = blbl
+        for (ou, ov), olbl in overlay.items():
+            current_edges[(ou, ov)] = olbl
+
+        has_uv = key in current_edges
+        edge_lbl = current_edges.get(key, -1)
+        in_tomb = key in tombstones
+        in_over = key in overlay
+
+        # Degrees and sorted unique neighbor lists
+        neighbors = {str(vx): [] for vx in sorted(base_v.keys())}
+        for (eu, ev) in current_edges:
+            neighbors[str(eu)].append(ev)
+            neighbors[str(ev)].append(eu)
+        for vx in neighbors:
+            neighbors[vx] = sorted(list(set(neighbors[vx])))
+        degrees = {vx: len(neighbors[vx]) for vx in neighbors}
+
+        sorted_edges = [
+            {"label": current_edges[(eu, ev)], "u": eu, "v": ev}
+            for (eu, ev) in sorted(current_edges.keys())
+        ]
+
+        expected_records.append({
+            "step_index": i,
+            "op": op,
+            "u": u,
+            "v": v,
+            "edges_count": len(current_edges),
+            "vertices_count": len(base_v),
+            "has_edge": has_uv,
+            "edge_label": edge_lbl,
+            "in_tombstones": in_tomb,
+            "in_overlay": in_over,
+            "edges": sorted_edges,
+            "neighbors": neighbors,
+            "degrees": degrees,
+        })
+
+    return expected_records
+
+
 def simulate_transaction_stream(fixture_data: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     Independent pure-Python reference model that simulates graph transactions
     step by step and tracks expected edges, degrees, and statuses.
+    Independently derives prevalidation, fault-injection rollback, and committed states.
     """
     base_v = {v["id"]: v["label"]["val"] for v in fixture_data["baseline"]["vertices"]}
-    edges = set()
+    committed_edges = {}
     for e in fixture_data["baseline"]["edges"]:
         u, v = min(e["u"], e["v"]), max(e["u"], e["v"])
-        edges.add((u, v, e["label"]["val"]))
+        committed_edges[(u, v)] = e["label"]["val"]
+
+    # Codec tracker: external data vertex IDs
+    data_vertices = set(base_v.keys())
 
     expected_steps = []
     for s in fixture_data["steps"]:
+        step_idx = s["step_index"]
         op = s["op"]
-        u, v = min(s["u"], s["v"]), max(s["u"], s["v"])
+        u, v = s["u"], s["v"]
         lbl = s["label"]["val"]
+        key = (min(u, v), max(u, v))
         fault = s["fault"]
-        exp_status = s["expected_status"]
+        expected_status_decl = s["expected_status"]
 
-        if exp_status == "SUCCESS":
+        # 1. Independent Prevalidation
+        status = "SUCCESS"
+        if u == v:
+            status = "PREVALIDATION_FAILED"
+        elif op == "+":
+            if key in committed_edges:
+                status = "PREVALIDATION_FAILED"
+        elif op == "-":
+            if u not in data_vertices or v not in data_vertices:
+                status = "PREVALIDATION_FAILED"
+            elif key not in committed_edges:
+                status = "PREVALIDATION_FAILED"
+            elif committed_edges[key] != lbl:
+                status = "PREVALIDATION_FAILED"
+
+        # 2. If prevalidation passed, check fault injection
+        effective_edges = dict(committed_edges)
+        effective_data_vertices = set(data_vertices)
+
+        if status == "SUCCESS":
+            # Apply temporary mutation
+            temp_edges = dict(committed_edges)
+            temp_vertices = set(data_vertices)
             if op == "+":
-                edges.add((u, v, lbl))
+                temp_edges[key] = lbl
+                temp_vertices.add(u)
+                temp_vertices.add(v)
             elif op == "-":
-                edges.remove((u, v, lbl))
+                del temp_edges[key]
 
-        edge_keys = {(eu, ev) for (eu, ev, el) in edges}
-        deg_u = sum(1 for (eu, ev) in edge_keys if eu == s["u"] or ev == s["u"])
-        deg_v = sum(1 for (eu, ev) in edge_keys if eu == s["v"] or ev == s["v"])
-        has_uv = (u, v) in edge_keys
+            if fault in ("AFTER_MUTATION", "DURING_CALLBACK", "BEFORE_PUBLISH"):
+                status = "FAULT_INJECTED"
+                # Rollback! State remains committed_edges
+                effective_edges = dict(committed_edges)
+                effective_data_vertices = set(data_vertices)
+            else:
+                # Commit!
+                committed_edges = temp_edges
+                data_vertices = temp_vertices
+                effective_edges = committed_edges
+                effective_data_vertices = data_vertices
+
+        # Check against expectation declared in fixture
+        if status != expected_status_decl:
+            raise ValueError(
+                f"Step {step_idx}: model computed status '{status}' does not match fixture '{expected_status_decl}'"
+            )
+
+        u_exists = u in effective_data_vertices
+        v_exists = v in effective_data_vertices
+        has_uv = key in effective_edges
+
+        # Build neighbors and degrees for all data vertices
+        neighbors = {str(vx): [] for vx in sorted(effective_data_vertices)}
+        for (eu, ev) in effective_edges:
+            if str(eu) in neighbors:
+                neighbors[str(eu)].append(ev)
+            if str(ev) in neighbors:
+                neighbors[str(ev)].append(eu)
+        for vx in neighbors:
+            neighbors[vx] = sorted(list(set(neighbors[vx])))
+        degrees = {vx: len(neighbors[vx]) for vx in neighbors}
+
+        deg_u = degrees.get(str(u), 0)
+        deg_v = degrees.get(str(v), 0)
+
+        sorted_edges = [
+            {"label": {"type": "int", "val": effective_edges[(eu, ev)]}, "u": eu, "v": ev}
+            for (eu, ev) in sorted(effective_edges.keys())
+        ]
 
         expected_steps.append({
-            "step_index": s["step_index"],
-            "status": exp_status,
-            "edges_count": len(edges),
-            "vertices_count": len(base_v),
+            "step_index": step_idx,
+            "status": status,
+            "op": op,
+            "u": u,
+            "v": v,
+            "current_edges_count": len(effective_edges),
+            "current_vertices_count": len(effective_data_vertices),
+            "edges_count": len(effective_edges),
+            "vertices_count": len(effective_data_vertices),
+            "vertex_u_exists": u_exists,
+            "vertex_v_exists": v_exists,
             "degree_u": deg_u,
             "degree_v": deg_v,
             "has_edge_uv": has_uv,
+            "edges": sorted_edges,
+            "neighbors": neighbors,
+            "degrees": degrees,
+            "codec_data_vertices_count": len(effective_data_vertices),
         })
+
     return expected_steps
+
+
+def validate_case_observations(
+    case_id: str,
+    fixture_data: Dict[str, Any],
+    native_report: Dict[str, Any],
+) -> Tuple[bool, str]:
+    """
+    Validates observation schema, value boundaries, and nested observation structures
+    with strict type discrimination (rejecting bool for int).
+    """
+    # 1. Top-level observations check
+    req_obs = REQUIRED_CASE_OBSERVATIONS.get(case_id, [])
+    for field_name, expected_type in req_obs:
+        if field_name not in native_report:
+            return False, f"Case '{case_id}': Missing required observation field '{field_name}' in native report"
+        val = native_report[field_name]
+        if expected_type is int:
+            if isinstance(val, bool) or not isinstance(val, int):
+                return False, f"Case '{case_id}': observation '{field_name}' must be integer, got {type(val).__name__}"
+            if val < 0:
+                return False, f"Case '{case_id}': observation '{field_name}' must be non-negative, got {val}"
+        elif expected_type is bool:
+            if not isinstance(val, bool):
+                return False, f"Case '{case_id}': observation '{field_name}' must be boolean, got {type(val).__name__}"
+        elif expected_type is list:
+            if not isinstance(val, list):
+                return False, f"Case '{case_id}': observation '{field_name}' must be list, got {type(val).__name__}"
+        elif expected_type is dict:
+            if not isinstance(val, dict):
+                return False, f"Case '{case_id}': observation '{field_name}' must be dict, got {type(val).__name__}"
+        elif not isinstance(val, expected_type):
+            return False, f"Case '{case_id}': observation '{field_name}' must be {expected_type.__name__}, got {type(val).__name__}"
+
+    # 2. Nested observations and domain-specific structure checks
+    if case_id == "codec_boundaries":
+        q_ids = native_report.get("query_vertex_ids", [])
+        if any(isinstance(x, bool) or not isinstance(x, int) for x in q_ids):
+            return False, f"Case '{case_id}': query_vertex_ids must be a list of integers"
+        d_ids = native_report.get("data_vertex_ids", [])
+        if any(isinstance(x, bool) or not isinstance(x, int) for x in d_ids):
+            return False, f"Case '{case_id}': data_vertex_ids must be a list of integers"
+
+    elif case_id == "lifecycle_stream":
+        muts = native_report.get("mutations_executed", [])
+        exp_len = len(fixture_data.get("mutations", []))
+        if len(muts) != exp_len:
+            return False, f"Case '{case_id}': mutations_executed count {len(muts)} != expected {exp_len}"
+
+        req_mut_fields = [
+            ("step_index", int),
+            ("op", str),
+            ("u", int),
+            ("v", int),
+            ("edges_count", int),
+            ("vertices_count", int),
+            ("has_edge", bool),
+            ("edge_label", int),
+            ("in_tombstones", bool),
+            ("in_overlay", bool),
+            ("edges", list),
+            ("neighbors", dict),
+            ("degrees", dict),
+        ]
+        for i, m in enumerate(muts):
+            if not isinstance(m, dict):
+                return False, f"Case '{case_id}' step {i}: mutation record must be an object"
+            for f_name, f_type in req_mut_fields:
+                if f_name not in m:
+                    return False, f"Case '{case_id}' step {i}: missing required nested observation '{f_name}'"
+                f_val = m[f_name]
+                if f_type is int:
+                    if isinstance(f_val, bool) or not isinstance(f_val, int):
+                        return False, f"Case '{case_id}' step {i}: field '{f_name}' must be integer, got {type(f_val).__name__}"
+                elif f_type is bool:
+                    if not isinstance(f_val, bool):
+                        return False, f"Case '{case_id}' step {i}: field '{f_name}' must be boolean, got {type(f_val).__name__}"
+                elif not isinstance(f_val, f_type):
+                    return False, f"Case '{case_id}' step {i}: field '{f_name}' must be {f_type.__name__}, got {type(f_val).__name__}"
+
+            if m["edges_count"] < 0:
+                return False, f"Case '{case_id}' step {i}: edges_count must be non-negative, got {m['edges_count']}"
+            if m["vertices_count"] < 0:
+                return False, f"Case '{case_id}' step {i}: vertices_count must be non-negative, got {m['vertices_count']}"
+
+    elif case_id == "transaction_lifecycle":
+        steps = native_report.get("steps_executed", [])
+        exp_len = len(fixture_data.get("steps", []))
+        if len(steps) != exp_len:
+            return False, f"Case '{case_id}': steps_executed count {len(steps)} != expected {exp_len}"
+
+        req_step_fields = [
+            ("step_index", int),
+            ("status", str),
+            ("op", str),
+            ("u", int),
+            ("v", int),
+            ("current_edges_count", int),
+            ("current_vertices_count", int),
+            ("vertex_u_exists", bool),
+            ("vertex_v_exists", bool),
+            ("degree_u", int),
+            ("degree_v", int),
+            ("has_edge_uv", bool),
+            ("edges", list),
+            ("neighbors", dict),
+            ("degrees", dict),
+            ("codec_state", dict),
+            ("sink_counters", dict),
+            ("published_tuples", list),
+        ]
+        for i, s in enumerate(steps):
+            if not isinstance(s, dict):
+                return False, f"Case '{case_id}' step {i}: step record must be an object"
+            for f_name, f_type in req_step_fields:
+                if f_name not in s:
+                    return False, f"Case '{case_id}' step {i}: missing required nested observation '{f_name}'"
+                f_val = s[f_name]
+                if f_type is int:
+                    if isinstance(f_val, bool) or not isinstance(f_val, int):
+                        return False, f"Case '{case_id}' step {i}: field '{f_name}' must be integer, got {type(f_val).__name__}"
+                elif f_type is bool:
+                    if not isinstance(f_val, bool):
+                        return False, f"Case '{case_id}' step {i}: field '{f_name}' must be boolean, got {type(f_val).__name__}"
+                elif not isinstance(f_val, f_type):
+                    return False, f"Case '{case_id}' step {i}: field '{f_name}' must be {f_type.__name__}, got {type(f_val).__name__}"
+
+            if s["current_edges_count"] < 0:
+                return False, f"Case '{case_id}' step {i}: current_edges_count must be non-negative, got {s['current_edges_count']}"
+            if s["current_vertices_count"] < 0:
+                return False, f"Case '{case_id}' step {i}: current_vertices_count must be non-negative, got {s['current_vertices_count']}"
+            if s["degree_u"] < 0:
+                return False, f"Case '{case_id}' step {i}: degree_u must be non-negative, got {s['degree_u']}"
+            if s["degree_v"] < 0:
+                return False, f"Case '{case_id}' step {i}: degree_v must be non-negative, got {s['degree_v']}"
+
+    elif case_id == "tuple_sink_invariants":
+        raw = native_report["raw_emissions"]
+        uniq = native_report["unique_emissions"]
+        comm = native_report["committed_emissions"]
+        disc = native_report["discarded_emissions"]
+        if raw < uniq:
+            return False, f"Case '{case_id}': raw_emissions ({raw}) < unique_emissions ({uniq})"
+        if comm + disc != uniq:
+            return False, f"Case '{case_id}': committed ({comm}) + discarded ({disc}) != unique ({uniq})"
+
+    elif case_id == "k4_exact_enumeration":
+        tup_count = native_report["tuple_count"]
+        tups = native_report["tuples"]
+        if tup_count != len(tups):
+            return False, f"Case '{case_id}': tuple_count ({tup_count}) != len(tuples) ({len(tups)})"
+
+    elif case_id == "event_transition_stream":
+        evs = native_report["events"]
+        for j, ev in enumerate(evs):
+            if not isinstance(ev, dict):
+                return False, f"Case '{case_id}' event {j}: event record must be an object"
+            for f_name, f_type in [("step", int), ("op", str), ("u", int), ("v", int), ("event_type", str), ("published_count", int), ("tuples", list)]:
+                if f_name not in ev:
+                    return False, f"Case '{case_id}' event {j}: missing nested field '{f_name}'"
+                f_val = ev[f_name]
+                if f_type is int and (isinstance(f_val, bool) or not isinstance(f_val, int)):
+                    return False, f"Case '{case_id}' event {j}: field '{f_name}' must be int, got {type(f_val).__name__}"
+            if ev["event_type"] not in ("ENTERED", "EXITED"):
+                return False, f"Case '{case_id}' event {j}: unknown event_type '{ev['event_type']}'"
+            if ev["published_count"] != len(ev["tuples"]):
+                return False, f"Case '{case_id}' event {j}: published_count ({ev['published_count']}) != len(tuples) ({len(ev['tuples'])})"
+
+    return True, "Observation schema and structure verified"
 
 
 def verify_case_with_oracle(
@@ -510,6 +841,27 @@ def verify_case_with_oracle(
     Cross-checks native execution against genuine Python reference models
     and scripts.dstar_oracle (M0 Oracle).
     """
+    if case_id == "codec_boundaries":
+        exp_q = len(fixture_data["external_query_vertices"])
+        exp_d = len(fixture_data["external_data_vertices"])
+        act_q = native_report.get("query_vertices_count")
+        act_d = native_report.get("data_vertices_count")
+        if act_q != exp_q:
+            return False, f"Case '{case_id}' query_vertices_count mismatch: expected {exp_q}, got {act_q}"
+        if act_d != exp_d:
+            return False, f"Case '{case_id}' data_vertices_count mismatch: expected {exp_d}, got {act_d}"
+
+        exp_q_ids = sorted([v["id"] for v in fixture_data["external_query_vertices"]])
+        exp_d_ids = sorted([v["id"] for v in fixture_data["external_data_vertices"]])
+        act_q_ids = sorted(native_report.get("query_vertex_ids", []))
+        act_d_ids = sorted(native_report.get("data_vertex_ids", []))
+        if act_q_ids != exp_q_ids:
+            return False, f"Case '{case_id}' query_vertex_ids mismatch: expected {exp_q_ids}, got {act_q_ids}"
+        if act_d_ids != exp_d_ids:
+            return False, f"Case '{case_id}' data_vertex_ids mismatch: expected {exp_d_ids}, got {act_d_ids}"
+
+        return True, "Codec boundaries verified against fixture metadata and roundtrip checks"
+
     if case_id == "k4_exact_enumeration":
         Q = DStarGraph()
         for v in fixture_data["query"]["vertices"]:
@@ -587,27 +939,80 @@ def verify_case_with_oracle(
 
     if case_id == "transaction_lifecycle":
         ref_steps = simulate_transaction_stream(fixture_data)
-        actual_steps = native_report.get("steps_executed", [])
-        if len(actual_steps) != len(ref_steps):
-            return False, f"Transaction steps count mismatch: expected {len(ref_steps)}, got {len(actual_steps)}"
+        act_steps = native_report.get("steps_executed", [])
+        if len(act_steps) != len(ref_steps):
+            return False, f"Case '{case_id}' steps count mismatch: expected {len(ref_steps)}, got {len(act_steps)}"
 
-        for i, (ref, act) in enumerate(zip(ref_steps, actual_steps)):
+        for i, (ref, act) in enumerate(zip(ref_steps, act_steps)):
+            if act.get("step_index") != ref["step_index"]:
+                return False, f"Case '{case_id}' step {i} field 'step_index' mismatch: expected {ref['step_index']}, got {act.get('step_index')}"
             if act.get("status") != ref["status"]:
-                return False, f"Step {i} status mismatch: expected {ref['status']}, got {act.get('status')}"
+                return False, f"Case '{case_id}' step {i} field 'status' mismatch: expected {ref['status']}, got {act.get('status')}"
+            if act.get("op") != ref["op"]:
+                return False, f"Case '{case_id}' step {i} field 'op' mismatch: expected {ref['op']}, got {act.get('op')}"
+            if act.get("u") != ref["u"]:
+                return False, f"Case '{case_id}' step {i} field 'u' mismatch: expected {ref['u']}, got {act.get('u')}"
+            if act.get("v") != ref["v"]:
+                return False, f"Case '{case_id}' step {i} field 'v' mismatch: expected {ref['v']}, got {act.get('v')}"
             if act.get("current_edges_count") != ref["edges_count"]:
-                return False, f"Step {i} edges_count mismatch: expected {ref['edges_count']}, got {act.get('current_edges_count')}"
-            if "has_edge_uv" in act and act["has_edge_uv"] != ref["has_edge_uv"]:
-                return False, f"Step {i} has_edge_uv mismatch: expected {ref['has_edge_uv']}, got {act.get('has_edge_uv')}"
+                return False, f"Case '{case_id}' step {i} field 'current_edges_count' mismatch: expected {ref['edges_count']}, got {act.get('current_edges_count')}"
+            if act.get("current_vertices_count") != ref["vertices_count"]:
+                return False, f"Case '{case_id}' step {i} field 'current_vertices_count' mismatch: expected {ref['vertices_count']}, got {act.get('current_vertices_count')}"
+            if act.get("vertex_u_exists") != ref["vertex_u_exists"]:
+                return False, f"Case '{case_id}' step {i} field 'vertex_u_exists' mismatch: expected {ref['vertex_u_exists']}, got {act.get('vertex_u_exists')}"
+            if act.get("vertex_v_exists") != ref["vertex_v_exists"]:
+                return False, f"Case '{case_id}' step {i} field 'vertex_v_exists' mismatch: expected {ref['vertex_v_exists']}, got {act.get('vertex_v_exists')}"
+            if act.get("degree_u") != ref["degree_u"]:
+                return False, f"Case '{case_id}' step {i} field 'degree_u' mismatch: expected {ref['degree_u']}, got {act.get('degree_u')}"
+            if act.get("degree_v") != ref["degree_v"]:
+                return False, f"Case '{case_id}' step {i} field 'degree_v' mismatch: expected {ref['degree_v']}, got {act.get('degree_v')}"
+            if act.get("has_edge_uv") != ref["has_edge_uv"]:
+                return False, f"Case '{case_id}' step {i} field 'has_edge_uv' mismatch: expected {ref['has_edge_uv']}, got {act.get('has_edge_uv')}"
+
+            # Full edges comparison with labels
+            act_edges = sorted(act.get("edges", []), key=lambda x: (x["u"], x["v"]))
+            ref_edges = sorted(ref["edges"], key=lambda x: (x["u"], x["v"]))
+            if act_edges != ref_edges:
+                return False, f"Case '{case_id}' step {i} field 'edges' mismatch: expected {ref_edges}, got {act_edges}"
+
+            # Degrees and neighbors comparison
+            if act.get("degrees") != ref["degrees"]:
+                return False, f"Case '{case_id}' step {i} field 'degrees' mismatch: expected {ref['degrees']}, got {act.get('degrees')}"
+            if act.get("neighbors") != ref["neighbors"]:
+                return False, f"Case '{case_id}' step {i} field 'neighbors' mismatch: expected {ref['neighbors']}, got {act.get('neighbors')}"
+
+            codec_st = act.get("codec_state", {})
+            if codec_st.get("data_vertices_count") != ref["codec_data_vertices_count"]:
+                return False, f"Case '{case_id}' step {i} codec data_vertices_count mismatch: expected {ref['codec_data_vertices_count']}, got {codec_st.get('data_vertices_count')}"
 
         return True, "Transaction lifecycle steps verified against Python reference state model"
 
     if case_id == "lifecycle_stream":
-        if native_report.get("final_vertices_count") != 5 or native_report.get("final_edges_count") != 4:
-            return False, "Lifecycle final graph topology mismatch"
-        mutations = native_report.get("mutations_executed", [])
-        if len(mutations) != len(fixture_data["mutations"]):
-            return False, "Lifecycle mutations count mismatch"
-        return True, "Lifecycle stream verified"
+        if native_report.get("final_vertices_count") != 5:
+            return False, f"Case '{case_id}' final_vertices_count mismatch: expected 5, got {native_report.get('final_vertices_count')}"
+        if native_report.get("final_edges_count") != 4:
+            return False, f"Case '{case_id}' final_edges_count mismatch: expected 4, got {native_report.get('final_edges_count')}"
+
+        ref_records = simulate_lifecycle_stream(fixture_data)
+        act_records = native_report.get("mutations_executed", [])
+        if len(act_records) != len(ref_records):
+            return False, f"Case '{case_id}' mutations count mismatch: expected {len(ref_records)}, got {len(act_records)}"
+
+        for i, (ref, act) in enumerate(zip(ref_records, act_records)):
+            for fld in ("step_index", "op", "u", "v", "edges_count", "vertices_count", "has_edge", "edge_label", "in_tombstones", "in_overlay"):
+                if act.get(fld) != ref[fld]:
+                    return False, f"Case '{case_id}' step {i} field '{fld}' mismatch: expected {ref[fld]}, got {act.get(fld)}"
+
+            act_edges = sorted(act.get("edges", []), key=lambda x: (x["u"], x["v"]))
+            ref_edges = sorted(ref["edges"], key=lambda x: (x["u"], x["v"]))
+            if act_edges != ref_edges:
+                return False, f"Case '{case_id}' step {i} field 'edges' mismatch: expected {ref_edges}, got {act_edges}"
+            if act.get("degrees") != ref["degrees"]:
+                return False, f"Case '{case_id}' step {i} field 'degrees' mismatch: expected {ref['degrees']}, got {act.get('degrees')}"
+            if act.get("neighbors") != ref["neighbors"]:
+                return False, f"Case '{case_id}' step {i} field 'neighbors' mismatch: expected {ref['neighbors']}, got {act.get('neighbors')}"
+
+        return True, "Lifecycle stream verified step-by-step against independent reference model"
 
     if case_id == "diamond_k1_fixed":
         if native_report.get("is_valid") is not True:
@@ -621,8 +1026,14 @@ def verify_case_with_oracle(
         return True, "Diamond k=1 evaluation verified against D-R guard contract"
 
     if case_id == "tuple_sink_invariants":
-        if native_report.get("raw_emissions") != 4 or native_report.get("committed_emissions") != 2:
-            return False, "TupleSink counter mismatch"
+        if native_report.get("raw_emissions") != 4:
+            return False, f"TupleSink raw_emissions mismatch: expected 4, got {native_report.get('raw_emissions')}"
+        if native_report.get("unique_emissions") != 3:
+            return False, f"TupleSink unique_emissions mismatch: expected 3, got {native_report.get('unique_emissions')}"
+        if native_report.get("committed_emissions") != 2:
+            return False, f"TupleSink committed_emissions mismatch: expected 2, got {native_report.get('committed_emissions')}"
+        if native_report.get("discarded_emissions") != 1:
+            return False, f"TupleSink discarded_emissions mismatch: expected 1, got {native_report.get('discarded_emissions')}"
         return True, "TupleSink invariants verified"
 
     if case_id == "irrelevant_update_stream":
@@ -772,44 +1183,16 @@ def run_isolated_case(
             "elapsed_seconds": round(elapsed_sec, 4),
         }
 
-    # Strict observation schema check
-    req_obs = REQUIRED_CASE_OBSERVATIONS.get(case_id, [])
-    for field_name, expected_type in req_obs:
-        if field_name not in native_report:
-            return {
-                "case_id": case_id,
-                "status": "FAIL",
-                "diagnostic": f"Missing required observation field '{field_name}' in native report",
-                "native_report": native_report,
-                "elapsed_seconds": round(elapsed_sec, 4),
-            }
-        val = native_report[field_name]
-        if expected_type is int:
-            if isinstance(val, bool) or not isinstance(val, int):
-                return {
-                    "case_id": case_id,
-                    "status": "FAIL",
-                    "diagnostic": f"Observation '{field_name}' must be integer, got {type(val).__name__}",
-                    "native_report": native_report,
-                    "elapsed_seconds": round(elapsed_sec, 4),
-                }
-        elif expected_type is bool:
-            if not isinstance(val, bool):
-                return {
-                    "case_id": case_id,
-                    "status": "FAIL",
-                    "diagnostic": f"Observation '{field_name}' must be boolean, got {type(val).__name__}",
-                    "native_report": native_report,
-                    "elapsed_seconds": round(elapsed_sec, 4),
-                }
-        elif not isinstance(val, expected_type):
-            return {
-                "case_id": case_id,
-                "status": "FAIL",
-                "diagnostic": f"Observation '{field_name}' must be {expected_type.__name__}, got {type(val).__name__}",
-                "native_report": native_report,
-                "elapsed_seconds": round(elapsed_sec, 4),
-            }
+    # Strict observation schema and structure check
+    obs_ok, obs_msg = validate_case_observations(case_id, fixture_data, native_report)
+    if not obs_ok:
+        return {
+            "case_id": case_id,
+            "status": "FAIL",
+            "diagnostic": obs_msg,
+            "native_report": native_report,
+            "elapsed_seconds": round(elapsed_sec, 4),
+        }
 
     oracle_ok, oracle_msg = verify_case_with_oracle(case_id, fixture_data, native_report)
     if not oracle_ok:
