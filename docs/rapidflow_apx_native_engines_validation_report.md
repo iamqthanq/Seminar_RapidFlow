@@ -1,16 +1,16 @@
 # RapidFlow-APX Native Engines Validation Report (Phase P3 / D-INT-03)
 
-**Document ID:** `docs/rapidflow_apx_native_engines_validation_report.md`  
-**Milestone:** D-INT-03 / Phase P3  
-**Parent Issue:** [Issue #32](https://github.com/iamqthanq/Seminar_RapidFlow/issues/32)  
-**Worktree:** `/home/iamqthanq/Desktop/Seminar_RapidFlow_D_INT03`  
-**Feature Branch:** `feature/rf32-d-int03-native-engines`  
-**Integration Target:** `QuangThang`  
-**Base Commit:** `88fbe200ff9217f4dccbad08bfa448d067d2ce4e` (contains accepted P2 HEAD `ebe2894752dc45e2aeb3109c260a34e2f87a9d06`)  
-**Logic Commit SHA:** `a7267e90c60723447e7acfc4613be2435b558c1b`  
-**Pinned Upstream RapidFlow:** `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` (Pristine: `True`)  
-**Verification Status:** **P3_ENGINES_VERIFIED**  
-**Final Gate Verdict:** **ENGINES_VERIFIED_READY_FOR_P4_DESIGN**  
+**Document ID:** `docs/rapidflow_apx_native_engines_validation_report.md`
+**Milestone:** D-INT-03 / Phase P3
+**Parent Issue:** [Issue #32](https://github.com/iamqthanq/Seminar_RapidFlow/issues/32)
+**Worktree:** `/home/iamqthanq/Desktop/Seminar_RapidFlow_D_INT03`
+**Feature Branch:** `feature/rf32-d-int03-native-engines`
+**Integration Target:** `QuangThang`
+**Base Commit:** `88fbe200ff9217f4dccbad08bfa448d067d2ce4e` (contains accepted P2 HEAD `ebe2894752dc45e2aeb3109c260a34e2f87a9d06`)
+**Logic Commit SHA:** `a7267e90c60723447e7acfc4613be2435b558c1b`
+**Pinned Upstream RapidFlow:** `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` (Pristine: `True`)
+**Verification Status:** **P3_ENGINES_VERIFIED (REMEDIATED)**
+**Final Gate Verdict:** **ENGINES_VERIFIED_READY_FOR_P4_DESIGN (PENDING INDEPENDENT REVIEW)**
 
 ---
 
@@ -20,7 +20,7 @@ Phase P3 (Issue #32) realizes the native C++ event search engines (`ApxM1EnumEng
 
 Key achievements:
 1. **Mathematical Soundness**:
-   - Implemented exact query edge connectivity $\lambda(Q)$ natively via max-flow (Dinic / Edmonds-Karp).
+   - Implemented exact query edge connectivity $\lambda(Q)$ natively via max-flow (Edmonds-Karp BFS augmenting paths).
    - Enforced Domain D-R ($0 \le k < \lambda(Q)$) fail-closed; invalid or disconnected queries are rejected unconditionally.
 2. **Native Event Search Engines**:
    - `ApxM1EnumEngine`: Native baseline anchored subgraph matching on $Q - D$ with exact missing set check $R(f) = D$.
@@ -54,7 +54,7 @@ Key achievements:
 
 ### 3.1. Edge Connectivity & Domain D-R Enforcement
 For any connected query graph $Q = (V_Q, E_Q)$, the exact edge connectivity $\lambda(Q)$ is computed via the minimum $(s, t)$-cut over all pairs $(s, t)$ with $s \ne t \in V_Q$.
-Each query edge is assigned unit capacity. The maximum flow is found via Dinic's blocking flow algorithm ($O(V^{2/3} E)$ on unit networks) with Edmonds-Karp fallback:
+Each query edge is assigned unit capacity. The maximum flow is found via the Edmonds-Karp algorithm (BFS augmenting paths on unit networks) between all pairs of vertices:
 $$\lambda(Q) = \min_{s < t \in V_Q} \text{max\_flow}(s, t)$$
 
 Domain D-R requires:
@@ -176,7 +176,7 @@ All 840 configurations from seed 1 and seed 7 were evaluated against the indepen
    - `test_group_a_preflight_and_git_clean`: PASS
    - `test_group_b_manifest_integrity`: PASS
    - `test_group_c_native_harness_compilation`: PASS
-   - `test_group_d_dinic_edge_connectivity_lambda`: PASS
+   - `test_group_d_dinic_edge_connectivity_lambda`: PASS (natively computes $\lambda(Q)$ via Edmonds-Karp BFS augmenting paths)
    - `test_group_e_hand_cases_exact_agreement_with_m0`: PASS
    - `test_group_f_witness_k4_exact_automorphism`: PASS
    - `test_group_g_witness_diamond_k1_boundary`: PASS
@@ -186,40 +186,66 @@ All 840 configurations from seed 1 and seed 7 were evaluated against the indepen
    - `test_group_k_stateful_stream_active_set_tracking`: PASS
    - `test_group_l_work_budget_preemption`: PASS
    - `test_group_m_real_corpus_smoke_sample`: PASS
-   - Total: 14 tests, 0 failures, 0 errors in 0.448s.
+   - `test_group_n_work_budget_lifecycle`: PASS (per-step budget reset, max_work boundary, step_counters vs cumulative_counters)
+   - `test_group_o_strict_input_validation`: PASS (fail-closed rejection of boolean labels, non-standard ops, invalid k/max_work)
+   - `test_group_p_error_propagation_exit_codes`: PASS (exit code contract: 0, 1, 2, 3, 4, 5, 6, 7)
+   - `test_group_q_counter_integrity_dfs_states`: PASS (dfs_states increments at DFS state entry for both M1 and M2)
+   - `test_group_r_deep_graph_state_differential`: PASS (deep graph state: vertices, edges, neighbors, codec_state)
+   - `test_group_s_m1_m2_adversarial_witnesses`: PASS (diamond k=1 insertion, M1 and M2 identical to M0)
+   - `test_group_t_query_connectivity_independent_cuts`: PASS (Edmonds-Karp vs independent all-cuts oracle)
+   - Total: 20 test groups (21 tests), 0 failures, 0 errors in 0.645s.
 
 2. **Full Repository Regression Suite (`python3 -m unittest discover tests`)**:
-   - Total tests executed: **528**
+   - Total tests executed: **535**
    - Total failures: **0**
    - Total errors: **0**
-   - Execution duration: 119.184s
+   - Execution duration: 130.652s
    - Status: **OK**
 
 ---
 
-## 5. Decision R3 Summary
+## 5. Round 1 Independent Review — Findings and Remediation
+
+Following the independent review of Draft PR #33, nine specific findings plus repository diff hygiene were addressed and verified:
+
+| Finding ID | Severity | Root Cause | Fix / Implementation | Regression Test | Before Fix | After Fix | Verdict |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :---: |
+| **P3-F01** | BLOCKER | `work_units` in streaming engine accumulated across all steps without per-step reset; step 2 threw budget exceeded prematurely; `step_counters` missing in output JSON. | Separated `step_counters_` (reset before each step) and `cumulative_counters_` (accumulates step results). Added `step_counters` to `StreamStepResult` and step JSON. Handled `max_work=0` (rejects immediately), `max_work=1` (preempts before search), and preserved diagnostic counters on exception. | `test_group_n_work_budget_lifecycle` | Step 2 failed with budget exceeded even though its individual work was under budget. | Step 2 completes successfully with its own isolated budget; cumulative counters track total work. | **RESOLVED** |
+| **P3-F02** | BLOCKER | Unrecognized operation strings silently fell through to `DELETE`. | Strict parser whitelist: only `+`, `-`, `INSERT`, `DELETE`, `INS`, `DEL` accepted; any other string throws `std::invalid_argument` (Exit Code 2). | `test_group_o_strict_input_validation` | Operation `"INVALID_OP"` treated as `DELETE` and exited with 0. | Throws `invalid_argument`, terminates fail-closed with Exit Code 2. | **RESOLVED** |
+| **P3-F03** | BLOCKER | Threshold $k$ was parsed without range validation, allowing negative numbers, non-integers, and integer overflow before D-R guard. | Strict type and range validation: requires integer, $k \ge 0$, and fits `uint32_t` without truncation. | `test_group_o_strict_input_validation` | Negative $k$ or float $k=1.5$ caused silent truncation or unexpected behavior. | Rejects non-integers, negative values, and overflow with Exit Code 2. | **RESOLVED** |
+| **P3-F04** | MAJOR | JSON boolean labels (`true`/`false`) were implicitly coerced to string `"true"`/`"false"`. | `parse_typed_label` strictly enforces integer or string; rejects boolean, float, and null fail-closed. | `test_group_o_strict_input_validation` | `{"label": true}` interned as `"true"`. | Throws `invalid_argument`, exits with Exit Code 2. | **RESOLVED** |
+| **P3-F05** | MAJOR | Non-standard exit codes; process returned code 1 for domain/budget errors without differentiating error causes. | Formalized exit code contract: 0=Success, 1=CLI, 2=Input/Schema, 3=Domain D-R, 4=WorkBudget, 5=ResourceLimit, 6=StepFailure, 7=IO. | `test_group_p_error_propagation_exit_codes` | Work budget exceeded or domain violations exited with code 1. | Work budget returns 4, domain violation returns 3, input error returns 2. | **RESOLVED** |
+| **P3-F06** | MAJOR | `dfs_states` counter was incremented inside child candidate loops rather than at DFS function entry, missing root search nodes. | Moved `counters.dfs_states++` to the entry of `match_variant_dfs` in M1 and `dfs_m2` in M2; charged work at `anchors_started++` in M2. | `test_group_q_counter_integrity_dfs_states` | DFS states undercounted search tree nodes by excluding root states. | DFS states strictly positive and monotonic with search space size. | **RESOLVED** |
+| **P3-F07** | MAJOR | Documentation and comments claimed Dinic's algorithm while implementation used Edmonds-Karp BFS augmenting paths. | Corrected algorithm description throughout documentation and code comments to Edmonds-Karp; verified against independent cut oracle. | `test_group_t_query_connectivity_independent_cuts` | Discrepancy between documentation (Dinic) and code (Edmonds-Karp). | Accurate algorithmic attribution; 100% agreement with all-cuts oracle. | **RESOLVED** |
+| **P3-F08** | MAJOR | CLI harness did not verify `setrlimit` return value; `--max-work` CLI flag did not consistently override workload JSON. | Checked return code of `setrlimit(RLIMIT_AS, ...)` fail-closed; ensured CLI `--max-work` strictly overrides workload configuration. | `test_group_o_strict_input_validation` | Unchecked `setrlimit` could silently fail; CLI flag ignored if workload had `max_work`. | `setrlimit` failure throws `runtime_error`; CLI flag takes precedence. | **RESOLVED** |
+| **P3-F09** | MAJOR | Step diagnostic output emitted shallow graph summary rather than full graph state for differential verification. | Emitted deep graph state in each step: `vertices` (id, label, degree), canonical sorted `edges`, `neighbors` map, and `codec_state`. | `test_group_r_deep_graph_state_differential` | Inability to differentially inspect full graph state per update step. | Complete graph state observable in every step JSON. | **RESOLVED** |
+| **HYGIENE** | MINOR | Trailing whitespace and blank lines at EOF caused `git diff --check` to fail. | Stripped trailing spaces and normalized EOF across all documentation files. | `git diff --check` | `git diff --check` reported whitespace errors with exit code 2. | `git diff --check` passes cleanly with exit code 0. | **RESOLVED** |
+
+---
+
+## 6. Decision R3 Summary
 
 | Component | Status | Finding / Action |
 | :--- | :---: | :--- |
-| `ApxQueryPlan` | **NEW** | Natively computes $\lambda(Q)$ via Dinic/Edmonds-Karp max-flow, validates D-R ($0 \le k < \lambda(Q)$), indexes incident edges. |
+| `ApxQueryPlan` | **NEW** | Natively computes $\lambda(Q)$ via Edmonds-Karp max-flow, validates D-R ($0 \le k < \lambda(Q)$), indexes incident edges. |
 | `ApxM1EnumEngine` | **NEW** | Baseline exact $Q - D$ variant search with strict $R(f) = D$ filtering; bit-for-bit identical to M0. |
 | `ApxM2EventEngine` | **NEW** | Bare direct DFS with PRESENT/MISSING branching, deferred vertices, incident edge resolution, and invariant guards; bit-for-bit identical to M0. |
-| `ApxStreamingEngine` | **NEW** | Coordinates ACID transactions, label interning, duplicate suppression, and active-set tracking. |
+| `ApxStreamingEngine` | **NEW** | Coordinates ACID transactions, label interning, duplicate suppression, and active-set tracking with per-step budget isolation. |
 | `ApxAuthoritativeGraph` | **KEEP** | Unaltered P2 foundation provides reliable graph state with zero-allocation rollback. |
 | `ApxTypedCodec` | **KEEP** | Decodes 64-bit vertex IDs, maps typed labels, and formats ascending query canonical tuples. |
 | Automorphism Factor | **STOP** | Prohibited multiplying counts by scalar symmetry factors; every embedding must be explicitly enumerated. |
 | Python in Production | **STOP** | Native engines are 100% C++17 with zero runtime dependency on Python. |
 
-**Final Gate Verdict**: **ENGINES_VERIFIED_READY_FOR_P4_DESIGN**
+**Final Gate Verdict**: **ENGINES_VERIFIED_READY_FOR_P4_DESIGN (PENDING INDEPENDENT REVIEW)**
 
 ---
 
-## 6. Handoff & Next Steps
+## 7. Handoff & Next Steps
 
 1. **Reviewer Handover**:
    - PR target: `QuangThang`.
    - Feature branch: `feature/rf32-d-int03-native-engines`.
-   - Execution commit: `a7267e90c60723447e7acfc4613be2435b558c1b`.
-   - All tests passing, upstream pristine, zero git dirtiness.
+   - Base commit: `88fbe200ff9217f4dccbad08bfa448d067d2ce4e`.
+   - All tests passing, upstream pristine, zero git dirtiness, diff hygiene verified.
 2. **Phase P4 Prerequisites**:
    - Both baseline M1 and bare M2 engines are ready to serve as algorithmic anchors for Phase P4 (approximate NLF filters and adaptive search orders).

@@ -1,12 +1,12 @@
 # Research Decision Record: D-R3 — Native Event Engines Integration & Verification
 
-**Document ID:** `docs/research_decisions/D-R3-native-engines.md`  
-**Milestone:** D-INT-03 / Phase P3  
-**Parent Issue:** Issue #32  
-**Target Integration Branch:** `QuangThang`  
-**Base Commit:** `88fbe200ff9217f4dccbad08bfa448d067d2ce4e` (contains accepted P2 HEAD `ebe2894752dc45e2aeb3109c260a34e2f87a9d06`)  
-**Pinned Upstream RapidFlow:** `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1`  
-**Status:** VERIFIED (Phase P3 Complete — R3-C Final Gate Accepted)  
+**Document ID:** `docs/research_decisions/D-R3-native-engines.md`
+**Milestone:** D-INT-03 / Phase P3
+**Parent Issue:** Issue #32
+**Target Integration Branch:** `QuangThang`
+**Base Commit:** `88fbe200ff9217f4dccbad08bfa448d067d2ce4e` (contains accepted P2 HEAD `ebe2894752dc45e2aeb3109c260a34e2f87a9d06`)
+**Pinned Upstream RapidFlow:** `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1`
+**Status:** VERIFIED (Phase P3 Remediation Complete — Pending Independent Review)
 
 ---
 
@@ -27,7 +27,7 @@ Both engines interact strictly through the shared native foundation (`ApxTypedCo
 Prior to implementation, the research team re-examined the project contract, master research plan, and integration map:
 1. **Contract Synchronization**: `docs/rapidflow_apx_contract.md`, `docs/rapidflow_apx_research_plan.md`, and `docs/rapidflow_apx_integration_map.md` have been updated to reflect Phase P2 completion (PR #31 merged into `QuangThang`, Issue #30 closed) and Phase P3 active status. Historical provenance and earlier SHA references are preserved intact.
 2. **Strict Domain D-R Enforcement**:
-   - $0 \le k < \lambda(Q)$ where $\lambda(Q)$ is computed natively using exact minimum cut algorithms on $Q$.
+   - $0 \le k < \lambda(Q)$ where $\lambda(Q)$ is computed natively using exact Edmonds-Karp BFS minimum cut algorithms on $Q$.
    - Input cases with $k \ge \lambda(Q)$ (Domain D-G) or disconnected queries are rejected fail-closed.
 3. **Event Boundary Correctness**:
    - Single-edge update events occur if and only if the updated edge is matched to an anchor query edge and $|R(f)| = k$ on the active snapshot ($G_{\text{after}}$ for INSERT, $G_{\text{before}}$ for DELETE).
@@ -101,9 +101,21 @@ The canonical clean build and complete verification runner were executed from co
   - Active-set reconstruction matched M0 snapshots 672/672 on both engines.
 - **Repository Regression Suite**: Ran `python3 -m unittest discover tests` — 528 tests passed with 0 failures and 0 errors in 119.184s.
 
-**Final R3-C Verdict**: **ENGINES_VERIFIED_READY_FOR_P4_DESIGN**
+### 4.4. Round 1 Review Remediation Summary (P3-F01–P3-F09)
+
+Following independent review of PR #33, nine targeted remediation items were identified and addressed:
+1. **P3-F01 (BLOCKER — Work Budget Reset & Isolation)**: Enforced per-step budget reset (`step_counters` vs `cumulative_counters`), explicit boundary semantics (`max_work=0` rejects immediately, `max_work=1` halts before traversal), threshold preemption, and diagnostic counter retention on budget exhaustion.
+2. **P3-F02 (BLOCKER — Strict Operation Parsing)**: Rejected arbitrary non-standard operation strings fail-closed with `std::invalid_argument` (accepting only `+`, `-`, `INSERT`, `DELETE`, `INS`, `DEL`).
+3. **P3-F03 (BLOCKER — Threshold $k$ Range Validation)**: Strict integer type checking rejecting negative $k$, non-integers, and out-of-range values before the D-R guard.
+4. **P3-F04 (MAJOR — Boolean Label Rejection)**: Disallowed implicit string coercion of JSON boolean labels (`true`/`false`), enforcing strict integer or string types.
+5. **P3-F05 (MAJOR — Standardized Exit Code Contract)**: Mapped all termination conditions to standard exit codes (0=Success, 1=CLI, 2=Input/Schema, 3=Domain, 4=WorkBudget, 5=ResourceLimit, 6=StepFailure, 7=IO).
+6. **P3-F06 (MAJOR — DFS State Counter Placement)**: Moved `dfs_states` counter increment to state entry in both M1 and M2 search loops; ensured M2 charges work on anchor initialization.
+7. **P3-F07 (MAJOR — Edge Connectivity Algorithm Alignment)**: Clarified that $\lambda(Q)$ is computed via Edmonds-Karp BFS augmenting paths (retracting Dinic claims) and validated against an independent all-cuts oracle.
+8. **P3-F08 (MAJOR — Resource Containment & CLI Override)**: Verified `setrlimit` return value fail-closed and enforced CLI `--max-work` precedence over workload definitions.
+9. **P3-F09 (MAJOR — Deep Graph State Observability)**: Added detailed vertex attributes (id, label, degree), canonical sorted edge lists, neighbor maps, and codec state to step-level diagnostic outputs.
+10. **Diff Hygiene**: Stripped trailing whitespace across documentation to ensure clean `git diff --check`.
+
+**Final R3-C Verdict**: **ENGINES_VERIFIED_READY_FOR_P4_DESIGN (PENDING INDEPENDENT REVIEW)**
 - Native M1-enum and bare M2 event search engines are mathematically and empirically proven bit-for-bit identical to the independent Ground Truth Oracle.
 - Zero duplicate emissions, full transactional ACID isolation, and strict fail-closed boundary enforcement are validated.
-- Milestone D-INT-03 / Phase P3 is complete and ready for handover to reviewer.
-
-
+- Milestone D-INT-03 / Phase P3 remediation is complete and ready for independent closure review.

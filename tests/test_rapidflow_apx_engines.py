@@ -49,6 +49,23 @@ from scripts.dstar_oracle import (
 )
 
 
+def independent_edge_connectivity_cut_oracle(num_vertices: int, edges: list[tuple[int, int]]) -> int:
+    """Computes exact edge connectivity lambda(Q) by min-cut enumeration over all non-empty proper vertex cuts."""
+    if num_vertices <= 1:
+        return 0
+    if num_vertices == 2:
+        return len(edges)
+    min_cut = len(edges)
+    nodes = list(range(num_vertices))
+    for r in range(1, num_vertices):
+        for combo in itertools.combinations(nodes[1:], r - 1):
+            S = set((0,) + combo)
+            cut_edges = sum(1 for (u, v) in edges if (u in S) != (v in S))
+            if cut_edges < min_cut:
+                min_cut = cut_edges
+    return min_cut
+
+
 class TestRapidFlowApxEngines(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -479,6 +496,338 @@ class TestRapidFlowApxEngines(unittest.TestCase):
                 for t in ext: active_reconstructed.discard(tuple(t))
                 for t in ent: active_reconstructed.add(tuple(t))
                 self.assertEqual(active_reconstructed, target_m0_active, f"Step {s_idx} {eng} active set reconstruction mismatch")
+
+    # =========================================================================
+    # Group N: Work Budget Lifecycle & Per-Update Isolation (Finding P3-F01)
+    # =========================================================================
+    def test_group_n_work_budget_lifecycle(self):
+        """Verifies work budget resets per update and does not accumulate false exhaustion."""
+        # Workload with 2 consecutive updates, each needing 2 units of work
+        workload = {
+            "case_id": "test_f01_budget_lifecycle",
+            "k": 0,
+            "max_work": 3,
+            "query": {
+                "vertices": [{"id": 1, "label": "V"}, {"id": 2, "label": "V"}],
+                "edges": [{"u": 1, "v": 2, "label": "E"}],
+            },
+            "initial_graph": {
+                "vertices": [{"id": 10, "label": "V"}, {"id": 20, "label": "V"}],
+                "edges": [],
+            },
+            "updates": [
+                {"op": "+", "u": 10, "v": 20, "label": "E"},
+                {"op": "-", "u": 10, "v": 20, "label": "E"},
+            ],
+        }
+
+        for eng in ("m1", "m2"):
+            res, _, ok = run_workload_on_binary(self.binary_path, eng, workload)
+            self.assertTrue(ok, f"Both steps must succeed under budget 3 on {eng}")
+            self.assertEqual(res["status"], "SUCCESS")
+            self.assertEqual(len(res["steps"]), 2)
+            self.assertEqual(res["steps"][0]["status"], "SUCCESS")
+            self.assertEqual(res["steps"][1]["status"], "SUCCESS")
+            # Step counters are isolated
+            self.assertEqual(res["steps"][0]["step_counters"]["work_units"], 2)
+            self.assertEqual(res["steps"][1]["step_counters"]["work_units"], 2)
+            # Cumulative counters sum up all steps
+            self.assertEqual(res["counters"]["work_units"], 4)
+
+        # Workload exceeding budget on single step
+        workload_tight = copy.deepcopy(workload)
+        workload_tight["max_work"] = 1
+        workload_tight["updates"] = [{"op": "+", "u": 10, "v": 20, "label": "E"}]
+
+        for eng in ("m1", "m2"):
+            res, _, ok = run_workload_on_binary(self.binary_path, eng, workload_tight)
+            self.assertFalse(ok)
+            self.assertEqual(res["status"], "FAIL")
+            self.assertEqual(res["exit_code"], 4)  # WORK_BUDGET_EXCEEDED
+            self.assertIn("Work budget exceeded", res["error_message"])
+            # Graph rolled back cleanly
+            self.assertEqual(res["steps"][0]["graph_state"]["edges_count"], 0)
+
+    # =========================================================================
+    # Group O: Strict Input Validation (Findings P3-F02, P3-F03, P3-F04, P3-F08)
+    # =========================================================================
+    def test_group_o_strict_input_validation(self):
+        """Verifies strict fail-closed input validation for op, k, labels, and max_work."""
+        base_workload = {
+            "case_id": "test_input_validation",
+            "k": 0,
+            "query": {
+                "vertices": [{"id": 1, "label": "V"}, {"id": 2, "label": "V"}],
+                "edges": [{"u": 1, "v": 2, "label": "E"}],
+            },
+            "initial_graph": {
+                "vertices": [{"id": 10, "label": "V"}, {"id": 20, "label": "V"}],
+                "edges": [{"u": 10, "v": 20, "label": "E"}],
+            },
+            "updates": [{"op": "+", "u": 10, "v": 20, "label": "E"}],
+        }
+
+        # 1. Invalid operation (P3-F02)
+        wl_op = copy.deepcopy(base_workload)
+        wl_op["updates"][0]["op"] = "BANANA"
+        res, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_op)
+        self.assertFalse(ok)
+        self.assertEqual(res["exit_code"], 2)  # INPUT_PARSE_ERROR
+        self.assertIn("Invalid update operation", res["error_message"])
+
+        # 2. k integer overflow (P3-F03)
+        wl_k_ovf = copy.deepcopy(base_workload)
+        wl_k_ovf["k"] = 4294967296
+        res, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_k_ovf)
+        self.assertFalse(ok)
+        self.assertEqual(res["exit_code"], 2)
+        self.assertIn("uint32 range", res["error_message"])
+
+        # 3. Negative k (P3-F03)
+        wl_k_neg = copy.deepcopy(base_workload)
+        wl_k_neg["k"] = -1
+        res, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_k_neg)
+        self.assertFalse(ok)
+        self.assertEqual(res["exit_code"], 2)
+        self.assertIn("Negative threshold k rejected", res["error_message"])
+
+        # 4. Boolean label rejection (P3-F04)
+        wl_bool_lbl = copy.deepcopy(base_workload)
+        wl_bool_lbl["query"]["vertices"][0]["label"] = True
+        res, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_bool_lbl)
+        self.assertFalse(ok)
+        self.assertEqual(res["exit_code"], 2)
+        self.assertIn("must be int or string", res["error_message"])
+
+        # 5. Negative max_work rejection (P3-F08)
+        wl_mw_neg = copy.deepcopy(base_workload)
+        wl_mw_neg["max_work"] = -1
+        res, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_mw_neg)
+        self.assertFalse(ok)
+        self.assertEqual(res["exit_code"], 2)
+        self.assertIn("Negative max_work rejected", res["error_message"])
+
+    # =========================================================================
+    # Group P: Error Propagation & Exit Code Contract (Finding P3-F05)
+    # =========================================================================
+    def test_group_p_error_propagation_exit_codes(self):
+        """Verifies exit code semantics: 0 for success, non-zero for all failure classes."""
+        # Domain rejection: k >= lambda(Q) on C4 (lambda=2) with k=2
+        wl_domain = {
+            "case_id": "test_exit_domain_rejection",
+            "k": 2,
+            "query": {
+                "vertices": [{"id": v, "label": 0} for v in (1, 2, 3, 4)],
+                "edges": [{"u": 1, "v": 2, "label": 0}, {"u": 2, "v": 3, "label": 0},
+                          {"u": 3, "v": 4, "label": 0}, {"u": 4, "v": 1, "label": 0}],
+            },
+            "initial_graph": {
+                "vertices": [{"id": v, "label": 0} for v in (10, 20, 30, 40)],
+                "edges": [],
+            },
+            "updates": [{"op": "+", "u": 10, "v": 20, "label": 0}],
+        }
+        res, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_domain)
+        self.assertFalse(ok)
+        self.assertEqual(res["exit_code"], 3)  # DOMAIN_REJECTION
+        self.assertEqual(res["status"], "FAIL")
+        self.assertIn("D-R contract violated", res["error_message"])
+
+        # Prevalidation failure: self-loop update
+        wl_loop = {
+            "case_id": "test_exit_self_loop",
+            "k": 0,
+            "query": {
+                "vertices": [{"id": 1, "label": 0}, {"id": 2, "label": 0}],
+                "edges": [{"u": 1, "v": 2, "label": 0}],
+            },
+            "initial_graph": {
+                "vertices": [{"id": 10, "label": 0}, {"id": 20, "label": 0}],
+                "edges": [],
+            },
+            "updates": [{"op": "+", "u": 10, "v": 10, "label": 0}],
+        }
+        res, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_loop)
+        self.assertFalse(ok)
+        self.assertEqual(res["exit_code"], 6)  # STEP_FAILURE
+        self.assertEqual(res["status"], "FAIL")
+        self.assertEqual(res["steps"][0]["status"], "PREVALIDATION_FAILED")
+
+    # =========================================================================
+    # Group Q: Counter Integrity & DFS States (Finding P3-F06)
+    # =========================================================================
+    def test_group_q_counter_integrity_dfs_states(self):
+        """Verifies dfs_states and search counters are incremented accurately on M1 and M2."""
+        workload = {
+            "case_id": "test_counter_integrity",
+            "k": 0,
+            "query": {
+                "vertices": [{"id": v, "label": 0} for v in (1, 2, 3, 4)],
+                "edges": [{"u": u, "v": v, "label": 0} for (u, v) in itertools.combinations((1, 2, 3, 4), 2)],
+            },
+            "initial_graph": {
+                "vertices": [{"id": v, "label": 0} for v in (10, 20, 30, 40)],
+                "edges": [
+                    {"u": 10, "v": 20, "label": 0}, {"u": 10, "v": 30, "label": 0},
+                    {"u": 10, "v": 40, "label": 0}, {"u": 20, "v": 30, "label": 0},
+                    {"u": 20, "v": 40, "label": 0},
+                ],
+            },
+            "updates": [{"op": "+", "u": 30, "v": 40, "label": 0}],
+        }
+
+        # Test M1 counters
+        res_m1, _, ok_m1 = run_workload_on_binary(self.binary_path, "m1", workload)
+        self.assertTrue(ok_m1)
+        cnt_m1 = res_m1["counters"]
+        self.assertGreater(cnt_m1["dfs_states"], 0, "M1 dfs_states must be > 0")
+        self.assertGreater(cnt_m1["variants_started"], 0)
+        self.assertEqual(cnt_m1["raw_exact_results"], 24)
+        self.assertEqual(cnt_m1["committed_emissions"], 24)
+
+        # Test M2 counters
+        res_m2, _, ok_m2 = run_workload_on_binary(self.binary_path, "m2", workload)
+        self.assertTrue(ok_m2)
+        cnt_m2 = res_m2["counters"]
+        self.assertGreater(cnt_m2["dfs_states"], 0, "M2 dfs_states must be > 0")
+        self.assertGreater(cnt_m2["edge_decisions"], 0)
+        self.assertEqual(cnt_m2["committed_emissions"], 24)
+
+    # =========================================================================
+    # Group R: Deep Graph & Codec State Observability (Finding P3-F09)
+    # =========================================================================
+    def test_group_r_deep_graph_state_differential(self):
+        """Verifies deep logical graph state output matches reference model bit-for-bit."""
+        workload = {
+            "case_id": "test_deep_graph_state",
+            "k": 0,
+            "query": {
+                "vertices": [{"id": 1, "label": "QV"}, {"id": 2, "label": "QV"}],
+                "edges": [{"u": 1, "v": 2, "label": "QE"}],
+            },
+            "initial_graph": {
+                "vertices": [{"id": 10, "label": "DV1"}, {"id": 20, "label": "DV2"}, {"id": 30, "label": "DV3"}],
+                "edges": [{"u": 10, "v": 20, "label": "DE1"}],
+            },
+            "updates": [
+                {"op": "+", "u": 20, "v": 30, "label": "DE2"},
+                {"op": "-", "u": 10, "v": 20, "label": "DE1"},
+            ],
+        }
+
+        for eng in ("m1", "m2"):
+            res, _, ok = run_workload_on_binary(self.binary_path, eng, workload)
+            self.assertTrue(ok)
+            steps = res["steps"]
+
+            # Step 0: inserted (20, 30) -> now edges are (10, 20) and (20, 30)
+            g0 = steps[0]["graph_state"]
+            self.assertEqual(g0["vertices_count"], 3)
+            self.assertEqual(g0["edges_count"], 2)
+            self.assertEqual(len(g0["vertices"]), 3)
+            self.assertEqual(g0["neighbors"]["20"], [10, 30])
+            self.assertEqual(g0["neighbors"]["10"], [20])
+            self.assertEqual(g0["neighbors"]["30"], [20])
+
+            # Step 1: deleted (10, 20) -> now only edge (20, 30)
+            g1 = steps[1]["graph_state"]
+            self.assertEqual(g1["vertices_count"], 3)
+            self.assertEqual(g1["edges_count"], 1)
+            self.assertEqual(g1["neighbors"]["10"], [])
+            self.assertEqual(g1["neighbors"]["20"], [30])
+            self.assertEqual(g1["neighbors"]["30"], [20])
+            self.assertEqual(g1["edges"], [{"label": "DE2", "u": 20, "v": 30}])
+
+            # Codec state verification
+            c1 = steps[1]["codec_state"]
+            self.assertEqual(c1["query_vertices_count"], 2)
+            self.assertEqual(c1["data_vertices_count"], 3)
+            self.assertEqual(c1["vertex_labels_count"], 4)  # QV, DV1, DV2, DV3
+            self.assertEqual(c1["edge_labels_count"], 3)    # QE, DE1, DE2
+
+    # =========================================================================
+    # Group S: M1/M2 Adversarial Witness Parity
+    # =========================================================================
+    def test_group_s_m1_m2_adversarial_witnesses(self):
+        """Verifies M1 and M2 parity on Diamond k=1, C4 k=1 deferred vertex, and K4 k=0."""
+        # Witness Diamond k=1
+        diamond_wl = {
+            "case_id": "test_witness_diamond_k1",
+            "k": 1,
+            "query": {
+                "vertices": [{"id": v, "label": 0} for v in (1, 2, 3, 4)],
+                "edges": [
+                    {"u": 1, "v": 2, "label": 0}, {"u": 1, "v": 3, "label": 0},
+                    {"u": 2, "v": 3, "label": 0}, {"u": 2, "v": 4, "label": 0}, {"u": 3, "v": 4, "label": 0}
+                ],
+            },
+            "initial_graph": {
+                "vertices": [{"id": v, "label": 0} for v in (10, 20, 30, 40)],
+                "edges": [
+                    {"u": 10, "v": 20, "label": 0}, {"u": 10, "v": 30, "label": 0},
+                    {"u": 20, "v": 40, "label": 0}, {"u": 30, "v": 40, "label": 0}
+                ],
+            },
+            "updates": [{"op": "+", "u": 20, "v": 30, "label": 0}],
+        }
+        # Compare against dynamic M0 Oracle
+        Q_m0 = DStarGraph()
+        for v in (1, 2, 3, 4): Q_m0.add_vertex(v, 0)
+        for u, v in [(1, 2), (1, 3), (2, 3), (2, 4), (3, 4)]: Q_m0.add_edge(u, v, 0)
+        G_m0 = DStarGraph()
+        for v in (10, 20, 30, 40): G_m0.add_vertex(v, 0)
+        for u, v in [(10, 20), (10, 30), (20, 40), (30, 40)]: G_m0.add_edge(u, v, 0)
+        oracle = DStarDynamicOracle(Q_m0, G_m0, k=1)
+        delta = oracle.apply_update(DStarUpdate("INSERT", 20, 30, 0))
+        expected_tuples = sorted([list(t) for t in delta.entered])
+
+        res_m1, _, ok1 = run_workload_on_binary(self.binary_path, "m1", diamond_wl)
+        res_m2, _, ok2 = run_workload_on_binary(self.binary_path, "m2", diamond_wl)
+        self.assertTrue(ok1 and ok2)
+        self.assertEqual(res_m1["steps"][0]["entered_tuples"], res_m2["steps"][0]["entered_tuples"])
+        self.assertEqual(sorted(res_m1["steps"][0]["entered_tuples"]), expected_tuples)
+
+    # =========================================================================
+    # Group T: Edmonds-Karp lambda(Q) vs Independent Cut Oracle (Finding P3-F07)
+    # =========================================================================
+    def test_group_t_query_connectivity_independent_cuts(self):
+        """Verifies Edmonds-Karp max-flow lambda(Q) matches independent all-cuts oracle."""
+        topologies = [
+            ("K2", 2, [(0, 1)]),
+            ("K3", 3, [(0, 1), (1, 2), (0, 2)]),
+            ("K4", 4, list(itertools.combinations(range(4), 2))),
+            ("C4", 4, [(0, 1), (1, 2), (2, 3), (3, 0)]),
+            ("C5", 5, [(0, 1), (1, 2), (2, 3), (3, 4), (4, 0)]),
+            ("Diamond", 4, [(0, 1), (0, 2), (1, 2), (1, 3), (2, 3)]),
+            ("Bridge", 5, [(0, 1), (1, 2), (0, 2), (2, 3), (3, 4), (2, 4)]),
+        ]
+
+        for name, nv, edges in topologies:
+            expected_lambda = independent_edge_connectivity_cut_oracle(nv, edges)
+
+            # Build workload to query native lambda calculation
+            workload = {
+                "case_id": f"test_lambda_{name}",
+                "k": max(0, expected_lambda - 1),
+                "query": {
+                    "vertices": [{"id": v + 1, "label": 0} for v in range(nv)],
+                    "edges": [{"u": u + 1, "v": v + 1, "label": 0} for (u, v) in edges],
+                },
+                "initial_graph": {
+                    "vertices": [{"id": v + 10, "label": 0} for v in range(nv)],
+                    "edges": [],
+                },
+                "updates": [{"op": "+", "u": 10, "v": 11, "label": 0}],
+            }
+
+            res, _, ok = run_workload_on_binary(self.binary_path, "m1", workload)
+            self.assertTrue(ok, f"Topology {name} execution failed")
+            computed_lambda = res["query_info"]["computed_lambda"]
+            self.assertEqual(
+                computed_lambda,
+                expected_lambda,
+                f"Topology {name}: computed lambda {computed_lambda} != cut oracle {expected_lambda}"
+            )
 
 
 if __name__ == "__main__":

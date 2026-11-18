@@ -1,18 +1,18 @@
 # RapidFlow-APX Native Engines Design Specification (Phase P3)
 
-**Document ID:** `docs/rapidflow_apx_native_engines_design.md`  
-**Milestone:** D-INT-03 / Phase P3  
-**Parent Issue:** Issue #32  
-**Target Integration Branch:** `QuangThang`  
-**Base Commit:** `88fbe200ff9217f4dccbad08bfa448d067d2ce4e` (contains accepted P2 HEAD `ebe2894752dc45e2aeb3109c260a34e2f87a9d06`)  
-**Pinned Upstream RapidFlow:** `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1`  
-**Status:** WORKING_DESIGN (R3-A Active)  
+**Document ID:** `docs/rapidflow_apx_native_engines_design.md`
+**Milestone:** D-INT-03 / Phase P3
+**Parent Issue:** Issue #32
+**Target Integration Branch:** `QuangThang`
+**Base Commit:** `88fbe200ff9217f4dccbad08bfa448d067d2ce4e` (contains accepted P2 HEAD `ebe2894752dc45e2aeb3109c260a34e2f87a9d06`)
+**Pinned Upstream RapidFlow:** `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1`
+**Status:** WORKING_DESIGN (R3-A Active)
 
 ---
 
 ## 1. Executive Summary & Design Goals
 
-This document specifies the architecture, component design, semantic contracts, algorithmic flows, and mathematical proofs for **Phase P3** of the RapidFlow-APX continuous subgraph matching (CSM) system. 
+This document specifies the architecture, component design, semantic contracts, algorithmic flows, and mathematical proofs for **Phase P3** of the RapidFlow-APX continuous subgraph matching (CSM) system.
 
 In Phase P2 (Issue #30, PR #31 merged), we established the native foundational infrastructure:
 1. `ApxTypedCodec`: Bidirectional mapping for signed 64-bit external IDs and typed labels (`int64` vs `string`), with zero-allocation `noexcept` checkpoint rollback.
@@ -121,7 +121,7 @@ where $u_1 < u_2 < \dots < u_n$ are the original signed 64-bit query vertex IDs 
 
 ### 4.1. `ApxQueryPlan`
 - **Responsibilities**:
-  - Computes exact edge connectivity $\lambda(Q)$ on the undirected query graph using Dinic / Edmonds-Karp maximum flow between all pairs $(s, t)$.
+  - Computes exact edge connectivity $\lambda(Q)$ on the undirected query graph using Edmonds-Karp BFS augmenting path maximum flow between all pairs $(s, t)$.
   - Enforces the D-R contract $0 \le k < \lambda(Q)$; throws `std::invalid_argument` if violated.
   - Builds indexed query edge lists $E_Q = [(qa_0, qb_0), \dots, (qa_{m-1}, qb_{m-1})]$ with internal dense indices.
   - Builds fast label-to-edges lookup: maps each edge label ID to compatible query edge indices.

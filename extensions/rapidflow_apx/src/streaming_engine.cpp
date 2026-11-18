@@ -17,10 +17,14 @@ ApxStreamingEngine::ApxStreamingEngine(
     max_work_(max_work),
     tx_manager_(graph, codec, sink)
 {
-    counters_.max_work = max_work_;
+    cumulative_counters_.max_work = max_work_;
+    step_counters_.max_work = max_work_;
 }
 
 StreamStepResult ApxStreamingEngine::execute_step(const UpdateOperation& update, uint32_t step_index) {
+    step_counters_.reset_step();
+    step_counters_.max_work = max_work_;
+
     StreamStepResult res;
     res.step_index = step_index;
     res.op = update.op;
@@ -32,6 +36,7 @@ StreamStepResult ApxStreamingEngine::execute_step(const UpdateOperation& update,
     if (!codec_.has_data_vertex(update.ext_u) || !codec_.has_data_vertex(update.ext_v)) {
         res.status = StepStatus::PREVALIDATION_FAILED;
         res.error_message = "Unknown data vertex ID: endpoints must exist in data graph";
+        res.step_counters = step_counters_;
         return res;
     }
 
@@ -41,6 +46,7 @@ StreamStepResult ApxStreamingEngine::execute_step(const UpdateOperation& update,
     if (dense_u == dense_v) {
         res.status = StepStatus::PREVALIDATION_FAILED;
         res.error_message = "Self-loop edge update rejected";
+        res.step_counters = step_counters_;
         return res;
     }
 
@@ -50,17 +56,20 @@ StreamStepResult ApxStreamingEngine::execute_step(const UpdateOperation& update,
         if (existing_edge) {
             res.status = StepStatus::PREVALIDATION_FAILED;
             res.error_message = "Edge already exists in graph for INSERT";
+            res.step_counters = step_counters_;
             return res;
         }
     } else { // DELETE
         if (!existing_edge) {
             res.status = StepStatus::PREVALIDATION_FAILED;
             res.error_message = "Edge does not exist in graph for DELETE";
+            res.step_counters = step_counters_;
             return res;
         }
         if (!codec_.has_edge_label(update.label)) {
             res.status = StepStatus::PREVALIDATION_FAILED;
             res.error_message = "Edge label mismatch for DELETE (label unknown in codec)";
+            res.step_counters = step_counters_;
             return res;
         }
         uint32_t dense_lbl = codec_.get_edge_label_id(update.label);
@@ -68,6 +77,7 @@ StreamStepResult ApxStreamingEngine::execute_step(const UpdateOperation& update,
         if (!actual_lbl.exists || actual_lbl.label != dense_lbl) {
             res.status = StepStatus::PREVALIDATION_FAILED;
             res.error_message = "Edge label mismatch for DELETE";
+            res.step_counters = step_counters_;
             return res;
         }
     }
@@ -94,9 +104,9 @@ StreamStepResult ApxStreamingEngine::execute_step(const UpdateOperation& update,
 
         try {
             if (engine_type_ == EngineType::M1) {
-                m1_engine_.search_event(query_plan_, snapshot, du, dv, dlbl, sink_, counters_);
+                m1_engine_.search_event(query_plan_, snapshot, du, dv, dlbl, sink_, step_counters_);
             } else {
-                m2_engine_.search_event(query_plan_, snapshot, du, dv, dlbl, sink_, counters_);
+                m2_engine_.search_event(query_plan_, snapshot, du, dv, dlbl, sink_, step_counters_);
             }
         } catch (const EngineException& e) {
             // Re-throw to trigger transaction abort
@@ -109,6 +119,8 @@ StreamStepResult ApxStreamingEngine::execute_step(const UpdateOperation& update,
 
     res.status = step_res.status;
     res.error_message = step_res.error_message;
+    res.step_counters = step_counters_;
+    cumulative_counters_.accumulate(step_counters_);
 
     if (res.status == StepStatus::SUCCESS) {
         if (update.op == UpdateOp::INSERT) {

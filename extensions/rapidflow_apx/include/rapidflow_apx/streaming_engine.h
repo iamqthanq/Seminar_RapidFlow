@@ -30,6 +30,7 @@ struct StreamStepResult {
     std::string error_message{};
     std::vector<std::vector<int64_t>> entered_tuples{};
     std::vector<std::vector<int64_t>> exited_tuples{};
+    EngineCounters step_counters{};
 };
 
 class ApxStreamingEngine {
@@ -45,8 +46,10 @@ public:
 
     StreamStepResult execute_step(const UpdateOperation& update, uint32_t step_index);
 
-    EngineCounters& get_counters() noexcept { return counters_; }
-    const EngineCounters& get_counters() const noexcept { return counters_; }
+    EngineCounters& get_counters() noexcept { return cumulative_counters_; }
+    const EngineCounters& get_counters() const noexcept { return cumulative_counters_; }
+    const EngineCounters& get_cumulative_counters() const noexcept { return cumulative_counters_; }
+    const EngineCounters& get_step_counters() const noexcept { return step_counters_; }
     EngineType get_engine_type() const noexcept { return engine_type_; }
 
     ApxTransactionManager& get_tx_manager() noexcept { return tx_manager_; }
@@ -62,7 +65,8 @@ private:
     ApxM1EnumEngine m1_engine_;
     ApxM2EventEngine m2_engine_;
     ApxTransactionManager tx_manager_;
-    EngineCounters counters_;
+    EngineCounters cumulative_counters_;
+    EngineCounters step_counters_;
 };
 
 } // namespace rapidflow_apx

@@ -48,6 +48,7 @@ uint64_t ApxM2EventEngine::search_event(
             }
 
             counters.anchors_started++;
+            counters.charge_work();
 
             // Initialize anchor state
             mapping[qa] = pa;
@@ -91,6 +92,7 @@ void ApxM2EventEngine::dfs_m2(
     ApxTupleSink& sink,
     EngineCounters& counters
 ) {
+    counters.dfs_states++;
     uint32_t k = query_plan.get_k();
     if (missing_count > k) {
         return;

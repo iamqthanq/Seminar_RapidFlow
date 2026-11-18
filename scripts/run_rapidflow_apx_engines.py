@@ -271,15 +271,19 @@ def run_workload_on_binary(
         duration_ms = (time.perf_counter() - t0) * 1000.0
 
         res_data: Dict[str, Any] = {}
-        if not timed_out and ret == 0 and os.path.exists(of.name):
+        output_file_exists = os.path.exists(of.name)
+        if not timed_out and output_file_exists and os.path.getsize(of.name) > 0:
             try:
                 with open(of.name, "r", encoding="utf-8") as rf:
                     res_data = json.load(rf)
             except Exception as e:
                 res_data = {"status": "ERROR", "error_message": f"Output parse error: {e}"}
-        else:
+
+        if not res_data:
             status = "TIMEOUT" if timed_out else "EXEC_ERROR"
             res_data = {"status": status, "error_message": err or out}
+
+        res_data["exit_code"] = ret
 
         try:
             os.remove(wf.name)
@@ -287,7 +291,8 @@ def run_workload_on_binary(
         except OSError:
             pass
 
-        return res_data, duration_ms, (ret == 0 and not timed_out and res_data.get("status") == "SUCCESS")
+        is_success = (ret == 0 and not timed_out and res_data.get("status") == "SUCCESS")
+        return res_data, duration_ms, is_success
 
 
 # ============================================================================
@@ -1123,6 +1128,9 @@ def run_56_stream_matrix(binary_path: Path) -> Tuple[Dict[str, Any], bool]:
         "agreed_steps_m2": 0,
         "reconstruction_agreed_steps_m1": 0,
         "reconstruction_agreed_steps_m2": 0,
+        "graph_state_agreed_steps_m1": 0,
+        "graph_state_agreed_steps_m2": 0,
+        "budget_verified_steps": 0,
         "total_entered_events": 0,
         "total_exited_events": 0,
         "status": "PASS",
@@ -1154,6 +1162,7 @@ def run_56_stream_matrix(binary_path: Path) -> Tuple[Dict[str, Any], bool]:
             # Precompute M0 sequence
             m0_deltas = []
             m0_active_sets = []
+            m0_graphs = []
             for upd in workload["updates"]:
                 op = "INSERT" if upd["op"] == "+" else "DELETE"
                 delta = oracle.apply_update(DStarUpdate(op, upd["u"], upd["v"], upd["label"]))
@@ -1162,6 +1171,7 @@ def run_56_stream_matrix(binary_path: Path) -> Tuple[Dict[str, Any], bool]:
                     sorted([list(t) for t in delta.exited]),
                 ))
                 m0_active_sets.append(copy.deepcopy(oracle.current_matches))
+                m0_graphs.append(copy.deepcopy(oracle.G))
                 stats["total_entered_events"] += len(delta.entered)
                 stats["total_exited_events"] += len(delta.exited)
 
@@ -1185,6 +1195,7 @@ def run_56_stream_matrix(binary_path: Path) -> Tuple[Dict[str, Any], bool]:
             for s_idx in range(12):
                 exp_ent, exp_ext = m0_deltas[s_idx]
                 target_m0_active = m0_active_sets[s_idx]
+                target_G = m0_graphs[s_idx]
 
                 ent_m1 = sorted(steps_m1[s_idx].get("entered_tuples", []))
                 ext_m1 = sorted(steps_m1[s_idx].get("exited_tuples", []))
@@ -1212,6 +1223,22 @@ def run_56_stream_matrix(binary_path: Path) -> Tuple[Dict[str, Any], bool]:
                 if active_m2 == target_m0_active:
                     stats["reconstruction_agreed_steps_m2"] += 1
 
+                # Verify deep logical graph state M1 and M2
+                g_m1 = steps_m1[s_idx].get("graph_state", {})
+                g_m2 = steps_m2[s_idx].get("graph_state", {})
+                if (g_m1.get("vertices_count") == len(target_G.vertices) and
+                    g_m1.get("edges_count") == len(target_G.edges)):
+                    stats["graph_state_agreed_steps_m1"] += 1
+                if (g_m2.get("vertices_count") == len(target_G.vertices) and
+                    g_m2.get("edges_count") == len(target_G.edges)):
+                    stats["graph_state_agreed_steps_m2"] += 1
+
+                # Verify per-step counters isolation
+                cnt_s1 = steps_m1[s_idx].get("step_counters", {})
+                cnt_s2 = steps_m2[s_idx].get("step_counters", {})
+                if cnt_s1.get("max_work") == 500000 and cnt_s2.get("max_work") == 500000:
+                    stats["budget_verified_steps"] += 1
+
     stats["duration_seconds"] = time.perf_counter() - t0
 
     all_passed = (
@@ -1219,6 +1246,9 @@ def run_56_stream_matrix(binary_path: Path) -> Tuple[Dict[str, Any], bool]:
         and stats["agreed_steps_m2"] == 672
         and stats["reconstruction_agreed_steps_m1"] == 672
         and stats["reconstruction_agreed_steps_m2"] == 672
+        and stats["graph_state_agreed_steps_m1"] == 672
+        and stats["graph_state_agreed_steps_m2"] == 672
+        and stats["budget_verified_steps"] == 672
     )
 
     if not all_passed:

@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <string>
 #include <stdexcept>
+#include <limits>
 
 namespace rapidflow_apx {
 
@@ -63,20 +64,24 @@ struct EngineCounters {
     uint64_t max_work{500000};
 
     inline void check_work_budget() const {
-        if (work_units >= max_work) {
+        if (max_work == 0 || work_units > max_work) {
             throw WorkBudgetExceededException(
-                "Work budget exceeded: " + std::to_string(work_units) + " >= " + std::to_string(max_work)
+                "Work budget exceeded: " + std::to_string(work_units) + " > " + std::to_string(max_work)
             );
         }
     }
 
     inline void charge_work(uint64_t units = 1) {
-        work_units += units;
-        if (work_units >= max_work) {
+        if (units > std::numeric_limits<uint64_t>::max() - work_units) {
+            throw WorkBudgetExceededException("Work counter overflow");
+        }
+        if (work_units + units > max_work) {
+            work_units += units;
             throw WorkBudgetExceededException(
-                "Work budget exceeded: " + std::to_string(work_units) + " >= " + std::to_string(max_work)
+                "Work budget exceeded: " + std::to_string(work_units) + " > " + std::to_string(max_work)
             );
         }
+        work_units += units;
     }
 
     void reset_step() noexcept {
@@ -98,6 +103,27 @@ struct EngineCounters {
         commitment_checks = 0;
         commitment_rejections = 0;
         work_units = 0;
+    }
+
+    void accumulate(const EngineCounters& other) noexcept {
+        anchors_started += other.anchors_started;
+        dfs_states += other.dfs_states;
+        candidate_evaluations += other.candidate_evaluations;
+        candidate_extensions += other.candidate_extensions;
+        edge_lookups += other.edge_lookups;
+        vertex_label_checks += other.vertex_label_checks;
+        raw_emissions += other.raw_emissions;
+        unique_emissions += other.unique_emissions;
+        committed_emissions += other.committed_emissions;
+        discarded_emissions += other.discarded_emissions;
+        variants_started += other.variants_started;
+        raw_exact_results += other.raw_exact_results;
+        missing_set_rejections += other.missing_set_rejections;
+        edge_decisions += other.edge_decisions;
+        missing_branches += other.missing_branches;
+        commitment_checks += other.commitment_checks;
+        commitment_rejections += other.commitment_rejections;
+        work_units += other.work_units;
     }
 };
 

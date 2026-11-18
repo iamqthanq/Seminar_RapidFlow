@@ -90,6 +90,7 @@ void ApxM1EnumEngine::match_variant_dfs(
     ApxTupleSink& sink,
     EngineCounters& counters
 ) {
+    counters.dfs_states++;
     if (idx == variant.search_order.size()) {
         counters.raw_exact_results++;
 

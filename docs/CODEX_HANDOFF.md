@@ -12,7 +12,7 @@
 - Current Active Direction: **Direction D (Issue #32 / Draft PR #32 / D-INT-03 / Phase P3)**. Objective: Implement native C++ M1-enum and bare M2 event search engines in `extensions/rapidflow_apx`, integrate with Phase P2 foundation, verify 100% against independent Python M0 Ground Truth Oracle across 840 corpus cases and 56 dynamic streams, and complete Decision Record R3.
 - **Status of Phase P2:** Merged into `QuangThang` via Draft PR #31 (`88fbe200ff9217f4dccbad08bfa448d067d2ce4e`), Issue #30 closed.
 - **Status of Phase P3:** Implementation and canonical verification complete.
-  - Implemented `ApxQueryPlan` (native $\lambda(Q)$ via Dinic/Edmonds-Karp max-flow, fail-closed D-R validation $0 \le k < \lambda(Q)$, incident edge indexing).
+  - Implemented `ApxQueryPlan` (native $\lambda(Q)$ via Edmonds-Karp BFS augmenting path max-flow, fail-closed D-R validation $0 \le k < \lambda(Q)$, incident edge indexing).
   - Implemented `ApxM1EnumEngine` (exact $Q - D$ variant search, anchored seed mapping, strict $R(f) = D$ missing set filter).
   - Implemented `ApxM2EventEngine` (bare direct DFS branching on PRESENT/MISSING, deferred vertex commitments, incident edge resolution, leaf invariant guard).
   - Implemented `ApxStreamingEngine` (ACID transaction execution, label interning, duplicate suppression, active-set tracking).
