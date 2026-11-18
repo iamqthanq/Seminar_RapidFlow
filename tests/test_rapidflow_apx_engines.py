@@ -45,10 +45,17 @@ from scripts.run_rapidflow_apx_engines import (
     validate_codec_state,
     validate_step_counters,
     validate_native_output_schema,
+    validate_micro_workload_bounds,
+    validate_required_hand_cases,
+    validate_stream_lock_registry,
+    build_hand_workloads,
     get_known_case_registry,
     run_hand_and_witness_cases,
     run_56_stream_matrix,
     run_corpus_840,
+    STREAM_56_LOCK_PATH,
+    REQUIRED_HAND_CASES_PATH,
+    CANONICAL_MAX_WORK_CAP,
 )
 from scripts.dstar_oracle import (
     DStarGraph,
@@ -839,10 +846,11 @@ class TestRapidFlowApxEngines(unittest.TestCase):
             )
 
     # =========================================================================
-    # Group U: Adversarial Mutation Test Suite (Part 18 — 33 Mutators)
+    # Group U: Adversarial Mutation Test Suite (Level A / B / C Multi-Tier)
     # =========================================================================
     def test_group_u_adversarial_mutation_suite(self):
-        """Verifies fail-closed detection across all 32+ required adversarial mutations (Part 18)."""
+        """Verifies fail-closed detection across Level A (validator units), Level B (stage integration),
+        and Level C (runner subprocess) adversarial mutations without tautological assertions (P3-R3-F02)."""
         mutations_injected = 0
         mutations_detected = 0
 
@@ -884,208 +892,287 @@ class TestRapidFlowApxEngines(unittest.TestCase):
             else:
                 self.fail(f"Mutation '{name}' was INCORRECTLY ACCEPTED (false PASS)!")
 
+        # -----------------------------------------------------------------
+        # Level A: Validator Unit Rejection Tests
+        # -----------------------------------------------------------------
         # 1. Corrupt native vertex ID
         m = copy.deepcopy(valid_graph_state)
         m["vertices"][0]["id"] = -999999
         v_ok, _ = validate_graph_state(m, G_ref)
-        record_mutation("Corrupt native vertex ID", not v_ok)
+        record_mutation("Level A: Corrupt native vertex ID", not v_ok)
 
         # 2. Corrupt native vertex label
         m = copy.deepcopy(valid_graph_state)
         m["vertices"][0]["label"] = "WRONG_LABEL"
         v_ok, _ = validate_graph_state(m, G_ref)
-        record_mutation("Corrupt native vertex label", not v_ok)
+        record_mutation("Level A: Corrupt native vertex label", not v_ok)
 
-        # 3. Corrupt native edge label
+        # 3. Float vertex ID (R3-F06)
         m = copy.deepcopy(valid_graph_state)
-        m["edges"][0]["label"] = "WRONG_LABEL"
+        m["vertices"][0]["id"] = 10.0
         v_ok, _ = validate_graph_state(m, G_ref)
-        record_mutation("Corrupt native edge label", not v_ok)
+        record_mutation("Level A: Float vertex ID", not v_ok)
 
-        # 4. Corrupt native adjacency (missing neighbor)
+        # 4. Boolean degree (R3-F06)
         m = copy.deepcopy(valid_graph_state)
-        m["neighbors"]["20"] = [10]  # dropped 30
+        m["vertices"][0]["degree"] = True
         v_ok, _ = validate_graph_state(m, G_ref)
-        record_mutation("Corrupt native adjacency (missing neighbor)", not v_ok)
+        record_mutation("Level A: Boolean degree", not v_ok)
 
-        # 5. Corrupt degree
+        # 5. Corrupt degree value
         m = copy.deepcopy(valid_graph_state)
         m["vertices"][1]["degree"] = 999
         v_ok, _ = validate_graph_state(m, G_ref)
-        record_mutation("Corrupt degree", not v_ok)
+        record_mutation("Level A: Corrupt degree value", not v_ok)
 
-        # 6. Asymmetric adjacency
+        # 6. Corrupt native edge label
+        m = copy.deepcopy(valid_graph_state)
+        m["edges"][0]["label"] = "WRONG_LABEL"
+        v_ok, _ = validate_graph_state(m, G_ref)
+        record_mutation("Level A: Corrupt native edge label", not v_ok)
+
+        # 7. Corrupt native adjacency (missing neighbor)
+        m = copy.deepcopy(valid_graph_state)
+        m["neighbors"]["20"] = [10]  # dropped 30
+        v_ok, _ = validate_graph_state(m, G_ref)
+        record_mutation("Level A: Corrupt native adjacency (missing neighbor)", not v_ok)
+
+        # 8. Asymmetric adjacency
         m = copy.deepcopy(valid_graph_state)
         m["neighbors"]["10"] = [20, 30]  # 10->30 but 30 doesn't have 10
         v_ok, _ = validate_graph_state(m, G_ref)
-        record_mutation("Asymmetric adjacency", not v_ok)
+        record_mutation("Level A: Asymmetric adjacency", not v_ok)
 
-        # 7. Extra edge
+        # 9. Float string neighbor key (R3-F06)
+        m = copy.deepcopy(valid_graph_state)
+        m["neighbors"]["10.0"] = m["neighbors"].pop("10")
+        v_ok, _ = validate_graph_state(m, G_ref)
+        record_mutation("Level A: Float string neighbor key", not v_ok)
+
+        # 10. Extra edge in edge list
         m = copy.deepcopy(valid_graph_state)
         m["edges"].append({"u": 10, "v": 30, "label": "extra"})
         m["edges_count"] = 3
         v_ok, _ = validate_graph_state(m, G_ref)
-        record_mutation("Extra edge", not v_ok)
+        record_mutation("Level A: Extra edge", not v_ok)
 
-        # 8. Duplicate edge in edge list
+        # 11. Duplicate edge in edge list
         m = copy.deepcopy(valid_graph_state)
         m["edges"].append(m["edges"][0])
         v_ok, _ = validate_graph_state(m, G_ref)
-        record_mutation("Duplicate edge in edge list", not v_ok)
+        record_mutation("Level A: Duplicate edge in edge list", not v_ok)
 
-        # 9. Corrupt codec count (vertex_labels_count)
+        # 12. Corrupt codec count (vertex_labels_count)
         valid_codec = {"query_vertices_count": 4, "data_vertices_count": 6, "vertex_labels_count": 2, "edge_labels_count": 2}
         m_c = copy.deepcopy(valid_codec)
         m_c["vertex_labels_count"] = 999999
         c_ok, _ = validate_codec_state(m_c, valid_codec)
-        record_mutation("Corrupt codec count (vertex_labels_count)", not c_ok)
+        record_mutation("Level A: Corrupt codec count (vertex_labels_count)", not c_ok)
 
-        # 10. Corrupt negative codec count
+        # 13. Corrupt negative codec count
         m_c = copy.deepcopy(valid_codec)
         m_c["data_vertices_count"] = -1
         c_ok, _ = validate_codec_state(m_c, valid_codec)
-        record_mutation("Corrupt negative codec count", not c_ok)
+        record_mutation("Level A: Corrupt negative codec count", not c_ok)
 
-        # 11. Corrupt work_units > max_work on SUCCESS
+        # 14. Corrupt boolean disguised as codec count
+        m_c = copy.deepcopy(valid_codec)
+        m_c["edge_labels_count"] = True
+        c_ok, _ = validate_codec_state(m_c, valid_codec)
+        record_mutation("Level A: Boolean disguised as codec count", not c_ok)
+
+        # 15. Corrupt work_units > max_work on SUCCESS
         valid_cnt = {"work_units": 10, "max_work": 500000, "dfs_states": 5, "candidate_evaluations": 5, "candidate_extensions": 5, "edge_lookups": 5, "vertex_label_checks": 5, "anchors_started": 1, "variants_started": 1, "raw_exact_results": 1, "missing_set_rejections": 0}
         m_cnt = copy.deepcopy(valid_cnt)
         m_cnt["work_units"] = 999999999
         cnt_ok, _ = validate_step_counters(m_cnt, "m1", 500000, is_success=True)
-        record_mutation("Corrupt work_units > max_work", not cnt_ok)
+        record_mutation("Level A: Corrupt work_units > max_work", not cnt_ok)
 
-        # 12. Corrupt negative counter
+        # 16. Corrupt negative counter
         m_cnt = copy.deepcopy(valid_cnt)
         m_cnt["dfs_states"] = -42
         cnt_ok, _ = validate_step_counters(m_cnt, "m1", 500000, is_success=True)
-        record_mutation("Corrupt negative counter", not cnt_ok)
+        record_mutation("Level A: Corrupt negative counter", not cnt_ok)
 
-        # 13. Corrupt boolean disguised as integer
+        # 17. Corrupt boolean disguised as integer in counters
         m_cnt = copy.deepcopy(valid_cnt)
         m_cnt["work_units"] = True
         cnt_ok, _ = validate_step_counters(m_cnt, "m1", 500000, is_success=True)
-        record_mutation("Corrupt boolean disguised as integer", not cnt_ok)
+        record_mutation("Level A: Corrupt boolean disguised as integer", not cnt_ok)
 
-        # 14. Missing required output field (execution)
+        # Baseline valid output schema for testing schema validator
         valid_out = {
             "schema_version": "1.1.0",
             "semantics_version": "D-R-1.0",
             "engine_name": "m1",
             "engine": "m1",
             "case_id": "test_case",
+            "status": "SUCCESS",
+            "error_category": "NONE",
+            "error_message": "",
             "raw_input_sha256": "abcdef",
             "execution": {"total_steps": 1, "attempted_steps": 1, "completed_steps": 1, "failed_steps": 0, "unattempted_steps": 0},
-            "steps": [],
+            "steps": [{
+                "step_index": 0,
+                "status": "SUCCESS",
+                "commit_status": "COMMITTED",
+                "error": "",
+                "error_category": "NONE",
+                "entered_tuples": [],
+                "exited_tuples": [],
+            }],
+            "counters": {
+                "raw_emissions": 0,
+                "unique_emissions": 0,
+                "committed_emissions": 0,
+                "discarded_emissions": 0,
+            },
+            "work_budget": {
+                "default_limit": 500000,
+                "canonical_cap": 500000,
+                "workload_requested_limit": 500000,
+                "cli_requested_limit": 500000,
+                "effective_limit": 500000,
+            },
         }
+
+        # 18. Missing required output field (execution)
         m_out = copy.deepcopy(valid_out)
         del m_out["execution"]
-        s_ok, _ = validate_native_output_schema(m_out, "m1", "test_case", None)
-        record_mutation("Missing required output field (execution)", not s_ok)
+        s_ok, _ = validate_native_output_schema(m_out, "m1", "test_case", None, is_success=True)
+        record_mutation("Level A: Missing required output field (execution)", not s_ok)
 
-        # 15. Wrong schema version
+        # 19. Wrong schema version
         m_out = copy.deepcopy(valid_out)
         m_out["schema_version"] = "0.9.0"
-        s_ok, _ = validate_native_output_schema(m_out, "m1", "test_case", None)
-        record_mutation("Wrong schema version", not s_ok)
+        s_ok, _ = validate_native_output_schema(m_out, "m1", "test_case", None, is_success=True)
+        record_mutation("Level A: Wrong schema version", not s_ok)
 
-        # 16. Wrong semantics version
+        # 20. Wrong semantics version
         m_out = copy.deepcopy(valid_out)
         m_out["semantics_version"] = "D-R-0.1"
-        s_ok, _ = validate_native_output_schema(m_out, "m1", "test_case", None)
-        record_mutation("Wrong semantics version", not s_ok)
+        s_ok, _ = validate_native_output_schema(m_out, "m1", "test_case", None, is_success=True)
+        record_mutation("Level A: Wrong semantics version", not s_ok)
 
-        # 17. Wrong engine identity
+        # 21. Wrong engine identity
         m_out = copy.deepcopy(valid_out)
         m_out["engine_name"] = "m2"
-        s_ok, _ = validate_native_output_schema(m_out, "m1", "test_case", None)
-        record_mutation("Wrong engine identity", not s_ok)
+        s_ok, _ = validate_native_output_schema(m_out, "m1", "test_case", None, is_success=True)
+        record_mutation("Level A: Wrong engine identity", not s_ok)
 
-        # 18. Wrong case identity
+        # 22. Wrong case identity
         m_out = copy.deepcopy(valid_out)
         m_out["case_id"] = "totally_different_case"
-        s_ok, _ = validate_native_output_schema(m_out, "m1", "test_case", None)
-        record_mutation("Wrong case identity", not s_ok)
+        s_ok, _ = validate_native_output_schema(m_out, "m1", "test_case", None, is_success=True)
+        record_mutation("Level A: Wrong case identity", not s_ok)
 
-        # 19. Unknown requested case rejection (P3-R2-F02)
-        registry = get_known_case_registry()
-        is_unknown = "NON_EXISTENT_CASE_999" not in registry
-        record_mutation("Unknown requested case rejection", is_unknown)
+        # 23. Case ID 'UNKNOWN' on SUCCESS (R3-F01)
+        m_out = copy.deepcopy(valid_out)
+        m_out["case_id"] = "UNKNOWN"
+        s_ok, _ = validate_native_output_schema(m_out, "m1", "test_case", None, is_success=True)
+        record_mutation("Level A: Case ID 'UNKNOWN' rejected on SUCCESS", not s_ok)
 
-        # 20. Case stage mismatch rejection (P3-R2-F02)
-        hand_case_in_stream = (registry.get("CASE_HAND_01") == "hand" and registry.get("CASE_HAND_01") != "stream")
-        record_mutation("Case stage mismatch rejection", hand_case_in_stream)
+        # 24. Inconsistent execution lifecycle totals (R3-F01)
+        m_out = copy.deepcopy(valid_out)
+        m_out["execution"]["completed_steps"] = 0  # 0 completed + 0 failed != 1 attempted
+        s_ok, _ = validate_native_output_schema(m_out, "m1", "test_case", None, is_success=True)
+        record_mutation("Level A: Inconsistent execution lifecycle totals", not s_ok)
 
-        # 21. SIGSEGV substituted for expected rejection (P3-R2-F07)
-        mock_segv = {"exit_code": 139, "error_category": "SEGFAULT", "status": "ERROR"}
-        segv_caught = (mock_segv["exit_code"] != 3 or mock_segv["error_category"] != "DOMAIN_ERROR")
-        record_mutation("SIGSEGV substituted for expected rejection", segv_caught)
+        # 25. Root SUCCESS with failed_steps > 0 (R3-F01)
+        m_out = copy.deepcopy(valid_out)
+        m_out["execution"]["failed_steps"] = 1
+        m_out["execution"]["attempted_steps"] = 2
+        m_out["execution"]["total_steps"] = 2
+        s_ok, _ = validate_native_output_schema(m_out, "m1", "test_case", None, is_success=True)
+        record_mutation("Level A: Root SUCCESS with failed_steps > 0", not s_ok)
 
-        # 22. Worker timeout substituted for expected rejection (P3-R2-F07)
-        mock_to = {"exit_code": -1, "error_category": "TIMEOUT", "status": "TIMEOUT"}
-        to_caught = (mock_to["exit_code"] != 3 or mock_to["error_category"] != "DOMAIN_ERROR")
-        record_mutation("Worker timeout substituted for expected rejection", to_caught)
+        # 26. Discarded emissions > 0 in canonical run (R3-F01)
+        m_out = copy.deepcopy(valid_out)
+        m_out["counters"]["discarded_emissions"] = 5
+        m_out["counters"]["raw_emissions"] = 5
+        s_ok, _ = validate_native_output_schema(m_out, "m1", "test_case", None, is_success=True)
+        record_mutation("Level A: Discarded emissions > 0 in canonical output", not s_ok)
 
-        # 23. Wrong error category in negative test (P3-R2-F07)
-        mock_wrong_cat = {"exit_code": 3, "error_category": "UNCAUGHT_ERROR", "status": "ERROR"}
-        wrong_cat_caught = (mock_wrong_cat["error_category"] != "DOMAIN_ERROR")
-        record_mutation("Wrong error category in negative test", wrong_cat_caught)
+        # 27. Canonical cap loosened in work_budget (R3-F07)
+        m_out = copy.deepcopy(valid_out)
+        m_out["work_budget"]["canonical_cap"] = 900000
+        m_out["work_budget"]["effective_limit"] = 900000
+        s_ok, _ = validate_native_output_schema(m_out, "m1", "test_case", None, is_success=True)
+        record_mutation("Level A: Canonical cap loosened in work_budget", not s_ok)
 
-        # 24. Exit 0 SUCCESS substituted for expected rejection (P3-R2-F07)
-        mock_fake_succ = {"exit_code": 0, "error_category": "NONE", "status": "SUCCESS"}
-        fake_succ_caught = (mock_fake_succ["exit_code"] != 3 or mock_fake_succ["status"] == "SUCCESS")
-        record_mutation("Exit 0 SUCCESS substituted for expected rejection", fake_succ_caught)
+        # 28. Micro-workload containment violation (|V(Q)| > 6) (R3-F08)
+        wl_oversize_q = {
+            "query": {"vertices": [{"id": i, "label": 0} for i in range(7)], "edges": []},
+            "initial_graph": {"vertices": [], "edges": []},
+            "updates": [],
+        }
+        b_ok, _ = validate_micro_workload_bounds(wl_oversize_q)
+        record_mutation("Level A: Micro-workload containment |V(Q)| > 6", not b_ok)
 
-        # 25. Changed corpus fixture hash lock (P3-R2-F08)
-        fake_sha = hashlib.sha256(b"corrupted_corpus_data").hexdigest()
-        from scripts.run_rapidflow_apx_engines import CORPUS_840_SEED1_SHA256
-        corpus_hash_caught = (fake_sha != CORPUS_840_SEED1_SHA256)
-        record_mutation("Changed corpus fixture hash lock", corpus_hash_caught)
+        # 29. Micro-workload containment violation (|V(G_0)| > 8) (R3-F08)
+        wl_oversize_g = {
+            "query": {"vertices": [{"id": 1, "label": 0}], "edges": []},
+            "initial_graph": {"vertices": [{"id": i, "label": 0} for i in range(9)], "edges": []},
+            "updates": [],
+        }
+        b_ok, _ = validate_micro_workload_bounds(wl_oversize_g)
+        record_mutation("Level A: Micro-workload containment |V(G_0)| > 8", not b_ok)
 
-        # 26. Changed stream workload seed / hash (P3-R2-F08)
-        from scripts.run_rapidflow_apx_engines import generate_stream_workload
-        mut_wl = generate_stream_workload(99999999, "C4", 0, 2, "uniform")
-        mut_bytes = json.dumps(mut_wl, sort_keys=True).encode("utf-8")
-        mut_sha = hashlib.sha256(mut_bytes).hexdigest()
-        with open(REPO_ROOT / "configs" / "rapidflow_apx_stream_56_lock.json") as f:
-            lock_data = json.load(f)
-        locked_c4_sha = lock_data["streams"][0]["canonical_input_sha256"]
-        seed_hash_caught = (mut_sha != locked_c4_sha)
-        record_mutation("Changed stream workload seed / hash", seed_hash_caught)
+        # 30. Micro-workload containment violation (updates > 12) (R3-F08)
+        wl_oversize_u = {
+            "query": {"vertices": [{"id": 1, "label": 0}], "edges": []},
+            "initial_graph": {"vertices": [{"id": 1, "label": 0}], "edges": []},
+            "updates": [{"op": "+", "u": 1, "v": 1, "label": 0} for _ in range(15)],
+        }
+        b_ok, _ = validate_micro_workload_bounds(wl_oversize_u)
+        record_mutation("Level A: Micro-workload containment updates > 12", not b_ok)
 
-        # 27. Zero-event substitution of locked matrix (P3-R2-F08)
-        zero_events = 0
-        locked_entered = lock_data["streams"][0]["expected_entered_events"]
-        zero_event_caught = (zero_events != locked_entered)
-        record_mutation("Zero-event substitution of locked matrix", zero_event_caught)
+        # 31. Dropped required hand case in generator (R3-F03)
+        hand_wls = build_hand_workloads()
+        dropped_wls = [w for w in hand_wls if w["case_id"] != "CASE_HAND_01"]
+        req_ok, _ = validate_required_hand_cases(dropped_wls, REQUIRED_HAND_CASES_PATH)
+        record_mutation("Level A: Dropped required hand case in generator", not req_ok)
 
-        # 28. Duplicate stream case ID in registry (P3-R2-F08)
-        stream_ids = [s["case_id"] for s in lock_data["streams"]]
-        has_dups = len(stream_ids) != len(set(stream_ids))
-        record_mutation("Duplicate stream case ID in registry", not has_dups)
+        # 32. Corrupted required hand case metadata (R3-F03)
+        corrupted_meta_wls = copy.deepcopy(hand_wls)
+        corrupted_meta_wls[0]["k"] = 999
+        req_ok, _ = validate_required_hand_cases(corrupted_meta_wls, REQUIRED_HAND_CASES_PATH)
+        record_mutation("Level A: Corrupted required hand case metadata", not req_ok)
 
-        # 29. Missing stream from 56 matrix
-        short_streams = stream_ids[:-1]
-        missing_caught = len(short_streams) != 56
-        record_mutation("Missing stream from 56 matrix", missing_caught)
+        # 33. Duplicate stream in stream lock registry (R3-F05)
+        with open(STREAM_56_LOCK_PATH, "r", encoding="utf-8") as f:
+            valid_lock_data = json.load(f)
+        mut_lock = copy.deepcopy(valid_lock_data)
+        mut_lock["streams"][1] = copy.deepcopy(mut_lock["streams"][0])  # duplicate case_id
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tf:
+            json.dump(mut_lock, tf)
+            tf.flush()
+            tf_path = Path(tf.name)
+        try:
+            lock_ok, _ = validate_stream_lock_registry(tf_path)
+            record_mutation("Level A: Duplicate stream in lock registry", not lock_ok)
+        finally:
+            if tf_path.exists():
+                tf_path.unlink()
 
-        # 30. Cumulative work units mismatch (P3-R2-F10)
-        step_work = [10, 20, 30]
-        corrupted_root_work = 999
-        cum_caught = (sum(step_work) != corrupted_root_work)
-        record_mutation("Cumulative work units mismatch", cum_caught)
+        # 34. Tampered update count in stream lock registry (R3-F05)
+        mut_lock = copy.deepcopy(valid_lock_data)
+        mut_lock["streams"][0]["update_count"] = 11  # sum becomes 671 != 672
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tf:
+            json.dump(mut_lock, tf)
+            tf.flush()
+            tf_path = Path(tf.name)
+        try:
+            lock_ok, _ = validate_stream_lock_registry(tf_path)
+            record_mutation("Level A: Tampered update count in lock registry", not lock_ok)
+        finally:
+            if tf_path.exists():
+                tf_path.unlink()
 
-        # 31. Raw duplicate emissions detected in counters (P3-R2-F10)
-        discarded_emissions = 5
-        raw_dup_caught = (discarded_emissions != 0)
-        record_mutation("Raw duplicate emissions in counters", raw_dup_caught)
-
-        # 32. Dirty source tree provenance failure (P3-R2-F06)
-        prov_meta, prov_valid = check_git_provenance()
-        if prov_meta.get("dirty_state") == "DIRTY_SOURCE_TREE":
-            record_mutation("Dirty source tree provenance failure", not prov_valid)
-        else:
-            record_mutation("Dirty source tree provenance failure", True)
-
-        # 33. End-to-end stage mutation: 1 corrupted tuple in hand cases makes stage FAIL (Part 18.4)
+        # -----------------------------------------------------------------
+        # Level B: Stage Integration Mutation Tests
+        # -----------------------------------------------------------------
+        # 35. Corrupted entered tuple in hand cases stage transitions stage to FAIL (Level B)
         from scripts import run_rapidflow_apx_engines as runner_mod
         orig_run_fn = runner_mod.run_workload_on_binary
 
@@ -1098,9 +1185,57 @@ class TestRapidFlowApxEngines(unittest.TestCase):
         runner_mod.run_workload_on_binary = corrupting_run_fn
         try:
             e2e_results, e2e_ok = run_hand_and_witness_cases(self.binary_path, engine_filter="m1", case_filter="CASE_HAND_01")
-            record_mutation("End-to-end stage corruption transitions PASS to FAIL", not e2e_ok)
+            record_mutation("Level B: Corrupted entered tuple fails hand stage", not e2e_ok)
         finally:
             runner_mod.run_workload_on_binary = orig_run_fn
+
+        # 36. Dropped required hand case fails hand stage (Level B)
+        orig_build_fn = runner_mod.build_hand_workloads
+        def dropping_build_fn():
+            wls = orig_build_fn()
+            return [w for w in wls if w["case_id"] != "CASE_HAND_02"]
+
+        runner_mod.build_hand_workloads = dropping_build_fn
+        try:
+            e2e_results, e2e_ok = run_hand_and_witness_cases(self.binary_path, engine_filter="m1")
+            record_mutation("Level B: Dropped hand case fails hand stage", not e2e_ok)
+        finally:
+            runner_mod.build_hand_workloads = orig_build_fn
+
+        # 37. Tampered stream lock file fails 56-stream matrix stage (Level B)
+        orig_lock_path = runner_mod.STREAM_56_LOCK_PATH
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tf:
+            json.dump({"version": "1.0", "total_streams": 0, "streams": []}, tf)
+            tf.flush()
+            tf_path = Path(tf.name)
+        runner_mod.STREAM_56_LOCK_PATH = tf_path
+        try:
+            stream_stats, stream_ok = run_56_stream_matrix(self.binary_path, engine_filter="m1", case_filter="stream_C4_k0_20261118_uniform")
+            record_mutation("Level B: Tampered stream lock fails stream stage", not stream_ok)
+        finally:
+            runner_mod.STREAM_56_LOCK_PATH = orig_lock_path
+            if tf_path.exists():
+                tf_path.unlink()
+
+        # -----------------------------------------------------------------
+        # Level C: Runner End-to-End Subprocess Tests
+        # -----------------------------------------------------------------
+        runner_script = REPO_ROOT / "scripts" / "run_rapidflow_apx_engines.py"
+
+        # 38. Runner invoked with unknown case ID rejected fail-closed (Level C)
+        cmd_unknown = [sys.executable, str(runner_script), "--case", "NON_EXISTENT_CASE_999"]
+        proc_unk = subprocess.run(cmd_unknown, capture_output=True, text=True, cwd=REPO_ROOT)
+        record_mutation("Level C: Unknown case filter rejected with non-zero exit", proc_unk.returncode != 0)
+
+        # 39. Runner invoked with stage mismatch rejected fail-closed (Level C)
+        cmd_mismatch = [sys.executable, str(runner_script), "--stage", "stream", "--case", "CASE_HAND_01"]
+        proc_mis = subprocess.run(cmd_mismatch, capture_output=True, text=True, cwd=REPO_ROOT)
+        record_mutation("Level C: Case stage mismatch rejected with non-zero exit", proc_mis.returncode != 0)
+
+        # 40. Runner invoked with invalid engine option rejected fail-closed (Level C)
+        cmd_invalid_eng = [sys.executable, str(runner_script), "--engine", "invalid_engine_name"]
+        proc_eng = subprocess.run(cmd_invalid_eng, capture_output=True, text=True, cwd=REPO_ROOT)
+        record_mutation("Level C: Invalid engine option rejected with non-zero exit", proc_eng.returncode != 0)
 
         # Verify 100% mutation detection score (Part 18.5)
         detection_rate = (mutations_detected / mutations_injected) * 100.0

@@ -210,15 +210,32 @@ The `ApxStreamingEngine` coordinates updates using `ApxTransactionManager`:
 
 Binary `rapidflow_apx_native`:
 ```bash
-rapidflow_apx_native --engine <m1|m2> --workload <INPUT.json> --output <OUTPUT.json>
+rapidflow_apx_native --engine <m1|m2> --workload <INPUT.json> --output <OUTPUT.json> [--max-work <N>]
 ```
 - **Process Resource Caps**:
-  - Time limit: $\le 30$s per case.
+  - Time limit: $\le 30$s per case (enforced via `alarm(30)`).
   - Memory limit: `RLIMIT_AS` $\le 512$ MiB.
-  - Work limit: max 500,000 work units per update.
+  - Work limit: max 500,000 work units per update (supervisor canonical cap; cannot be enlarged).
 - **Fail-Closed Verification**:
   - Validates schema, input graph sizes ($|V_Q| \le 6, |V_G| \le 8$), and budget $k < \lambda(Q)$.
   - Any invariant violation, resource exhaustion, or format corruption terminates fail-closed with structured error codes.
+
+### 6.1. Contract Distinction: Engine Architectural Capability vs. Canonical Test Verification Scope (P3-R3-F08)
+
+An explicit distinction is drawn between the native engine implementation capability and the Phase P3 canonical test verification regime:
+1. **Native Engine Implementation Capability**:
+   - The underlying C++ components (`ApxAuthoritativeGraph`, `ApxTypedCodec`, `ApxM1EnumEngine`, `ApxM2EventEngine`) are designed with dynamic standard library containers (`std::vector`, `sparsepp::sparse_hash_map`, `GlobalEdgeView`) and dynamic typed labels. They place no hard-coded compile-time limits on graph size, edge count, or update sequences, and are architected to scale to larger workloads in subsequent project phases.
+2. **Canonical Phase P3 Acceptance & Containment Contract**:
+   - Canonical Phase P3 acceptance is strictly and deliberately bounded to **micro-workloads**:
+     - Query size: $|V(Q)| \le 6$, $|E(Q)| \ge 1$
+     - Data graph size: $|V(G_0)| \le 8$, $|V(G_t)| \le 8$
+     - Stream updates: $\le 12$ steps per stream
+     - Candidate search space: $\le 100,000$
+     - Max work limit: $\le 500,000$ units per update
+     - Process containment: Wall clock timeout $\le 30$ seconds, address space $\le 512$ MiB (`RLIMIT_AS`)
+   - **Rationale**:
+     Micro-workloads enable exhaustive bit-for-bit differential comparison against the independent Python Ground Truth Oracle (M0) and exact all-cuts enumeration $\lambda(Q)$, ensuring complete automorphism group preservation and 100% deterministic reproducibility under CI resource guards without non-deterministic timeouts or heuristic approximations.
+   - Any test workload submitted under Phase P3 canonical evaluation exceeding these containment boundaries is rejected preflight fail-closed with `CONTAINMENT_VIOLATION`.
 
 ---
 

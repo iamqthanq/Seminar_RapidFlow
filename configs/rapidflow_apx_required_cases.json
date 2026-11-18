@@ -1,0 +1,282 @@
+{
+  "registry_version": "1.0.0",
+  "contract": "rapidflow_apx-p3-required-hand-cases",
+  "total_required_cases": 25,
+  "cases": [
+    {
+      "case_id": "CASE_HAND_01",
+      "name": "diamond_distinct_labels",
+      "k": 0,
+      "is_negative": false,
+      "expected_exit_code": 0,
+      "expected_error_category": null,
+      "required_engines": "both",
+      "expected_entered_count": 1,
+      "expected_exited_count": 0
+    },
+    {
+      "case_id": "CASE_HAND_02",
+      "name": "diamond_k0_insert",
+      "k": 0,
+      "is_negative": false,
+      "expected_exit_code": 0,
+      "expected_error_category": null,
+      "required_engines": "both",
+      "expected_entered_count": 4,
+      "expected_exited_count": 0
+    },
+    {
+      "case_id": "CASE_HAND_03",
+      "name": "diamond_k0_delete",
+      "k": 0,
+      "is_negative": false,
+      "expected_exit_code": 0,
+      "expected_error_category": null,
+      "required_engines": "both",
+      "expected_entered_count": 0,
+      "expected_exited_count": 4
+    },
+    {
+      "case_id": "CASE_HAND_04",
+      "name": "k4_k1",
+      "k": 1,
+      "is_negative": false,
+      "expected_exit_code": 0,
+      "expected_error_category": null,
+      "required_engines": "both",
+      "expected_entered_count": 24,
+      "expected_exited_count": 0
+    },
+    {
+      "case_id": "CASE_HAND_05",
+      "name": "k4_k2",
+      "k": 2,
+      "is_negative": false,
+      "expected_exit_code": 0,
+      "expected_error_category": null,
+      "required_engines": "both",
+      "expected_entered_count": 24,
+      "expected_exited_count": 0
+    },
+    {
+      "case_id": "CASE_HAND_06_STEP1",
+      "name": "diamond_2step_delete_step1",
+      "k": 1,
+      "is_negative": false,
+      "expected_exit_code": 0,
+      "expected_error_category": null,
+      "required_engines": "both",
+      "expected_entered_count": 0,
+      "expected_exited_count": 16
+    },
+    {
+      "case_id": "CASE_HAND_06_STEP2",
+      "name": "diamond_2step_delete_step2",
+      "k": 1,
+      "is_negative": false,
+      "expected_exit_code": 0,
+      "expected_error_category": null,
+      "required_engines": "both",
+      "expected_entered_count": 0,
+      "expected_exited_count": 8
+    },
+    {
+      "case_id": "CASE_HAND_07",
+      "name": "no_matching_label",
+      "k": 0,
+      "is_negative": false,
+      "expected_exit_code": 0,
+      "expected_error_category": null,
+      "required_engines": "both",
+      "expected_entered_count": 0,
+      "expected_exited_count": 0
+    },
+    {
+      "case_id": "CASE_HAND_08",
+      "name": "non_induced_extra_chords",
+      "k": 0,
+      "is_negative": false,
+      "expected_exit_code": 0,
+      "expected_error_category": null,
+      "required_engines": "both",
+      "expected_entered_count": 8,
+      "expected_exited_count": 0
+    },
+    {
+      "case_id": "CASE_HAND_09",
+      "name": "edge_label_mismatch",
+      "k": 1,
+      "is_negative": false,
+      "expected_exit_code": 0,
+      "expected_error_category": null,
+      "required_engines": "both",
+      "expected_entered_count": 6,
+      "expected_exited_count": 0
+    },
+    {
+      "case_id": "CASE_HAND_10",
+      "name": "vertex_label_mismatch",
+      "k": 0,
+      "is_negative": false,
+      "expected_exit_code": 0,
+      "expected_error_category": null,
+      "required_engines": "both",
+      "expected_entered_count": 0,
+      "expected_exited_count": 0
+    },
+    {
+      "case_id": "CASE_HAND_11",
+      "name": "int_vs_str_labels",
+      "k": 0,
+      "is_negative": false,
+      "expected_exit_code": 0,
+      "expected_error_category": null,
+      "required_engines": "both",
+      "expected_entered_count": 0,
+      "expected_exited_count": 0
+    },
+    {
+      "case_id": "CASE_HAND_12",
+      "name": "sparse_negative_ids",
+      "k": 0,
+      "is_negative": false,
+      "expected_exit_code": 0,
+      "expected_error_category": null,
+      "required_engines": "both",
+      "expected_entered_count": 6,
+      "expected_exited_count": 0
+    },
+    {
+      "case_id": "CASE_HAND_13",
+      "name": "canonical_tuple_order",
+      "k": 0,
+      "is_negative": false,
+      "expected_exit_code": 0,
+      "expected_error_category": null,
+      "required_engines": "both",
+      "expected_entered_count": 1,
+      "expected_exited_count": 0
+    },
+    {
+      "case_id": "CASE_HAND_14",
+      "name": "uniform_k4_k0_automorphisms",
+      "k": 0,
+      "is_negative": false,
+      "expected_exit_code": 0,
+      "expected_error_category": null,
+      "required_engines": "both",
+      "expected_entered_count": 24,
+      "expected_exited_count": 0
+    },
+    {
+      "case_id": "CASE_HAND_15",
+      "name": "c4_k1_deferred_witness",
+      "k": 1,
+      "is_negative": false,
+      "expected_exit_code": 0,
+      "expected_error_category": null,
+      "required_engines": "both",
+      "expected_entered_count": 8,
+      "expected_exited_count": 0
+    },
+    {
+      "case_id": "CASE_HAND_16",
+      "name": "missing_commitment_violation",
+      "k": 1,
+      "is_negative": false,
+      "expected_exit_code": 0,
+      "expected_error_category": null,
+      "required_engines": "both",
+      "expected_entered_count": 16,
+      "expected_exited_count": 0
+    },
+    {
+      "case_id": "CASE_HAND_17",
+      "name": "no_double_charging",
+      "k": 0,
+      "is_negative": false,
+      "expected_exit_code": 0,
+      "expected_error_category": null,
+      "required_engines": "both",
+      "expected_entered_count": 6,
+      "expected_exited_count": 0
+    },
+    {
+      "case_id": "CASE_HAND_18",
+      "name": "rollback_isolation",
+      "k": 0,
+      "is_negative": false,
+      "expected_exit_code": 0,
+      "expected_error_category": null,
+      "required_engines": "both",
+      "expected_entered_count": 8,
+      "expected_exited_count": 0
+    },
+    {
+      "case_id": "CASE_HAND_19",
+      "name": "reversed_endpoints",
+      "k": 0,
+      "is_negative": false,
+      "expected_exit_code": 0,
+      "expected_error_category": null,
+      "required_engines": "both",
+      "expected_entered_count": 0,
+      "expected_exited_count": 0
+    },
+    {
+      "case_id": "CASE_HAND_20",
+      "name": "caller_mutation_isolation",
+      "k": 0,
+      "is_negative": false,
+      "expected_exit_code": 0,
+      "expected_error_category": null,
+      "required_engines": "both",
+      "expected_entered_count": 0,
+      "expected_exited_count": 0
+    },
+    {
+      "case_id": "CASE_HAND_21",
+      "name": "invalid_k_domain",
+      "k": 1,
+      "is_negative": true,
+      "expected_exit_code": 3,
+      "expected_error_category": "DOMAIN_ERROR",
+      "required_engines": "both",
+      "expected_entered_count": 0,
+      "expected_exited_count": 0
+    },
+    {
+      "case_id": "CASE_HAND_22",
+      "name": "invalid_update_rollback",
+      "k": 0,
+      "is_negative": true,
+      "expected_exit_code": 6,
+      "expected_error_category": "PREVALIDATION_ERROR",
+      "required_engines": "both",
+      "expected_entered_count": 0,
+      "expected_exited_count": 0
+    },
+    {
+      "case_id": "CASE_HAND_23",
+      "name": "query_size_5_k5_minus_edge",
+      "k": 1,
+      "is_negative": false,
+      "expected_exit_code": 0,
+      "expected_error_category": null,
+      "required_engines": "both",
+      "expected_entered_count": 96,
+      "expected_exited_count": 0
+    },
+    {
+      "case_id": "CASE_HAND_24_Q6",
+      "name": "c6_cycle_size_6",
+      "k": 1,
+      "is_negative": false,
+      "expected_exit_code": 0,
+      "expected_error_category": null,
+      "required_engines": "both",
+      "expected_entered_count": 12,
+      "expected_exited_count": 0
+    }
+  ]
+}

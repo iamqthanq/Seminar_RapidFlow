@@ -328,6 +328,8 @@ int main(int argc, char* argv[]) {
     root_out["error_message"] = json::Value("");
     root_out["steps"] = json::Value::make_array();
 
+    const uint64_t CANONICAL_MAX_WORK_CAP = 500000ULL;
+
     json::Value exec_init = json::Value::make_object();
     exec_init["total_steps"] = json::Value(static_cast<int64_t>(0));
     exec_init["attempted_steps"] = json::Value(static_cast<int64_t>(0));
@@ -336,6 +338,14 @@ int main(int argc, char* argv[]) {
     exec_init["unattempted_steps"] = json::Value(static_cast<int64_t>(0));
     root_out["execution"] = exec_init;
 
+    json::Value wb_init = json::Value::make_object();
+    wb_init["default_limit"] = json::Value(static_cast<int64_t>(CANONICAL_MAX_WORK_CAP));
+    wb_init["canonical_cap"] = json::Value(static_cast<int64_t>(CANONICAL_MAX_WORK_CAP));
+    wb_init["workload_requested_limit"] = json::Value(static_cast<int64_t>(CANONICAL_MAX_WORK_CAP));
+    wb_init["cli_requested_limit"] = json::Value(static_cast<int64_t>(cli_max_work_set ? cli_max_work : CANONICAL_MAX_WORK_CAP));
+    wb_init["effective_limit"] = json::Value(static_cast<int64_t>(cli_max_work_set ? std::min(cli_max_work, CANONICAL_MAX_WORK_CAP) : CANONICAL_MAX_WORK_CAP));
+    root_out["work_budget"] = wb_init;
+
     ExitCode final_exit_code = ExitCode::SUCCESS;
 
     try {
@@ -343,6 +353,12 @@ int main(int argc, char* argv[]) {
 
         std::string case_id = root_in.contains("case_id") ? root_in["case_id"].as_string() : "unknown";
         root_out["case_id"] = json::Value(case_id);
+
+        if (root_in.contains("updates") && root_in["updates"].is_array()) {
+            int64_t total_u = static_cast<int64_t>(root_in["updates"].as_array().size());
+            root_out["execution"]["total_steps"] = json::Value(total_u);
+            root_out["execution"]["unattempted_steps"] = json::Value(total_u);
+        }
 
         uint32_t k = 0;
         if (root_in.contains("k")) {
@@ -360,7 +376,9 @@ int main(int argc, char* argv[]) {
             k = static_cast<uint32_t>(raw_k);
         }
 
-        uint64_t max_work = 500000;
+        uint64_t default_limit = CANONICAL_MAX_WORK_CAP;
+        uint64_t workload_requested_limit = CANONICAL_MAX_WORK_CAP;
+        bool workload_requested_set = false;
         if (root_in.contains("max_work")) {
             const auto& mw_val = root_in["max_work"];
             if (!mw_val.is_int()) {
@@ -370,11 +388,28 @@ int main(int argc, char* argv[]) {
             if (raw_mw <= 0) {
                 throw std::invalid_argument("Negative max_work rejected: " + std::to_string(raw_mw));
             }
-            max_work = static_cast<uint64_t>(raw_mw);
+            workload_requested_limit = static_cast<uint64_t>(raw_mw);
+            workload_requested_set = true;
+        }
+
+        uint64_t cli_requested_limit = cli_max_work_set ? cli_max_work : CANONICAL_MAX_WORK_CAP;
+        uint64_t effective_limit = CANONICAL_MAX_WORK_CAP;
+        if (workload_requested_set) {
+            effective_limit = std::min(effective_limit, workload_requested_limit);
         }
         if (cli_max_work_set) {
-            max_work = cli_max_work;
+            effective_limit = std::min(effective_limit, cli_requested_limit);
         }
+
+        json::Value wb_obj = json::Value::make_object();
+        wb_obj["default_limit"] = json::Value(static_cast<int64_t>(default_limit));
+        wb_obj["canonical_cap"] = json::Value(static_cast<int64_t>(CANONICAL_MAX_WORK_CAP));
+        wb_obj["workload_requested_limit"] = json::Value(static_cast<int64_t>(workload_requested_limit));
+        wb_obj["cli_requested_limit"] = json::Value(static_cast<int64_t>(cli_requested_limit));
+        wb_obj["effective_limit"] = json::Value(static_cast<int64_t>(effective_limit));
+        root_out["work_budget"] = wb_obj;
+
+        uint64_t max_work = effective_limit;
 
         // 1. Initialize Codec
         ApxTypedCodec codec;
