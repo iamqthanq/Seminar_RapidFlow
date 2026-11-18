@@ -7,7 +7,7 @@
 **Base Commit:** `03be8b56a9479609adf87d213122eabefc9162fb`
 **Upstream RapidFlow SHA:** `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1`
 **Audit Status:** `COMPLETE`
-**Overall Verdict:** `READY_FOR_P2_DESIGN`
+**Overall Verdict:** `READY_FOR_P2_DESIGN (PENDING_USER_PR_CLOSURE)`
 
 ---
 
@@ -77,13 +77,13 @@ All 6 declared probes were executed natively with process group containment (tim
 ### 5.2. Rejected / Incompatible Mechanisms
 1. **Exact NLF Candidate Pruning**: Probe D conclusively proved that RapidFlow's `nlf_check` condition ($v\_nlf \ge u\_nlf$) prunes valid approximate embeddings where query edges are missing. Candidate filtering based on exact NLF must be eliminated in P2/P3.
 2. **Leaf Candidate Count Shortcut**: In `search_engine.cpp:161`, RapidFlow directly adds `local_idx_[next_depth].second` to `result_count` without binding vertex assignments. Must be unrolled in P2 to materialize individual tuples.
-3. **Naive Automorphism Expansion on Full DFS**: In `streaming_engine.cpp:181`, RapidFlow multiplies results by $|Aut(Q)|$. As proven by the K4 counterexample ($24 \times 24 = 576$), unconditional expansion on a complete DFS produces gross overcounting. The native tuple sink must either use symmetry-breaking in the DFS tree or expand representative edge orbits only.
+3. **Automorphism Handling in Tuple Path**: In `streaming_engine.cpp:181`, RapidFlow multiplies results by `automorphism_size` (`automorphism_edges_[id].size()`, which is 12 for $K_4$), representing the directed edge orbit size, NOT $|\operatorname{Aut}(K_4)| = 24$. As proven by the K4 counterexample ($24 \times 24 = 576$), unconditional post-hoc multiplication or full-group expansion on a complete DFS produces gross overcounting. For default bare M2, DFS across all valid anchor orientations produces every valid ordered tuple directly and uniquely, requiring **no post-hoc scalar multiplication and no post-hoc expansion**.
 
 ---
 
 ## 6. Decision R1 Summary & Phase P2 Recommendations
 
-- **Verdict:** **`READY_FOR_P2_DESIGN`**
+- **Verdict:** **`READY_FOR_P2_DESIGN (PENDING_USER_PR_CLOSURE)`**
 - **Phase P2 Priorities**:
   1. Build `ApxTypedCodec` to handle external sparse/negative IDs and typed labels (int `0` vs str `"0"`).
   2. Implement `ApxAuthoritativeGraph` combining RapidFlow CSR snapshot with `GlobalEdgeView` mutable overlays.

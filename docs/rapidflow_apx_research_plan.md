@@ -136,20 +136,31 @@ The final research product must be a **demonstrably integrated C++ system** deri
   1. Dynamic Defect Bound $\delta'$: Track committed missing edges $|R_p|$ and unassigned query edges; prune when $|R_p| + \text{unavoidable} > k$.
   2. Relaxed NLF: Construct neighbor label frequency multisets with tolerance $k$, avoiding false rejections.
   3. Dynamic Candidate Ordering: Select next frontier edge based on candidate set cardinality.
-  4. **Optional Pruning Principle**: Candidate pruning is strictly optional. If the CPU and memory overhead of computing approximate NLF or maintaining dynamic candidate lists exceeds the backtracking search reduction, the engine must allow bypassing pruning and executing direct join/search.
+  4. **Strict Optional Pruning Principle & Bare M2 Fallback**: Candidate pruning (NLF, $\delta'$) is strictly an optional optimization. If the CPU and memory overhead of computing approximate NLF or maintaining dynamic candidate lists exceeds the backtracking search reduction, the engine must safely and unconditionally fall back to bare M2 without filtering.
 - **Exit Criteria**: Pruned M2 produces identical tuple output to bare M2 while demonstrating positive net work reduction when pruning is enabled.
 
 ### 3.6. Phase P5: Pilot, Scaling & NetFlow Workload Evaluation
 - **Scope**: Replicate the S4 pilot natively and scale to representative workloads:
   1. Bounded Native Pilot: Execute paired runs under RLIMIT_AS 512 MiB and wall-clock timeout.
-  2. Scaling Exploration: Proposed exploration target $|S| \ge 64$ for stress-testing scalability (clarified: $|S| \ge 64$ is a target for stress-testing, not an established mathematical minimum).
+  2. Scaling Exploration: Proposed exploration target $|S| \ge 64$ for stress-testing scalability (explicitly defined as a proposed exploratory stress-testing target, NOT an established mathematical minimum or thesis validity gate).
   3. Workload Separation: Natural continuous stream (event-by-event processing) is explicitly evaluated separately from dense sliding window snapshot sampling.
-  4. Fair Metric Evaluation: Measure actual CPU runtime, memory RSS, physical operation counters, and cache locality. Novelty is established by guaranteed correctness under bounded approximation, not merely raw throughput.
+  4. Fair Metric Evaluation & Novelty Stance: Measure actual CPU runtime, memory RSS, physical operation counters, and cache locality. Scientific novelty is treated as an unverified working hypothesis requiring formal comparative analysis against established literature (e.g., dynamic continuous subgraph matching, approximate subgraph isomorphism, and fault-tolerant pattern matching). No claim of novelty is asserted as an established fact prior to peer evaluation.
+  5. **Empirical Evaluation States**:
+     Empirical benchmarks must be classified under one of five explicit evaluation states:
+     - `ADVANTAGE_OBSERVED/PROVEN`: Statistically significant runtime speedup and/or memory RSS reduction with verified 100% bit-for-bit output equivalence against M0.
+     - `PARITY`: Performance differences lie within statistical noise / margin of error ($\pm 5\%$).
+     - `QUERY_DEPENDENT`: Performance advantageous on specific query topologies or edge densities, but neutral or disadvantageous on others.
+     - `INCONCLUSIVE`: High variance across runs, unresolved resource contention, or inability to establish a clear trend across workloads.
+     - `NO_GO`: Fundamental algorithmic overhead, severe memory blowup, or scaling bottlenecks rendering the method uncompetitive or impractical.
+  6. **Rules for Censoring & Timeouts**:
+     - Any run terminated by wall-clock timeout or memory ceiling must be explicitly flagged as `TIMEOUT` or `OOM_CENSORED`, along with the exact cutoff threshold.
+     - Censored runs must NEVER be silently discarded from statistical summaries or replaced with arbitrary zeroes/infinities.
+     - Both censored proportions and bounded quantile statistics must be reported transparently.
 - **Exit Criteria**: Reproducible benchmark report with audited provenance and transparent statistical bounds.
 
 ### 3.7. Phase P6: Comparative Evaluation & Deliverables
 - **Scope**: Final thesis analysis, documentation, and archival:
-  1. Comparative assessment: M1-enum vs bare M2 vs optimized M2.
+  1. Comparative assessment: M1-enum vs bare M2 vs optimized M2 across the 5 evaluation states.
   2. Complete thesis artifact package: code, test suites, manifests, and documentation.
   3. Formal defense slides and summary.
 
@@ -160,11 +171,11 @@ The final research product must be a **demonstrably integrated C++ system** deri
 | Gate | Associated Phase | Core Question | Evidence Required | Verdict Options |
 | :---: | :---: | :--- | :--- | :---: |
 | **R0** | P0 | Is the problem contract and inventory locked? | `rapidflow_apx_contract.md`, `reuse_inventory.md` | `APPROVED` / `REVISE` |
-| **R1** | P1 | Is native RapidFlow integration feasible and architecturally sound? | Probes A–F execution, integration map, source audit | `READY_FOR_P2_DESIGN` / `NEEDS_ADJUSTMENT` / `BLOCKED` |
+| **R1** | P1 | Is native RapidFlow integration feasible and architecturally sound? | Probes A–F execution, integration map, source audit | `READY_FOR_P2_DESIGN (PENDING_USER_PR_CLOSURE)` / `NEEDS_ADJUSTMENT` / `BLOCKED` |
 | **R2** | P2 | Can native components materialize tuples and handle rollback? | Foundation unit tests, tuple sink verification, rollback tests | `READY_FOR_ENGINES` / `FIX_FOUNDATION` |
 | **R3** | P3 | Do native M1 and M2 match M0 Oracle 100% on corpus? | 840 corpus verification, 56-stream matrix | `ENGINES_VERIFIED` / `DISCREPANCY_FOUND` |
 | **R4** | P4 | Are NLF/$\delta'$ pruning optimizations sound and effective? | Equivalence verification, operation counter reduction | `PRUNING_VALIDATED` / `PRUNING_UNSOUND` |
-| **R5** | P5 | Does M2 outperform M1 on real-world NetFlow benchmarks? | Microbenchmarks, RSS, latency distributions, NetFlow logs | `ADVANTAGE_PROVEN` / `PARITY` / `NO_GO` |
+| **R5** | P5 | Does M2 outperform M1 on real-world NetFlow benchmarks? | Microbenchmarks, RSS, latency distributions, NetFlow logs | `ADVANTAGE_PROVEN` / `PARITY` / `QUERY_DEPENDENT` / `INCONCLUSIVE` / `NO_GO` |
 | **R6** | P6 | Are all deliverables reproducible and ready for thesis defense? | Independent verification script, clean build, PR merge | `READY_FOR_DEFENSE` / `REVISE` |
 
 ---

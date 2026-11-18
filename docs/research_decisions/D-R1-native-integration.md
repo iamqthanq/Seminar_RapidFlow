@@ -7,7 +7,7 @@
 **Context:** Seminar RapidFlow / Continuous Subgraph Matching (CSM) — Direction D (Issue #28 / PR #29)
 **Parent Document:** Issue #28 (`D-INT-01 / P0–P1`)
 **Base Commit:** `03be8b56a9479609adf87d213122eabefc9162fb`
-**Verdict:** `READY_FOR_P2_DESIGN`
+**Verdict:** `READY_FOR_P2_DESIGN (PENDING_USER_PR_CLOSURE)`
 
 ---
 
@@ -15,10 +15,10 @@
 
 Based on the line-by-line audit of original RapidFlow source code (`2ea4f4c...`), the empirical execution of native validation Probes A through F using genuine RapidFlow components and locked JSON fixtures, and rigorous mathematical analysis of the Edge Recall / S2 problem contract:
 
-**Verdict:** **`READY_FOR_P2_DESIGN`**
+**Verdict:** **`READY_FOR_P2_DESIGN (PENDING_USER_PR_CLOSURE)`**
 
 ### Verdict Meaning & Non-Claims
-- `READY_FOR_P2_DESIGN` certifies that sufficient architectural and runtime evidence exists to proceed with the formal design and initial construction of Phase P2 (`extensions/rapidflow_apx/`).
+- `READY_FOR_P2_DESIGN (PENDING_USER_PR_CLOSURE)` certifies that sufficient architectural and runtime evidence exists to proceed with the formal design and initial construction of Phase P2 (`extensions/rapidflow_apx/`), pending final user review and merge of Draft PR #29.
 - It does **NOT** claim that native integration is already complete, nor does it claim that native APX is faster than M1 or baselines.
 - The audit affirmatively proved both viable integration paths (Graph CSR, GlobalEdgeView, streaming snapshot sequencing) and fatal exact mechanisms that must be replaced (exact NLF pruning, leaf count shortcut, naive full-group automorphism multiplication on complete search spaces).
 
@@ -41,46 +41,67 @@ Every architectural statement, claim, and finding in this record is classified u
 | **Candidate Set Exclusion** | `streaming/global_view_manager.cpp:135-144` | `NATIVE_RUNTIME_VERIFIED` | Evaluated in Probe D. `GlobalViewManager::create_views` completely excludes vertices 1 and 2 from `candidates_` when `nlf_check` fails. |
 | **Streaming Snapshot Ordering** | `streaming/streaming_engine.cpp:143-157, 210-230` | `SOURCE_INSPECTED` | INSERT updates view then searches ($G_{\text{after}}$); DELETE searches then removes from view ($G_{\text{before}}$). |
 | **Adapter Transactional Rollback** | `tests/native/rapidflow_apx_audit/src/audit_probes.cpp` | `NEW_AUDIT_ADAPTER_RUNTIME` | Verified in Probe E on adapter forward/reverse views under simulated fault injection (`INJECTED_TRANSACTION_ABORT`). |
-| **Automorphism Edge Orbit Partitioning** | `streaming/order_manager.cpp:51-76` | `SOURCE_INSPECTED` | Computes $\operatorname{Aut}(Q)$ and partitions query edges into orbits; only one canonical representative edge per orbit is searched. |
+| **Automorphism Edge Orbit Partitioning** | `streaming/order_manager.cpp:47-76` | `SOURCE_INSPECTED` | Partitions directed query edges into orbits; `get_automorphism_meta` returns `automorphism_edges_[id].size()` (12 on $K_4$), representing directed edge orbit size, NOT $|\operatorname{Aut}(Q)|$ (24). |
 | **Scalar Automorphism Multiplication** | `streaming/streaming_engine.cpp:181` | `SOURCE_INSPECTED` | Multiplies count by `automorphism_size` (`result_count += local_result_count * automorphism_size`). Valid ONLY because search is restricted to representative space! |
 | **Leaf Candidate Count Shortcut** | `streaming/search_engine.cpp:161` | `SOURCE_INSPECTED` | Exact SearchEngine skips leaf vertex binding: `result_count += local_idx_[next_depth].second`. |
 | **Tuple Materialization Pipeline** | `extensions/rapidflow_apx/` | `PROPOSED` | Leaf candidate unrolling and representative orbit expansion proposed for Phase P2. |
 | **Native M1 & M2 Search Kernels** | `extensions/rapidflow_apx/` | `PROPOSED` | Native variant query execution (M1) and defect-branching DFS (M2) proposed for Phase P3. |
-| **Novelty / Speedup Claims** | Entire System | `NOT_VERIFIED` | Banned from assertion. Throughput/latency alone does not prove novelty; correctness and bounded trade-offs must be proven. |
+| **Novelty / Speedup Claims** | Entire System | `NOT_VERIFIED` | Banned from assertion. Novelty is an unverified hypothesis requiring literature comparison; empirical performance requires rigorous benchmarking. |
 
 ---
 
-## 3. Symmetry & Automorphism Architecture: The K4 Counterexample
+## 3. Symmetry & Automorphism Architecture: The Directed Edge Orbit and K4 Analysis
 
 A critical finding of this audit concerns RapidFlow's symmetry handling in `OrderManager` and `StreamingEngine`:
 
-### 3.1. Original RapidFlow Mechanism
+### 3.1. Original RapidFlow Mechanism: Directed Edge Orbits vs Full Automorphism Group
+Inspecting `order_manager.cpp:47-49` reveals the exact definition of `automorphism_size`:
+```cpp
+inline auto get_automorphism_meta(uint32_t id) const {
+    return std::make_tuple(automorphism_edges_[id][0], &orders_[id],
+                           (uint32_t)automorphism_edges_[id].size());
+}
+```
 1. `OrderManager::detect_automorphism_edges(const Graph *query_graph)` (`order_manager.cpp:51-76`):
    - Computes query automorphism group $\operatorname{Aut}(Q)$ via `GraphOperations::compute_automorphism`.
-   - Partitions all query edges $\{u, v\}$ into equivalence orbits under $\operatorname{Aut}(Q)$.
-   - For each edge orbit, selects only the first edge (`automorphism.front()`) as the canonical representative.
-   - Generates matching and indexing orders **only for that representative edge**.
-2. `StreamingEngine::execute` (`streaming_engine.cpp:181`):
+   - Partitions all **directed query edges** $(u, v)$ into equivalence orbits under $\operatorname{Aut}(Q)$.
+   - For each edge orbit, selects only the first directed edge (`automorphism_edges_[id][0]`) as the canonical representative.
+   - Generates matching and indexing orders **only for that representative directed edge**.
+2. **Directed Edge Orbit Size (12) vs Full Automorphism Group Order (24) on $K_4$**:
+   - For undirected $K_4$, there are 4 vertices and 6 undirected edges, corresponding to **12 directed edges**.
+   - Under $\operatorname{Aut}(K_4)$ (where $|\operatorname{Aut}(K_4)| = 4! = 24$), all 12 directed edges form a single transitive orbit.
+   - Therefore, `automorphism_edges_[id].size()` returns **12**, which is the size of the directed edge orbit, NOT $|\operatorname{Aut}(K_4)| = 24$.
+3. `StreamingEngine::execute` (`streaming_engine.cpp:181`):
    - Searches only the representative order for the matched dynamic edge.
-   - Scales the resulting count by `automorphism_size`:
+   - Scales the resulting count by `automorphism_size` (12):
      ```cpp
      result_count += local_result_count * automorphism_size;
      ```
-   - This scalar factor is mathematically sound in RapidFlow **strictly because the search space was restricted to a single representative orientation/orbit**.
+   - This scalar factor 12 is mathematically sound in RapidFlow **strictly because the search was restricted to a single representative directed anchor edge**. The 12 directed edges in the orbit represent the 12 possible orientations of dynamic edge insertion/deletion.
 
-### 3.2. The K4 Counterexample: Proof That Unconditional Expansion is Fatal
+### 3.2. The K4 Analysis: Why Bare M2 Requires Neither Multiplication Nor Full Expansion
 Consider query $Q = K_4$ and data graph $G = K_4$:
 - $K_4$ has $|\operatorname{Aut}(K_4)| = 4! = 24$ automorphisms.
-- In $G = K_4$, there are exactly $4! = 24$ distinct subgraph isomorphism embeddings.
-- If an algorithm performs a complete backtracking search (like full DFS or M0 Oracle) that explores all candidate permutations, it already discovers all **24 distinct embeddings**.
-- **Fatal Error**: If someone naively takes the output of a complete backtracking search and unconditionally multiplies or expands each found embedding by the 24 automorphisms in $\operatorname{Aut}(Q)$, it would emit:
-  $$24 \times 24 = 576 \text{ raw embeddings}$$
-  producing a $24\times$ overcounting error!
+- In $G = K_4$, there are exactly $4! = 24$ distinct subgraph isomorphism embeddings (ordered 4-tuples $(f(u_1), f(u_2), f(u_3), f(u_4))$).
+- **Default Bare M2 Matching Path**:
+  - Bare M2 anchors at the dynamic update and explores all valid anchor orientations/edges in $Q$.
+  - It runs backtracking DFS over the full unreduced query space.
+  - Because DFS enumerates all valid vertex assignments directly, it discovers each valid ordered tuple $(f(u_1), \dots, f(u_n))$ **exactly once**.
+  - Therefore, bare M2 requires **NO post-hoc scalar multiplication and NO post-hoc automorphism expansion**.
+- **Fatal Overcounting Trap**:
+  - If an implementation executes full DFS across all valid anchor orientations (discovering all 24 distinct embeddings) and then naively applies a post-search expansion by the 24 automorphisms in $\operatorname{Aut}(Q)$, it would emit:
+    $$24 \times 24 = 576 \text{ raw embeddings}$$
+    producing an erroneous $24\times$ overcount!
+  - Similarly, multiplying by `automorphism_size` (12) after full DFS would produce $24 \times 12 = 288$ tuples.
 
-### 3.3. Phase P2 Architectural Requirement for Tuple Extraction
-To emit explicit ordered tuples $(f(u_1), \dots, f(u_n))$ without duplication, Phase P2 must follow one of two sound architectures:
-1. **Representative Search with Group Orbit Expansion**: Restrict the native DFS to search only canonical representative embeddings (enforcing symmetry-breaking order constraints $f(u_a) < f(u_b)$ on symmetric vertices), and then expand each representative embedding across the coset / orbit generators of $\operatorname{Aut}(Q)$.
-2. **Exhaustive DFS with Canonical Filtering**: Allow the native DFS to explore the full space, but disable all automorphism factor multiplication/expansion, using a visited set or canonical representative filter to ensure each distinct tuple is emitted exactly once.
+### 3.3. Tuple Canonicalization and Architectural Options for Phase P2
+To emit explicit ordered tuples $(f(u_1), \dots, f(u_n))$ without duplication, Phase P2 establishes:
+1. **Tuple Canonicalization Rule**:
+   All emitted tuples must order coordinate positions strictly by original query vertex IDs: $(f(u_1), f(u_2), \dots, f(u_n))$ where $u_1 < u_2 < \dots < u_n$. The internal DFS exploration order (which varies per order) is completely abstracted away.
+2. **Default Path (Bare M2 Exhaustive DFS)**:
+   Search over all valid anchor orientations without automorphism scalar multiplication or post-hoc expansion. Each valid embedding is generated natively.
+3. **Optimized Path (Representative Search with Orbit Expansion)**:
+   Restrict the native DFS to search only canonical representative embeddings (enforcing symmetry-breaking constraints $f(u_a) < f(u_b)$ on symmetric vertices), and then expand each representative embedding across the coset / orbit generators of $\operatorname{Aut}(Q)$. Must be proven equivalent to Bare M2 before adoption.
 
 ---
 
@@ -147,7 +168,9 @@ To emit explicit ordered tuples $(f(u_1), \dots, f(u_n))$ without duplication, P
       emit_tuple(embedding_);
   }
   ```
-- **Automorphism Expansion**: Instead of multiplying count by `automorphism_size`, the search operates on a symmetry-broken representative space and expands canonical embeddings across representative orbits, avoiding the 576-tuple K4 overcounting defect.
+- **Automorphism Handling in Tuple Path**:
+  - **Default Bare M2 Path**: The native DFS explores all valid anchor orientations over the full unreduced query space. Under this default design, each valid ordered tuple $(f(u_1), \dots, f(u_n))$ is generated directly and uniquely. Therefore, bare M2 requires **NO post-hoc scalar multiplication and NO post-hoc automorphism expansion**.
+  - **Optional Representative Search Path**: If search space reduction via representative anchor orbits is used, the search operates strictly on a symmetry-broken representative space and expands canonical embeddings across representative orbits, avoiding the 576-tuple K4 overcounting defect.
 
 ### 9. Where is bare M2 integrated?
 - Bare M2 is integrated as a native search engine class `ApxM2SearchEngine`.
@@ -193,7 +216,7 @@ To emit explicit ordered tuples $(f(u_1), \dots, f(u_n))$ without duplication, P
 | **Dynamic Adjacency** | Reuse `GlobalEdgeView` for mutable edge overlay | `KEEP` | `NATIVE_RUNTIME_VERIFIED` | High-performance sorted vector adjacency; tested in Probe C. |
 | **Exact NLF Check** | Ban `nlf_check` from candidate filtering for $k \ge 1$ | `CHANGE` | `NATIVE_RUNTIME_VERIFIED` | Proven unsound in Probe D; prunes valid approximate embeddings. |
 | **Leaf Count Shortcut** | Unroll candidate loop into explicit tuple binding | `CHANGE` | `SOURCE_INSPECTED` | CSM contract mandates explicit ordered tuple mappings. |
-| **Automorphism Factorization** | Replace scalar multiplication with representative orbit expansion | `CHANGE` | `SOURCE_INSPECTED` | Naive expansion overcounts (576 on K4); requires representative space. |
+| **Automorphism Factorization** | For bare M2, disable scalar multiplication and post-hoc expansion; for reduced search, expand representative orbits | `CHANGE` | `SOURCE_INSPECTED` | Bare M2 finds ordered tuples directly; naive post-hoc expansion on full DFS causes 24x overcounting (576 on K4). |
 | **Update Relevance Filtering** | Retain for search triggering; bypass for authoritative graph update | `ADAPT` | `SOURCE_INSPECTED` | Safe in D-R for search triggering, but graph state must remain authoritative. |
 | **General Threshold D-G** | Defer until D-R native integration is complete | `DEFER` | `NOT_VERIFIED` | Premature complexity; requires dynamic connectivity checking. |
 | **Standalone C++ Rewrite** | Reject standalone rewrite uncoupled from RapidFlow | `STOP` | `NOT_VERIFIED` | Violates core project mandate of genuine RapidFlow extension. |

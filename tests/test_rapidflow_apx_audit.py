@@ -32,13 +32,16 @@ import sys
 import tempfile
 import time
 import unittest
+import unittest.mock
 from pathlib import Path
 
 from scripts.dstar_oracle import enumerate_snapshot, DStarGraph
 from scripts.run_rapidflow_apx_audit import (
     build_native_harness,
+    check_preflight_resources,
     compute_sha256,
     execute_contained_subprocess,
+    get_git_info,
     run_probe_case,
     validate_manifest,
 )
@@ -288,6 +291,212 @@ class TestRapidFlowApxAudit(unittest.TestCase):
             # Wait another 2.5s to ensure worker did NOT continue running in background
             time.sleep(2.5)
             self.assertFalse(leak_file.exists(), "Leak marker must NOT exist (process was killed and reaped)")
+
+    def test_19_payload_missing_required_evidence_field_rejected(self):
+        """Test 19 (Gap A): Runner rejects payload missing any field declared in required_evidence_fields."""
+        case = copy.deepcopy(next(c for c in self.manifest["cases"] if c["case_id"] == "CASE_PROBE_A_PROVENANCE"))
+        ret, stdout, stderr, timed_out = execute_contained_subprocess([str(self.binary_path), "--probe", "a"], cwd=self.root_dir)
+        self.assertEqual(ret, 0)
+        data = json.loads(stdout)
+        # Remove compiler_version from evidence
+        self.assertIn("compiler_version", data["probes"][0]["evidence"])
+        del data["probes"][0]["evidence"]["compiler_version"]
+
+        with unittest.mock.patch("scripts.run_rapidflow_apx_audit.execute_contained_subprocess", return_value=(0, json.dumps(data), "", False)):
+            res = run_probe_case(self.binary_path, case, self.root_dir, self.binary_sha256)
+            self.assertEqual(res["status"], "FAIL")
+            self.assertIn("Missing required evidence field declared in manifest: 'compiler_version'", res["error"])
+
+    def test_20_payload_empty_or_null_required_evidence_rejected(self):
+        """Test 20 (Gap A): Runner rejects payload with null or empty string in required evidence fields."""
+        case = copy.deepcopy(next(c for c in self.manifest["cases"] if c["case_id"] == "CASE_PROBE_A_PROVENANCE"))
+        ret, stdout, stderr, timed_out = execute_contained_subprocess([str(self.binary_path), "--probe", "a"], cwd=self.root_dir)
+        data = json.loads(stdout)
+
+        # Empty string
+        data["probes"][0]["evidence"]["compiler_version"] = "   "
+        with unittest.mock.patch("scripts.run_rapidflow_apx_audit.execute_contained_subprocess", return_value=(0, json.dumps(data), "", False)):
+            res = run_probe_case(self.binary_path, case, self.root_dir, self.binary_sha256)
+            self.assertEqual(res["status"], "FAIL")
+            self.assertIn("must not be null or empty string", res["error"])
+
+        # Null value
+        data["probes"][0]["evidence"]["compiler_version"] = None
+        with unittest.mock.patch("scripts.run_rapidflow_apx_audit.execute_contained_subprocess", return_value=(0, json.dumps(data), "", False)):
+            res = run_probe_case(self.binary_path, case, self.root_dir, self.binary_sha256)
+            self.assertEqual(res["status"], "FAIL")
+            self.assertIn("must not be null or empty string", res["error"])
+
+    def test_21_case_limits_exceeding_ceiling_rejected(self):
+        """Test 21 (Gap B): Manifest with runtime probe limits above ceiling (30s / 512 MiB) is rejected."""
+        # 31s timeout
+        bad_case = copy.deepcopy(self.manifest["cases"][0])
+        bad_case["limits"]["timeout_seconds"] = 31
+        bad_manifest = copy.deepcopy(self.manifest)
+        bad_manifest["cases"][0] = bad_case
+        with self.assertRaises(ValueError) as ctx:
+            validate_manifest(bad_manifest, self.root_dir)
+        self.assertIn("Invalid timeout_seconds", str(ctx.exception))
+
+        # 513 MiB address space
+        bad_case2 = copy.deepcopy(self.manifest["cases"][0])
+        bad_case2["limits"]["max_address_space_mib"] = 513
+        bad_manifest2 = copy.deepcopy(self.manifest)
+        bad_manifest2["cases"][0] = bad_case2
+        with self.assertRaises(ValueError) as ctx:
+            validate_manifest(bad_manifest2, self.root_dir)
+        self.assertIn("Invalid max_address_space_mib", str(ctx.exception))
+
+        # Build ceiling (120s / 1024 MiB) mistakenly placed on a probe
+        bad_case3 = copy.deepcopy(self.manifest["cases"][0])
+        bad_case3["limits"]["timeout_seconds"] = 120
+        bad_case3["limits"]["max_address_space_mib"] = 1024
+        bad_manifest3 = copy.deepcopy(self.manifest)
+        bad_manifest3["cases"][0] = bad_case3
+        with self.assertRaises(ValueError) as ctx:
+            validate_manifest(bad_manifest3, self.root_dir)
+        self.assertIn("Invalid timeout_seconds", str(ctx.exception))
+
+    def test_22_manifest_resource_limits_exceeding_ceiling_rejected(self):
+        """Test 22 (Gap B): Top-level manifest resource limits exceeding contracts are rejected."""
+        bad_manifest = copy.deepcopy(self.manifest)
+        bad_manifest["resource_limits"]["max_runtime_seconds"] = 31
+        with self.assertRaises(ValueError) as ctx:
+            validate_manifest(bad_manifest, self.root_dir)
+        self.assertIn("Invalid max_runtime_seconds", str(ctx.exception))
+
+        bad_manifest2 = copy.deepcopy(self.manifest)
+        bad_manifest2["resource_limits"]["max_compile_time_seconds"] = 121
+        with self.assertRaises(ValueError) as ctx:
+            validate_manifest(bad_manifest2, self.root_dir)
+        self.assertIn("Invalid max_compile_time_seconds", str(ctx.exception))
+
+    def test_23_preflight_resource_failure_mocked(self):
+        """Test 23 (Gap B): Preflight checks raise RuntimeError when available RAM or disk is insufficient."""
+        with self.assertRaises(RuntimeError) as ctx:
+            check_preflight_resources(self.root_dir, min_ram_bytes=10**15)
+        self.assertIn("Preflight RAM check failed", str(ctx.exception))
+
+        with self.assertRaises(RuntimeError) as ctx:
+            check_preflight_resources(self.root_dir, min_disk_bytes=10**15)
+        self.assertIn("Preflight disk check failed", str(ctx.exception))
+
+    def test_24_multi_process_tree_descendant_containment(self):
+        """Test 24 (Gap B): Process containment reaps grandchild process tree on timeout."""
+        with tempfile.TemporaryDirectory() as td:
+            td_path = Path(td)
+            hb_file = td_path / "grandchild_heartbeat.marker"
+            leak_file = td_path / "grandchild_leak.marker"
+
+            grandchild_code = (
+                f"import time, pathlib\n"
+                f"pathlib.Path('{hb_file}').write_text('GRANDCHILD_STARTED')\n"
+                f"time.sleep(4)\n"
+                f"pathlib.Path('{leak_file}').write_text('GRANDCHILD_LEAKED')\n"
+            )
+            child_code = (
+                f"import subprocess, sys\n"
+                f"subprocess.Popen([sys.executable, '-c', {repr(grandchild_code)}])\n"
+                f"import time; time.sleep(10)\n"
+            )
+
+            cmd = [sys.executable, "-c", child_code]
+            ret, out, err, timed_out = execute_contained_subprocess(
+                cmd, cwd=td_path, timeout=1, address_space_mib=256
+            )
+
+            self.assertTrue(timed_out, "Subprocess tree must have timed out")
+            self.assertTrue(hb_file.exists(), "Grandchild heartbeat marker must exist")
+            time.sleep(3.5)
+            self.assertFalse(leak_file.exists(), "Grandchild leak marker must NOT exist (process tree reaped)")
+
+    def test_25_partial_failure_preserves_prior_and_writes_summary(self):
+        """Test 25 (Gap C): Unexpected failure during probe execution preserves prior cases in results and exits 1."""
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
+            tmp_path = Path(tmp.name)
+        try:
+            test_script = (
+                f"import sys, json\n"
+                f"from pathlib import Path\n"
+                f"from unittest.mock import patch\n"
+                f"import scripts.run_rapidflow_apx_audit as runner\n"
+                f"call_count = 0\n"
+                f"orig_run = runner.run_probe_case\n"
+                f"def mock_run(*args, **kwargs):\n"
+                f"    global call_count\n"
+                f"    call_count += 1\n"
+                f"    if call_count == 2:\n"
+                f"        raise RuntimeError('Simulated unexpected crash on case 2')\n"
+                f"    return orig_run(*args, **kwargs)\n"
+                f"with patch('scripts.run_rapidflow_apx_audit.run_probe_case', side_effect=mock_run):\n"
+                f"    sys.argv = ['run_rapidflow_apx_audit.py', '--output', '{tmp_path}']\n"
+                f"    runner.main()\n"
+            )
+            proc = subprocess.run([sys.executable, "-c", test_script], cwd=self.root_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertEqual(proc.returncode, 1)
+            self.assertTrue(tmp_path.exists())
+            data = json.loads(tmp_path.read_text(encoding="utf-8"))
+            self.assertEqual(data["overall_status"], "FAIL")
+            self.assertEqual(data["failing_stage"], "CASE_PROBE_B_TYPED_BOUNDARY")
+            self.assertGreaterEqual(len(data["results"]), 2)
+            self.assertEqual(data["results"][0]["status"], "PASS_EXPECTED")
+            self.assertEqual(data["results"][1]["status"], "ERROR")
+            self.assertIn("Simulated unexpected crash on case 2", data["results"][1]["error"])
+        finally:
+            if tmp_path.exists():
+                tmp_path.unlink()
+
+    def test_26_malformed_json_manifest_fatal_error(self):
+        """Test 26 (Gap C): Malformed JSON manifest exits 1 and writes structured error artifact."""
+        with tempfile.TemporaryDirectory() as td:
+            td_path = Path(td)
+            bad_manifest = td_path / "bad_manifest.json"
+            bad_manifest.write_text("{ this is completely invalid JSON content !!!", encoding="utf-8")
+            out_summary = td_path / "out_summary.json"
+
+            cmd = [
+                sys.executable,
+                str(self.root_dir / "scripts" / "run_rapidflow_apx_audit.py"),
+                "--manifest", str(bad_manifest),
+                "--output", str(out_summary)
+            ]
+            proc = subprocess.run(cmd, cwd=self.root_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertEqual(proc.returncode, 1)
+            self.assertTrue(out_summary.exists())
+            data = json.loads(out_summary.read_text(encoding="utf-8"))
+            self.assertEqual(data["overall_status"], "FAIL")
+            self.assertEqual(data["failing_stage"], "MANIFEST_PARSE_ERROR")
+            self.assertIn("Malformed JSON", data["error"])
+
+    def test_27_git_query_failure_returns_unknown_error(self):
+        """Test 27 (Gap D): Querying git status in non-git directory returns UNKNOWN_ERROR, never false CLEAN."""
+        with tempfile.TemporaryDirectory() as td:
+            commit, dirty_state = get_git_info(Path(td))
+            self.assertEqual(commit, "UNKNOWN_COMMIT")
+            self.assertEqual(dirty_state, "UNKNOWN_ERROR")
+
+    def test_28_canonical_summary_schema_and_provenance_completeness(self):
+        """Test 28 (Gap D): Canonical summary report has complete schema, platform info, and hashes."""
+        summary_file = self.root_dir / "reports" / "rapidflow_apx_audit" / "summary.json"
+        self.assertTrue(summary_file.exists())
+        with open(summary_file, "r", encoding="utf-8") as f:
+            s = json.load(f)
+
+        required_keys = [
+            "run_id", "timestamp", "manifest_version", "manifest_sha256",
+            "execution_head", "dirty_state", "base_commit", "upstream_sha",
+            "upstream_dirty_state", "binary_path", "binary_sha256",
+            "host_environment", "tool_versions", "source_hashes",
+            "fixture_hashes", "build_provenance", "total_cases", "passed_cases",
+            "overall_status", "results"
+        ]
+        for key in required_keys:
+            self.assertIn(key, s, f"Missing top-level key '{key}' in summary.json")
+
+        self.assertIn(s["dirty_state"], ["CLEAN", "DIRTY"])
+        self.assertGreaterEqual(len(s["source_hashes"]), 8)
+        self.assertEqual(len(s["fixture_hashes"]), 4)
+        self.assertEqual(s["overall_status"], "PASS")
 
 
 if __name__ == "__main__":
