@@ -1,0 +1,55 @@
+{
+  "case_id": "event_transition_stream",
+  "description": "Dynamic event transitions on K4 missing edge: 0 baseline, 24 ENTERED on INSERT, 24 EXITED on DELETE",
+  "query": {
+    "vertices": [
+      {"id": 1, "label": {"type": "int", "val": 0}},
+      {"id": 2, "label": {"type": "int", "val": 0}},
+      {"id": 3, "label": {"type": "int", "val": 0}},
+      {"id": 4, "label": {"type": "int", "val": 0}}
+    ],
+    "edges": [
+      {"u": 1, "v": 2, "label": {"type": "int", "val": 0}},
+      {"u": 1, "v": 3, "label": {"type": "int", "val": 0}},
+      {"u": 1, "v": 4, "label": {"type": "int", "val": 0}},
+      {"u": 2, "v": 3, "label": {"type": "int", "val": 0}},
+      {"u": 2, "v": 4, "label": {"type": "int", "val": 0}},
+      {"u": 3, "v": 4, "label": {"type": "int", "val": 0}}
+    ]
+  },
+  "baseline_data": {
+    "vertices": [
+      {"id": 10, "label": {"type": "int", "val": 0}},
+      {"id": 20, "label": {"type": "int", "val": 0}},
+      {"id": 30, "label": {"type": "int", "val": 0}},
+      {"id": 40, "label": {"type": "int", "val": 0}}
+    ],
+    "edges": [
+      {"u": 10, "v": 20, "label": {"type": "int", "val": 0}},
+      {"u": 10, "v": 30, "label": {"type": "int", "val": 0}},
+      {"u": 10, "v": 40, "label": {"type": "int", "val": 0}},
+      {"u": 20, "v": 30, "label": {"type": "int", "val": 0}},
+      {"u": 20, "v": 40, "label": {"type": "int", "val": 0}}
+    ]
+  },
+  "events": [
+    {
+      "step": 1,
+      "op": "+",
+      "u": 30,
+      "v": 40,
+      "label": {"type": "int", "val": 0},
+      "expected_event_type": "ENTERED",
+      "expected_tuple_count": 24
+    },
+    {
+      "step": 2,
+      "op": "-",
+      "u": 30,
+      "v": 40,
+      "label": {"type": "int", "val": 0},
+      "expected_event_type": "EXITED",
+      "expected_tuple_count": 24
+    }
+  ]
+}

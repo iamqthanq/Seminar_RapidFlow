@@ -1,0 +1,23 @@
+{
+  "case_id": "codec_boundaries",
+  "description": "Verification of signed 64-bit external IDs, distinct typed labels (int 0 != str '0'), and capacity preflight",
+  "external_query_vertices": [
+    {"id": -100, "label": {"type": "int", "val": 0}},
+    {"id": 0, "label": {"type": "string", "val": "0"}},
+    {"id": 5000000000, "label": {"type": "int", "val": 42}}
+  ],
+  "external_data_vertices": [
+    {"id": -999999999999, "label": {"type": "int", "val": 0}},
+    {"id": -42, "label": {"type": "string", "val": "0"}},
+    {"id": 0, "label": {"type": "int", "val": 0}},
+    {"id": 1000000, "label": {"type": "string", "val": "0"}},
+    {"id": 5000000000, "label": {"type": "int", "val": 42}},
+    {"id": 9007199254740993, "label": {"type": "int", "val": 42}}
+  ],
+  "typed_edge_labels": [
+    {"type": "int", "val": 0},
+    {"type": "string", "val": "0"},
+    {"type": "int", "val": 100}
+  ],
+  "test_capacity_checks": true
+}

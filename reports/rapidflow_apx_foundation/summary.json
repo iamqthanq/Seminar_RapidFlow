@@ -1,0 +1,1711 @@
+{
+  "timestamp_utc": "2026-11-18T13:05:49.307142+00:00",
+  "runner_mode": "CANONICAL",
+  "overall_status": "P2_FOUNDATION_VERIFIED",
+  "stages": {
+    "PROVENANCE": "PASS",
+    "PREFLIGHT": "PASS",
+    "MANIFEST": "PASS",
+    "BUILD": "PASS",
+    "CASES": "PASS"
+  },
+  "results": [
+    {
+      "case_id": "codec_boundaries",
+      "status": "PASS",
+      "diagnostic": "Codec successfully roundtrips 64-bit signed IDs and maintains typed label isolation",
+      "oracle_verification": "Codec boundaries verified against fixture metadata and roundtrip checks",
+      "elapsed_seconds": 0.0039,
+      "native_report": {
+        "data_vertex_ids": [
+          -999999999999,
+          -42,
+          0,
+          1000000,
+          5000000000,
+          9007199254740993
+        ],
+        "query_vertex_ids": [
+          -100,
+          0,
+          5000000000
+        ],
+        "data_vertices_count": 6,
+        "binary_sha256": "56a25a9db6ceee3cc5df9dd17e2333849a080d6d035a4235cdcec38911897d41",
+        "query_vertices_count": 3,
+        "diagnostic": "Codec successfully roundtrips 64-bit signed IDs and maintains typed label isolation",
+        "vertex_labels_count": 2,
+        "status": "PASS",
+        "edge_labels_count": 0,
+        "case_id": "codec_boundaries"
+      }
+    },
+    {
+      "case_id": "lifecycle_stream",
+      "status": "PASS",
+      "diagnostic": "Graph lifecycle, overlays, tombstones, and label precedence verified",
+      "oracle_verification": "Lifecycle stream verified step-by-step against independent reference model",
+      "elapsed_seconds": 0.0043,
+      "native_report": {
+        "binary_sha256": "56a25a9db6ceee3cc5df9dd17e2333849a080d6d035a4235cdcec38911897d41",
+        "mutations_executed": [
+          {
+            "edges": [
+              {
+                "label": 10,
+                "v": 4,
+                "u": 0
+              },
+              {
+                "label": 10,
+                "v": 2,
+                "u": 1
+              },
+              {
+                "label": 10,
+                "v": 3,
+                "u": 2
+              },
+              {
+                "label": 10,
+                "v": 4,
+                "u": 3
+              }
+            ],
+            "in_overlay": false,
+            "degrees": {
+              "4": 2,
+              "2": 2,
+              "3": 2,
+              "1": 1,
+              "0": 1
+            },
+            "in_tombstones": true,
+            "edge_label": -1,
+            "has_edge": false,
+            "v": 1,
+            "u": 0,
+            "vertices_count": 5,
+            "edges_count": 4,
+            "op": "delete_base",
+            "neighbors": {
+              "4": [
+                0,
+                3
+              ],
+              "2": [
+                1,
+                3
+              ],
+              "3": [
+                2,
+                4
+              ],
+              "1": [
+                2
+              ],
+              "0": [
+                4
+              ]
+            },
+            "step_index": 0
+          },
+          {
+            "edges": [
+              {
+                "label": 10,
+                "v": 1,
+                "u": 0
+              },
+              {
+                "label": 10,
+                "v": 4,
+                "u": 0
+              },
+              {
+                "label": 10,
+                "v": 2,
+                "u": 1
+              },
+              {
+                "label": 10,
+                "v": 3,
+                "u": 2
+              },
+              {
+                "label": 10,
+                "v": 4,
+                "u": 3
+              }
+            ],
+            "in_overlay": true,
+            "degrees": {
+              "4": 2,
+              "2": 2,
+              "3": 2,
+              "1": 2,
+              "0": 2
+            },
+            "in_tombstones": false,
+            "edge_label": 10,
+            "has_edge": true,
+            "v": 1,
+            "u": 0,
+            "vertices_count": 5,
+            "edges_count": 5,
+            "op": "reinsert_same",
+            "neighbors": {
+              "4": [
+                0,
+                3
+              ],
+              "2": [
+                1,
+                3
+              ],
+              "3": [
+                2,
+                4
+              ],
+              "1": [
+                0,
+                2
+              ],
+              "0": [
+                1,
+                4
+              ]
+            },
+            "step_index": 1
+          },
+          {
+            "edges": [
+              {
+                "label": 10,
+                "v": 4,
+                "u": 0
+              },
+              {
+                "label": 10,
+                "v": 2,
+                "u": 1
+              },
+              {
+                "label": 10,
+                "v": 3,
+                "u": 2
+              },
+              {
+                "label": 10,
+                "v": 4,
+                "u": 3
+              }
+            ],
+            "in_overlay": false,
+            "degrees": {
+              "4": 2,
+              "2": 2,
+              "3": 2,
+              "1": 1,
+              "0": 1
+            },
+            "in_tombstones": true,
+            "edge_label": -1,
+            "has_edge": false,
+            "v": 1,
+            "u": 0,
+            "vertices_count": 5,
+            "edges_count": 4,
+            "op": "delete_reinserted",
+            "neighbors": {
+              "4": [
+                0,
+                3
+              ],
+              "2": [
+                1,
+                3
+              ],
+              "3": [
+                2,
+                4
+              ],
+              "1": [
+                2
+              ],
+              "0": [
+                4
+              ]
+            },
+            "step_index": 2
+          },
+          {
+            "edges": [
+              {
+                "label": 99,
+                "v": 1,
+                "u": 0
+              },
+              {
+                "label": 10,
+                "v": 4,
+                "u": 0
+              },
+              {
+                "label": 10,
+                "v": 2,
+                "u": 1
+              },
+              {
+                "label": 10,
+                "v": 3,
+                "u": 2
+              },
+              {
+                "label": 10,
+                "v": 4,
+                "u": 3
+              }
+            ],
+            "in_overlay": true,
+            "degrees": {
+              "4": 2,
+              "2": 2,
+              "3": 2,
+              "1": 2,
+              "0": 2
+            },
+            "in_tombstones": false,
+            "edge_label": 99,
+            "has_edge": true,
+            "v": 1,
+            "u": 0,
+            "vertices_count": 5,
+            "edges_count": 5,
+            "op": "reinsert_diff_label",
+            "neighbors": {
+              "4": [
+                0,
+                3
+              ],
+              "2": [
+                1,
+                3
+              ],
+              "3": [
+                2,
+                4
+              ],
+              "1": [
+                0,
+                2
+              ],
+              "0": [
+                1,
+                4
+              ]
+            },
+            "step_index": 3
+          },
+          {
+            "edges": [
+              {
+                "label": 10,
+                "v": 4,
+                "u": 0
+              },
+              {
+                "label": 10,
+                "v": 2,
+                "u": 1
+              },
+              {
+                "label": 10,
+                "v": 3,
+                "u": 2
+              },
+              {
+                "label": 10,
+                "v": 4,
+                "u": 3
+              }
+            ],
+            "in_overlay": false,
+            "degrees": {
+              "4": 2,
+              "2": 2,
+              "3": 2,
+              "1": 1,
+              "0": 1
+            },
+            "in_tombstones": true,
+            "edge_label": -1,
+            "has_edge": false,
+            "v": 1,
+            "u": 0,
+            "vertices_count": 5,
+            "edges_count": 4,
+            "op": "delete_reinserted_diff",
+            "neighbors": {
+              "4": [
+                0,
+                3
+              ],
+              "2": [
+                1,
+                3
+              ],
+              "3": [
+                2,
+                4
+              ],
+              "1": [
+                2
+              ],
+              "0": [
+                4
+              ]
+            },
+            "step_index": 4
+          },
+          {
+            "edges": [
+              {
+                "label": 10,
+                "v": 4,
+                "u": 0
+              },
+              {
+                "label": 10,
+                "v": 2,
+                "u": 1
+              },
+              {
+                "label": 50,
+                "v": 3,
+                "u": 1
+              },
+              {
+                "label": 10,
+                "v": 3,
+                "u": 2
+              },
+              {
+                "label": 10,
+                "v": 4,
+                "u": 3
+              }
+            ],
+            "in_overlay": true,
+            "degrees": {
+              "4": 2,
+              "2": 2,
+              "3": 3,
+              "1": 2,
+              "0": 1
+            },
+            "in_tombstones": false,
+            "edge_label": 50,
+            "has_edge": true,
+            "v": 3,
+            "u": 1,
+            "vertices_count": 5,
+            "edges_count": 5,
+            "op": "insert_dynamic",
+            "neighbors": {
+              "4": [
+                0,
+                3
+              ],
+              "2": [
+                1,
+                3
+              ],
+              "3": [
+                1,
+                2,
+                4
+              ],
+              "1": [
+                2,
+                3
+              ],
+              "0": [
+                4
+              ]
+            },
+            "step_index": 5
+          },
+          {
+            "edges": [
+              {
+                "label": 10,
+                "v": 4,
+                "u": 0
+              },
+              {
+                "label": 10,
+                "v": 2,
+                "u": 1
+              },
+              {
+                "label": 10,
+                "v": 3,
+                "u": 2
+              },
+              {
+                "label": 10,
+                "v": 4,
+                "u": 3
+              }
+            ],
+            "in_overlay": false,
+            "degrees": {
+              "4": 2,
+              "2": 2,
+              "3": 2,
+              "1": 1,
+              "0": 1
+            },
+            "in_tombstones": false,
+            "edge_label": -1,
+            "has_edge": false,
+            "v": 3,
+            "u": 1,
+            "vertices_count": 5,
+            "edges_count": 4,
+            "op": "delete_dynamic",
+            "neighbors": {
+              "4": [
+                0,
+                3
+              ],
+              "2": [
+                1,
+                3
+              ],
+              "3": [
+                2,
+                4
+              ],
+              "1": [
+                2
+              ],
+              "0": [
+                4
+              ]
+            },
+            "step_index": 6
+          }
+        ],
+        "final_edges_count": 4,
+        "final_vertices_count": 5,
+        "diagnostic": "Graph lifecycle, overlays, tombstones, and label precedence verified",
+        "status": "PASS",
+        "case_id": "lifecycle_stream"
+      }
+    },
+    {
+      "case_id": "transaction_lifecycle",
+      "status": "PASS",
+      "diagnostic": "Transaction manager ACID boundaries, reentrancy guard, and fault rollback verified",
+      "oracle_verification": "Transaction lifecycle steps verified against Python reference state model",
+      "elapsed_seconds": 0.0048,
+      "native_report": {
+        "binary_sha256": "56a25a9db6ceee3cc5df9dd17e2333849a080d6d035a4235cdcec38911897d41",
+        "steps_executed": [
+          {
+            "published_tuples": [],
+            "step_index": 0,
+            "neighbors": {
+              "30": [
+                20
+              ],
+              "40": [
+                10
+              ],
+              "20": [
+                10,
+                30
+              ],
+              "10": [
+                20,
+                40
+              ]
+            },
+            "status": "SUCCESS",
+            "sink_counters": {
+              "discarded_emissions": 0,
+              "committed_emissions": 0,
+              "unique_emissions": 0,
+              "raw_emissions": 0
+            },
+            "v": 40,
+            "op": "+",
+            "degrees": {
+              "30": 1,
+              "40": 1,
+              "20": 2,
+              "10": 2
+            },
+            "u": 10,
+            "vertex_u_exists": true,
+            "current_edges_count": 3,
+            "current_vertices_count": 4,
+            "vertex_v_exists": true,
+            "codec_state": {
+              "edge_labels_count": 1,
+              "vertex_labels_count": 1,
+              "data_vertices_count": 4
+            },
+            "degree_u": 2,
+            "degree_v": 1,
+            "edges": [
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 20,
+                "u": 10
+              },
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 40,
+                "u": 10
+              },
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 30,
+                "u": 20
+              }
+            ],
+            "has_edge_uv": true
+          },
+          {
+            "published_tuples": [],
+            "step_index": 1,
+            "neighbors": {
+              "30": [
+                20
+              ],
+              "40": [
+                10
+              ],
+              "20": [
+                10,
+                30
+              ],
+              "10": [
+                20,
+                40
+              ]
+            },
+            "status": "PREVALIDATION_FAILED",
+            "sink_counters": {
+              "discarded_emissions": 0,
+              "committed_emissions": 0,
+              "unique_emissions": 0,
+              "raw_emissions": 0
+            },
+            "v": 40,
+            "op": "+",
+            "degrees": {
+              "30": 1,
+              "40": 1,
+              "20": 2,
+              "10": 2
+            },
+            "u": 10,
+            "vertex_u_exists": true,
+            "current_edges_count": 3,
+            "current_vertices_count": 4,
+            "vertex_v_exists": true,
+            "codec_state": {
+              "edge_labels_count": 1,
+              "vertex_labels_count": 1,
+              "data_vertices_count": 4
+            },
+            "degree_u": 2,
+            "degree_v": 1,
+            "edges": [
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 20,
+                "u": 10
+              },
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 40,
+                "u": 10
+              },
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 30,
+                "u": 20
+              }
+            ],
+            "has_edge_uv": true
+          },
+          {
+            "published_tuples": [],
+            "step_index": 2,
+            "neighbors": {
+              "30": [
+                20
+              ],
+              "40": [
+                10
+              ],
+              "20": [
+                10,
+                30
+              ],
+              "10": [
+                20,
+                40
+              ]
+            },
+            "status": "FAULT_INJECTED",
+            "sink_counters": {
+              "discarded_emissions": 0,
+              "committed_emissions": 0,
+              "unique_emissions": 0,
+              "raw_emissions": 0
+            },
+            "v": 40,
+            "op": "+",
+            "degrees": {
+              "30": 1,
+              "40": 1,
+              "20": 2,
+              "10": 2
+            },
+            "u": 20,
+            "vertex_u_exists": true,
+            "current_edges_count": 3,
+            "current_vertices_count": 4,
+            "vertex_v_exists": true,
+            "codec_state": {
+              "edge_labels_count": 1,
+              "vertex_labels_count": 1,
+              "data_vertices_count": 4
+            },
+            "degree_u": 2,
+            "degree_v": 1,
+            "edges": [
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 20,
+                "u": 10
+              },
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 40,
+                "u": 10
+              },
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 30,
+                "u": 20
+              }
+            ],
+            "has_edge_uv": false
+          },
+          {
+            "published_tuples": [],
+            "step_index": 3,
+            "neighbors": {
+              "30": [
+                20
+              ],
+              "40": [
+                10
+              ],
+              "20": [
+                10,
+                30
+              ],
+              "10": [
+                20,
+                40
+              ]
+            },
+            "status": "FAULT_INJECTED",
+            "sink_counters": {
+              "discarded_emissions": 0,
+              "committed_emissions": 0,
+              "unique_emissions": 0,
+              "raw_emissions": 0
+            },
+            "v": 40,
+            "op": "+",
+            "degrees": {
+              "30": 1,
+              "40": 1,
+              "20": 2,
+              "10": 2
+            },
+            "u": 30,
+            "vertex_u_exists": true,
+            "current_edges_count": 3,
+            "current_vertices_count": 4,
+            "vertex_v_exists": true,
+            "codec_state": {
+              "edge_labels_count": 1,
+              "vertex_labels_count": 1,
+              "data_vertices_count": 4
+            },
+            "degree_u": 1,
+            "degree_v": 1,
+            "edges": [
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 20,
+                "u": 10
+              },
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 40,
+                "u": 10
+              },
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 30,
+                "u": 20
+              }
+            ],
+            "has_edge_uv": false
+          },
+          {
+            "published_tuples": [],
+            "step_index": 4,
+            "neighbors": {
+              "30": [
+                20
+              ],
+              "40": [
+                10
+              ],
+              "20": [
+                10,
+                30
+              ],
+              "10": [
+                20,
+                40
+              ]
+            },
+            "status": "PREVALIDATION_FAILED",
+            "sink_counters": {
+              "discarded_emissions": 0,
+              "committed_emissions": 0,
+              "unique_emissions": 0,
+              "raw_emissions": 0
+            },
+            "v": 40,
+            "op": "-",
+            "degrees": {
+              "30": 1,
+              "40": 1,
+              "20": 2,
+              "10": 2
+            },
+            "u": 999,
+            "vertex_u_exists": false,
+            "current_edges_count": 3,
+            "current_vertices_count": 4,
+            "vertex_v_exists": true,
+            "codec_state": {
+              "edge_labels_count": 1,
+              "vertex_labels_count": 1,
+              "data_vertices_count": 4
+            },
+            "degree_u": 0,
+            "degree_v": 1,
+            "edges": [
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 20,
+                "u": 10
+              },
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 40,
+                "u": 10
+              },
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 30,
+                "u": 20
+              }
+            ],
+            "has_edge_uv": false
+          },
+          {
+            "published_tuples": [],
+            "step_index": 5,
+            "neighbors": {
+              "30": [
+                20
+              ],
+              "40": [
+                10
+              ],
+              "20": [
+                10,
+                30
+              ],
+              "10": [
+                20,
+                40
+              ]
+            },
+            "status": "PREVALIDATION_FAILED",
+            "sink_counters": {
+              "discarded_emissions": 0,
+              "committed_emissions": 0,
+              "unique_emissions": 0,
+              "raw_emissions": 0
+            },
+            "v": 20,
+            "op": "-",
+            "degrees": {
+              "30": 1,
+              "40": 1,
+              "20": 2,
+              "10": 2
+            },
+            "u": 10,
+            "vertex_u_exists": true,
+            "current_edges_count": 3,
+            "current_vertices_count": 4,
+            "vertex_v_exists": true,
+            "codec_state": {
+              "edge_labels_count": 1,
+              "vertex_labels_count": 1,
+              "data_vertices_count": 4
+            },
+            "degree_u": 2,
+            "degree_v": 2,
+            "edges": [
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 20,
+                "u": 10
+              },
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 40,
+                "u": 10
+              },
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 30,
+                "u": 20
+              }
+            ],
+            "has_edge_uv": true
+          },
+          {
+            "published_tuples": [],
+            "step_index": 6,
+            "neighbors": {
+              "30": [
+                20
+              ],
+              "40": [
+                10
+              ],
+              "20": [
+                10,
+                30
+              ],
+              "10": [
+                20,
+                40
+              ]
+            },
+            "status": "FAULT_INJECTED",
+            "sink_counters": {
+              "discarded_emissions": 0,
+              "committed_emissions": 0,
+              "unique_emissions": 0,
+              "raw_emissions": 0
+            },
+            "v": 20,
+            "op": "-",
+            "degrees": {
+              "30": 1,
+              "40": 1,
+              "20": 2,
+              "10": 2
+            },
+            "u": 10,
+            "vertex_u_exists": true,
+            "current_edges_count": 3,
+            "current_vertices_count": 4,
+            "vertex_v_exists": true,
+            "codec_state": {
+              "edge_labels_count": 1,
+              "vertex_labels_count": 1,
+              "data_vertices_count": 4
+            },
+            "degree_u": 2,
+            "degree_v": 2,
+            "edges": [
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 20,
+                "u": 10
+              },
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 40,
+                "u": 10
+              },
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 30,
+                "u": 20
+              }
+            ],
+            "has_edge_uv": true
+          },
+          {
+            "published_tuples": [],
+            "step_index": 7,
+            "neighbors": {
+              "30": [
+                20
+              ],
+              "40": [
+                10
+              ],
+              "20": [
+                30
+              ],
+              "10": [
+                40
+              ]
+            },
+            "status": "SUCCESS",
+            "sink_counters": {
+              "discarded_emissions": 0,
+              "committed_emissions": 0,
+              "unique_emissions": 0,
+              "raw_emissions": 0
+            },
+            "v": 20,
+            "op": "-",
+            "degrees": {
+              "30": 1,
+              "40": 1,
+              "20": 1,
+              "10": 1
+            },
+            "u": 10,
+            "vertex_u_exists": true,
+            "current_edges_count": 2,
+            "current_vertices_count": 4,
+            "vertex_v_exists": true,
+            "codec_state": {
+              "edge_labels_count": 1,
+              "vertex_labels_count": 1,
+              "data_vertices_count": 4
+            },
+            "degree_u": 1,
+            "degree_v": 1,
+            "edges": [
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 40,
+                "u": 10
+              },
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 30,
+                "u": 20
+              }
+            ],
+            "has_edge_uv": false
+          }
+        ],
+        "diagnostic": "Transaction manager ACID boundaries, reentrancy guard, and fault rollback verified",
+        "status": "PASS",
+        "case_id": "transaction_lifecycle"
+      }
+    },
+    {
+      "case_id": "tuple_sink_invariants",
+      "status": "PASS",
+      "diagnostic": "TupleSink injectivity, duplicate rejection, and staging invariants verified",
+      "oracle_verification": "TupleSink invariants verified",
+      "elapsed_seconds": 0.0035,
+      "native_report": {
+        "discarded_emissions": 1,
+        "committed_emissions": 2,
+        "unique_emissions": 3,
+        "binary_sha256": "56a25a9db6ceee3cc5df9dd17e2333849a080d6d035a4235cdcec38911897d41",
+        "raw_emissions": 4,
+        "diagnostic": "TupleSink injectivity, duplicate rejection, and staging invariants verified",
+        "status": "PASS",
+        "case_id": "tuple_sink_invariants"
+      }
+    },
+    {
+      "case_id": "k4_exact_enumeration",
+      "status": "PASS",
+      "diagnostic": "K4 exact enumeration produced exactly 24 unique ordered tuples",
+      "oracle_verification": "Bit-for-bit match with genuine scripts.dstar_oracle (24 unique ordered tuples)",
+      "elapsed_seconds": 0.0033,
+      "native_report": {
+        "tuples": [
+          [
+            10,
+            20,
+            30,
+            40
+          ],
+          [
+            10,
+            20,
+            40,
+            30
+          ],
+          [
+            10,
+            30,
+            20,
+            40
+          ],
+          [
+            10,
+            30,
+            40,
+            20
+          ],
+          [
+            10,
+            40,
+            20,
+            30
+          ],
+          [
+            10,
+            40,
+            30,
+            20
+          ],
+          [
+            20,
+            10,
+            30,
+            40
+          ],
+          [
+            20,
+            10,
+            40,
+            30
+          ],
+          [
+            20,
+            30,
+            10,
+            40
+          ],
+          [
+            20,
+            30,
+            40,
+            10
+          ],
+          [
+            20,
+            40,
+            10,
+            30
+          ],
+          [
+            20,
+            40,
+            30,
+            10
+          ],
+          [
+            30,
+            10,
+            20,
+            40
+          ],
+          [
+            30,
+            10,
+            40,
+            20
+          ],
+          [
+            30,
+            20,
+            10,
+            40
+          ],
+          [
+            30,
+            20,
+            40,
+            10
+          ],
+          [
+            30,
+            40,
+            10,
+            20
+          ],
+          [
+            30,
+            40,
+            20,
+            10
+          ],
+          [
+            40,
+            10,
+            20,
+            30
+          ],
+          [
+            40,
+            10,
+            30,
+            20
+          ],
+          [
+            40,
+            20,
+            10,
+            30
+          ],
+          [
+            40,
+            20,
+            30,
+            10
+          ],
+          [
+            40,
+            30,
+            10,
+            20
+          ],
+          [
+            40,
+            30,
+            20,
+            10
+          ]
+        ],
+        "unique_emissions": 24,
+        "binary_sha256": "56a25a9db6ceee3cc5df9dd17e2333849a080d6d035a4235cdcec38911897d41",
+        "raw_emissions": 24,
+        "tuple_count": 24,
+        "diagnostic": "K4 exact enumeration produced exactly 24 unique ordered tuples",
+        "status": "PASS",
+        "case_id": "k4_exact_enumeration"
+      }
+    },
+    {
+      "case_id": "event_transition_stream",
+      "status": "PASS",
+      "diagnostic": "Dynamic event transitions on K4 missing edge verified (0 baseline, 24 ENTERED, 24 EXITED)",
+      "oracle_verification": "Dynamic delta events verified bit-for-bit against scripts.dstar_oracle with strict event_type validation",
+      "elapsed_seconds": 0.0037,
+      "native_report": {
+        "binary_sha256": "56a25a9db6ceee3cc5df9dd17e2333849a080d6d035a4235cdcec38911897d41",
+        "events": [
+          {
+            "tuples": [
+              [
+                30,
+                40,
+                10,
+                20
+              ],
+              [
+                30,
+                40,
+                20,
+                10
+              ],
+              [
+                40,
+                30,
+                10,
+                20
+              ],
+              [
+                40,
+                30,
+                20,
+                10
+              ],
+              [
+                30,
+                10,
+                40,
+                20
+              ],
+              [
+                30,
+                20,
+                40,
+                10
+              ],
+              [
+                40,
+                10,
+                30,
+                20
+              ],
+              [
+                40,
+                20,
+                30,
+                10
+              ],
+              [
+                30,
+                10,
+                20,
+                40
+              ],
+              [
+                30,
+                20,
+                10,
+                40
+              ],
+              [
+                40,
+                10,
+                20,
+                30
+              ],
+              [
+                40,
+                20,
+                10,
+                30
+              ],
+              [
+                10,
+                30,
+                40,
+                20
+              ],
+              [
+                20,
+                30,
+                40,
+                10
+              ],
+              [
+                10,
+                40,
+                30,
+                20
+              ],
+              [
+                20,
+                40,
+                30,
+                10
+              ],
+              [
+                10,
+                30,
+                20,
+                40
+              ],
+              [
+                20,
+                30,
+                10,
+                40
+              ],
+              [
+                10,
+                40,
+                20,
+                30
+              ],
+              [
+                20,
+                40,
+                10,
+                30
+              ],
+              [
+                10,
+                20,
+                30,
+                40
+              ],
+              [
+                20,
+                10,
+                30,
+                40
+              ],
+              [
+                10,
+                20,
+                40,
+                30
+              ],
+              [
+                20,
+                10,
+                40,
+                30
+              ]
+            ],
+            "event_type": "ENTERED",
+            "v": 40,
+            "u": 30,
+            "published_count": 24,
+            "op": "+",
+            "step": 1
+          },
+          {
+            "tuples": [
+              [
+                30,
+                40,
+                10,
+                20
+              ],
+              [
+                30,
+                40,
+                20,
+                10
+              ],
+              [
+                40,
+                30,
+                10,
+                20
+              ],
+              [
+                40,
+                30,
+                20,
+                10
+              ],
+              [
+                30,
+                10,
+                40,
+                20
+              ],
+              [
+                30,
+                20,
+                40,
+                10
+              ],
+              [
+                40,
+                10,
+                30,
+                20
+              ],
+              [
+                40,
+                20,
+                30,
+                10
+              ],
+              [
+                30,
+                10,
+                20,
+                40
+              ],
+              [
+                30,
+                20,
+                10,
+                40
+              ],
+              [
+                40,
+                10,
+                20,
+                30
+              ],
+              [
+                40,
+                20,
+                10,
+                30
+              ],
+              [
+                10,
+                30,
+                40,
+                20
+              ],
+              [
+                20,
+                30,
+                40,
+                10
+              ],
+              [
+                10,
+                40,
+                30,
+                20
+              ],
+              [
+                20,
+                40,
+                30,
+                10
+              ],
+              [
+                10,
+                30,
+                20,
+                40
+              ],
+              [
+                20,
+                30,
+                10,
+                40
+              ],
+              [
+                10,
+                40,
+                20,
+                30
+              ],
+              [
+                20,
+                40,
+                10,
+                30
+              ],
+              [
+                10,
+                20,
+                30,
+                40
+              ],
+              [
+                20,
+                10,
+                30,
+                40
+              ],
+              [
+                10,
+                20,
+                40,
+                30
+              ],
+              [
+                20,
+                10,
+                40,
+                30
+              ]
+            ],
+            "event_type": "EXITED",
+            "v": 40,
+            "u": 30,
+            "published_count": 24,
+            "op": "-",
+            "step": 2
+          }
+        ],
+        "diagnostic": "Dynamic event transitions on K4 missing edge verified (0 baseline, 24 ENTERED, 24 EXITED)",
+        "status": "PASS",
+        "case_id": "event_transition_stream"
+      }
+    },
+    {
+      "case_id": "diamond_k1_fixed",
+      "status": "PASS",
+      "diagnostic": "Diamond k=1 fixed-mapping successfully evaluated satisfying D-R guard (k < lambda) and S2 spanning connectivity",
+      "oracle_verification": "Diamond k=1 evaluation verified against D-R guard contract",
+      "elapsed_seconds": 0.0036,
+      "native_report": {
+        "binary_sha256": "56a25a9db6ceee3cc5df9dd17e2333849a080d6d035a4235cdcec38911897d41",
+        "computed_lambda": 2,
+        "missing_edges": 1,
+        "is_valid": true,
+        "matched_edges": 4,
+        "diagnostic": "Diamond k=1 fixed-mapping successfully evaluated satisfying D-R guard (k < lambda) and S2 spanning connectivity",
+        "s2_spanning_connected": true,
+        "status": "PASS",
+        "case_id": "diamond_k1_fixed"
+      }
+    },
+    {
+      "case_id": "irrelevant_update_stream",
+      "status": "PASS",
+      "diagnostic": "Irrelevant update recorded in authoritative state with zero search emissions",
+      "oracle_verification": "Irrelevant update verified",
+      "elapsed_seconds": 0.0032,
+      "native_report": {
+        "binary_sha256": "56a25a9db6ceee3cc5df9dd17e2333849a080d6d035a4235cdcec38911897d41",
+        "edge_recorded": true,
+        "diagnostic": "Irrelevant update recorded in authoritative state with zero search emissions",
+        "status": "PASS",
+        "published_tuples_count": 0,
+        "case_id": "irrelevant_update_stream"
+      }
+    }
+  ],
+  "provenance": {
+    "repo_commit": "ff41f8edc2129e8048fe03350ed4294f7f2961e6",
+    "repo_clean": true,
+    "dirty_state": "DIRTY_REPORTS_ONLY",
+    "modified_paths": [
+      " M reports/rapidflow_apx_foundation/summary.json"
+    ],
+    "upstream_commit": "2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1",
+    "upstream_pristine": true,
+    "tools": {
+      "cmake": "cmake version 3.28.3",
+      "cxx": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]"
+    },
+    "source_hashes": {
+      "extensions/rapidflow_apx/include/rapidflow_apx/typed_codec.h": "fce8f4b42e871d9bd61efc16f06c96b1f4f183a7a2f80e62138113caf0dec6d8",
+      "extensions/rapidflow_apx/include/rapidflow_apx/authoritative_graph.h": "1d9eb2cc59f7fa27aa8f8171dbc4778ea054f3675e2d47876db7ce0ba7ba1c36",
+      "extensions/rapidflow_apx/include/rapidflow_apx/transaction_manager.h": "a3f38005a7a9928718bfd50a2f9ebd04ab9fec4992068ee3278438d9f637f08c",
+      "extensions/rapidflow_apx/include/rapidflow_apx/tuple_sink.h": "ee1a56e9f9a3a3e6838df7dc30b6c72934fbc33e36f966d6433c467fd5a03086",
+      "extensions/rapidflow_apx/include/rapidflow_apx/micro_matcher.h": "e8733c4fdcf0c1a43908bb6fab55f5e433da0c99c1c2ebd4cd0648ac049c5a55",
+      "extensions/rapidflow_apx/src/typed_codec.cpp": "e469810883731d7532492250a3179a2c53f2025a6afe96de03f8d3b9db447db4",
+      "extensions/rapidflow_apx/src/authoritative_graph.cpp": "cf4a281712f1ab256bfc409d80221d2370204c23e4c31ca7a304b582ff9ca824",
+      "extensions/rapidflow_apx/src/transaction_manager.cpp": "f4e2c5b153144791e2bd099cb9edefefabf39f91af8a6088c4bd114cc47dfc86",
+      "extensions/rapidflow_apx/src/tuple_sink.cpp": "1452fee665605789bb2abf356ec2ea3d2d00636a0605dd7bbd8ab90ee40c3b2d",
+      "extensions/rapidflow_apx/src/micro_matcher.cpp": "65f2ad5b8b2450a91b6743d7dc3c9511be25cbcc962f5d9a93e0a3b76624104b",
+      "tests/native/rapidflow_apx_foundation/src/main.cpp": "5b69b3a9567dcc9dbeff1f5531be5d4819842f852010c69597941cc06cf1ac30",
+      "tests/native/rapidflow_apx_foundation/src/harness_cases.h": "4ee7d8d3d1c41dbba8fe478e157c914628df0421f49c8464b5c314a93f04df29",
+      "tests/native/rapidflow_apx_foundation/src/harness_cases.cpp": "f544a065d1fea0fde65a1c82d23a29e05944562bd696c3c8bc6522f34b1f539e",
+      "tests/native/rapidflow_apx_foundation/src/json_mini.h": "5a1d660125f2f656bc8d3b67b34dffd909f0064c4b623ac5ce756893ac6e4d04",
+      "tests/native/rapidflow_apx_foundation/CMakeLists.txt": "c3b39a6b03895e02ec68a30fb03574ad649bbb6b78f208acd9efb81b4df0d592",
+      "extensions/rapidflow_apx/CMakeLists.txt": "fcb79b2ac00fa883ed118f25d2b104421514a77b93f8337efa4d8b882acafdaf",
+      "scripts/run_rapidflow_apx_foundation.py": "172f0a296291e0cd5b7c7cb64f6e56429fb8dcaa33bea12ffdb2aeabb5558bd5",
+      "scripts/dstar_oracle.py": "e2583dceba1679ce10fdb5fa91dbbd6a79e10f59778968b1facd4a9f86b4337e"
+    },
+    "verified_at": "2026-11-18T13:05:49.323744+00:00"
+  },
+  "system_resources": {
+    "available_ram_gib": 5.04,
+    "free_disk_gib": 109.98
+  },
+  "manifest_sha256": "4e002352123ee4d12d473a7d08a63d3325d3be065149116a145d7a79303ce030",
+  "fixture_hashes": {
+    "codec_boundaries": "588d73959c9f92bc7a302efce0b1a52eee539d6333312281848cbd9adec63eb3",
+    "lifecycle_stream": "46f3a01794da6d1c5c09b375161129187ee989e5f171ed8256df06914ae1b7fb",
+    "transaction_lifecycle": "8cf7fa0f3159fe94289def993a965f4f51b04e1abaf271968ed2f1ccdec6f7bc",
+    "tuple_sink_invariants": "875fd08364d838987f326e1b2446b85a812fd9dec4a5ffe1faf6df5d0ccc5978",
+    "k4_exact_enumeration": "b2e95b3ad0e0bb84e3aee1b40af13465b1686f1b2bd724a2808d5fa3c475713e",
+    "event_transition_stream": "1198c242623ac69c8dba5b59c6534fd4c43afe36a57611eb9dbbd0009c000c70",
+    "diamond_k1_fixed": "6e5b741de60eeb9974a2a8bbed2f433a587d3b09e044c1f5c49222bfbd96ee36",
+    "irrelevant_update_stream": "0d6ed69139a59fc12fd76bd974389c9df837f7d2be3d917f39ecfa23f794d12f"
+  },
+  "binary_path": "/home/iamqthanq/Desktop/Seminar_RapidFlow_D_INT02/tests/native/rapidflow_apx_foundation/build/rapidflow_apx_foundation_harness",
+  "binary_sha256": "56a25a9db6ceee3cc5df9dd17e2333849a080d6d035a4235cdcec38911897d41",
+  "build_provenance": {
+    "cmake_command": [
+      "/home/iamqthanq/Desktop/Seminar_RapidFlow_D_INT02/external/tools/cmake-3.28.3-linux-x86_64/bin/cmake",
+      "..",
+      "-DCMAKE_BUILD_TYPE=Release"
+    ],
+    "make_command": [
+      "make",
+      "-j2"
+    ],
+    "binary_sha256": "56a25a9db6ceee3cc5df9dd17e2333849a080d6d035a4235cdcec38911897d41"
+  },
+  "completed_cases": 8,
+  "passed_cases": 8,
+  "failed_cases": 0,
+  "unattempted_cases": 0,
+  "total_cases": 8
+}
