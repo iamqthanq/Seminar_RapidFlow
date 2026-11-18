@@ -57,7 +57,8 @@
         "large_id_mapped",
         "int_zero_vs_str_zero_separated",
         "codec_roundtrip_verified",
-        "graph_native_loaded"
+        "graph_native_loaded",
+        "fixture_bound"
       ]
     },
     {
@@ -103,7 +104,9 @@
         "rapidflow_nlf_check_result",
         "candidate_filter_excluded_vertices",
         "raw_view_edges_present",
-        "incompatibility_proven"
+        "incompatibility_proven",
+        "native_gvm_executed",
+        "fixture_bound"
       ]
     },
     {
@@ -129,7 +132,10 @@
         "delete_snapshot_verified",
         "fault_injected",
         "rollback_executed",
-        "pre_fault_state_preserved"
+        "pre_fault_state_preserved",
+        "fixture_bound",
+        "adapter_evidence_level",
+        "upstream_engine_evidence_level"
       ]
     },
     {
@@ -151,7 +157,9 @@
         "rapidflow_output_mode",
         "leaf_shortcut_line",
         "automorphism_factor_line",
-        "p2_tuple_path_design"
+        "p2_tuple_path_design",
+        "fixture_bound",
+        "evidence_level"
       ]
     }
   ]

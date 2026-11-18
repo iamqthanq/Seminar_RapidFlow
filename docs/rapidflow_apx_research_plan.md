@@ -2,7 +2,7 @@
 
 **Document ID:** `docs/rapidflow_apx_research_plan.md`
 **Date:** 2026-11-18
-**Plan Version:** 1.0 (In-Repository Master Plan)
+**Plan Version:** 1.1 (Realigned with Direction D Master Protocol & Remediation F01–F06)
 **Context:** Seminar RapidFlow / Continuous Subgraph Matching (CSM) — Direction D
 **Parent Document:** Issue #28 (`[D-INT-01 / P0–P1] Đồng bộ hợp đồng D và kiểm chứng kiến trúc mở rộng RapidFlow gốc`)
 **Base Commit:** `03be8b56a9479609adf87d213122eabefc9162fb`
@@ -23,7 +23,7 @@ The primary objective of this seminar thesis is to develop and validate an exten
 The final research product must be a **demonstrably integrated C++ system** derived from the original RapidFlow codebase (`baselines/rapidflow/source/` pinned at `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1`):
 - **Genuine Component Reuse**: Real compilation, linking, and runtime invocation of RapidFlow's Graph CSR representation, Global Views, memory-efficient sparse relation layouts, and streaming execution loops.
 - **Integrated Pipeline**: An end-to-end native update-and-search pipeline operating on shared state.
-- **Concrete Tuple Materialization**: Emitting explicit canonical ordered tuples $(f(u_1), \dots, f(u_n))$ sorted by original query vertex IDs, preserving all valid symmetric automorphisms.
+- **Concrete Tuple Materialization**: Emitting explicit canonical ordered tuples $(f(u_1), \dots, f(u_n))$ sorted by original query vertex IDs, preserving all valid symmetric automorphisms without duplication.
 - **Fail-Closed Verification**: 100% bit-for-bit equivalence against the independent Python M0 Ground Truth Oracle across all test corpus cases.
 
 **Unacceptable Non-Solutions**:
@@ -58,7 +58,7 @@ The final research product must be a **demonstrably integrated C++ system** deri
 | - Authoritative graph state (immutable CSR snapshot + mutable overlay)          |
 | - Transactional pre-validation and atomic rollback wrapper                      |
 | - External-to-internal dense ID / typed-label codec                             |
-| - OrderManager adaptation: query automorphism expansion into concrete orbits    |
+| - OrderManager adaptation: representative orbit expansion / symmetry breaking    |
 | - SearchEngine leaf loop unrolling & canonical tuple sink                       |
 +---------------------------------------------------------------------------------+
                                        |
@@ -72,18 +72,19 @@ The final research product must be a **demonstrably integrated C++ system** deri
                                        |
                                        v
 +---------------------------------------------------------------------------------+
-| Phase P4: Verified Approximate Pruning Optimizations                            |
+| Phase P4: Safe & Optional Approximate Pruning Optimizations                     |
 | - Partial mapping defect bound delta'(f_p, free neighbors)                      |
-| - Verified approximate NLF filter (relaxing exact threshold)                    |
+| - Relaxed approximate NLF filter (optional: skip if overhead >= savings)        |
 | - Dynamic candidate ordering for approximate branch reduction                   |
 | - Continuous M0 invariant checking across all optimizations                     |
 +---------------------------------------------------------------------------------+
                                        |
                                        v
 +---------------------------------------------------------------------------------+
-| Phase P5: Pilot, Scaling & Real-World NetFlow Benchmarking                      |
-| - S4 pilot replicated natively with bounded address space and wall timeouts     |
-| - Scaling to representative NetFlow horizons (|S| >= 64, dense subgraphs)       |
+| Phase P5: Pilot, Scaling & NetFlow Workload Evaluation                          |
+| - S4 pilot replicated natively under RLIMIT_AS 512 MiB and wall timeouts        |
+| - Proposed scaling exploration to larger horizons (|S| >= 64, dense windows)   |
+| - Fair separation: natural continuous stream vs dense sliding window sampling   |
 | - Measurement of latency, memory RSS, work counters, and throughput             |
 +---------------------------------------------------------------------------------+
                                        |
@@ -110,8 +111,8 @@ The final research product must be a **demonstrably integrated C++ system** deri
   - **Probe A (Provenance)**: Compile and link `graph.cpp`; invoke runtime accessors; record binary SHA-256 and compiler flags.
   - **Probe B (Typed Boundary)**: Verify codec round-trip for sparse IDs, negative IDs, IDs $> 2^{32}-1$, and typed labels ($0 \ne \text{"0"}$).
   - **Probe C (Mutable GlobalEdgeView)**: Verify sorted neighbor insertion, deletion, duplicate/absent return values, and container label absence.
-  - **Probe D (Exact NLF Incompatibility)**: Evaluate Diamond query ($k=1, \lambda=2$) against data graph missing edge $BC$; prove that valid APX identity match is pruned by RapidFlow's exact NLF check.
-  - **Probe E (Snapshot Order & Rollback)**: Verify INSERT search on $G_{\text{after}}$, DELETE search on $G_{\text{before}}$, and mid-stream rollback upon injected failure.
+  - **Probe D (Exact NLF Incompatibility)**: Evaluate Diamond query ($k=1, \lambda=2$) against data graph missing edge $BC$; prove via genuine runtime invocation of `GlobalViewManager` that valid APX identity match is pruned by RapidFlow's exact NLF check.
+  - **Probe E (Snapshot Order & Rollback)**: Verify INSERT search on $G_{\text{after}}$, DELETE search on $G_{\text{before}}$, and mid-stream rollback upon injected failure on adapter structures.
   - **Probe F (Count/Tuple Boundary)**: Evaluate $K_4$ query on 4-clique; confirm that RapidFlow reports scalar count 24 via leaf shortcut and automorphism factorization, and define tuple extraction architecture.
 - **Review Gate R1**: Publish `docs/research_decisions/D-R1-native-integration.md` with verdict (`READY_FOR_P2_DESIGN`, `NEEDS_DESIGN_ADJUSTMENT`, or `BLOCKED_INTEGRATION`).
 - **Status**: Active in Issue #28.
@@ -121,7 +122,7 @@ The final research product must be a **demonstrably integrated C++ system** deri
   1. Authoritative Graph State: Hybrid structure combining RapidFlow immutable CSR (for static base) and `GlobalEdgeView` mutable overlay for streaming updates.
   2. Transactional Update Pipeline: Pre-validation, forward/reverse view updates, search invocation, commit, and atomic rollback on error.
   3. External Typed Codec: Two-way bijection mapping arbitrary user IDs and typed labels to dense internal integers.
-  4. Tuple Sink & Automorphism Expansion: Unroll leaf-level candidate loops in backtracking search; expand automorphism group into concrete ordered permutations; stream canonical tuples to consumer.
+  4. Tuple Sink & Symmetry Handling: Unroll leaf-level candidate loops in backtracking search; implement sound representative orbit expansion or symmetry-breaking constraints to avoid the 576-tuple K4 overcounting defect; stream canonical tuples to consumer.
 - **Exit Criteria**: Native micro-matcher enumerates 100% of tuples on small fixtures without count shortcuts.
 
 ### 3.4. Phase P3: Integrated Native Bare M1 & M2 Engines
@@ -130,18 +131,20 @@ The final research product must be a **demonstrably integrated C++ system** deri
   2. Native Bare M2-Event-k: Single-pass anchored DFS with PRESENT and MISSING branches; unmapped vertex deferral; leaf condition $|R| == k$.
 - **Exit Criteria**: 100% agreement with M0 Oracle on 840 corpus cases and stream regression matrix.
 
-### 3.5. Phase P4: Safe Approximate Pruning
+### 3.5. Phase P4: Safe & Optional Approximate Pruning
 - **Scope**: Develop sound pruning strategies for approximate matching:
   1. Dynamic Defect Bound $\delta'$: Track committed missing edges $|R_p|$ and unassigned query edges; prune when $|R_p| + \text{unavoidable} > k$.
   2. Relaxed NLF: Construct neighbor label frequency multisets with tolerance $k$, avoiding false rejections.
   3. Dynamic Candidate Ordering: Select next frontier edge based on candidate set cardinality.
-- **Exit Criteria**: Pruned M2 produces identical tuple output to bare M2 while reducing search branch operations.
+  4. **Optional Pruning Principle**: Candidate pruning is strictly optional. If the CPU and memory overhead of computing approximate NLF or maintaining dynamic candidate lists exceeds the backtracking search reduction, the engine must allow bypassing pruning and executing direct join/search.
+- **Exit Criteria**: Pruned M2 produces identical tuple output to bare M2 while demonstrating positive net work reduction when pruning is enabled.
 
-### 3.6. Phase P5: Pilot, Scaling & NetFlow Benchmarking
+### 3.6. Phase P5: Pilot, Scaling & NetFlow Workload Evaluation
 - **Scope**: Replicate the S4 pilot natively and scale to representative workloads:
   1. Bounded Native Pilot: Execute paired runs under RLIMIT_AS 512 MiB and wall-clock timeout.
-  2. Scaling NetFlow Horizons: Extract dense NetFlow subgraphs with $|S| \ge 64$ to capture genuine continuous events.
-  3. Fair Metric Evaluation: Measure actual CPU runtime, memory RSS, and physical operation counters.
+  2. Scaling Exploration: Proposed exploration target $|S| \ge 64$ for stress-testing scalability (clarified: $|S| \ge 64$ is a target for stress-testing, not an established mathematical minimum).
+  3. Workload Separation: Natural continuous stream (event-by-event processing) is explicitly evaluated separately from dense sliding window snapshot sampling.
+  4. Fair Metric Evaluation: Measure actual CPU runtime, memory RSS, physical operation counters, and cache locality. Novelty is established by guaranteed correctness under bounded approximation, not merely raw throughput.
 - **Exit Criteria**: Reproducible benchmark report with audited provenance and transparent statistical bounds.
 
 ### 3.7. Phase P6: Comparative Evaluation & Deliverables

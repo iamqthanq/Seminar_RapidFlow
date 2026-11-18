@@ -39,8 +39,8 @@ The resulting binary is created at:
 # Run all probes directly
 ./tests/native/rapidflow_apx_audit/build/rapidflow_apx_audit --probe all
 
-# Run specific probe (e.g. Probe D: Exact NLF counterexample)
-./tests/native/rapidflow_apx_audit/build/rapidflow_apx_audit --probe d
+# Run specific probe with fixture (e.g. Probe D: Exact NLF counterexample)
+./tests/native/rapidflow_apx_audit/build/rapidflow_apx_audit --probe d --fixture tests/fixtures/rapidflow_apx_audit/diamond_k1_fixture.json
 ```
 
 ### 1.4. Running the Fail-Closed Audit Runner
@@ -69,7 +69,9 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -Wall -Wextra -pthread")
 ### Source File Provenance:
 - `baselines/rapidflow/source/graph/graph.cpp`: Compiled directly in-place from pinned upstream commit `2ea4f4c3...`.
 - `baselines/rapidflow/source/utility/graphoperations.cpp`: Compiled directly in-place.
+- `baselines/rapidflow/source/streaming/global_view_manager.cpp`: Compiled directly in-place for genuine GlobalViewManager execution.
 - `tests/native/rapidflow_apx_audit/src/audit_probes.cpp`: Custom audit probe implementations.
+- `tests/native/rapidflow_apx_audit/src/simple_json.h`: Header-only JSON fixture parser.
 - `tests/native/rapidflow_apx_audit/src/main.cpp`: CLI entry point.
 
 ---

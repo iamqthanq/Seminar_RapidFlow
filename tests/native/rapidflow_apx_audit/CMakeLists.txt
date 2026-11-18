@@ -18,6 +18,7 @@ include_directories(
 set(RAPIDFLOW_SRCS
     ${RAPIDFLOW_ROOT}/graph/graph.cpp
     ${RAPIDFLOW_ROOT}/utility/graphoperations.cpp
+    ${RAPIDFLOW_ROOT}/streaming/global_view_manager.cpp
 )
 
 # Audit harness probe implementation

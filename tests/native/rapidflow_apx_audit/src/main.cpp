@@ -62,11 +62,16 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    size_t passed_count = 0;
+    for (const auto& r : results) {
+        if (r.pass) passed_count++;
+    }
+
     std::ostringstream json;
     json << "{\n";
     json << "  \"execution_status\": \"" << (all_pass ? "PASS" : "FAIL") << "\",\n";
     json << "  \"total_probes\": " << results.size() << ",\n";
-    json << "  \"passed_probes\": " << (all_pass ? results.size() : 0) << ",\n";
+    json << "  \"passed_probes\": " << passed_count << ",\n";
     json << "  \"probes\": [\n";
 
     for (size_t i = 0; i < results.size(); ++i) {
