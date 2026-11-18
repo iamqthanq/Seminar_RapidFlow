@@ -1,0 +1,49 @@
+{
+  "name": "transaction_stream_fixture",
+  "description": "Stream of updates testing snapshot order (INSERT on G_after, DELETE on G_before) and rollback under mid-sequence fault",
+  "base_graph": {
+    "vertex_count": 4,
+    "vertices": [0, 1, 2, 3],
+    "vertex_label": 0,
+    "initial_edges": []
+  },
+  "stream": [
+    {
+      "step": 1,
+      "op": "+",
+      "src": 0,
+      "dst": 1,
+      "label": 0,
+      "expected_snapshot": "AFTER",
+      "should_fault": false
+    },
+    {
+      "step": 2,
+      "op": "+",
+      "src": 1,
+      "dst": 2,
+      "label": 0,
+      "expected_snapshot": "AFTER",
+      "should_fault": false
+    },
+    {
+      "step": 3,
+      "op": "+",
+      "src": 2,
+      "dst": 3,
+      "label": 0,
+      "expected_snapshot": "AFTER",
+      "should_fault": true,
+      "fault_type": "INJECTED_TRANSACTION_ABORT"
+    },
+    {
+      "step": 4,
+      "op": "-",
+      "src": 0,
+      "dst": 1,
+      "label": 0,
+      "expected_snapshot": "BEFORE",
+      "should_fault": false
+    }
+  ]
+}

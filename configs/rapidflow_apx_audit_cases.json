@@ -1,0 +1,166 @@
+{
+  "manifest_version": "1.0",
+  "created_date": "2026-11-18",
+  "scope": "D-INT-01 / P0-P1 Native RapidFlow Integration Architecture Validation",
+  "base_commit": "03be8b56a9479609adf87d213122eabefc9162fb",
+  "pinned_upstream_sha": "2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1",
+  "resource_limits": {
+    "max_compile_time_seconds": 120,
+    "max_compile_address_space_mib": 1024,
+    "max_runtime_seconds": 30,
+    "max_runtime_address_space_mib": 512,
+    "max_graph_vertices": 8,
+    "max_query_vertices": 6,
+    "max_stream_steps": 12
+  },
+  "cases": [
+    {
+      "case_id": "CASE_PROBE_A_PROVENANCE",
+      "probe_group": "PROBE_A",
+      "name": "Build, Link, and Runtime Provenance Verification",
+      "description": "Genuinely compile and link RapidFlow Graph C++ source; verify runtime accessors and record binary SHA-256 and compiler flags",
+      "fixture_path": null,
+      "fixture_sha256": null,
+      "required_native_component": "baselines/rapidflow/source/graph/graph.cpp",
+      "expected_behavior": "Graph accessors execute successfully and binary SHA-256 matches build output",
+      "expected_rejection": null,
+      "limits": {
+        "timeout_seconds": 10,
+        "max_address_space_mib": 256
+      },
+      "required_evidence_fields": [
+        "compiler_version",
+        "compiler_flags",
+        "linked_sources",
+        "binary_sha256",
+        "runtime_exit_code",
+        "graph_accessors_verified"
+      ]
+    },
+    {
+      "case_id": "CASE_PROBE_B_TYPED_BOUNDARY",
+      "probe_group": "PROBE_B",
+      "name": "Graph and Typed Boundary Codec Verification",
+      "description": "Verify external-to-internal dense ID bijection and typed label distinction (int 0 != str '0') on RapidFlow Graph",
+      "fixture_path": "tests/fixtures/rapidflow_apx_audit/typed_boundary_fixture.json",
+      "fixture_sha256": "9945cc5a8839b5f92959f8f66d593eba9266f50c8c7d864e77238e4649d89ecc",
+      "required_native_component": "baselines/rapidflow/source/graph/graph.cpp",
+      "expected_behavior": "Codec round-trips sparse, negative, and large IDs cleanly; preserves int 0 vs str '0' distinction without collision",
+      "expected_rejection": null,
+      "limits": {
+        "timeout_seconds": 10,
+        "max_address_space_mib": 256
+      },
+      "required_evidence_fields": [
+        "sparse_id_mapped",
+        "negative_id_mapped",
+        "large_id_mapped",
+        "int_zero_vs_str_zero_separated",
+        "codec_roundtrip_verified",
+        "graph_native_loaded",
+        "fixture_bound"
+      ]
+    },
+    {
+      "case_id": "CASE_PROBE_C_GLOBAL_EDGE_VIEW",
+      "probe_group": "PROBE_C",
+      "name": "Mutable GlobalEdgeView Behavior Verification",
+      "description": "Audit insertion, removal, sorted order, duplicate/absent return values, and container label absence in GlobalEdgeView",
+      "fixture_path": null,
+      "fixture_sha256": null,
+      "required_native_component": "baselines/rapidflow/source/utility/relation/global_edge_view.h",
+      "expected_behavior": "Maintains sorted vectors; duplicate insertion returns false; absent deletion returns false; container does not store edge labels",
+      "expected_rejection": null,
+      "limits": {
+        "timeout_seconds": 10,
+        "max_address_space_mib": 256
+      },
+      "required_evidence_fields": [
+        "insertion_sorted",
+        "duplicate_insert_rejected",
+        "absent_delete_rejected",
+        "cardinality_consistent",
+        "edge_label_absent_in_container",
+        "pointer_invalidation_noted"
+      ]
+    },
+    {
+      "case_id": "CASE_PROBE_D_EXACT_NLF_COUNTEREXAMPLE",
+      "probe_group": "PROBE_D",
+      "name": "Diamond Counterexample: Exact NLF Prunes Valid APX Matches",
+      "description": "Demonstrate on Diamond (k=1, lambda=2) that RapidFlow exact NLF prunes valid APX embedding (0,1,2,3), proving NLF filter cannot be used as-is",
+      "fixture_path": "tests/fixtures/rapidflow_apx_audit/diamond_k1_fixture.json",
+      "fixture_sha256": "ac1184e2565ed08f6adfb991312b6125f207b162c5b8aa0bc60c82349bf61d48",
+      "required_native_component": "baselines/rapidflow/source/streaming/global_view_manager.h",
+      "expected_behavior": "M0 accepts identity match; RapidFlow exact nlf_check returns false and candidate filter prunes valid vertices; raw view retains edges",
+      "expected_rejection": null,
+      "limits": {
+        "timeout_seconds": 15,
+        "max_address_space_mib": 256
+      },
+      "required_evidence_fields": [
+        "m0_ground_truth_accepted",
+        "s2_spanning_connected",
+        "rapidflow_nlf_check_result",
+        "candidate_filter_excluded_vertices",
+        "raw_view_edges_present",
+        "incompatibility_proven",
+        "native_gvm_executed",
+        "fixture_bound"
+      ]
+    },
+    {
+      "case_id": "CASE_PROBE_E_SNAPSHOT_ROLLBACK",
+      "probe_group": "PROBE_E",
+      "name": "Snapshot Ordering and Transactional Rollback",
+      "description": "Verify INSERT sees G_after, DELETE sees G_before, and mid-stream fault injection triggers clean atomic rollback",
+      "fixture_path": "tests/fixtures/rapidflow_apx_audit/transaction_stream_fixture.json",
+      "fixture_sha256": "29e94a04bf44878623709c6a2ee1f2e7cd58f185cf7c6f5de29f3a4407f8db6e",
+      "required_native_component": "baselines/rapidflow/source/streaming/streaming_engine.cpp",
+      "expected_behavior": "Snapshot timing matches CSM specification; injected fault in Step 3 cleanly reverts Step 3 while preserving Step 1-2 commits",
+      "expected_rejection": {
+        "step": 3,
+        "fault_type": "INJECTED_TRANSACTION_ABORT",
+        "rollback_verified": true
+      },
+      "limits": {
+        "timeout_seconds": 15,
+        "max_address_space_mib": 256
+      },
+      "required_evidence_fields": [
+        "insert_snapshot_verified",
+        "delete_snapshot_verified",
+        "fault_injected",
+        "rollback_executed",
+        "pre_fault_state_preserved",
+        "fixture_bound",
+        "adapter_evidence_level",
+        "upstream_engine_evidence_level"
+      ]
+    },
+    {
+      "case_id": "CASE_PROBE_F_COUNT_TUPLE_BOUNDARY",
+      "probe_group": "PROBE_F",
+      "name": "Count vs Tuple Boundary Audit on K4",
+      "description": "Analyze RapidFlow COUNT-ONLY execution on K4 (scalar 24 via leaf shortcut and automorphism factorization) vs 24 explicit M0 tuples; specify P2 tuple path",
+      "fixture_path": "tests/fixtures/rapidflow_apx_audit/k4_k0_fixture.json",
+      "fixture_sha256": "6e069043d7680144cb53d45fd73ff3c269b1bbd4d604f918816fc8e8ef2decd1",
+      "required_native_component": "baselines/rapidflow/source/streaming/search_engine.cpp",
+      "expected_behavior": "RapidFlow native reports COUNT_ONLY scalar 24; does not materialize embeddings; P2 tuple path design documented",
+      "expected_rejection": null,
+      "limits": {
+        "timeout_seconds": 15,
+        "max_address_space_mib": 256
+      },
+      "required_evidence_fields": [
+        "m0_distinct_tuples_count",
+        "rapidflow_output_mode",
+        "leaf_shortcut_line",
+        "automorphism_factor_line",
+        "p2_tuple_path_design",
+        "fixture_bound",
+        "evidence_level"
+      ]
+    }
+  ]
+}
