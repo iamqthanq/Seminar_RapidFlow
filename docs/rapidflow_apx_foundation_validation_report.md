@@ -7,7 +7,7 @@
 **Base Commit:** `8f6ebdacbf289e48e1c8a80a1c2e93720bcf633e`
 **Feature Branch:** `feature/rf30-d-int02-native-foundation`
 **Pinned Upstream RapidFlow:** `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1`
-**Execution Commit:** `98601a02d45da7544af085397d31a2c9c249d589`
+**Execution Commit:** `975eb1e8c8a70781766803a0ad94f2b0c7a1ef39`
 **Native Harness Binary SHA-256:** `56a25a9db6ceee3cc5df9dd17e2333849a080d6d035a4235cdcec38911897d41`
 **Runner Execution Status:** **`PASS (P2_FOUNDATION_VERIFIED)`**
 **Review Status:** `READY_FOR_INDEPENDENT_CLOSURE_REVIEW` (Pending reviewer acceptance)
@@ -18,13 +18,13 @@
 
 Phase P2 delivers the authoritative C++ native foundation for RapidFlow-APX in `extensions/rapidflow_apx/`. All four core components—`ApxTypedCodec`, `ApxAuthoritativeGraph`, `ApxTransactionManager`, and `ApxTupleSink`—have been fully implemented, compiled into `librapidflow_apx_foundation.a`, and linked with genuine upstream RapidFlow components (`Graph` CSR and `GlobalEdgeView`).
 
-All 8 canonical foundation test cases in `configs/rapidflow_apx_foundation_cases.json` and 35 Python unit tests across 11 groups (Groups A through K) in `tests/test_rapidflow_apx_foundation.py` pass cleanly with zero failures and zero flakes. Total repository-wide test suite passes at 499/499 tests.
+All 8 canonical foundation test cases in `configs/rapidflow_apx_foundation_cases.json` and 43 Python unit tests across 12 groups (Groups A through L) in `tests/test_rapidflow_apx_foundation.py` pass cleanly with zero failures and zero flakes. Total repository-wide test suite passes at 507/507 tests.
 
 The targeted closure remediation thoroughly resolves all remaining aspects of P2-F01 through P2-F08:
-- **P2-F01**: Canonical required case registry locked in code (`CANONICAL_REQUIRED_CASE_IDS`); manifest cannot self-shrink; required observation schema strictly verified per case with explicit types (rejecting `bool` for `int`); non-negative bounds and structure strictly enforced; `--dry-run` performs full fixture existence and hash validation.
+- **P2-F01**: Canonical required case registry locked in code (`CANONICAL_REQUIRED_CASE_IDS`); manifest cannot self-shrink; required observation schema strictly verified per case with explicit types (rejecting `bool` for `int`); non-negative bounds and structure strictly enforced; `--dry-run` performs full fixture existence and hash validation; deep validation rejects empty dicts, missing keys in nested dicts (`sink_counters`, `codec_state`), negative counts (`codec_state.edge_labels_count = -1`), `bool` degrees (`degrees = {"30": True}`), unexpected tuple emissions in `transaction_lifecycle` (`published_tuples` must be empty `[]`), and corrupted $K_4$ emissions (`raw=0, unique=999999`).
 - **P2-F02**: Full exception safety in `ApxTypedCodec` with immediate map-erase rollback on vector insertion throw (no ghost entries); RAII `TransactionScope` ensuring zero-allocation rollback across all exit paths before error string creation; complete elimination of container copy-assignments (`restore_checkpoint`); persistent allocation failure during staging rollback verified.
 - **P2-F03**: Ingestion rejects duplicate external vertex declarations fail-closed; JSON parser decodes Unicode escapes (`\uXXXX`, e.g. `\u0030` -> `"0"`) and rejects invalid escapes (e.g. `\q`).
-- **P2-F04**: Step-by-step differential graph-state verification against independent Python reference models (`simulate_lifecycle_stream` and `simulate_transaction_stream`); compares all active edges, typed labels, degrees, and sorted/unique neighbor lists; dynamic events strictly derive `event_type` from operation semantics (INSERT -> ENTERED, DELETE -> EXITED) without copying expected values.
+- **P2-F04**: Step-by-step differential graph-state verification against independent Python reference models (`simulate_lifecycle_stream` and `simulate_transaction_stream`); compares all active edges, typed labels, degrees, and sorted/unique neighbor lists; dynamic events strictly derive `event_type` from operation semantics (INSERT -> ENTERED, DELETE -> EXITED) without copying expected values; enforces fixed vertices contract in reference model (edge insertion with unknown endpoints is rejected with `PREVALIDATION_FAILED` without expanding vertex set; preserved label typing).
 - **P2-F05**: D-R guard computes exact $\lambda(Q)$ via min $s$-$t$ cut flow network passes; enforces $0 \le k < \lambda(Q)$; verifies S2 spanning connectivity on matched query edges.
 - **P2-F06**: Resource containment: child process exits with 127 if `setrlimit` fails, failing case immediately; build and runtime use process group `SIGKILL` cleanup.
 - **P2-F07**: Unexpected exceptions in case loop record terminal `FAIL` status in `summary.json`; complete source-binding provenance (SHA-256 for all headers, sources, manifests, fixtures, build commands) included in report; git dirty state honestly differentiated between code modifications and runner outputs.
@@ -36,7 +36,7 @@ The targeted closure remediation thoroughly resolves all remaining aspects of P2
 
 | Metric / Property | Value / Verification Evidence |
 | :--- | :--- |
-| **Execution Commit** | `98601a02d45da7544af085397d31a2c9c249d589` |
+| **Execution Commit** | `975eb1e8c8a70781766803a0ad94f2b0c7a1ef39` |
 | **Repository Cleanliness** | Verified CLEAN via `git status --porcelain` |
 | **Upstream RapidFlow Path** | `baselines/rapidflow/source/` (symlink in worktree) |
 | **Upstream Pinned Commit** | `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` |
@@ -46,7 +46,7 @@ The targeted closure remediation thoroughly resolves all remaining aspects of P2
 | **Native Library Output** | `extensions/rapidflow_apx/build/librapidflow_apx_foundation.a` |
 | **Native Test Harness** | `tests/native/rapidflow_apx_foundation/build/rapidflow_apx_foundation_harness` |
 | **Harness SHA-256** | `56a25a9db6ceee3cc5df9dd17e2333849a080d6d035a4235cdcec38911897d41` |
-| **System Resources** | 5.13 GiB RAM (>= 2.0 GiB required), 109.99 GiB Free Disk (>= 1.0 GiB required) |
+| **System Resources** | 5.22 GiB RAM (>= 2.0 GiB required), 110.0 GiB Free Disk (>= 1.0 GiB required) |
 
 ---
 
@@ -94,6 +94,6 @@ All cases were executed under fail-closed process containment with `RLIMIT_AS` m
 
 ## 5. Distinction of Phase Scope & Non-Claims
 
-1. **Phase P2 vs Production Engines**: Phase P2 provides the native data structure foundation (`ApxTypedCodec`, `ApxAuthoritativeGraph`, `ApxTransactionManager`, `ApxTupleSink`, `MicroExactMatcher`). Production M1/M2 search algorithms, NLF candidate filtering, and dynamic index trees are strictly deferred to Phase P3.
+1. **Phase P2 vs Production Engines & Pruning**: Phase P2 provides solely the native data structure foundation (`ApxTypedCodec`, `ApxAuthoritativeGraph`, `ApxTransactionManager`, `ApxTupleSink`, `MicroExactMatcher`). Production M1/M2 search engine algorithms, backtracking matchers, and continuous dynamic matching pipelines are strictly deferred to Phase P3. Dynamic pruning optimizations ($\delta'$ threshold bounds, dynamic Neighborhood Label Frequency / NLF candidate filtering, and pruning index structures) are strictly deferred to Phase P4. Neither is implemented or claimed in Phase P2.
 2. **Speedup & Novelty**: No claims of speedup or algorithmic novelty are made in Phase P2; all benchmarks at this stage are architectural correctness probes.
 3. **Review Decision**: Runner status `PASS` confirms that automated checks completed successfully; final acceptance of Issue #30 and merging into `QuangThang` is strictly subject to reviewer independent verification.

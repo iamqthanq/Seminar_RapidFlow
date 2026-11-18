@@ -1,5 +1,5 @@
 {
-  "timestamp_utc": "2026-11-18T12:22:30.896218+00:00",
+  "timestamp_utc": "2026-11-18T12:47:43.788427+00:00",
   "runner_mode": "CANONICAL",
   "overall_status": "P2_FOUNDATION_VERIFIED",
   "stages": {
@@ -15,7 +15,7 @@
       "status": "PASS",
       "diagnostic": "Codec successfully roundtrips 64-bit signed IDs and maintains typed label isolation",
       "oracle_verification": "Codec boundaries verified against fixture metadata and roundtrip checks",
-      "elapsed_seconds": 0.0043,
+      "elapsed_seconds": 0.0036,
       "native_report": {
         "data_vertex_ids": [
           -999999999999,
@@ -45,7 +45,7 @@
       "status": "PASS",
       "diagnostic": "Graph lifecycle, overlays, tombstones, and label precedence verified",
       "oracle_verification": "Lifecycle stream verified step-by-step against independent reference model",
-      "elapsed_seconds": 0.0041,
+      "elapsed_seconds": 0.0043,
       "native_report": {
         "binary_sha256": "56a25a9db6ceee3cc5df9dd17e2333849a080d6d035a4235cdcec38911897d41",
         "mutations_executed": [
@@ -510,7 +510,7 @@
       "status": "PASS",
       "diagnostic": "Transaction manager ACID boundaries, reentrancy guard, and fault rollback verified",
       "oracle_verification": "Transaction lifecycle steps verified against Python reference state model",
-      "elapsed_seconds": 0.0042,
+      "elapsed_seconds": 0.0043,
       "native_report": {
         "binary_sha256": "56a25a9db6ceee3cc5df9dd17e2333849a080d6d035a4235cdcec38911897d41",
         "steps_executed": [
@@ -1107,7 +1107,7 @@
       "status": "PASS",
       "diagnostic": "TupleSink injectivity, duplicate rejection, and staging invariants verified",
       "oracle_verification": "TupleSink invariants verified",
-      "elapsed_seconds": 0.0035,
+      "elapsed_seconds": 0.0034,
       "native_report": {
         "discarded_emissions": 1,
         "committed_emissions": 2,
@@ -1124,7 +1124,7 @@
       "status": "PASS",
       "diagnostic": "K4 exact enumeration produced exactly 24 unique ordered tuples",
       "oracle_verification": "Bit-for-bit match with genuine scripts.dstar_oracle (24 unique ordered tuples)",
-      "elapsed_seconds": 0.0032,
+      "elapsed_seconds": 0.0033,
       "native_report": {
         "tuples": [
           [
@@ -1286,7 +1286,7 @@
       "status": "PASS",
       "diagnostic": "Dynamic event transitions on K4 missing edge verified (0 baseline, 24 ENTERED, 24 EXITED)",
       "oracle_verification": "Dynamic delta events verified bit-for-bit against scripts.dstar_oracle with strict event_type validation",
-      "elapsed_seconds": 0.0035,
+      "elapsed_seconds": 0.0034,
       "native_report": {
         "binary_sha256": "56a25a9db6ceee3cc5df9dd17e2333849a080d6d035a4235cdcec38911897d41",
         "events": [
@@ -1609,7 +1609,7 @@
       "status": "PASS",
       "diagnostic": "Diamond k=1 fixed-mapping successfully evaluated satisfying D-R guard (k < lambda) and S2 spanning connectivity",
       "oracle_verification": "Diamond k=1 evaluation verified against D-R guard contract",
-      "elapsed_seconds": 0.003,
+      "elapsed_seconds": 0.0033,
       "native_report": {
         "binary_sha256": "56a25a9db6ceee3cc5df9dd17e2333849a080d6d035a4235cdcec38911897d41",
         "computed_lambda": 2,
@@ -1627,7 +1627,7 @@
       "status": "PASS",
       "diagnostic": "Irrelevant update recorded in authoritative state with zero search emissions",
       "oracle_verification": "Irrelevant update verified",
-      "elapsed_seconds": 0.003,
+      "elapsed_seconds": 0.0037,
       "native_report": {
         "binary_sha256": "56a25a9db6ceee3cc5df9dd17e2333849a080d6d035a4235cdcec38911897d41",
         "edge_recorded": true,
@@ -1639,7 +1639,7 @@
     }
   ],
   "provenance": {
-    "repo_commit": "98601a02d45da7544af085397d31a2c9c249d589",
+    "repo_commit": "975eb1e8c8a70781766803a0ad94f2b0c7a1ef39",
     "repo_clean": true,
     "dirty_state": "DIRTY_REPORTS_ONLY",
     "modified_paths": [
@@ -1669,14 +1669,14 @@
       "tests/native/rapidflow_apx_foundation/src/json_mini.h": "5a1d660125f2f656bc8d3b67b34dffd909f0064c4b623ac5ce756893ac6e4d04",
       "tests/native/rapidflow_apx_foundation/CMakeLists.txt": "c3b39a6b03895e02ec68a30fb03574ad649bbb6b78f208acd9efb81b4df0d592",
       "extensions/rapidflow_apx/CMakeLists.txt": "fcb79b2ac00fa883ed118f25d2b104421514a77b93f8337efa4d8b882acafdaf",
-      "scripts/run_rapidflow_apx_foundation.py": "66e99e9725233b8e67d09f1acf28e2dff4d983d13e690449bf9966538ea2a49b",
+      "scripts/run_rapidflow_apx_foundation.py": "2a31791b3c98945d72a94ef4168d813bffc2d3b69caddaaabe203f3d063947e9",
       "scripts/dstar_oracle.py": "e2583dceba1679ce10fdb5fa91dbbd6a79e10f59778968b1facd4a9f86b4337e"
     },
-    "verified_at": "2026-11-18T12:22:30.914533+00:00"
+    "verified_at": "2026-11-18T12:47:43.805896+00:00"
   },
   "system_resources": {
-    "available_ram_gib": 5.13,
-    "free_disk_gib": 109.99
+    "available_ram_gib": 5.22,
+    "free_disk_gib": 110.0
   },
   "manifest_sha256": "4e002352123ee4d12d473a7d08a63d3325d3be065149116a145d7a79303ce030",
   "fixture_hashes": {
