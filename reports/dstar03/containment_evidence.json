@@ -1,0 +1,28 @@
+{
+  "memory_containment_test": {
+    "exit_code": 1,
+    "passed": true,
+    "status": "RESOURCE_LIMIT",
+    "stderr_snippet": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\nMemoryError\n",
+    "termination_reason": "Explicit memory allocation failure under RLIMIT_AS (MemoryError/bad_alloc)"
+  },
+  "overall_containment_status": "PASS",
+  "preflight": {
+    "disk_free_bytes": 118216744960,
+    "disk_free_gib": 110.098,
+    "mem_available_bytes": 3805822976,
+    "mem_available_gib": 3.544,
+    "reason": null,
+    "status": "PASS"
+  },
+  "protocol_version": "dstar03-containment-v2",
+  "timeout_containment_test": {
+    "exit_code": -9,
+    "passed": true,
+    "status": "TIMEOUT",
+    "termination_reason": "Process exceeded wall timeout of 0.5s",
+    "wall_ns": 506183525
+  },
+  "timestamp": 1794978666.8711932,
+  "timestamp_iso": "2026-11-18T05:11:06Z"
+}

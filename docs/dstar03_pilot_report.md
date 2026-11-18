@@ -24,9 +24,9 @@ The DSTAR-03 exploratory pilot evaluates the accepted **M1-enum-Exact-$k$** base
    - In exact controls ($k = 0$), M1 and M2 performed the exact same number of candidate evaluations (31,086 vs 31,086), while M2 incurred additional edge decisions (7,962), resulting in a median budget ratio of $0.9214$.
 
 3. **Observed Latencies & Exploratory Observations:**
-   - On the 40 synthetic workloads, paired speedup ratio $T_{\text{M1}} / T_{\text{M2}}$ had a median of **1.3581** (range $[0.6035, 2.6495]$). Speedup was more pronounced on higher-defect queries (e.g. $K_4, k=2$ median 1.7909) and close to parity on exact controls ($k=0$ median 0.9898).
-   - On the 5 structured witnesses, latencies were sub-millisecond ($< 0.3\text{ ms}$), with a median speedup ratio of **0.9829** (range $[0.6111, 1.4109]$).
-   - On the 20 NetFlow probes, all 20 probes produced zero events due to tiny subgraph horizons ($|S| \le 8$), with a median speedup ratio of **1.4680** (range $[0.7845, 4.5404]$).
+   - On the 40 synthetic workloads, paired speedup ratio $T_{\text{M1}} / T_{\text{M2}}$ had a median of **1.2476** (range $[0.6265, 2.6094]$). Speedup was more pronounced on higher-defect queries (e.g. $K_4, k=2$ median 1.6488) and close to parity on exact controls ($k=0$ median 0.9580).
+   - On the 5 structured witnesses, latencies were sub-millisecond ($< 0.3\text{ ms}$), with a median speedup ratio of **1.5331** (range $[0.9554, 1.7603]$).
+   - On the 20 NetFlow probes, all 20 probes produced zero events due to tiny subgraph horizons ($|S| \le 8$), with a median speedup ratio of **1.3898** (range $[0.6042, 4.7501]$).
 
 4. **Exploratory Hypothesis on State Management:**
    Observed latency variations between M1 and M2 in this Python pilot may relate to state management overhead (such as dictionary allocations, defect tracking objects, and tuple construction). However, this pilot does not perform isolated compiler profiling, ablation, or cross-language comparisons; therefore, state management differences remain an exploratory hypothesis rather than a proven causal claim. Both M1 and M2 anchor search at updated edges.
@@ -41,10 +41,10 @@ The DSTAR-03 exploratory pilot evaluates the accepted **M1-enum-Exact-$k$** base
 ### Workload Breakdown
 | Family | Workloads | Updates / Workload | Total Steps | With Events | Zero Events | Sub-ms Noisy | Total Events |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **SYNTHETIC_MATRIX** | 40 | 12 | 480 | 22 | 18 | 15 | 6,284 |
+| **SYNTHETIC_MATRIX** | 40 | 12 | 480 | 22 | 18 | 14 | 6,284 |
 | **STRUCTURED_WITNESS** | 5 | 4 | 20 | 5 | 0 | 5 | 10 |
 | **NETFLOW_PROBE** | 20 | 1 | 20 | 0 | 20 | 18 | 0 |
-| **Total** | **65** | — | **520** | **27** | **38** | **38** | **6,294** |
+| **Total** | **65** | — | **520** | **27** | **38** | **37** | **6,294** |
 
 ### Execution Protocol
 - **Slots Executed:** 65 workloads $\times$ 3 pairs $\times$ 2 engines = **390 child subprocess runs** (100% completion).
@@ -62,30 +62,30 @@ The following tables are generated directly from `reports/dstar03/pilot_results.
 ### 3.1 Family Summary
 | Family | Workloads | Completed Slots | Median Speedup Ratio ($T_{\text{M1}}/T_{\text{M2}}$) | Speedup Range | Median Budget Ratio ($W_{\text{M1}}/W_{\text{M2}}$) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **SYNTHETIC_MATRIX** | 40 | 240 / 240 | **1.3581** | $[0.6035, 2.6495]$ | **1.5206** |
-| **STRUCTURED_WITNESS** | 5 | 30 / 30 | **0.9829** | $[0.6111, 1.4109]$ | **1.3000** |
-| **NETFLOW_PROBE** | 20 | 120 / 120 | **1.4680** | $[0.7845, 4.5404]$ | **1.2858** |
+| **SYNTHETIC_MATRIX** | 40 | 240 / 240 | **1.2476** | $[0.6265, 2.6094]$ | **1.5206** |
+| **STRUCTURED_WITNESS** | 5 | 30 / 30 | **1.5331** | $[0.9554, 1.7603]$ | **1.3000** |
+| **NETFLOW_PROBE** | 20 | 120 / 120 | **1.3898** | $[0.6042, 4.7501]$ | **1.2858** |
 
 ### 3.2 Segmented Breakdown: Approximate Defect vs Exact Controls
 | Segment | Workloads | With Events | Zero Events | Sub-ms Noisy | Speedup Median | Speedup Range | Budget Ratio Median |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Synthetic $k \ge 1$ (Approximate)** | 24 | 16 | 8 | 7 | **1.5217** | $[0.9589, 2.6495]$ | **1.8662** |
-| **Synthetic $k = 0$ (Exact Control)** | 16 | 6 | 10 | 8 | **0.9898** | $[0.6035, 1.8916]$ | **0.9214** |
+| **Synthetic $k \ge 1$ (Approximate)** | 24 | 16 | 8 | 6 | **1.4984** | $[0.9306, 2.6094]$ | **1.8662** |
+| **Synthetic $k = 0$ (Exact Control)** | 16 | 6 | 10 | 8 | **0.9580** | $[0.6265, 1.2702]$ | **0.9214** |
 
 ### 3.3 Query Condition Breakdown (All 65 Workloads)
 | Condition | Shape | $k$ | Workloads | With Events | Speedup Median | Speedup Range | Budget Ratio Median |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| `diamond_k1` | Diamond | 1 | 13 | 7 | **1.2530** | $[0.9589, 4.0630]$ | **1.4579** |
-| `k4_k1` | $K_4$ | 1 | 13 | 5 | **1.5095** | $[0.9829, 3.1346]$ | **1.9009** |
-| `k4_k2` | $K_4$ | 2 | 13 | 7 | **1.7909** | $[1.3639, 4.5404]$ | **2.0599** |
-| `diamond_k0` | Diamond | 0 | 13 | 5 | **0.9176** | $[0.7845, 1.8916]$ | **0.8784** |
-| `k4_k0` | $K_4$ | 0 | 13 | 3 | **1.0409** | $[0.6035, 1.8411]$ | **0.9667** |
+| `diamond_k1` | Diamond | 1 | 13 | 7 | **1.3090** | $[0.6042, 4.3257]$ | **1.4579** |
+| `k4_k1` | $K_4$ | 1 | 13 | 5 | **1.5706** | $[1.1316, 3.3793]$ | **1.9009** |
+| `k4_k2` | $K_4$ | 2 | 13 | 7 | **1.6488** | $[1.2235, 4.7501]$ | **2.0599** |
+| `diamond_k0` | Diamond | 0 | 13 | 5 | **1.0256** | $[0.6265, 1.2908]$ | **0.8784** |
+| `k4_k0` | $K_4$ | 0 | 13 | 3 | **0.9833** | $[0.7089, 2.0111]$ | **0.9667** |
 
 ### 3.4 Label Regime Breakdown (Synthetic Matrix)
 | Regime | Workloads | With Events | Zero Events | Sub-ms Noisy | Speedup Median | Speedup Range | Budget Ratio Median |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Uniform Labels** | 20 | 17 | 3 | 0 | **1.3581** | $[0.6035, 2.3797]$ | **1.4003** |
-| **Mixed Labels** | 20 | 5 | 15 | 15 | **1.3254** | $[0.8605, 2.6495]$ | **1.6120** |
+| **Uniform Labels** | 20 | 17 | 3 | 0 | **1.2243** | $[0.6265, 2.6031]$ | **1.4003** |
+| **Mixed Labels** | 20 | 5 | 15 | 14 | **1.3196** | $[0.8394, 2.6094]$ | **1.6120** |
 
 ### 3.5 Disaggregated Algorithmic Counters
 | Family | M1 Candidate Evals | M2 Candidate Evals | M2 Edge Decisions | M2 Missing Branches |
@@ -107,7 +107,7 @@ These counters serve as an internal safety guardrail under `limits["max_work"]`.
 - In exact control matching ($k = 0$), both engines performed identical candidate evaluations (31,086), while M2 tracked edge decisions (7,962).
 
 ### 4.2 Sub-Millisecond Measurement Noise
-A significant portion of runs (38 of 65 workloads) exhibited median execution times below **1.0 millisecond**.
+A significant portion of runs (37 of 65 workloads) exhibited median execution times below **1.0 millisecond**.
 - In this regime, timer resolution, CPU frequency scaling, and interpreter dispatch introduce variance.
 - All cases with median latencies below 1.0 ms are explicitly tagged with `SUB_MILLISECOND_NOISY` in `pilot_results.csv`.
 - These observations are presented as exploratory measurements rather than conclusive evidence of asymptotic differences.
