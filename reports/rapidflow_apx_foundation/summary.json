@@ -1,5 +1,5 @@
 {
-  "timestamp_utc": "2026-11-18T11:42:26.243315+00:00",
+  "timestamp_utc": "2026-11-18T12:22:30.896218+00:00",
   "runner_mode": "CANONICAL",
   "overall_status": "P2_FOUNDATION_VERIFIED",
   "stages": {
@@ -14,14 +14,29 @@
       "case_id": "codec_boundaries",
       "status": "PASS",
       "diagnostic": "Codec successfully roundtrips 64-bit signed IDs and maintains typed label isolation",
-      "oracle_verification": "Case verified",
-      "elapsed_seconds": 0.0032,
+      "oracle_verification": "Codec boundaries verified against fixture metadata and roundtrip checks",
+      "elapsed_seconds": 0.0043,
       "native_report": {
+        "data_vertex_ids": [
+          -999999999999,
+          -42,
+          0,
+          1000000,
+          5000000000,
+          9007199254740993
+        ],
+        "query_vertex_ids": [
+          -100,
+          0,
+          5000000000
+        ],
         "data_vertices_count": 6,
-        "binary_sha256": "b85eebb2aa8a000b18354c4673d4da27278e0cc0fcf6cfec8124bf894734e403",
+        "binary_sha256": "56a25a9db6ceee3cc5df9dd17e2333849a080d6d035a4235cdcec38911897d41",
         "query_vertices_count": 3,
         "diagnostic": "Codec successfully roundtrips 64-bit signed IDs and maintains typed label isolation",
+        "vertex_labels_count": 2,
         "status": "PASS",
+        "edge_labels_count": 0,
         "case_id": "codec_boundaries"
       }
     },
@@ -29,65 +44,457 @@
       "case_id": "lifecycle_stream",
       "status": "PASS",
       "diagnostic": "Graph lifecycle, overlays, tombstones, and label precedence verified",
-      "oracle_verification": "Lifecycle stream verified",
-      "elapsed_seconds": 0.0034,
+      "oracle_verification": "Lifecycle stream verified step-by-step against independent reference model",
+      "elapsed_seconds": 0.0041,
       "native_report": {
-        "binary_sha256": "b85eebb2aa8a000b18354c4673d4da27278e0cc0fcf6cfec8124bf894734e403",
+        "binary_sha256": "56a25a9db6ceee3cc5df9dd17e2333849a080d6d035a4235cdcec38911897d41",
         "mutations_executed": [
           {
+            "edges": [
+              {
+                "label": 10,
+                "v": 4,
+                "u": 0
+              },
+              {
+                "label": 10,
+                "v": 2,
+                "u": 1
+              },
+              {
+                "label": 10,
+                "v": 3,
+                "u": 2
+              },
+              {
+                "label": 10,
+                "v": 4,
+                "u": 3
+              }
+            ],
+            "in_overlay": false,
+            "degrees": {
+              "4": 2,
+              "2": 2,
+              "3": 2,
+              "1": 1,
+              "0": 1
+            },
+            "in_tombstones": true,
+            "edge_label": -1,
             "has_edge": false,
             "v": 1,
             "u": 0,
+            "vertices_count": 5,
             "edges_count": 4,
             "op": "delete_base",
+            "neighbors": {
+              "4": [
+                0,
+                3
+              ],
+              "2": [
+                1,
+                3
+              ],
+              "3": [
+                2,
+                4
+              ],
+              "1": [
+                2
+              ],
+              "0": [
+                4
+              ]
+            },
             "step_index": 0
           },
           {
+            "edges": [
+              {
+                "label": 10,
+                "v": 1,
+                "u": 0
+              },
+              {
+                "label": 10,
+                "v": 4,
+                "u": 0
+              },
+              {
+                "label": 10,
+                "v": 2,
+                "u": 1
+              },
+              {
+                "label": 10,
+                "v": 3,
+                "u": 2
+              },
+              {
+                "label": 10,
+                "v": 4,
+                "u": 3
+              }
+            ],
+            "in_overlay": true,
+            "degrees": {
+              "4": 2,
+              "2": 2,
+              "3": 2,
+              "1": 2,
+              "0": 2
+            },
+            "in_tombstones": false,
+            "edge_label": 10,
             "has_edge": true,
             "v": 1,
             "u": 0,
+            "vertices_count": 5,
             "edges_count": 5,
             "op": "reinsert_same",
+            "neighbors": {
+              "4": [
+                0,
+                3
+              ],
+              "2": [
+                1,
+                3
+              ],
+              "3": [
+                2,
+                4
+              ],
+              "1": [
+                0,
+                2
+              ],
+              "0": [
+                1,
+                4
+              ]
+            },
             "step_index": 1
           },
           {
+            "edges": [
+              {
+                "label": 10,
+                "v": 4,
+                "u": 0
+              },
+              {
+                "label": 10,
+                "v": 2,
+                "u": 1
+              },
+              {
+                "label": 10,
+                "v": 3,
+                "u": 2
+              },
+              {
+                "label": 10,
+                "v": 4,
+                "u": 3
+              }
+            ],
+            "in_overlay": false,
+            "degrees": {
+              "4": 2,
+              "2": 2,
+              "3": 2,
+              "1": 1,
+              "0": 1
+            },
+            "in_tombstones": true,
+            "edge_label": -1,
             "has_edge": false,
             "v": 1,
             "u": 0,
+            "vertices_count": 5,
             "edges_count": 4,
             "op": "delete_reinserted",
+            "neighbors": {
+              "4": [
+                0,
+                3
+              ],
+              "2": [
+                1,
+                3
+              ],
+              "3": [
+                2,
+                4
+              ],
+              "1": [
+                2
+              ],
+              "0": [
+                4
+              ]
+            },
             "step_index": 2
           },
           {
+            "edges": [
+              {
+                "label": 99,
+                "v": 1,
+                "u": 0
+              },
+              {
+                "label": 10,
+                "v": 4,
+                "u": 0
+              },
+              {
+                "label": 10,
+                "v": 2,
+                "u": 1
+              },
+              {
+                "label": 10,
+                "v": 3,
+                "u": 2
+              },
+              {
+                "label": 10,
+                "v": 4,
+                "u": 3
+              }
+            ],
+            "in_overlay": true,
+            "degrees": {
+              "4": 2,
+              "2": 2,
+              "3": 2,
+              "1": 2,
+              "0": 2
+            },
+            "in_tombstones": false,
+            "edge_label": 99,
             "has_edge": true,
             "v": 1,
             "u": 0,
+            "vertices_count": 5,
             "edges_count": 5,
             "op": "reinsert_diff_label",
+            "neighbors": {
+              "4": [
+                0,
+                3
+              ],
+              "2": [
+                1,
+                3
+              ],
+              "3": [
+                2,
+                4
+              ],
+              "1": [
+                0,
+                2
+              ],
+              "0": [
+                1,
+                4
+              ]
+            },
             "step_index": 3
           },
           {
+            "edges": [
+              {
+                "label": 10,
+                "v": 4,
+                "u": 0
+              },
+              {
+                "label": 10,
+                "v": 2,
+                "u": 1
+              },
+              {
+                "label": 10,
+                "v": 3,
+                "u": 2
+              },
+              {
+                "label": 10,
+                "v": 4,
+                "u": 3
+              }
+            ],
+            "in_overlay": false,
+            "degrees": {
+              "4": 2,
+              "2": 2,
+              "3": 2,
+              "1": 1,
+              "0": 1
+            },
+            "in_tombstones": true,
+            "edge_label": -1,
             "has_edge": false,
             "v": 1,
             "u": 0,
+            "vertices_count": 5,
             "edges_count": 4,
             "op": "delete_reinserted_diff",
+            "neighbors": {
+              "4": [
+                0,
+                3
+              ],
+              "2": [
+                1,
+                3
+              ],
+              "3": [
+                2,
+                4
+              ],
+              "1": [
+                2
+              ],
+              "0": [
+                4
+              ]
+            },
             "step_index": 4
           },
           {
+            "edges": [
+              {
+                "label": 10,
+                "v": 4,
+                "u": 0
+              },
+              {
+                "label": 10,
+                "v": 2,
+                "u": 1
+              },
+              {
+                "label": 50,
+                "v": 3,
+                "u": 1
+              },
+              {
+                "label": 10,
+                "v": 3,
+                "u": 2
+              },
+              {
+                "label": 10,
+                "v": 4,
+                "u": 3
+              }
+            ],
+            "in_overlay": true,
+            "degrees": {
+              "4": 2,
+              "2": 2,
+              "3": 3,
+              "1": 2,
+              "0": 1
+            },
+            "in_tombstones": false,
+            "edge_label": 50,
             "has_edge": true,
             "v": 3,
             "u": 1,
+            "vertices_count": 5,
             "edges_count": 5,
             "op": "insert_dynamic",
+            "neighbors": {
+              "4": [
+                0,
+                3
+              ],
+              "2": [
+                1,
+                3
+              ],
+              "3": [
+                1,
+                2,
+                4
+              ],
+              "1": [
+                2,
+                3
+              ],
+              "0": [
+                4
+              ]
+            },
             "step_index": 5
           },
           {
+            "edges": [
+              {
+                "label": 10,
+                "v": 4,
+                "u": 0
+              },
+              {
+                "label": 10,
+                "v": 2,
+                "u": 1
+              },
+              {
+                "label": 10,
+                "v": 3,
+                "u": 2
+              },
+              {
+                "label": 10,
+                "v": 4,
+                "u": 3
+              }
+            ],
+            "in_overlay": false,
+            "degrees": {
+              "4": 2,
+              "2": 2,
+              "3": 2,
+              "1": 1,
+              "0": 1
+            },
+            "in_tombstones": false,
+            "edge_label": -1,
             "has_edge": false,
             "v": 3,
             "u": 1,
+            "vertices_count": 5,
             "edges_count": 4,
             "op": "delete_dynamic",
+            "neighbors": {
+              "4": [
+                0,
+                3
+              ],
+              "2": [
+                1,
+                3
+              ],
+              "3": [
+                2,
+                4
+              ],
+              "1": [
+                2
+              ],
+              "0": [
+                4
+              ]
+            },
             "step_index": 6
           }
         ],
@@ -103,103 +510,591 @@
       "status": "PASS",
       "diagnostic": "Transaction manager ACID boundaries, reentrancy guard, and fault rollback verified",
       "oracle_verification": "Transaction lifecycle steps verified against Python reference state model",
-      "elapsed_seconds": 0.0045,
+      "elapsed_seconds": 0.0042,
       "native_report": {
-        "binary_sha256": "b85eebb2aa8a000b18354c4673d4da27278e0cc0fcf6cfec8124bf894734e403",
+        "binary_sha256": "56a25a9db6ceee3cc5df9dd17e2333849a080d6d035a4235cdcec38911897d41",
         "steps_executed": [
           {
-            "has_edge_uv": true,
-            "degree_u": 2,
-            "current_vertices_count": 4,
-            "degree_v": 1,
-            "current_edges_count": 3,
-            "u": 10,
-            "op": "+",
-            "v": 40,
+            "published_tuples": [],
+            "step_index": 0,
+            "neighbors": {
+              "30": [
+                20
+              ],
+              "40": [
+                10
+              ],
+              "20": [
+                10,
+                30
+              ],
+              "10": [
+                20,
+                40
+              ]
+            },
             "status": "SUCCESS",
-            "step_index": 0
-          },
-          {
-            "has_edge_uv": true,
-            "degree_u": 2,
-            "current_vertices_count": 4,
-            "degree_v": 1,
-            "current_edges_count": 3,
-            "u": 10,
-            "op": "+",
+            "sink_counters": {
+              "discarded_emissions": 0,
+              "committed_emissions": 0,
+              "unique_emissions": 0,
+              "raw_emissions": 0
+            },
             "v": 40,
-            "status": "PREVALIDATION_FAILED",
-            "step_index": 1
+            "op": "+",
+            "degrees": {
+              "30": 1,
+              "40": 1,
+              "20": 2,
+              "10": 2
+            },
+            "u": 10,
+            "vertex_u_exists": true,
+            "current_edges_count": 3,
+            "current_vertices_count": 4,
+            "vertex_v_exists": true,
+            "codec_state": {
+              "edge_labels_count": 1,
+              "vertex_labels_count": 1,
+              "data_vertices_count": 4
+            },
+            "degree_u": 2,
+            "degree_v": 1,
+            "edges": [
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 20,
+                "u": 10
+              },
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 40,
+                "u": 10
+              },
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 30,
+                "u": 20
+              }
+            ],
+            "has_edge_uv": true
           },
           {
-            "has_edge_uv": false,
-            "degree_u": 2,
-            "current_vertices_count": 4,
-            "degree_v": 1,
+            "published_tuples": [],
+            "step_index": 1,
+            "neighbors": {
+              "30": [
+                20
+              ],
+              "40": [
+                10
+              ],
+              "20": [
+                10,
+                30
+              ],
+              "10": [
+                20,
+                40
+              ]
+            },
+            "status": "PREVALIDATION_FAILED",
+            "sink_counters": {
+              "discarded_emissions": 0,
+              "committed_emissions": 0,
+              "unique_emissions": 0,
+              "raw_emissions": 0
+            },
+            "v": 40,
+            "op": "+",
+            "degrees": {
+              "30": 1,
+              "40": 1,
+              "20": 2,
+              "10": 2
+            },
+            "u": 10,
+            "vertex_u_exists": true,
             "current_edges_count": 3,
+            "current_vertices_count": 4,
+            "vertex_v_exists": true,
+            "codec_state": {
+              "edge_labels_count": 1,
+              "vertex_labels_count": 1,
+              "data_vertices_count": 4
+            },
+            "degree_u": 2,
+            "degree_v": 1,
+            "edges": [
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 20,
+                "u": 10
+              },
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 40,
+                "u": 10
+              },
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 30,
+                "u": 20
+              }
+            ],
+            "has_edge_uv": true
+          },
+          {
+            "published_tuples": [],
+            "step_index": 2,
+            "neighbors": {
+              "30": [
+                20
+              ],
+              "40": [
+                10
+              ],
+              "20": [
+                10,
+                30
+              ],
+              "10": [
+                20,
+                40
+              ]
+            },
+            "status": "FAULT_INJECTED",
+            "sink_counters": {
+              "discarded_emissions": 0,
+              "committed_emissions": 0,
+              "unique_emissions": 0,
+              "raw_emissions": 0
+            },
+            "v": 40,
+            "op": "+",
+            "degrees": {
+              "30": 1,
+              "40": 1,
+              "20": 2,
+              "10": 2
+            },
             "u": 20,
-            "op": "+",
-            "v": 40,
-            "status": "FAULT_INJECTED",
-            "step_index": 2
+            "vertex_u_exists": true,
+            "current_edges_count": 3,
+            "current_vertices_count": 4,
+            "vertex_v_exists": true,
+            "codec_state": {
+              "edge_labels_count": 1,
+              "vertex_labels_count": 1,
+              "data_vertices_count": 4
+            },
+            "degree_u": 2,
+            "degree_v": 1,
+            "edges": [
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 20,
+                "u": 10
+              },
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 40,
+                "u": 10
+              },
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 30,
+                "u": 20
+              }
+            ],
+            "has_edge_uv": false
           },
           {
-            "has_edge_uv": false,
-            "degree_u": 1,
-            "current_vertices_count": 4,
-            "degree_v": 1,
-            "current_edges_count": 3,
+            "published_tuples": [],
+            "step_index": 3,
+            "neighbors": {
+              "30": [
+                20
+              ],
+              "40": [
+                10
+              ],
+              "20": [
+                10,
+                30
+              ],
+              "10": [
+                20,
+                40
+              ]
+            },
+            "status": "FAULT_INJECTED",
+            "sink_counters": {
+              "discarded_emissions": 0,
+              "committed_emissions": 0,
+              "unique_emissions": 0,
+              "raw_emissions": 0
+            },
+            "v": 40,
+            "op": "+",
+            "degrees": {
+              "30": 1,
+              "40": 1,
+              "20": 2,
+              "10": 2
+            },
             "u": 30,
-            "op": "+",
-            "v": 40,
-            "status": "FAULT_INJECTED",
-            "step_index": 3
-          },
-          {
-            "current_vertices_count": 4,
-            "degree_v": 1,
+            "vertex_u_exists": true,
             "current_edges_count": 3,
-            "u": 999,
-            "op": "-",
-            "v": 40,
-            "status": "PREVALIDATION_FAILED",
-            "step_index": 4
-          },
-          {
-            "has_edge_uv": true,
-            "degree_u": 2,
             "current_vertices_count": 4,
-            "degree_v": 2,
-            "current_edges_count": 3,
-            "u": 10,
-            "op": "-",
-            "v": 20,
-            "status": "PREVALIDATION_FAILED",
-            "step_index": 5
-          },
-          {
-            "has_edge_uv": true,
-            "degree_u": 2,
-            "current_vertices_count": 4,
-            "degree_v": 2,
-            "current_edges_count": 3,
-            "u": 10,
-            "op": "-",
-            "v": 20,
-            "status": "FAULT_INJECTED",
-            "step_index": 6
-          },
-          {
-            "has_edge_uv": false,
+            "vertex_v_exists": true,
+            "codec_state": {
+              "edge_labels_count": 1,
+              "vertex_labels_count": 1,
+              "data_vertices_count": 4
+            },
             "degree_u": 1,
-            "current_vertices_count": 4,
             "degree_v": 1,
-            "current_edges_count": 2,
-            "u": 10,
+            "edges": [
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 20,
+                "u": 10
+              },
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 40,
+                "u": 10
+              },
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 30,
+                "u": 20
+              }
+            ],
+            "has_edge_uv": false
+          },
+          {
+            "published_tuples": [],
+            "step_index": 4,
+            "neighbors": {
+              "30": [
+                20
+              ],
+              "40": [
+                10
+              ],
+              "20": [
+                10,
+                30
+              ],
+              "10": [
+                20,
+                40
+              ]
+            },
+            "status": "PREVALIDATION_FAILED",
+            "sink_counters": {
+              "discarded_emissions": 0,
+              "committed_emissions": 0,
+              "unique_emissions": 0,
+              "raw_emissions": 0
+            },
+            "v": 40,
             "op": "-",
+            "degrees": {
+              "30": 1,
+              "40": 1,
+              "20": 2,
+              "10": 2
+            },
+            "u": 999,
+            "vertex_u_exists": false,
+            "current_edges_count": 3,
+            "current_vertices_count": 4,
+            "vertex_v_exists": true,
+            "codec_state": {
+              "edge_labels_count": 1,
+              "vertex_labels_count": 1,
+              "data_vertices_count": 4
+            },
+            "degree_u": 0,
+            "degree_v": 1,
+            "edges": [
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 20,
+                "u": 10
+              },
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 40,
+                "u": 10
+              },
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 30,
+                "u": 20
+              }
+            ],
+            "has_edge_uv": false
+          },
+          {
+            "published_tuples": [],
+            "step_index": 5,
+            "neighbors": {
+              "30": [
+                20
+              ],
+              "40": [
+                10
+              ],
+              "20": [
+                10,
+                30
+              ],
+              "10": [
+                20,
+                40
+              ]
+            },
+            "status": "PREVALIDATION_FAILED",
+            "sink_counters": {
+              "discarded_emissions": 0,
+              "committed_emissions": 0,
+              "unique_emissions": 0,
+              "raw_emissions": 0
+            },
             "v": 20,
+            "op": "-",
+            "degrees": {
+              "30": 1,
+              "40": 1,
+              "20": 2,
+              "10": 2
+            },
+            "u": 10,
+            "vertex_u_exists": true,
+            "current_edges_count": 3,
+            "current_vertices_count": 4,
+            "vertex_v_exists": true,
+            "codec_state": {
+              "edge_labels_count": 1,
+              "vertex_labels_count": 1,
+              "data_vertices_count": 4
+            },
+            "degree_u": 2,
+            "degree_v": 2,
+            "edges": [
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 20,
+                "u": 10
+              },
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 40,
+                "u": 10
+              },
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 30,
+                "u": 20
+              }
+            ],
+            "has_edge_uv": true
+          },
+          {
+            "published_tuples": [],
+            "step_index": 6,
+            "neighbors": {
+              "30": [
+                20
+              ],
+              "40": [
+                10
+              ],
+              "20": [
+                10,
+                30
+              ],
+              "10": [
+                20,
+                40
+              ]
+            },
+            "status": "FAULT_INJECTED",
+            "sink_counters": {
+              "discarded_emissions": 0,
+              "committed_emissions": 0,
+              "unique_emissions": 0,
+              "raw_emissions": 0
+            },
+            "v": 20,
+            "op": "-",
+            "degrees": {
+              "30": 1,
+              "40": 1,
+              "20": 2,
+              "10": 2
+            },
+            "u": 10,
+            "vertex_u_exists": true,
+            "current_edges_count": 3,
+            "current_vertices_count": 4,
+            "vertex_v_exists": true,
+            "codec_state": {
+              "edge_labels_count": 1,
+              "vertex_labels_count": 1,
+              "data_vertices_count": 4
+            },
+            "degree_u": 2,
+            "degree_v": 2,
+            "edges": [
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 20,
+                "u": 10
+              },
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 40,
+                "u": 10
+              },
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 30,
+                "u": 20
+              }
+            ],
+            "has_edge_uv": true
+          },
+          {
+            "published_tuples": [],
+            "step_index": 7,
+            "neighbors": {
+              "30": [
+                20
+              ],
+              "40": [
+                10
+              ],
+              "20": [
+                30
+              ],
+              "10": [
+                40
+              ]
+            },
             "status": "SUCCESS",
-            "step_index": 7
+            "sink_counters": {
+              "discarded_emissions": 0,
+              "committed_emissions": 0,
+              "unique_emissions": 0,
+              "raw_emissions": 0
+            },
+            "v": 20,
+            "op": "-",
+            "degrees": {
+              "30": 1,
+              "40": 1,
+              "20": 1,
+              "10": 1
+            },
+            "u": 10,
+            "vertex_u_exists": true,
+            "current_edges_count": 2,
+            "current_vertices_count": 4,
+            "vertex_v_exists": true,
+            "codec_state": {
+              "edge_labels_count": 1,
+              "vertex_labels_count": 1,
+              "data_vertices_count": 4
+            },
+            "degree_u": 1,
+            "degree_v": 1,
+            "edges": [
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 40,
+                "u": 10
+              },
+              {
+                "label": {
+                  "val": 100,
+                  "type": "int"
+                },
+                "v": 30,
+                "u": 20
+              }
+            ],
+            "has_edge_uv": false
           }
         ],
         "diagnostic": "Transaction manager ACID boundaries, reentrancy guard, and fault rollback verified",
@@ -212,12 +1107,12 @@
       "status": "PASS",
       "diagnostic": "TupleSink injectivity, duplicate rejection, and staging invariants verified",
       "oracle_verification": "TupleSink invariants verified",
-      "elapsed_seconds": 0.0033,
+      "elapsed_seconds": 0.0035,
       "native_report": {
         "discarded_emissions": 1,
         "committed_emissions": 2,
         "unique_emissions": 3,
-        "binary_sha256": "b85eebb2aa8a000b18354c4673d4da27278e0cc0fcf6cfec8124bf894734e403",
+        "binary_sha256": "56a25a9db6ceee3cc5df9dd17e2333849a080d6d035a4235cdcec38911897d41",
         "raw_emissions": 4,
         "diagnostic": "TupleSink injectivity, duplicate rejection, and staging invariants verified",
         "status": "PASS",
@@ -229,7 +1124,7 @@
       "status": "PASS",
       "diagnostic": "K4 exact enumeration produced exactly 24 unique ordered tuples",
       "oracle_verification": "Bit-for-bit match with genuine scripts.dstar_oracle (24 unique ordered tuples)",
-      "elapsed_seconds": 0.0035,
+      "elapsed_seconds": 0.0032,
       "native_report": {
         "tuples": [
           [
@@ -378,7 +1273,7 @@
           ]
         ],
         "unique_emissions": 24,
-        "binary_sha256": "b85eebb2aa8a000b18354c4673d4da27278e0cc0fcf6cfec8124bf894734e403",
+        "binary_sha256": "56a25a9db6ceee3cc5df9dd17e2333849a080d6d035a4235cdcec38911897d41",
         "raw_emissions": 24,
         "tuple_count": 24,
         "diagnostic": "K4 exact enumeration produced exactly 24 unique ordered tuples",
@@ -391,9 +1286,9 @@
       "status": "PASS",
       "diagnostic": "Dynamic event transitions on K4 missing edge verified (0 baseline, 24 ENTERED, 24 EXITED)",
       "oracle_verification": "Dynamic delta events verified bit-for-bit against scripts.dstar_oracle with strict event_type validation",
-      "elapsed_seconds": 0.0032,
+      "elapsed_seconds": 0.0035,
       "native_report": {
-        "binary_sha256": "b85eebb2aa8a000b18354c4673d4da27278e0cc0fcf6cfec8124bf894734e403",
+        "binary_sha256": "56a25a9db6ceee3cc5df9dd17e2333849a080d6d035a4235cdcec38911897d41",
         "events": [
           {
             "tuples": [
@@ -714,9 +1609,9 @@
       "status": "PASS",
       "diagnostic": "Diamond k=1 fixed-mapping successfully evaluated satisfying D-R guard (k < lambda) and S2 spanning connectivity",
       "oracle_verification": "Diamond k=1 evaluation verified against D-R guard contract",
-      "elapsed_seconds": 0.0029,
+      "elapsed_seconds": 0.003,
       "native_report": {
-        "binary_sha256": "b85eebb2aa8a000b18354c4673d4da27278e0cc0fcf6cfec8124bf894734e403",
+        "binary_sha256": "56a25a9db6ceee3cc5df9dd17e2333849a080d6d035a4235cdcec38911897d41",
         "computed_lambda": 2,
         "missing_edges": 1,
         "is_valid": true,
@@ -732,9 +1627,9 @@
       "status": "PASS",
       "diagnostic": "Irrelevant update recorded in authoritative state with zero search emissions",
       "oracle_verification": "Irrelevant update verified",
-      "elapsed_seconds": 0.0025,
+      "elapsed_seconds": 0.003,
       "native_report": {
-        "binary_sha256": "b85eebb2aa8a000b18354c4673d4da27278e0cc0fcf6cfec8124bf894734e403",
+        "binary_sha256": "56a25a9db6ceee3cc5df9dd17e2333849a080d6d035a4235cdcec38911897d41",
         "edge_recorded": true,
         "diagnostic": "Irrelevant update recorded in authoritative state with zero search emissions",
         "status": "PASS",
@@ -744,7 +1639,7 @@
     }
   ],
   "provenance": {
-    "repo_commit": "df276529ceea03d8cc85c3781b567fbbf3bb135a",
+    "repo_commit": "98601a02d45da7544af085397d31a2c9c249d589",
     "repo_clean": true,
     "dirty_state": "DIRTY_REPORTS_ONLY",
     "modified_paths": [
@@ -759,7 +1654,7 @@
     },
     "source_hashes": {
       "extensions/rapidflow_apx/include/rapidflow_apx/typed_codec.h": "fce8f4b42e871d9bd61efc16f06c96b1f4f183a7a2f80e62138113caf0dec6d8",
-      "extensions/rapidflow_apx/include/rapidflow_apx/authoritative_graph.h": "9677dcc27046358bbd60ecbee1944ed62782f39896a90db020467c621fa796d9",
+      "extensions/rapidflow_apx/include/rapidflow_apx/authoritative_graph.h": "1d9eb2cc59f7fa27aa8f8171dbc4778ea054f3675e2d47876db7ce0ba7ba1c36",
       "extensions/rapidflow_apx/include/rapidflow_apx/transaction_manager.h": "a3f38005a7a9928718bfd50a2f9ebd04ab9fec4992068ee3278438d9f637f08c",
       "extensions/rapidflow_apx/include/rapidflow_apx/tuple_sink.h": "ee1a56e9f9a3a3e6838df7dc30b6c72934fbc33e36f966d6433c467fd5a03086",
       "extensions/rapidflow_apx/include/rapidflow_apx/micro_matcher.h": "e8733c4fdcf0c1a43908bb6fab55f5e433da0c99c1c2ebd4cd0648ac049c5a55",
@@ -770,18 +1665,18 @@
       "extensions/rapidflow_apx/src/micro_matcher.cpp": "65f2ad5b8b2450a91b6743d7dc3c9511be25cbcc962f5d9a93e0a3b76624104b",
       "tests/native/rapidflow_apx_foundation/src/main.cpp": "5b69b3a9567dcc9dbeff1f5531be5d4819842f852010c69597941cc06cf1ac30",
       "tests/native/rapidflow_apx_foundation/src/harness_cases.h": "4ee7d8d3d1c41dbba8fe478e157c914628df0421f49c8464b5c314a93f04df29",
-      "tests/native/rapidflow_apx_foundation/src/harness_cases.cpp": "d226e1b3bab0694df5752c43680d1c6b0895f485a0a69aea8b64fad9b0970d44",
+      "tests/native/rapidflow_apx_foundation/src/harness_cases.cpp": "f544a065d1fea0fde65a1c82d23a29e05944562bd696c3c8bc6522f34b1f539e",
       "tests/native/rapidflow_apx_foundation/src/json_mini.h": "5a1d660125f2f656bc8d3b67b34dffd909f0064c4b623ac5ce756893ac6e4d04",
       "tests/native/rapidflow_apx_foundation/CMakeLists.txt": "c3b39a6b03895e02ec68a30fb03574ad649bbb6b78f208acd9efb81b4df0d592",
       "extensions/rapidflow_apx/CMakeLists.txt": "fcb79b2ac00fa883ed118f25d2b104421514a77b93f8337efa4d8b882acafdaf",
-      "scripts/run_rapidflow_apx_foundation.py": "9c80fe00848abc4f811194f95d82abbd8d84fc1d0cdae5f9be58a7970648d320",
+      "scripts/run_rapidflow_apx_foundation.py": "66e99e9725233b8e67d09f1acf28e2dff4d983d13e690449bf9966538ea2a49b",
       "scripts/dstar_oracle.py": "e2583dceba1679ce10fdb5fa91dbbd6a79e10f59778968b1facd4a9f86b4337e"
     },
-    "verified_at": "2026-11-18T11:42:26.262745+00:00"
+    "verified_at": "2026-11-18T12:22:30.914533+00:00"
   },
   "system_resources": {
-    "available_ram_gib": 5.21,
-    "free_disk_gib": 110.0
+    "available_ram_gib": 5.13,
+    "free_disk_gib": 109.99
   },
   "manifest_sha256": "4e002352123ee4d12d473a7d08a63d3325d3be065149116a145d7a79303ce030",
   "fixture_hashes": {
@@ -795,7 +1690,7 @@
     "irrelevant_update_stream": "0d6ed69139a59fc12fd76bd974389c9df837f7d2be3d917f39ecfa23f794d12f"
   },
   "binary_path": "/home/iamqthanq/Desktop/Seminar_RapidFlow_D_INT02/tests/native/rapidflow_apx_foundation/build/rapidflow_apx_foundation_harness",
-  "binary_sha256": "b85eebb2aa8a000b18354c4673d4da27278e0cc0fcf6cfec8124bf894734e403",
+  "binary_sha256": "56a25a9db6ceee3cc5df9dd17e2333849a080d6d035a4235cdcec38911897d41",
   "build_provenance": {
     "cmake_command": [
       "/home/iamqthanq/Desktop/Seminar_RapidFlow_D_INT02/external/tools/cmake-3.28.3-linux-x86_64/bin/cmake",
@@ -806,7 +1701,7 @@
       "make",
       "-j2"
     ],
-    "binary_sha256": "b85eebb2aa8a000b18354c4673d4da27278e0cc0fcf6cfec8124bf894734e403"
+    "binary_sha256": "56a25a9db6ceee3cc5df9dd17e2333849a080d6d035a4235cdcec38911897d41"
   },
   "completed_cases": 8,
   "passed_cases": 8,
