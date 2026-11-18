@@ -2,8 +2,8 @@
 
 **Date:** 2026-11-18 (Updated following 18/11/2026 Architectural Sync)
 **Context:** Seminar RapidFlow / CSM — D* Feasibility Route
-**Current Phase:** DSTAR-02 (Issue #24) Complete
-**Next Phase:** DSTAR-03 (M2 Optimizations: NLF, $\delta'$, candidate ordering)
+**Current Phase:** DSTAR-03 (Issue #26) Complete
+**Next Phase:** DSTAR-04 (M2 Optimizations: NLF, $\delta'$, candidate ordering or C++ Port)
 
 ---
 
@@ -33,14 +33,21 @@ Phase 2: Event Enumeration: M1-enum, Bare M2 & Tuple Correctness [COMPLETED IN D
    │  └── reports/dstar02/correctness_summary.json & docs/dstar02_validation_report.md
    │
    ▼
-Phase 3: M2 Algorithmic Optimizations [UPCOMING DSTAR-03]
-   │  ├── Static Neighbor Label Frequency (NLF) filtering
-   │  ├── Dynamic NLF delta' updates around modified data vertices
-   │  └── Candidate ordering and failure-driven pruning
+Phase 3: S4 Tiny Pilot — Paired M1/M2 Evaluation [COMPLETED IN DSTAR-03 / Issue #26]
+   │  ├── docs/dstar03_pilot_protocol.md (Frozen 65-workload protocol, COLLECT_VERIFY_SORT_V1)
+   │  ├── configs/dstar03_pilot_manifest.json (40 synthetic, 5 witness, 20 NetFlow probes)
+   │  ├── scripts/generate_dstar03_workloads.py (Bounded 2-pass streaming, deterministic RNG)
+   │  ├── scripts/dstar03_resources.py (RLIMIT_AS 512 MiB, 60s timeout, process group isolation)
+   │  ├── scripts/dstar03_pilot_worker.py (Warm-up reset, perf_counter_ns engine-call timing)
+   │  ├── scripts/run_dstar03_pilot.py (Resumable durable journal ledger, parity-offset order)
+   │  ├── scripts/summarize_dstar03_pilot.py (Reconciles 390 slots, noise and coverage tagging)
+   │  ├── reports/dstar03/attempts.jsonl, pilot_summary.json, pilot_results.csv
+   │  └── docs/dstar03_pilot_report.md (390/390 completed, M0 verified, M2 ~34% work reduction)
    │
    ▼
-Phase 4: Local View Integration & C++ Implementation [UPCOMING DSTAR-04]
-   │  ├── Adaptation of RapidFlow Local View for approximate event search
+Phase 4: M2 Algorithmic Optimizations & C++ Implementation [UPCOMING DSTAR-04]
+   │  ├── Static Neighbor Label Frequency (NLF) and Dynamic delta' filtering
+   │  ├── Candidate ordering and failure-driven branch pruning
    │  └── C++ native implementation of M1-enum and optimized M2
    │
    ▼

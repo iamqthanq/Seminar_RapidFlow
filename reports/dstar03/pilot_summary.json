@@ -1,0 +1,50 @@
+{
+  "manifest_id": "dstar03-pilot-manifest-v1",
+  "execution_completeness": "PILOT_COMPLETED",
+  "total_registered_workloads": 65,
+  "total_required_attempts": 390,
+  "completed_attempts": 390,
+  "missing_slots_count": 0,
+  "status_breakdown": {
+    "SUCCESS_NONEMPTY": 162,
+    "ZERO_RESULT_COMPLETE": 228
+  },
+  "family_summary": {
+    "SYNTHETIC_MATRIX": {
+      "workload_count": 40,
+      "completed_workloads": 40,
+      "speedup_ratio_median": 0.9271,
+      "speedup_ratio_min": 0.2989,
+      "speedup_ratio_max": 1.9679,
+      "work_ratio_median": 1.5206
+    },
+    "STRUCTURED_WITNESS": {
+      "workload_count": 5,
+      "completed_workloads": 5,
+      "speedup_ratio_median": 0.7622,
+      "speedup_ratio_min": 0.6026,
+      "speedup_ratio_max": 1.4429,
+      "work_ratio_median": 1.3
+    },
+    "NETFLOW_PROBE": {
+      "workload_count": 20,
+      "completed_workloads": 20,
+      "speedup_ratio_median": 1.4157,
+      "speedup_ratio_min": 0.8622,
+      "speedup_ratio_max": 4.645,
+      "work_ratio_median": 1.2858
+    }
+  },
+  "scientific_scope": {
+    "tiny_pilot_caps": {
+      "max_candidates": 100000,
+      "max_data_vertices": 8,
+      "max_query_vertices": 6,
+      "max_stream_steps": 100,
+      "max_work": 500000
+    },
+    "no_speedup_threshold_mandate": true,
+    "exploratory_status": "Valid negative/inconclusive pilot outcomes retained truthfully",
+    "netflow_zero_event_coverage_noted": true
+  }
+}

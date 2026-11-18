@@ -1,0 +1,596 @@
+{
+  "status": "CORRECTNESS_VERIFIED",
+  "total_registered_workloads": 65,
+  "workloads_with_events": 27,
+  "workloads_zero_events": 38,
+  "total_entered_events": 3501,
+  "total_exited_events": 2793,
+  "total_events": 6294,
+  "per_workload": [
+    {
+      "workload_id": "syn_case_00_diamond_k1_n6_p25_uniform",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 296,
+      "total_exited": 168,
+      "total_events": 464,
+      "has_events": true
+    },
+    {
+      "workload_id": "syn_case_01_diamond_k1_n6_p25_mixed",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "syn_case_02_diamond_k1_n6_p65_uniform",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 264,
+      "total_exited": 176,
+      "total_events": 440,
+      "has_events": true
+    },
+    {
+      "workload_id": "syn_case_03_diamond_k1_n6_p65_mixed",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 9,
+      "total_exited": 12,
+      "total_events": 21,
+      "has_events": true
+    },
+    {
+      "workload_id": "syn_case_04_diamond_k1_n8_p25_uniform",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 8,
+      "total_exited": 0,
+      "total_events": 8,
+      "has_events": true
+    },
+    {
+      "workload_id": "syn_case_05_diamond_k1_n8_p25_mixed",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "syn_case_06_diamond_k1_n8_p65_uniform",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 904,
+      "total_exited": 336,
+      "total_events": 1240,
+      "has_events": true
+    },
+    {
+      "workload_id": "syn_case_07_diamond_k1_n8_p65_mixed",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 7,
+      "total_exited": 12,
+      "total_events": 19,
+      "has_events": true
+    },
+    {
+      "workload_id": "syn_case_08_k4_k1_n6_p25_uniform",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "syn_case_09_k4_k1_n6_p25_mixed",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 4,
+      "total_exited": 0,
+      "total_events": 4,
+      "has_events": true
+    },
+    {
+      "workload_id": "syn_case_10_k4_k1_n6_p65_uniform",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 96,
+      "total_exited": 72,
+      "total_events": 168,
+      "has_events": true
+    },
+    {
+      "workload_id": "syn_case_11_k4_k1_n6_p65_mixed",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "syn_case_12_k4_k1_n8_p25_uniform",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 24,
+      "total_exited": 0,
+      "total_events": 24,
+      "has_events": true
+    },
+    {
+      "workload_id": "syn_case_13_k4_k1_n8_p25_mixed",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "syn_case_14_k4_k1_n8_p65_uniform",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 72,
+      "total_exited": 240,
+      "total_events": 312,
+      "has_events": true
+    },
+    {
+      "workload_id": "syn_case_15_k4_k1_n8_p65_mixed",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "syn_case_16_k4_k2_n6_p25_uniform",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 24,
+      "total_exited": 48,
+      "total_events": 72,
+      "has_events": true
+    },
+    {
+      "workload_id": "syn_case_17_k4_k2_n6_p25_mixed",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "syn_case_18_k4_k2_n6_p65_uniform",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 360,
+      "total_exited": 192,
+      "total_events": 552,
+      "has_events": true
+    },
+    {
+      "workload_id": "syn_case_19_k4_k2_n6_p65_mixed",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 36,
+      "total_exited": 24,
+      "total_events": 60,
+      "has_events": true
+    },
+    {
+      "workload_id": "syn_case_20_k4_k2_n8_p25_uniform",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 48,
+      "total_exited": 96,
+      "total_events": 144,
+      "has_events": true
+    },
+    {
+      "workload_id": "syn_case_21_k4_k2_n8_p25_mixed",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "syn_case_22_k4_k2_n8_p65_uniform",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 408,
+      "total_exited": 720,
+      "total_events": 1128,
+      "has_events": true
+    },
+    {
+      "workload_id": "syn_case_23_k4_k2_n8_p65_mixed",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 8,
+      "total_exited": 12,
+      "total_events": 20,
+      "has_events": true
+    },
+    {
+      "workload_id": "syn_case_24_diamond_k0_n6_p25_uniform",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 8,
+      "total_exited": 4,
+      "total_events": 12,
+      "has_events": true
+    },
+    {
+      "workload_id": "syn_case_25_diamond_k0_n6_p25_mixed",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "syn_case_26_diamond_k0_n6_p65_uniform",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 12,
+      "total_exited": 12,
+      "total_events": 24,
+      "has_events": true
+    },
+    {
+      "workload_id": "syn_case_27_diamond_k0_n6_p65_mixed",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "syn_case_28_diamond_k0_n8_p25_uniform",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 44,
+      "total_exited": 20,
+      "total_events": 64,
+      "has_events": true
+    },
+    {
+      "workload_id": "syn_case_29_diamond_k0_n8_p25_mixed",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "syn_case_30_diamond_k0_n8_p65_uniform",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 456,
+      "total_exited": 260,
+      "total_events": 716,
+      "has_events": true
+    },
+    {
+      "workload_id": "syn_case_31_diamond_k0_n8_p65_mixed",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "syn_case_32_k4_k0_n6_p25_uniform",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "syn_case_33_k4_k0_n6_p25_mixed",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "syn_case_34_k4_k0_n6_p65_uniform",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 24,
+      "total_exited": 48,
+      "total_events": 72,
+      "has_events": true
+    },
+    {
+      "workload_id": "syn_case_35_k4_k0_n6_p65_mixed",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "syn_case_36_k4_k0_n8_p25_uniform",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "syn_case_37_k4_k0_n8_p25_mixed",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "syn_case_38_k4_k0_n8_p65_uniform",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 384,
+      "total_exited": 336,
+      "total_events": 720,
+      "has_events": true
+    },
+    {
+      "workload_id": "syn_case_39_k4_k0_n8_p65_mixed",
+      "family": "SYNTHETIC_MATRIX",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "witness_01_diamond_k1",
+      "family": "STRUCTURED_WITNESS",
+      "m0_verified": true,
+      "total_entered": 1,
+      "total_exited": 1,
+      "total_events": 2,
+      "has_events": true
+    },
+    {
+      "workload_id": "witness_02_k4_k1",
+      "family": "STRUCTURED_WITNESS",
+      "m0_verified": true,
+      "total_entered": 1,
+      "total_exited": 1,
+      "total_events": 2,
+      "has_events": true
+    },
+    {
+      "workload_id": "witness_03_k4_k2",
+      "family": "STRUCTURED_WITNESS",
+      "m0_verified": true,
+      "total_entered": 1,
+      "total_exited": 1,
+      "total_events": 2,
+      "has_events": true
+    },
+    {
+      "workload_id": "witness_04_diamond_k0",
+      "family": "STRUCTURED_WITNESS",
+      "m0_verified": true,
+      "total_entered": 1,
+      "total_exited": 1,
+      "total_events": 2,
+      "has_events": true
+    },
+    {
+      "workload_id": "witness_05_k4_k0",
+      "family": "STRUCTURED_WITNESS",
+      "m0_verified": true,
+      "total_entered": 1,
+      "total_exited": 1,
+      "total_events": 2,
+      "has_events": true
+    },
+    {
+      "workload_id": "netflow_s20261118_insert_diamond_k1",
+      "family": "NETFLOW_PROBE",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "netflow_s20261118_insert_k4_k1",
+      "family": "NETFLOW_PROBE",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "netflow_s20261118_insert_k4_k2",
+      "family": "NETFLOW_PROBE",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "netflow_s20261118_insert_diamond_k0",
+      "family": "NETFLOW_PROBE",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "netflow_s20261118_insert_k4_k0",
+      "family": "NETFLOW_PROBE",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "netflow_s20261118_delete_diamond_k1",
+      "family": "NETFLOW_PROBE",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "netflow_s20261118_delete_k4_k1",
+      "family": "NETFLOW_PROBE",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "netflow_s20261118_delete_k4_k2",
+      "family": "NETFLOW_PROBE",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "netflow_s20261118_delete_diamond_k0",
+      "family": "NETFLOW_PROBE",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "netflow_s20261118_delete_k4_k0",
+      "family": "NETFLOW_PROBE",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "netflow_s20261119_insert_diamond_k1",
+      "family": "NETFLOW_PROBE",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "netflow_s20261119_insert_k4_k1",
+      "family": "NETFLOW_PROBE",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "netflow_s20261119_insert_k4_k2",
+      "family": "NETFLOW_PROBE",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "netflow_s20261119_insert_diamond_k0",
+      "family": "NETFLOW_PROBE",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "netflow_s20261119_insert_k4_k0",
+      "family": "NETFLOW_PROBE",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "netflow_s20261119_delete_diamond_k1",
+      "family": "NETFLOW_PROBE",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "netflow_s20261119_delete_k4_k1",
+      "family": "NETFLOW_PROBE",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "netflow_s20261119_delete_k4_k2",
+      "family": "NETFLOW_PROBE",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "netflow_s20261119_delete_diamond_k0",
+      "family": "NETFLOW_PROBE",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    },
+    {
+      "workload_id": "netflow_s20261119_delete_k4_k0",
+      "family": "NETFLOW_PROBE",
+      "m0_verified": true,
+      "total_entered": 0,
+      "total_exited": 0,
+      "total_events": 0,
+      "has_events": false
+    }
+  ]
+}

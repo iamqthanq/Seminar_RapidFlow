@@ -1,0 +1,143 @@
+{
+  "case_index": 56,
+  "family": "NETFLOW_PROBE",
+  "graph_mode": "SUBGRAPH_RELATIVE",
+  "initial_graph": {
+    "edges": [
+      [
+        1723290,
+        1919127,
+        2
+      ],
+      [
+        1723290,
+        1983204,
+        2
+      ],
+      [
+        1723290,
+        2305320,
+        2
+      ],
+      [
+        1723290,
+        2837228,
+        2
+      ],
+      [
+        1723290,
+        2899104,
+        2
+      ],
+      [
+        1723290,
+        3036347,
+        2
+      ]
+    ],
+    "vertices": {
+      "1723290": 0,
+      "1919127": 0,
+      "1983204": 0,
+      "2305320": 0,
+      "2837228": 0,
+      "2899104": 0,
+      "3036347": 0,
+      "3066455": 0
+    }
+  },
+  "k": 1,
+  "lambda_val": 3,
+  "m0_verification": {
+    "has_events": false,
+    "steps": [
+      {
+        "edge": [
+          1723290,
+          3066455
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 2,
+        "operation": "INSERT",
+        "step": 0
+      }
+    ],
+    "total_entered_events": 0,
+    "total_events": 0,
+    "total_exited_events": 0,
+    "verified": true
+  },
+  "netflow_seed": 20261119,
+  "query": {
+    "edges": [
+      [
+        0,
+        1,
+        2
+      ],
+      [
+        0,
+        2,
+        2
+      ],
+      [
+        0,
+        3,
+        2
+      ],
+      [
+        1,
+        2,
+        2
+      ],
+      [
+        1,
+        3,
+        2
+      ],
+      [
+        2,
+        3,
+        2
+      ]
+    ],
+    "vertices": {
+      "0": 0,
+      "1": 0,
+      "2": 0,
+      "3": 0
+    }
+  },
+  "query_name": "k4_k1",
+  "query_shape": "k4",
+  "sample_universe_S": [
+    1723290,
+    3066455,
+    1983204,
+    2837228,
+    3036347,
+    1919127,
+    2899104,
+    2305320
+  ],
+  "sha256_initial_graph": "48127606d709320f5677a51da7b3851f2977f7767dd240f61fa922bf8b2db51f",
+  "sha256_query": "2390c221decb6b39aa13626180cae2fd4918cf48d07ae7108625688b8f0a8bbd",
+  "sha256_stream": "24d3471c2d4a42b0c73858b9a63a109e392e0187c96a8dbbc218d0c869019cda",
+  "sha256_workload": "cdd91aa42c8e647f6ad8a24cf504c489506cfbbbf71bbabf61c7356ecdd42960",
+  "stream": [
+    {
+      "edge": [
+        1723290,
+        3066455
+      ],
+      "label": 2,
+      "operation": "INSERT"
+    }
+  ],
+  "target_label": 2,
+  "target_operation": "INSERT",
+  "target_raw_line": "e 1723290 3066455 2",
+  "target_source_op_index": 11,
+  "workload_id": "netflow_s20261119_insert_k4_k1"
+}

@@ -1,0 +1,238 @@
+{
+  "anchor_edge": [
+    0,
+    1
+  ],
+  "case_index": 44,
+  "defect_set": [],
+  "expected_events": [
+    {
+      "entered": [
+        [
+          0,
+          1,
+          2,
+          3
+        ]
+      ],
+      "exited": [],
+      "step": 0
+    },
+    {
+      "entered": [],
+      "exited": [],
+      "step": 1
+    },
+    {
+      "entered": [],
+      "exited": [],
+      "step": 2
+    },
+    {
+      "entered": [],
+      "exited": [
+        [
+          0,
+          1,
+          2,
+          3
+        ]
+      ],
+      "step": 3
+    }
+  ],
+  "family": "STRUCTURED_WITNESS",
+  "graph_mode": "STRUCTURED_WITNESS",
+  "initial_graph": {
+    "edges": [
+      [
+        0,
+        2,
+        0
+      ],
+      [
+        0,
+        3,
+        0
+      ],
+      [
+        1,
+        2,
+        0
+      ],
+      [
+        1,
+        3,
+        0
+      ],
+      [
+        2,
+        3,
+        0
+      ]
+    ],
+    "vertices": {
+      "0": 10,
+      "1": 20,
+      "2": 30,
+      "3": 40,
+      "4": 50,
+      "5": 60
+    }
+  },
+  "k": 0,
+  "label_regime": "distinct_witness",
+  "lambda_val": 3,
+  "m0_verification": {
+    "has_events": true,
+    "steps": [
+      {
+        "edge": [
+          0,
+          1
+        ],
+        "entered": [
+          [
+            0,
+            1,
+            2,
+            3
+          ]
+        ],
+        "exited": [],
+        "label": 0,
+        "operation": "INSERT",
+        "step": 0
+      },
+      {
+        "edge": [
+          4,
+          5
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 0,
+        "operation": "INSERT",
+        "step": 1
+      },
+      {
+        "edge": [
+          4,
+          5
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 0,
+        "operation": "DELETE",
+        "step": 2
+      },
+      {
+        "edge": [
+          0,
+          1
+        ],
+        "entered": [],
+        "exited": [
+          [
+            0,
+            1,
+            2,
+            3
+          ]
+        ],
+        "label": 0,
+        "operation": "DELETE",
+        "step": 3
+      }
+    ],
+    "total_entered_events": 1,
+    "total_events": 2,
+    "total_exited_events": 1,
+    "verified": true
+  },
+  "query": {
+    "edges": [
+      [
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        2,
+        0
+      ],
+      [
+        0,
+        3,
+        0
+      ],
+      [
+        1,
+        2,
+        0
+      ],
+      [
+        1,
+        3,
+        0
+      ],
+      [
+        2,
+        3,
+        0
+      ]
+    ],
+    "vertices": {
+      "0": 10,
+      "1": 20,
+      "2": 30,
+      "3": 40
+    }
+  },
+  "query_name": "k4_k0",
+  "query_shape": "k4",
+  "sha256_initial_graph": "02c0aca089417687b80092d50c00c1260f02a71f302c94bbb04cd5ce18d45436",
+  "sha256_query": "108803a8cc8bf4b04a5fe133ce1b5c956de6514882a9b727307fe7cb3b3cf86c",
+  "sha256_stream": "0cab33bd77047d49a13a4f69d1515fe97a4ff97429531ea5f4c804be2e6e1134",
+  "sha256_workload": "b422bfc1ebe95bca94819302f8d8ef53996f35f5201a34497748b098200adc89",
+  "spectator_edge": [
+    4,
+    5
+  ],
+  "stream": [
+    {
+      "edge": [
+        0,
+        1
+      ],
+      "label": 0,
+      "operation": "INSERT"
+    },
+    {
+      "edge": [
+        4,
+        5
+      ],
+      "label": 0,
+      "operation": "INSERT"
+    },
+    {
+      "edge": [
+        4,
+        5
+      ],
+      "label": 0,
+      "operation": "DELETE"
+    },
+    {
+      "edge": [
+        0,
+        1
+      ],
+      "label": 0,
+      "operation": "DELETE"
+    }
+  ],
+  "workload_id": "witness_05_k4_k0"
+}

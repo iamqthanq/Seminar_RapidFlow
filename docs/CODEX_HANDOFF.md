@@ -9,4 +9,4 @@
 - Distinguish count-only from full explicit delta embeddings. Do not claim correctness or speedup from only a smoke count.
 - Every PR requires complete attempted cases, input SHA-256, exact commands, CPU/RAM/compiler/flags, exit code, times, RSS, logs, limitations and independent oracle evidence when requested.
 - Classify claims PAPER/BUILD/SMOKE/CORRECT/BENCHMARK/HYPOTHESIS. All phases need manager review, external AI critique and explicit approval before next gate.
-- D* Feasibility Route (Issue #22 / DSTAR-01 & Issue #24 / DSTAR-02): see `docs/dstar_problem_contract_v1.md`, `docs/dstar02_engine_contract.md`, `docs/dstar01_validation_report.md`, and `docs/dstar02_validation_report.md`. Model C artifacts are historical.
+- D* Feasibility Route (Issue #22 / DSTAR-01, Issue #24 / DSTAR-02, Issue #26 / DSTAR-03): see `docs/dstar_problem_contract_v1.md`, `docs/dstar02_engine_contract.md`, `docs/dstar03_pilot_protocol.md`, `docs/dstar03_pilot_report.md`. Model C artifacts are historical.
