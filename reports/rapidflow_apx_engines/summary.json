@@ -1,21 +1,24 @@
 {
   "runner_mode": "CANONICAL_FULL_RUN",
   "overall_status": "P3_ENGINES_VERIFIED",
-  "timestamp_utc": "2026-11-18T15:38:07.076059+00:00",
+  "timestamp_utc": "2026-11-18T16:46:07.794803+00:00",
   "manifest_path": "configs/rapidflow_apx_engines_cases.json",
   "manifest_sha256": "6f224fbb477697af0c9f7d9f438c3e85b6cfd349dda99614bcc4f2f763d6c41d",
   "binary_path": "tests/native/rapidflow_apx_engines/build/rapidflow_apx_native",
-  "binary_sha256": "469d5209ed884eb02da9664cbc5966ffd6b76ff5b89d29bbbfdc9ad2cf960cb8",
+  "binary_sha256": "34c297f1971833309cdc5a4dd1e90bfb48e5f077dfc54edadd5009fab28d019c",
+  "selected_engine": "all",
+  "selected_stage": "all",
+  "selected_case": null,
   "provenance": {
-    "repo_commit": "c58038bd935c6868af669471cb8eec061ef7133b",
+    "repo_commit": "0dbb56c01d9a392d427692c4bb216abc99314b49",
     "repo_clean": true,
     "dirty_state": "CLEAN",
     "upstream_commit": "2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1",
     "upstream_pristine": true
   },
   "system_resources": {
-    "mem_available_gib": 5.096088409423828,
-    "free_disk_gib": 109.93290710449219,
+    "mem_available_gib": 4.723117828369141,
+    "free_disk_gib": 109.92612075805664,
     "preflight_passed": true
   },
   "build_provenance": {
@@ -30,7 +33,7 @@
       "-j2"
     ],
     "build_exit_code": 0,
-    "duration_ms": 14700.99203800055
+    "duration_ms": 13078.80858000135
   },
   "stages": {
     "hand_cases": {
@@ -43,231 +46,291 @@
           "name": "diamond_distinct_labels",
           "status": "PASS",
           "diagnostic": "",
-          "duration_ms_m1": 4.182920005405322,
-          "duration_ms_m2": 4.115803996683098
+          "m1_executed": true,
+          "m2_executed": true,
+          "duration_ms_m1": 6.736619005096145,
+          "duration_ms_m2": 6.844358998932876
         },
         {
           "case_id": "CASE_HAND_02",
           "name": "diamond_k0_insert",
           "status": "PASS",
           "diagnostic": "",
-          "duration_ms_m1": 4.643955995561555,
-          "duration_ms_m2": 5.449278993182816
+          "m1_executed": true,
+          "m2_executed": true,
+          "duration_ms_m1": 6.408946996089071,
+          "duration_ms_m2": 6.088895999710076
         },
         {
           "case_id": "CASE_HAND_03",
           "name": "diamond_k0_delete",
           "status": "PASS",
           "diagnostic": "",
-          "duration_ms_m1": 3.979457003879361,
-          "duration_ms_m2": 3.4137059992644936
+          "m1_executed": true,
+          "m2_executed": true,
+          "duration_ms_m1": 5.242701998213306,
+          "duration_ms_m2": 5.143603993928991
         },
         {
           "case_id": "CASE_HAND_04",
           "name": "k4_k1",
           "status": "PASS",
           "diagnostic": "",
-          "duration_ms_m1": 3.7626869961968623,
-          "duration_ms_m2": 3.458496001258027
+          "m1_executed": true,
+          "m2_executed": true,
+          "duration_ms_m1": 5.1397009956417605,
+          "duration_ms_m2": 5.1242490008007735
         },
         {
           "case_id": "CASE_HAND_05",
           "name": "k4_k2",
           "status": "PASS",
           "diagnostic": "",
-          "duration_ms_m1": 3.6055360033060424,
-          "duration_ms_m2": 5.325056998117361
+          "m1_executed": true,
+          "m2_executed": true,
+          "duration_ms_m1": 4.935780001687817,
+          "duration_ms_m2": 5.8065369958058
         },
         {
           "case_id": "CASE_HAND_06_STEP1",
           "name": "diamond_2step_delete_step1",
           "status": "PASS",
           "diagnostic": "",
-          "duration_ms_m1": 3.6894250006298535,
-          "duration_ms_m2": 3.3655649967840873
+          "m1_executed": true,
+          "m2_executed": true,
+          "duration_ms_m1": 5.044646008173004,
+          "duration_ms_m2": 5.803263993584551
         },
         {
           "case_id": "CASE_HAND_06_STEP2",
           "name": "diamond_2step_delete_step2",
           "status": "PASS",
           "diagnostic": "",
-          "duration_ms_m1": 3.559006996511016,
-          "duration_ms_m2": 3.9370809972751886
+          "m1_executed": true,
+          "m2_executed": true,
+          "duration_ms_m1": 5.503117004991509,
+          "duration_ms_m2": 4.976444994099438
         },
         {
           "case_id": "CASE_HAND_07",
           "name": "no_matching_label",
           "status": "PASS",
           "diagnostic": "",
-          "duration_ms_m1": 3.6320680010248907,
-          "duration_ms_m2": 4.945190004946198
+          "m1_executed": true,
+          "m2_executed": true,
+          "duration_ms_m1": 4.737954004667699,
+          "duration_ms_m2": 4.87540100584738
         },
         {
           "case_id": "CASE_HAND_08",
           "name": "non_induced_extra_chords",
           "status": "PASS",
           "diagnostic": "",
-          "duration_ms_m1": 5.334200999641325,
-          "duration_ms_m2": 3.7609279970638454
+          "m1_executed": true,
+          "m2_executed": true,
+          "duration_ms_m1": 4.90885999170132,
+          "duration_ms_m2": 5.275559000438079
         },
         {
           "case_id": "CASE_HAND_09",
           "name": "edge_label_mismatch",
           "status": "PASS",
           "diagnostic": "",
-          "duration_ms_m1": 4.45926800603047,
-          "duration_ms_m2": 3.528795001329854
+          "m1_executed": true,
+          "m2_executed": true,
+          "duration_ms_m1": 5.192482989514247,
+          "duration_ms_m2": 5.204372995649464
         },
         {
           "case_id": "CASE_HAND_10",
           "name": "vertex_label_mismatch",
           "status": "PASS",
           "diagnostic": "",
-          "duration_ms_m1": 3.213348005374428,
-          "duration_ms_m2": 3.275613002188038
+          "m1_executed": true,
+          "m2_executed": true,
+          "duration_ms_m1": 5.142681999132037,
+          "duration_ms_m2": 5.017096002120525
         },
         {
           "case_id": "CASE_HAND_11",
           "name": "int_vs_str_labels",
           "status": "PASS",
           "diagnostic": "",
-          "duration_ms_m1": 4.365120003058109,
-          "duration_ms_m2": 3.726816998096183
+          "m1_executed": true,
+          "m2_executed": true,
+          "duration_ms_m1": 5.381235998356715,
+          "duration_ms_m2": 5.567945001530461
         },
         {
           "case_id": "CASE_HAND_12",
           "name": "sparse_negative_ids",
           "status": "PASS",
           "diagnostic": "",
-          "duration_ms_m1": 4.174276000412647,
-          "duration_ms_m2": 3.6241740017430857
+          "m1_executed": true,
+          "m2_executed": true,
+          "duration_ms_m1": 5.083023002953269,
+          "duration_ms_m2": 6.005608011037111
         },
         {
           "case_id": "CASE_HAND_13",
           "name": "canonical_tuple_order",
           "status": "PASS",
           "diagnostic": "",
-          "duration_ms_m1": 3.3915820022230037,
-          "duration_ms_m2": 3.2431420040666126
+          "m1_executed": true,
+          "m2_executed": true,
+          "duration_ms_m1": 4.929103000904433,
+          "duration_ms_m2": 5.156974992132746
         },
         {
           "case_id": "CASE_HAND_14",
           "name": "uniform_k4_k0_automorphisms",
           "status": "PASS",
           "diagnostic": "",
-          "duration_ms_m1": 4.000895998615306,
-          "duration_ms_m2": 5.041410004196223
+          "m1_executed": true,
+          "m2_executed": true,
+          "duration_ms_m1": 9.656440990511328,
+          "duration_ms_m2": 10.97734400536865
         },
         {
           "case_id": "CASE_HAND_15",
           "name": "c4_k1_deferred_witness",
           "status": "PASS",
           "diagnostic": "",
-          "duration_ms_m1": 4.706088999228086,
-          "duration_ms_m2": 4.038833998492919
+          "m1_executed": true,
+          "m2_executed": true,
+          "duration_ms_m1": 13.398645009147003,
+          "duration_ms_m2": 6.401617007213645
         },
         {
           "case_id": "CASE_HAND_16",
           "name": "missing_commitment_violation",
           "status": "PASS",
           "diagnostic": "",
-          "duration_ms_m1": 4.458821997104678,
-          "duration_ms_m2": 4.3577369942795485
+          "m1_executed": true,
+          "m2_executed": true,
+          "duration_ms_m1": 6.182363998959772,
+          "duration_ms_m2": 5.524225009139627
         },
         {
           "case_id": "CASE_HAND_17",
           "name": "no_double_charging",
           "status": "PASS",
           "diagnostic": "",
-          "duration_ms_m1": 4.33759799489053,
-          "duration_ms_m2": 6.028520001564175
+          "m1_executed": true,
+          "m2_executed": true,
+          "duration_ms_m1": 6.557496992172673,
+          "duration_ms_m2": 5.484081004397012
         },
         {
           "case_id": "CASE_HAND_18",
           "name": "rollback_isolation",
           "status": "PASS",
           "diagnostic": "",
-          "duration_ms_m1": 3.7184739994700067,
-          "duration_ms_m2": 5.087425000965595
+          "m1_executed": true,
+          "m2_executed": true,
+          "duration_ms_m1": 5.073833992355503,
+          "duration_ms_m2": 5.670822007232346
         },
         {
           "case_id": "CASE_HAND_19",
           "name": "reversed_endpoints",
           "status": "PASS",
           "diagnostic": "",
-          "duration_ms_m1": 3.6795560008613393,
-          "duration_ms_m2": 4.5692670028074645
+          "m1_executed": true,
+          "m2_executed": true,
+          "duration_ms_m1": 5.1658199954545125,
+          "duration_ms_m2": 5.147818999830633
         },
         {
           "case_id": "CASE_HAND_20",
           "name": "caller_mutation_isolation",
           "status": "PASS",
           "diagnostic": "",
-          "duration_ms_m1": 5.552588998398278,
-          "duration_ms_m2": 4.286761999537703
+          "m1_executed": true,
+          "m2_executed": true,
+          "duration_ms_m1": 6.378156991559081,
+          "duration_ms_m2": 5.398463996243663
         },
         {
           "case_id": "CASE_HAND_21",
           "name": "invalid_k_domain",
           "status": "PASS",
           "diagnostic": "",
-          "duration_ms_m1": 4.712804002338089,
-          "duration_ms_m2": 4.242103997967206
+          "m1_executed": true,
+          "m2_executed": true,
+          "duration_ms_m1": 4.9482189933769405,
+          "duration_ms_m2": 5.127509997691959
         },
         {
           "case_id": "CASE_HAND_22",
           "name": "invalid_update_rollback",
           "status": "PASS",
           "diagnostic": "",
-          "duration_ms_m1": 3.301664997707121,
-          "duration_ms_m2": 3.169620998960454
+          "m1_executed": true,
+          "m2_executed": true,
+          "duration_ms_m1": 5.253921000985429,
+          "duration_ms_m2": 5.1309420086909086
         },
         {
           "case_id": "CASE_HAND_23",
           "name": "query_size_5_k5_minus_edge",
           "status": "PASS",
           "diagnostic": "",
-          "duration_ms_m1": 4.579742999339942,
-          "duration_ms_m2": 4.657881996536162
+          "m1_executed": true,
+          "m2_executed": true,
+          "duration_ms_m1": 6.112702991231345,
+          "duration_ms_m2": 5.543496998143382
         },
         {
           "case_id": "CASE_HAND_24_Q6",
           "name": "c6_cycle_size_6",
           "status": "PASS",
           "diagnostic": "",
-          "duration_ms_m1": 5.442840003524907,
-          "duration_ms_m2": 3.4457430010661483
+          "m1_executed": true,
+          "m2_executed": true,
+          "duration_ms_m1": 5.39257399213966,
+          "duration_ms_m2": 4.933863005135208
         }
       ]
     },
     "corpus_840": {
       "total_cases": 840,
+      "selected_cases": 840,
       "total_truth_events": 8002,
       "cases_with_events": 330,
       "cases_with_events_k_ge_1": 239,
+      "m1_executed": true,
+      "m2_executed": true,
       "m1_agreed": 840,
       "m2_agreed": 840,
       "m1_zero_duplicates": 840,
       "m2_zero_duplicates": 840,
       "status": "PASS",
       "error": null,
-      "duration_seconds": 14.408942973001103
+      "duration_seconds": 16.7467035449954
     },
     "stream_56_matrix": {
       "total_configurations": 56,
+      "selected_configurations": 56,
       "total_updates": 672,
+      "selected_updates": 672,
+      "m1_executed": true,
+      "m2_executed": true,
       "agreed_steps_m1": 672,
       "agreed_steps_m2": 672,
       "reconstruction_agreed_steps_m1": 672,
       "reconstruction_agreed_steps_m2": 672,
       "graph_state_agreed_steps_m1": 672,
       "graph_state_agreed_steps_m2": 672,
-      "budget_verified_steps": 672,
+      "codec_state_agreed_steps_m1": 672,
+      "codec_state_agreed_steps_m2": 672,
+      "counters_agreed_steps_m1": 672,
+      "counters_agreed_steps_m2": 672,
       "total_entered_events": 3024,
       "total_exited_events": 1780,
       "status": "PASS",
       "error": null,
-      "duration_seconds": 3.171353566001926
+      "duration_seconds": 3.1360514169937233
     }
   }
 }
