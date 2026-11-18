@@ -117,7 +117,7 @@ To emit explicit ordered tuples $(f(u_1), \dots, f(u_n))$ without duplication, P
 - **`streaming/global_view_manager.*`** (`ADAPT`, `NATIVE_RUNTIME_VERIFIED`): Retain the raw view mapping table (`views_`), but REPAIR candidate generation: completely bypass `candidates_` and `encoded_candidates_` which rely on exact `nlf_check`.
 - **`streaming/streaming_engine.*`** (`ADAPT`, `SOURCE_INSPECTED`): Retain the snapshot sequencing (INSERT on $G_{\text{after}}$, DELETE on $G_{\text{before}}$). Remove relevance filtering from graph state maintenance (all updates must update authoritative state). Add prevalidation and transactional rollback.
 - **`streaming/search_engine.*`** (`REPLACE`, `SOURCE_INSPECTED`): The exact backtracking engine with leaf candidate count shortcut cannot emit mapping tuples. Replaced by native M1/M2 DFS kernels with explicit candidate binding.
-- **`streaming/order_manager.*`** (`ADAPT`, `SOURCE_INSPECTED`): Automorphism symmetry detection is retained to find generators, but scalar multiplication ($N \times |Aut(Q)|$) is replaced by explicit representative orbit expansion or symmetry-broken DFS.
+- **`streaming/order_manager.*`** (`ADAPT`, `SOURCE_INSPECTED`): Automorphism symmetry detection is retained to partition directed query edges into orbits; `automorphism_size` represents the directed edge orbit size (12 on $K_4$), NOT $|\operatorname{Aut}(Q)|$ (24). For bare M2, DFS explores the unreduced space directly without scalar multiplication or post-hoc expansion; for reduced representative search (if pursued), scalar multiplication is replaced by representative orbit expansion.
 - **`streaming/local_view_manager.*`** (`REPLACE` for Bare M2): Exact candidate set intersection along query edges is unsound when edges can be missing. Bare M2 uses direct DFS branching.
 
 ### 3. How do the authoritative current graph and mutable views cooperate?
@@ -188,7 +188,7 @@ To emit explicit ordered tuples $(f(u_1), \dots, f(u_n))$ without duplication, P
   - `ApxTypedCodec`: external-to-internal ID and typed label mapping.
   - `ApxAuthoritativeGraph`: hybrid CSR + `GlobalEdgeView` mutable overlay.
   - `ApxTransactionManager`: prevalidation, mutation sequencing, rollback.
-  - `ApxTupleSink`: canonical tuple serialization, representative automorphism expansion.
+  - `ApxTupleSink`: canonical tuple serialization (with conditional/optional representative orbit expansion if reduced space is used).
 - **Out of Scope for P2**:
   - Full production M1/M2 search engines (scheduled for P3).
   - NLF and dynamic pruning $\delta'$ (scheduled for P4).
@@ -226,5 +226,5 @@ To emit explicit ordered tuples $(f(u_1), \dots, f(u_n))$ without duplication, P
 ## 6. Next Step Recommendation
 
 Proceed to **Phase P2** (Issue formulation for Native Foundation & Tuple Materialization):
-1. Lock Phase P2 issue scope to `extensions/rapidflow_apx/` foundation: `ApxTypedCodec`, `ApxAuthoritativeGraph`, `ApxTransactionManager`, and `ApxTupleSink`.
+1. Lock Phase P2 issue scope to `extensions/rapidflow_apx/` foundation: `ApxTypedCodec`, `ApxAuthoritativeGraph`, `ApxTransactionManager`, and `ApxTupleSink` (with canonical tuple ordering, and representative orbit expansion strictly conditional if reduced search is used).
 2. Do not code Phase P2 until Phase P0–P1 Draft PR is reviewed and merged by the user.

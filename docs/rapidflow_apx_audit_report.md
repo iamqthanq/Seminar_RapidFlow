@@ -27,8 +27,9 @@ The audit specifically validates:
 
 ## 2. Execution Environment & Provenance
 
-- **Operating System:** Linux (Ubuntu 24.04 LTS, kernel 6.8.0)
-- **CPU:** Intel Core i5-8265U @ 1.60GHz (4 cores / 8 threads)
+- **Operating System:** Linux (`Linux-7.0.0-42-generic-x86_64-with-glibc2.39`, kernel `7.0.0-42-generic`, x86_64)
+- **Python:** `3.12.3`
+- **CPU:** 8 logical cores
 - **RAM Available:** Preflight check passed ($\ge 2.0$ GiB available satisfied)
 - **Disk Free:** Preflight check passed ($\ge 1.0$ GiB free satisfied)
 - **Compiler:** `g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0`
@@ -88,7 +89,7 @@ All 6 declared probes were executed natively with process group containment (tim
   1. Build `ApxTypedCodec` to handle external sparse/negative IDs and typed labels (int `0` vs str `"0"`).
   2. Implement `ApxAuthoritativeGraph` combining RapidFlow CSR snapshot with `GlobalEdgeView` mutable overlays.
   3. Implement `ApxTransactionManager` with pre-validation, atomic updates, and rollback.
-  4. Implement `ApxTupleSink` with leaf-level candidate binding and representative automorphism expansion.
+  4. Implement `ApxTupleSink` with leaf-level candidate binding and canonical tuple formatting (with conditional representative orbit expansion if reduced space is used).
 - **Constraints**:
   - Do NOT implement full M1/M2 search in P2 (deferred to P3).
   - Do NOT implement dynamic pruning $\delta'$ or NLF in P2 (deferred to P4).

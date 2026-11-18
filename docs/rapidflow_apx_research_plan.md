@@ -113,8 +113,8 @@ The final research product must be a **demonstrably integrated C++ system** deri
   - **Probe C (Mutable GlobalEdgeView)**: Verify sorted neighbor insertion, deletion, duplicate/absent return values, and container label absence.
   - **Probe D (Exact NLF Incompatibility)**: Evaluate Diamond query ($k=1, \lambda=2$) against data graph missing edge $BC$; prove via genuine runtime invocation of `GlobalViewManager` that valid APX identity match is pruned by RapidFlow's exact NLF check.
   - **Probe E (Snapshot Order & Rollback)**: Verify INSERT search on $G_{\text{after}}$, DELETE search on $G_{\text{before}}$, and mid-stream rollback upon injected failure on adapter structures.
-  - **Probe F (Count/Tuple Boundary)**: Evaluate $K_4$ query on 4-clique; confirm that RapidFlow reports scalar count 24 via leaf shortcut and automorphism factorization, and define tuple extraction architecture.
-- **Review Gate R1**: Publish `docs/research_decisions/D-R1-native-integration.md` with verdict (`READY_FOR_P2_DESIGN`, `NEEDS_DESIGN_ADJUSTMENT`, or `BLOCKED_INTEGRATION`).
+  - **Probe F (Count/Tuple Boundary)**: Evaluate $K_4$ query on 4-clique fixture; M0 enumerates 24 distinct ordered tuples; inspect RapidFlow source confirming leaf count shortcut (`search_engine.cpp:161`) and scalar factor multiplication (`streaming_engine.cpp:181`), and establish the tuple materialization architecture without overcounting.
+- **Review Gate R1**: Publish `docs/research_decisions/D-R1-native-integration.md` with verdict (`READY_FOR_P2_DESIGN (PENDING_USER_PR_CLOSURE)`, `NEEDS_DESIGN_ADJUSTMENT`, or `BLOCKED_INTEGRATION`).
 - **Status**: Active in Issue #28.
 
 ### 3.3. Phase P2: Native Engine Foundation & Tuple Materialization
@@ -122,7 +122,7 @@ The final research product must be a **demonstrably integrated C++ system** deri
   1. Authoritative Graph State: Hybrid structure combining RapidFlow immutable CSR (for static base) and `GlobalEdgeView` mutable overlay for streaming updates.
   2. Transactional Update Pipeline: Pre-validation, forward/reverse view updates, search invocation, commit, and atomic rollback on error.
   3. External Typed Codec: Two-way bijection mapping arbitrary user IDs and typed labels to dense internal integers.
-  4. Tuple Sink & Symmetry Handling: Unroll leaf-level candidate loops in backtracking search; implement sound representative orbit expansion or symmetry-breaking constraints to avoid the 576-tuple K4 overcounting defect; stream canonical tuples to consumer.
+  4. Tuple Sink: Unroll leaf-level candidate loops in backtracking search to materialize canonical tuples $(f(u_1), \dots, f(u_n))$; for bare M2, DFS directly produces distinct ordered tuples without post-hoc expansion; if reduced representative search is pursued, implement representative orbit expansion to avoid the 576-tuple K4 overcounting defect; stream canonical tuples to consumer.
 - **Exit Criteria**: Native micro-matcher enumerates 100% of tuples on small fixtures without count shortcuts.
 
 ### 3.4. Phase P3: Integrated Native Bare M1 & M2 Engines

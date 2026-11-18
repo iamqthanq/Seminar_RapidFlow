@@ -498,6 +498,89 @@ class TestRapidFlowApxAudit(unittest.TestCase):
         self.assertEqual(len(s["fixture_hashes"]), 4)
         self.assertEqual(s["overall_status"], "PASS")
 
+    def test_29_provenance_failure_entrypoint_rejection(self):
+        """Test 29 (F04 Final): main() fails closed with PROVENANCE stage if Git query fails on repo or upstream."""
+        cases = [
+            ("repo_commit_unknown", ("UNKNOWN_COMMIT", "CLEAN"), ("2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1", "CLEAN"), ["repository", "commit"]),
+            ("repo_status_unknown", ("1a33f64a5e413ad87b38e7ae83b90e04f4d2b477", "UNKNOWN_ERROR"), ("2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1", "CLEAN"), ["repository", "status"]),
+            ("upstream_commit_unknown", ("1a33f64a5e413ad87b38e7ae83b90e04f4d2b477", "CLEAN"), ("UNKNOWN_COMMIT", "CLEAN"), ["upstream", "commit"]),
+            ("upstream_status_unknown", ("1a33f64a5e413ad87b38e7ae83b90e04f4d2b477", "CLEAN"), ("2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1", "UNKNOWN_ERROR"), ["upstream", "status"]),
+        ]
+
+        from scripts.run_rapidflow_apx_audit import main
+
+        for name, repo_info, upstream_info, err_keywords in cases:
+            with self.subTest(case=name):
+                with tempfile.TemporaryDirectory() as td:
+                    td_path = Path(td)
+                    out_path = td_path / f"summary_{name}.json"
+
+                    def mock_git_info(target_dir):
+                        if "baselines" in str(target_dir):
+                            return upstream_info
+                        return repo_info
+
+                    mock_build = unittest.mock.MagicMock()
+                    mock_probe = unittest.mock.MagicMock()
+
+                    with unittest.mock.patch("scripts.run_rapidflow_apx_audit.get_git_info", side_effect=mock_git_info), \
+                         unittest.mock.patch("scripts.run_rapidflow_apx_audit.build_native_harness", mock_build), \
+                         unittest.mock.patch("scripts.run_rapidflow_apx_audit.run_probe_case", mock_probe), \
+                         unittest.mock.patch("sys.argv", ["run_rapidflow_apx_audit.py", "--output", str(out_path)]):
+
+                        with self.assertRaises(SystemExit) as ctx:
+                            main()
+
+                        self.assertEqual(ctx.exception.code, 1, f"Process must exit with code 1 on {name}")
+
+                    self.assertTrue(out_path.exists(), f"Artifact must exist for {name}")
+                    with open(out_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+
+                    self.assertNotEqual(data["overall_status"], "PASS")
+                    self.assertEqual(data["overall_status"], "FAIL")
+                    self.assertEqual(data["failing_stage"], "PROVENANCE")
+                    err_msg = data.get("error", "").lower()
+                    for kw in err_keywords:
+                        self.assertIn(kw.lower(), err_msg, f"Expected keyword '{kw}' in error message: {data.get('error')}")
+
+                    self.assertEqual(data["completed_cases"], 0)
+                    self.assertEqual(data["passed_cases"], 0)
+                    self.assertEqual(len(data["results"]), 0)
+
+                    # Ensure build and probe runners were NEVER called
+                    mock_build.assert_not_called()
+                    mock_probe.assert_not_called()
+
+    def test_30_valid_provenance_entrypoint_passes_gate(self):
+        """Test 30 (F04 Final): main() passes provenance gate when repo and upstream Git info are valid."""
+        with tempfile.TemporaryDirectory() as td:
+            td_path = Path(td)
+            out_path = td_path / "summary_valid_prov.json"
+
+            def mock_git_info(target_dir):
+                if "baselines" in str(target_dir):
+                    return ("2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1", "CLEAN")
+                return ("1a33f64a5e413ad87b38e7ae83b90e04f4d2b477", "CLEAN")
+
+            # Mock preflight and manifest validation to isolate provenance gate passing
+            with unittest.mock.patch("scripts.run_rapidflow_apx_audit.get_git_info", side_effect=mock_git_info), \
+                 unittest.mock.patch("scripts.run_rapidflow_apx_audit.check_preflight_resources", side_effect=RuntimeError("HALT_AFTER_PROVENANCE")), \
+                 unittest.mock.patch("sys.argv", ["run_rapidflow_apx_audit.py", "--output", str(out_path)]):
+
+                from scripts.run_rapidflow_apx_audit import main
+                with self.assertRaises(SystemExit) as ctx:
+                    main()
+
+                # Execution failed at PREFLIGHT (meaning PROVENANCE passed cleanly)
+                self.assertEqual(ctx.exception.code, 1)
+
+            with open(out_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            self.assertEqual(data["failing_stage"], "PREFLIGHT")
+            self.assertIn("HALT_AFTER_PROVENANCE", data.get("error", ""))
+
 
 if __name__ == "__main__":
     unittest.main()

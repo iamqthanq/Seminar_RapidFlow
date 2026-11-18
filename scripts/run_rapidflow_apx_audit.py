@@ -740,6 +740,24 @@ def main():
         print(json.dumps(summary, indent=2))
         sys.exit(exit_code)
 
+    # 0. Check Git provenance fail-closed
+    provenance_errors = []
+    if git_head == "UNKNOWN_COMMIT":
+        provenance_errors.append("repository Git commit SHA could not be determined")
+    if git_dirty == "UNKNOWN_ERROR":
+        provenance_errors.append("repository Git status could not be determined")
+    if upstream_head == "UNKNOWN_COMMIT":
+        provenance_errors.append("upstream RapidFlow Git commit SHA could not be determined")
+    if upstream_dirty == "UNKNOWN_ERROR":
+        provenance_errors.append("upstream RapidFlow Git status could not be determined")
+
+    if provenance_errors:
+        err_msg = "; ".join(provenance_errors)
+        sys.stderr.write(f"FATAL PROVENANCE: {err_msg}\n")
+        summary["failing_stage"] = "PROVENANCE"
+        summary["error"] = f"Provenance check failed: {err_msg}"
+        write_summary_and_exit(1)
+
     # 1. Preflight check
     try:
         check_preflight_resources(root_dir)
