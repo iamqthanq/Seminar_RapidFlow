@@ -478,14 +478,28 @@ def run_hand_cases() -> Tuple[List[Dict[str, Any]], bool]:
     up19_1 = DStarEventUpdate("INSERT", (2, 3), 0)
     up19_2 = DStarEventUpdate("INSERT", (3, 2), 0)
     ok19 = (up19_1.edge == (2, 3) and up19_2.edge == (2, 3))
-    cases.append({"case_id": "CASE_HAND_19", "name": "reversed_endpoints", "status": "PASS" if ok19 else "FAIL", "agreed": ok19})
+    cases.append({
+        "case_id": "CASE_HAND_19",
+        "name": "reversed_endpoints",
+        "status": "PASS" if ok19 else "FAIL",
+        "agreed": ok19,
+        "m0_entered": 0,
+        "m0_exited": 0,
+    })
     if not ok19: all_ok = False
 
     # Case 20: Caller mutation isolation
     res20, _ = m1.process_update(Q7, G7, DStarEventUpdate("INSERT", (10, 30), 0), k=0)
     res20.entered.append((999, 999, 999))
     ok20 = (10, 30) not in G7.edges
-    cases.append({"case_id": "CASE_HAND_20", "name": "caller_mutation_isolation", "status": "PASS" if ok20 else "FAIL", "agreed": ok20})
+    cases.append({
+        "case_id": "CASE_HAND_20",
+        "name": "caller_mutation_isolation",
+        "status": "PASS" if ok20 else "FAIL",
+        "agreed": ok20,
+        "m0_entered": 0,
+        "m0_exited": 0,
+    })
     if not ok20: all_ok = False
 
     # Case 21: Invalid k domain
@@ -498,7 +512,14 @@ def run_hand_cases() -> Tuple[List[Dict[str, Any]], bool]:
     try: m2.find_events(Q21, G7, DStarEventUpdate("INSERT", (10, 30), 0), k=1)
     except InvalidThresholdError: rejected_m2 = True
     ok21 = rejected_m1 and rejected_m2
-    cases.append({"case_id": "CASE_HAND_21", "name": "invalid_k_domain", "status": "PASS" if ok21 else "FAIL", "agreed": ok21})
+    cases.append({
+        "case_id": "CASE_HAND_21",
+        "name": "invalid_k_domain",
+        "status": "PASS" if ok21 else "FAIL",
+        "agreed": ok21,
+        "m0_entered": 0,
+        "m0_exited": 0,
+    })
     if not ok21: all_ok = False
 
     # Case 22: Invalid update rollback (graph and state untouched)
@@ -512,7 +533,14 @@ def run_hand_cases() -> Tuple[List[Dict[str, Any]], bool]:
     else:
         ok22 = False
     ok22 = ok22 and (G22.edges == g22_before_edges)
-    cases.append({"case_id": "CASE_HAND_22", "name": "invalid_update_rollback", "status": "PASS" if ok22 else "FAIL", "agreed": ok22})
+    cases.append({
+        "case_id": "CASE_HAND_22",
+        "name": "invalid_update_rollback",
+        "status": "PASS" if ok22 else "FAIL",
+        "agreed": ok22,
+        "m0_entered": 0,
+        "m0_exited": 0,
+    })
     if not ok22: all_ok = False
 
     # Case 23: Query size 5 (within bounds, F07)
@@ -915,13 +943,19 @@ def run_56_stream_matrix() -> Tuple[Dict[str, Any], bool]:
                         "seed": seed,
                         "label_mode": label_mode,
                         "total_configurations_completed": len(configs_summary),
+                        "completed_configurations": list(configs_summary),
                         "total_steps_attempted": total_steps,
                         "total_steps_completed": len(completed_step_records),
+                        "step_agreement_count": agreed_steps,
+                        "reconstruction_agreement_count": reconstruction_agreed_steps,
+                        "completed_step_records": list(completed_step_records),
                         "failing_step": {
                             "config_id": config_id,
                             "step_index": up_idx,
                             "update": up.to_dict(),
                             "error": str(e),
+                            "error_type": type(e).__name__,
+                            "error_message": str(e),
                         },
                     }
                     raise StreamMatrixExecutionError(
@@ -1088,7 +1122,7 @@ def reconcile_manifest(manifest_path: Path, hand_cases: List[Dict[str, Any]]) ->
     except Exception as e:
         return {"status": "FAIL", "errors": [f"Malformed manifest JSON: {e}"]}, False
 
-    # 1. Resource caps strict check (no bools, positive ints)
+    # 1. Resource caps strict check (type must be int, no floats or bools)
     r_caps = manifest.get("resource_guards", {})
     expected_caps = {
         "max_data_vertices": DEFAULT_MAX_DATA_VERTICES,
@@ -1099,8 +1133,8 @@ def reconcile_manifest(manifest_path: Path, hand_cases: List[Dict[str, Any]]) ->
     }
     for cap_k, cap_v in expected_caps.items():
         val = r_caps.get(cap_k)
-        if isinstance(val, bool) or val != cap_v:
-            errors.append(f"Resource cap {cap_k} mismatch: manifest={val!r} vs expected={cap_v}")
+        if type(val) is not int or val != cap_v:
+            errors.append(f"Resource cap {cap_k} mismatch (must be exact int {cap_v}): manifest={val!r} (type {type(val).__name__})")
 
     # 2. Corpus 840 files and totals check
     corpus_decl = manifest.get("corpus_840", {})
@@ -1126,7 +1160,7 @@ def reconcile_manifest(manifest_path: Path, hand_cases: List[Dict[str, Any]]) ->
         if not fpath.is_file():
             errors.append(f"Declared corpus file missing on disk: {fpath_str}")
 
-    # 3. Stream 56 matrix specification check
+    # 3. Stream 56 matrix specification check (seeds, combinations, label regimes)
     matrix_decl = manifest.get("stream_56_matrix", {})
     if matrix_decl.get("total_configurations") != 56:
         errors.append(f"Matrix total_configurations mismatch: {matrix_decl.get('total_configurations')} != 56")
@@ -1139,7 +1173,28 @@ def reconcile_manifest(manifest_path: Path, hand_cases: List[Dict[str, Any]]) ->
     if matrix_decl.get("seeds") != expected_seeds:
         errors.append(f"Matrix seeds mismatch: {matrix_decl.get('seeds')} vs {expected_seeds}")
 
-    # 4. Hand cases bidirectional check
+    expected_combinations = [
+        {"query": "C4", "k": 0, "lambda": 2},
+        {"query": "C4", "k": 1, "lambda": 2},
+        {"query": "Diamond", "k": 0, "lambda": 2},
+        {"query": "Diamond", "k": 1, "lambda": 2},
+        {"query": "K4", "k": 0, "lambda": 3},
+        {"query": "K4", "k": 1, "lambda": 3},
+        {"query": "K4", "k": 2, "lambda": 3},
+    ]
+    manifest_combs = matrix_decl.get("combinations")
+    if manifest_combs != expected_combinations:
+        errors.append(f"Matrix combinations mismatch: {manifest_combs} vs {expected_combinations}")
+
+    expected_label_regimes = [
+        "uniform", "uniform", "uniform", "uniform",
+        "mixed", "mixed", "mixed", "mixed",
+    ]
+    manifest_regimes = matrix_decl.get("label_regimes_per_combination")
+    if manifest_regimes != expected_label_regimes:
+        errors.append(f"Matrix label regimes mismatch: {manifest_regimes} vs {expected_label_regimes}")
+
+    # 4. Hand cases bidirectional check and per-case count verification
     raw_cases = manifest.get("hand_cases", [])
     if not isinstance(raw_cases, list):
         errors.append("Manifest 'hand_cases' must be a list")
@@ -1157,6 +1212,25 @@ def reconcile_manifest(manifest_path: Path, hand_cases: List[Dict[str, Any]]) ->
     unknown_in_manifest = set(manifest_cids) - set(spec_cids)
     if unknown_in_manifest:
         errors.append(f"Unknown hand cases declared in manifest: {sorted(unknown_in_manifest)}")
+
+    manifest_case_map = {c["id"]: c for c in raw_cases if isinstance(c, dict) and "id" in c}
+    for spec_c in hand_cases:
+        cid = spec_c["case_id"]
+        mc = manifest_case_map.get(cid)
+        if mc is not None:
+            exp_ent = mc.get("expected_entered_count")
+            exp_ext = mc.get("expected_exited_count")
+            act_ent = spec_c.get("m0_entered")
+            act_ext = spec_c.get("m0_exited")
+
+            if type(exp_ent) is not int or (act_ent is not None and exp_ent != act_ent):
+                errors.append(
+                    f"Hand case {cid} expected_entered_count mismatch: manifest={exp_ent!r} vs actual={act_ent!r}"
+                )
+            if type(exp_ext) is not int or (act_ext is not None and exp_ext != act_ext):
+                errors.append(
+                    f"Hand case {cid} expected_exited_count mismatch: manifest={exp_ext!r} vs actual={act_ext!r}"
+                )
 
     ok = len(errors) == 0
     return {"status": "PASS" if ok else "FAIL", "errors": errors}, ok

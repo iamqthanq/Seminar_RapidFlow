@@ -1,8 +1,8 @@
 {
   "contract_version": "dstar-v1.0",
-  "run_id": "20261118T033324Z_84fbbb86",
-  "timestamp": "2026-11-18T03:33:33.041002+00:00",
-  "runtime_seconds": 8.7298,
+  "run_id": "20261118T034647Z_63f50b02",
+  "timestamp": "2026-11-18T03:46:56.600590+00:00",
+  "runtime_seconds": 8.7226,
   "environment": {
     "platform": "Linux-7.0.0-42-generic-x86_64-with-glibc2.39",
     "python_version": "3.12.3",
@@ -12,7 +12,7 @@
     "configured_historical_base_sha": "e6cc1dba15955ce9f7f05ec0ca2a1d749181218c",
     "observed_origin_quangthang_sha": "e6cc1dba15955ce9f7f05ec0ca2a1d749181218c",
     "observed_merge_base_sha": "e6cc1dba15955ce9f7f05ec0ca2a1d749181218c",
-    "execution_head_sha": "81009b9725d850681ab4e677ce82b57a810af632",
+    "execution_head_sha": "cbe95355192e6b00784875e8d19b3298af613de4",
     "is_dirty_at_runtime": false,
     "branch": "feature/rf24-dstar02-event-engines",
     "source_hashes": {
@@ -20,7 +20,7 @@
       "scripts/dstar_m1_enum.py": "10550c50d53c5cf6207b2b61ff29c55e3dc056da5c2b7daa3aae6eaabceec0db",
       "scripts/dstar_m2_event.py": "6b7e000a8f6ea1fba756e5b36adeade67fb17600976868a2b23b8c44d198cbc2",
       "scripts/dstar_event_cli.py": "8acb7a1027edb77598de8f5db9b9973862da4b687ab6d776a7511c44687dfbf0",
-      "scripts/generate_dstar02_report.py": "022d1147a018bb56f168fa5b6e8aea1547a11f1946f01ebe92de7949b3215566",
+      "scripts/generate_dstar02_report.py": "0c0ef7a9060f05327498ed9e38022022463756491320f774b37c49b6e4af7fe0",
       "scripts/dstar_oracle.py": "e2583dceba1679ce10fdb5fa91dbbd6a79e10f59778968b1facd4a9f86b4337e",
       "configs/dstar02_correctness_cases.json": "208f4ef6048268ca17688207d8354e2d6e9e9d3a253031f8aeae1a1841852645",
       "docs/dstar02_engine_contract.md": "850c792eb953dff6f21b912c06c188bfcd62b79d279046fbd1d1b1121f10321d",
@@ -365,25 +365,33 @@
         "case_id": "CASE_HAND_19",
         "name": "reversed_endpoints",
         "status": "PASS",
-        "agreed": true
+        "agreed": true,
+        "m0_entered": 0,
+        "m0_exited": 0
       },
       {
         "case_id": "CASE_HAND_20",
         "name": "caller_mutation_isolation",
         "status": "PASS",
-        "agreed": true
+        "agreed": true,
+        "m0_entered": 0,
+        "m0_exited": 0
       },
       {
         "case_id": "CASE_HAND_21",
         "name": "invalid_k_domain",
         "status": "PASS",
-        "agreed": true
+        "agreed": true,
+        "m0_entered": 0,
+        "m0_exited": 0
       },
       {
         "case_id": "CASE_HAND_22",
         "name": "invalid_update_rollback",
         "status": "PASS",
-        "agreed": true
+        "agreed": true,
+        "m0_entered": 0,
+        "m0_exited": 0
       },
       {
         "case_id": "CASE_HAND_23",
