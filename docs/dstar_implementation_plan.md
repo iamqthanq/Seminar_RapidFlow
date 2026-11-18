@@ -1,24 +1,20 @@
 # D* Implementation and Validation Plan — Roadmap from M0 to M2
 
-**Date:** 2026-11-17
+**Date:** 2026-11-18 (Updated following 18/11/2026 Architectural Sync)
 **Context:** Seminar RapidFlow / CSM — D* Feasibility Route
-**Current Phase:** DSTAR-01 (Issue #22) Foundation Complete
-**Next Phase:** Gate 0A (Advisor Confirmation) & Gate 0B-1 (RapidFlow Binary Audit)
+**Current Phase:** DSTAR-02 (Issue #24) Complete
+**Next Phase:** DSTAR-03 (M2 Optimizations: NLF, $\delta'$, candidate ordering)
 
 ---
 
 ## 1. Executive Roadmap Overview
 
-The D* research direction adopts a phased, evidence-driven validation methodology. The objective is to evaluate whether single-pass event-anchored approximate matching (candidate algorithm **M2-Event-k**) can outperform decomposition baselines (**M1-count** and **M1-enum-Exact-k**) under strict Edge Recall and S2 connectivity.
+The D* research direction evaluates whether single-pass event-anchored approximate continuous subgraph matching (candidate algorithm **M2-Event-k**) can outperform decomposition baselines (**M1-count** and **M1-enum-Exact-k**) under strict Edge Recall and S2 connectivity.
+
+Following the **18/11/2026 architectural decision**, M1-count (counting via inclusion-exclusion / Möbius inversion) has been decoupled and is no longer a blocking prerequisite for event enumeration. Direct event enumeration via M1-enum-Exact-k and bare M2-Event-k constitutes the primary path.
 
 ```text
-Gate 0A: Advisor Decisions (Scope, C++, COUNT vs Tuples, SCORE_CHANGED)
-   │
-   ▼
-Gate 0B-1: RapidFlow Binary Audit (Raw ordered COUNT, Signed DELETE, Automorphism)
-   │
-   ▼
-Gate 1: M0 Oracle & Correctness Foundation [COMPLETED IN DSTAR-01]
+Phase 1: M0 Oracle & Correctness Foundation [COMPLETED IN DSTAR-01 / Issue #22]
    │  ├── docs/dstar_problem_contract_v1.md
    │  ├── scripts/dstar_oracle.py (Independent M0, stdlib-only)
    │  ├── tests/fixtures/dstar01/ (Hand cases A–L)
@@ -26,112 +22,83 @@ Gate 1: M0 Oracle & Correctness Foundation [COMPLETED IN DSTAR-01]
    │  └── reports/dstar01/correctness_summary.json
    │
    ▼
-Gate 2: Baseline Implementation (M1-count & M1-enum-Exact-k)
-   │  ├── M1-count: Inclusion-exclusion on RapidFlow Exact counts
-   │  └── M1-enum-Exact-k: Enumeration on Q-D variants with shared primitive
+Phase 2: Event Enumeration: M1-enum, Bare M2 & Tuple Correctness [COMPLETED IN DSTAR-02 / Issue #24]
+   │  ├── docs/dstar02_engine_contract.md (Frozen engine contract, Event Boundary Lemma)
+   │  ├── scripts/dstar_event_common.py (Shared primitives, EventSink with zero-dup assertions)
+   │  ├── scripts/dstar_m1_enum.py (Anchored Exact variants Q - D, R(f) == D)
+   │  ├── scripts/dstar_m2_event.py (Bare M2 DFS: PRESENT/MISSING branches, deferred vertices)
+   │  ├── scripts/dstar_event_cli.py (CLI interface with exit codes 0/1/2)
+   │  ├── tests/fixtures/dstar02/corpus_840/ (840 reference cases, 8002 truth events)
+   │  ├── tests/test_dstar02_engines.py (840 corpus, 56 streams x 12 updates, 23 hand cases)
+   │  └── reports/dstar02/correctness_summary.json & docs/dstar02_validation_report.md
    │
    ▼
-Gate 3: M2-Event-k Correctness Prototype
-   │  ├── Bare DFS with deterministic frontier (NO unproved pruning)
-   │  └── 100% tuple-level equivalence against M0 Oracle (Diamond k=1, K4 k=1/2)
+Phase 3: M2 Algorithmic Optimizations [UPCOMING DSTAR-03]
+   │  ├── Static Neighbor Label Frequency (NLF) filtering
+   │  ├── Dynamic NLF delta' updates around modified data vertices
+   │  └── Candidate ordering and failure-driven pruning
    │
    ▼
-Gate 4: Fair Benchmark, Novelty & Scaling Evaluation
-      ├── Hardware counters, work operations, latency, RSS
-      ├── Scale to C6 (k=1) and K3,3 (k=2)
-      └── Decision on C++ integration and thesis contribution
+Phase 4: Local View Integration & C++ Implementation [UPCOMING DSTAR-04]
+   │  ├── Adaptation of RapidFlow Local View for approximate event search
+   │  └── C++ native implementation of M1-enum and optimized M2
+   │
+   ▼
+Phase 5: Full Workload Benchmarking & Thesis Evaluation [UPCOMING DSTAR-05]
+      ├── Large dynamic graphs & NetFlow workload evaluation
+      ├── Microbenchmarks: latency, work operations, RSS, scalability
+      └── Final comparative assessment: M1-enum vs optimized M2
 ```
 
 ---
 
-## 2. Completed Foundation: Gate 1 (DSTAR-01)
+## 2. Completed Milestones
 
-The following artifacts have been completed and verified under Issue #22:
+### 2.1. Foundation: DSTAR-01 (Issue #22)
 1. **Working Problem Contract (`docs/dstar_problem_contract_v1.md`)**:
    - Locked definitions for query $Q$, data graph $G$, injective mapping $f$, and Edge Recall $S_E(f)$.
    - Explicit specification of S2 connectivity ($Q[E_Q \setminus R(f)]$ spanning connected).
    - Domain safety bound: $0 \le k < \lambda(Q)$, where $\lambda(Q)$ is global edge connectivity.
    - Event semantics: only `ENTERED` and `EXITED`; no `SCORE_CHANGED`.
-   - Rejection rules and atomic fail-closed behavior on all invalid updates.
 2. **Independent M0 Oracle (`scripts/dstar_oracle.py`)**:
-   - Implemented in pure Python 3 standard library with zero third-party dependencies and zero coupling to legacy matching code.
-   - Direct calculation of $\lambda(Q)$ via exhaustive cut enumeration.
-   - Direct S2 connectivity evaluation on matched query edges.
-   - Stateful incremental oracle computing true snapshot set differences.
-3. **Hand-Calculated Microcases (`tests/fixtures/dstar01/`, Cases A–L)**:
-   - Verified exact recovery ($k=0$), extra internal chords, external tails, injectivity rejection, vertex/edge label checks, sparse IDs, $K_4$ automorphism (24 tuples), Diamond event/no-event streams, unrelated updates, and S1 vs S2 distinction.
-4. **Legacy Compatibility Matrix (`tests/test_dstar_legacy_compatibility.py`)**:
-   - 56 configurations across $C_4$ ($k \in \{0, 1\}$), Diamond ($k \in \{0, 1\}$), and $K_4$ ($k \in \{0, 1, 2\}$) with 8 seeds each.
-   - 224 valid dynamic updates executed step-by-step against legacy APX-02 Oracle (configured with $\varepsilon_m = k, \varepsilon_x = \text{None}, \text{STRICT}$).
-   - 100% tuple-level agreement across all 224 updates (1,148 entered tuples, 978 exited tuples).
-5. **Truthful Evidence Generation (`scripts/generate_dstar01_report.py`)**:
-   - Generates structured summary `reports/dstar01/correctness_summary.json` with exact execution timestamps, base SHA, execution HEAD, and source file SHA-256 hashes.
+   - Pure Python 3 stdlib, exhaustive ordered permutation search, strict type validation.
+3. **Legacy Model C Compatibility**:
+   - 56 configurations, 224 dynamic updates, 100% agreement with legacy APX-02 Oracle.
+
+### 2.2. Event Enumeration: DSTAR-02 (Issue #24)
+1. **Engine Contract & Primitives (`docs/dstar02_engine_contract.md`, `scripts/dstar_event_common.py`)**:
+   - Event Boundary Lemma: $|R_{\text{after}}| == k$ for INSERT, $|R_{\text{before}}| == k$ for DELETE.
+   - Canonical tuple convention: ascending sorted order of original query vertex IDs.
+   - Output sink with strict zero-duplicate assertion upon finalization.
+2. **M1-enum-Exact-k Baseline (`scripts/dstar_m1_enum.py`)**:
+   - Decomposes approximate matching into exact searches across all $\binom{m-1}{k}$ variant queries $Q - D$.
+   - Strict equivalence filtering ($R(f) == D$) guarantees zero duplicate emissions.
+3. **Bare M2-Event-k Engine (`scripts/dstar_m2_event.py`)**:
+   - Anchored DFS with PRESENT and MISSING branches.
+   - Deferral of vertex assignments on MISSING branch.
+   - Two-endpoint commitment verification.
+   - Empty frontier fail-closed guard (`InvariantViolationError` when $k < \lambda(Q)$ invariant is broken).
+4. **Empirical Verification**:
+   - Corpus 840: All 840 reference cases (8,002 truth events across 330 event cases) matched 100% across M0, M1, and M2 with 0 raw duplicates.
+   - 56-Stream Matrix: 56 configurations $\times$ 12 updates = 672 updates evaluated with continuous step agreement and active-set reconstruction ($M_t = (M_{t-1} \setminus \text{exited}) \cup \text{entered} == M_0(G_t)$).
+   - AST Independence Audit: Zero imports of oracle or legacy modules in production engines.
 
 ---
 
-## 3. Detailed Specifications for Future Gates
+## 3. Specifications for Future Gates (DSTAR-03–05)
 
-### 3.1. Gate 0A: Formal Scope Confirmation with Advisor
-Before commencing Gate 2 implementation, the four foundational questions in `docs/dstar_problem_contract_v1.md` Section 7 must be reviewed with the thesis advisor:
-- **Q1 (C++ Integration)**: Confirm whether direct modification of RapidFlow C++ source is mandatory or if a standalone research engine compared against RapidFlow is acceptable.
-- **Q2 (Output Primary Metric)**: Confirm whether evaluation focuses on COUNT or explicit ordered tuples.
-- **Q3 (Event Scope)**: Confirm that `SCORE_CHANGED` is excluded and only `ENTERED`/`EXITED` are emitted.
-- **Q4 (MVP Domain)**: Confirm acceptance of Edge Recall on simple labeled graphs under $k < \lambda(Q)$ with pilot queries Diamond ($k=1$) and $K_4$ ($k \in \{1, 2\}$).
+### 3.1. DSTAR-03: M2 Optimizations
+- **Static NLF**: Prune query-data vertex candidate pairs using neighbor label frequency multisets.
+- **Dynamic NLF $\delta'$**: Incremental maintenance of data vertex NLF upon edge insertions/deletions.
+- **Candidate Ordering**: Dynamically select frontier edges to minimize branching factor.
+- **Invariant**: All optimizations must preserve 100% tuple-level equivalence against M0 Oracle and M1-enum baseline.
 
-### 3.2. Gate 0B-1: RapidFlow Exact Binary & Source Audit
-A rigorous audit of the pinned RapidFlow binary (`baselines/rapidflow/build/RapidFlow`) must be conducted:
-1. **Raw Ordered Count vs Automorphism Factor**:
-   - Inspect whether `RapidFlow` outputs the raw number of ordered embeddings $\sum_f 1$, or divides by $|\text{Aut}(Q)|$, or applies symmetry breaking / leaf shortcuts.
-   - Compare `RapidFlow` exact count on $Q$ against M0 Oracle snapshot count for uniform vs labeled queries.
-2. **Signed Delta on Deletion (`DELETE`)**:
-   - RapidFlow streaming mode outputs signed delta values $\Delta N_t(Q)$ after an update.
-   - On edge deletion, verify whether $\Delta N_t(Q) \le 0$ and whether `result_count_` reflects the exact snapshot count.
-   - Construct two test scenarios:
-     * *Scenario 1 (No threshold crossing)*: Initial graph has full Diamond (5 edges). Delete 1 edge. Verify that while exact count decreases, the approximate count at $k=1$ remains unchanged.
-     * *Scenario 2 (Threshold crossing)*: Initial graph already lacks 1 edge. Delete a matched edge. Verify that the mapping exits at $k=1$.
-3. **Exit Criteria for Gate 0B-1**:
-   - RapidFlow binary confirmed to report compatible counts, or a proven mathematical adapter is implemented and verified.
-   - If RapidFlow binary cannot be adapted for signed deletions or symmetry conventions, flag the project risk immediately and fallback to an independent Exact baseline.
+### 3.2. DSTAR-04: Local View Integration & C++ Engine
+- Inspect and adapt RapidFlow's Local View data structure for approximate event traversal.
+- Port M1-enum and M2-Event-k to C++ adhering to RapidFlow binary interface conventions.
+- Confirm raw ordered count and signed delta semantics under C++.
 
-### 3.3. Gate 2: Implementation of M1 Baselines
-Two distinct baseline approaches must be implemented:
-1. **M1-count (Counting Baseline)**:
-   - For a query $Q$ with $m$ edges and budget $k < \lambda(Q)$:
-     $$\text{APX\_COUNT}(G) = \sum_{|T| \le k} c_T \cdot N(Q - T)$$
-     where $N(Q - T)$ is the exact count of $Q - T$ on $G$, and coefficients $c_T$ are derived via Möbius inversion / inclusion-exclusion:
-     $$c_T = \sum_{j=|T|}^k (-1)^{j - |T|} \binom{m - |T|}{j - |T|}$$
-   - Streaming delta count:
-     $$\Delta \text{APX}_t = \sum_{|T| \le k} c_T \cdot \Delta N_t(Q - T)$$
-   - Must be verified against M0 Oracle count deltas for both `INSERT` and `DELETE`.
-2. **M1-enum-Exact-k (Enumeration Baseline)**:
-   - For an update on edge $e$:
-     Iterates over all subsets $D \subset E_Q \setminus \{q\}$ with $|D| = k$, where $q$ is compatible with $e$.
-     Runs exact enumeration on $Q - D$ anchored to $e$.
-     Filters matches to ensure $R(f) = D$ strictly (preventing duplicate emissions across different variants).
-   - Must use the **identical** graph storage representation, edge lookup primitives, and tuple sink as M2 to ensure benchmarking isolates search strategy alone.
-
-### 3.4. Gate 3: M2-Event-k Correctness Prototype
-1. **Core DFS Search Engine**:
-   - Implements Appendix G specification:
-     * Step 1: Anchor $q = \{u, v\}$ to the updated data edge on the snapshot containing the edge.
-     * Step 2: Injective state maintenance with status array `status[e] in {YES, NO, UNDECIDED}`.
-     * Step 3: Frontier selection via a deterministic function of the state.
-     * Step 4: Branch YES: maps unmapped endpoint to matching data neighbor, sets `status[e] = YES`.
-     * Step 5: Branch NO: commits `status[e] = NO`, increments $|R_p|$, and **defers** the unmapped vertex (does not assign it).
-     * Step 6: Terminal leaf checks injectivity, labels, $|R(f)| = k$, and emits canonical ordered tuple.
-2. **No Unproved Pruning**:
-   - Static NLF, dynamic NLF $\delta'$, and Local View must remain disabled during initial correctness verification.
-3. **Exit Criteria for Gate 3**:
-   - 100% tuple-level match against M0 Oracle on Diamond ($k=1$), $K_4$ ($k \in \{1, 2\}$), and $C_4$ ($k=1$) for both `INSERT` and `DELETE`.
-   - Zero false positives, zero false negatives, zero duplicate tuples emitted.
-
-### 3.5. Gate 4: Benchmarking and Scaling
-1. **Fair Comparison Framework**:
-   - Instrument hardware performance counters and work counters (state visits, edge lookups, candidate checks, emitted tuples).
-   - Compare M1-enum-Exact-k against M2-Event-k using identical output sinks.
-   - Compare M1-count against RapidFlow Exact counts separately.
-2. **Topology Scaling**:
-   - Evaluate scaling behavior on larger topologies: $C_6$ ($k=1, \lambda=2$) and $K_{3,3}$ ($k \in \{1, 2\}, \lambda=3$).
-3. **Honest Scientific Evaluation**:
-   - If M2 exhibits higher latency than M1 due to branch misprediction or deferred vertex tracking, report the bottleneck truthfully.
-   - Formulate conclusions based on reproducible data rather than unverified speedup hypotheses.
+### 3.3. DSTAR-05: Benchmarks and Novelty Evaluation
+- Comprehensive benchmark against NetFlow workloads and synthetic graph families ($C_6, K_{3,3}$).
+- Measure latency, memory RSS, work counters (edge lookups, candidate extensions, branch decisions).
+- Publish truthful empirical results determining the viability and novelty of M2 over M1.
