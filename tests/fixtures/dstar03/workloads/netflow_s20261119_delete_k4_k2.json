@@ -128,20 +128,26 @@
   ],
   "sha256_initial_graph": "2774d3e4729d4bc09189931856e0b07ca317b0c6f098cc7ea2ef2ef5ed951f4a",
   "sha256_query": "827de8732ebf763d6956412ea1ec799c091ec7ccae4cd10f7bff72fc26a25f1b",
-  "sha256_stream": "8db84848c000d704044b8cc9f220282f89a708755663ca082af3fd198acc01f4",
-  "sha256_workload": "487367888f826a55257d5e81e8e4022dbd02471ceff803013fe350bdf8a1b85a",
+  "sha256_stream": "8aa155c0a63358aae70a451505e150daa74eb56135a25305d7b3f47de8f9bc53",
+  "sha256_workload": "4ee7f5351cd6996c8284bee35cac5be647d5e785d62a11110498204c30a51f2b",
   "stream": [
     {
       "edge": [
         129124,
         2759658
       ],
+      "is_target": true,
       "label": 0,
-      "operation": "DELETE"
+      "operation": "DELETE",
+      "physical_line_number": 3,
+      "raw_line": "-e 129124 2759658 0",
+      "source_op_index": 2,
+      "step": 0
     }
   ],
   "target_label": 0,
   "target_operation": "DELETE",
+  "target_physical_line_number": 3,
   "target_raw_line": "-e 129124 2759658 0",
   "target_source_op_index": 2,
   "workload_id": "netflow_s20261119_delete_k4_k2"

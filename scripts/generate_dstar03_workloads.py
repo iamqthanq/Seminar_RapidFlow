@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
 """
-scripts/generate_dstar03_workloads.py — Deterministic Generator for DSTAR-03 Pilot Workloads.
+scripts/generate_dstar03_workloads.py — Deterministic Generator for DSTAR-03 Pilot Workloads (v2).
 
 Generates 65 concrete locked workloads:
 - 40 Synthetic Matrix Workloads (5 query/k x 2 data_vertices x 2 edge_prob x 2 label_regimes).
 - 5 Structured Semantic Witnesses (positive witnesses with planted anchor & external spectator edges).
 - 20 NetFlow-Relative Subgraph Probes (4 sample universes x 5 query/k probes).
 
-Features:
-- Completely deterministic (reproducible RNG seeds, no randomized hash()).
-- Streaming bounded-memory 2-pass NetFlow extraction.
-- Cryptographic SHA-256 fingerprinting of all inputs and sub-components.
-- Preflight M0 verification for every generated workload.
-- Emits locked configs/dstar03_pilot_manifest.json and tests/fixtures/dstar03/workloads/*.json.
+Remediation features (F02, F03, F04):
+- NetFlow extraction executed in contained disposable subprocess with hard RLIMIT_AS (512 MiB) and wall timeout (60s).
+- Chunked cryptographic hashing of data source files (never using whole-file f.read()).
+- Strict operation parsing: explicit 'e' and '-e' tokens, rejecting unknown tokens, ignoring blank/comment lines.
+- Reads 64 valid operation records (not assuming 64 physical lines).
+- Reads and preserves source vertex labels; validates selected vertices exist and strictly match required label (0).
+- Strictly bounded candidate memory ($O(1)$) using bounded top-6 neighbor heap and top-8 fallback heap.
+- Retains all updates before target in projection and validates target containment.
+- Records physical line numbers, source operation indices, and target flags for all projected updates.
+- Proper workload fingerprint calculation excluding self-hash field.
+- Emits locked configs/dstar03_pilot_manifest.json (v2) and tests/fixtures/dstar03/workloads/*.json.
 """
 
 from __future__ import annotations
@@ -24,6 +29,7 @@ import json
 import os
 import random
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -31,6 +37,12 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 import dstar_oracle as M0
+from dstar03_resources import (
+    DEFAULT_RLIMIT_AS_BYTES,
+    DEFAULT_TIMEOUT_SECONDS,
+    hash_file_sha256,
+    run_contained_subprocess,
+)
 from dstar_event_common import (
     DEFAULT_MAX_CANDIDATES,
     DEFAULT_MAX_DATA_VERTICES,
@@ -61,8 +73,15 @@ def sha256_of_obj(data: Any) -> str:
     return hashlib.sha256(canonical_json_bytes(data)).hexdigest()
 
 
+def compute_workload_fingerprint(workload: Dict[str, Any]) -> str:
+    """Computes SHA-256 fingerprint of workload dictionary excluding self-hash field."""
+    obj_for_hash = {k: v for k, v in workload.items() if k != "sha256_workload"}
+    return sha256_of_obj(obj_for_hash)
+
+
 class MaxHeapItem:
     """Wrapper for min-priority max-heap to keep smallest hash values."""
+
     def __init__(self, key: str, val: int) -> None:
         self.key = key
         self.val = val
@@ -199,8 +218,13 @@ def generate_synthetic_workloads() -> List[Dict[str, Any]]:
                         "query": q.to_dict(),
                         "initial_graph": g0.to_dict(),
                         "stream": [
-                            {"operation": u.operation, "edge": list(u.edge), "label": u.label}
-                            for u in stream_updates
+                            {
+                                "step": s_idx,
+                                "operation": u.operation,
+                                "edge": list(u.edge),
+                                "label": u.label,
+                            }
+                            for s_idx, u in enumerate(stream_updates)
                         ],
                     }
                     workloads.append(workload_obj)
@@ -270,8 +294,13 @@ def generate_witness_workloads() -> List[Dict[str, Any]]:
             "query": q.to_dict(),
             "initial_graph": g0.to_dict(),
             "stream": [
-                {"operation": u.operation, "edge": list(u.edge), "label": u.label}
-                for u in stream_updates
+                {
+                    "step": s_idx,
+                    "operation": u.operation,
+                    "edge": list(u.edge),
+                    "label": u.label,
+                }
+                for s_idx, u in enumerate(stream_updates)
             ],
             "expected_events": [
                 {"step": 0, "entered": [[0, 1, 2, 3]], "exited": []},
@@ -302,53 +331,105 @@ def resolve_netflow_data_dir(candidate_dir: Optional[str] = None) -> Optional[Pa
     return None
 
 
+def parse_netflow_deletion_records(
+    ndeletion_path: Path, max_records: int = 64
+) -> List[Tuple[int, str, int, int, int, int, str]]:
+    """
+    Parses exactly max_records valid operation records from Ndeletion10.graph.
+    Strictly checks 'e' and '-e' tokens, rejecting any unknown prefix.
+    Skips comment lines (starting with '#' or 'c') and blank lines.
+    Returns: List of (source_op_index, op_type, u, v, label, physical_line_number, raw_line).
+    """
+    records: List[Tuple[int, str, int, int, int, int, str]] = []
+    physical_line_no = 0
+    source_op_idx = 0
+
+    with ndeletion_path.open("r", encoding="utf-8") as f:
+        for line in f:
+            physical_line_no += 1
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#") or stripped.startswith("c"):
+                continue
+
+            parts = stripped.split()
+            token = parts[0]
+            if token == "e":
+                op_type = "INSERT"
+            elif token == "-e":
+                op_type = "DELETE"
+            else:
+                raise ValueError(
+                    f"Unknown operation token {token!r} at line {physical_line_no} in {ndeletion_path}"
+                )
+
+            if len(parts) < 4:
+                raise ValueError(
+                    f"Malformed operation line at {physical_line_no}: {stripped!r}"
+                )
+
+            u = int(parts[1])
+            v = int(parts[2])
+            label = int(parts[3])
+
+            records.append((source_op_idx, op_type, u, v, label, physical_line_no, stripped))
+            source_op_idx += 1
+
+            if len(records) >= max_records:
+                break
+
+    if len(records) < max_records:
+        raise ValueError(
+            f"Expected {max_records} operation records from {ndeletion_path}, got {len(records)}"
+        )
+
+    return records
+
+
 def generate_netflow_workloads(netflow_dir: Path) -> List[Dict[str, Any]]:
     """
-    Extracts 4 sample universes from NetFlow data using bounded-memory streaming
+    Extracts 4 sample universes from NetFlow data using bounded-memory streaming ($O(1)$)
     and creates 20 query/k probe workloads.
     """
     seeds = [20261118, 20261119]
     target_ops = ["INSERT", "DELETE"]
 
-    # 1. Read first 64 operation records from Ndeletion10.graph
     ndeletion_path = netflow_dir / "Ndeletion10.graph"
-    with ndeletion_path.open("r", encoding="utf-8") as f:
-        prefix_lines = [f.readline().strip() for _ in range(64)]
+    ndata_path = netflow_dir / "Ndata.graph"
 
-    prefix_records: List[Tuple[int, str, int, int, int, str]] = []
-    for idx, line in enumerate(prefix_lines):
-        parts = line.split()
-        op_type = "INSERT" if parts[0] == "e" else "DELETE"
-        u, v, label = int(parts[1]), int(parts[2]), int(parts[3])
-        prefix_records.append((idx, op_type, u, v, label, line))
+    # 1. Parse 64 operation records with strict format checks
+    prefix_records = parse_netflow_deletion_records(ndeletion_path, max_records=64)
 
-    # 2. Select 4 target operations
-    sample_configs: List[Dict[str, Any]] = []
-    sample_targets: Dict[Tuple[int, str], Tuple[int, str, int, int, int, str]] = {}
-
+    # 2. Select 4 target operations deterministically
+    sample_targets: Dict[Tuple[int, str], Tuple[int, str, int, int, int, int, str]] = {}
     for seed in seeds:
         for op in target_ops:
             matching = [r for r in prefix_records if r[1] == op]
+            if not matching:
+                raise ValueError(f"No matching operations for op={op} in prefix records")
             best_target = min(
                 matching,
                 key=lambda r: hashlib.sha256(f"{seed}:{op}:{r[0]}".encode("utf-8")).hexdigest(),
             )
             sample_targets[(seed, op)] = best_target
-            sample_configs.append({
-                "seed": seed,
-                "op": op,
-                "target_record": best_target,
-            })
 
-    # 3. Pass 1: Stream Ndata.graph to select bounded candidate vertices for each sample
-    # Bounded heaps for each of the 4 samples: top 6 neighbors, top 8 fallbacks
+    # 3. Pass 1: Stream Ndata.graph to select bounded candidate vertices for each sample.
+    # Bounded candidate tracking memory:
+    # Top 6 neighbors and top 8 fallbacks per sample, tracked with bounded heaps and sets of size <= 8.
+    # Total memory: 4 * (6 + 8) = 56 elements, strictly O(1).
     neighbor_heaps: Dict[Tuple[int, str], List[MaxHeapItem]] = {k: [] for k in sample_targets}
-    seen_neighbors: Dict[Tuple[int, str], Set[int]] = {k: set() for k in sample_targets}
-    fallback_heaps: Dict[Tuple[int, str], List[MaxHeapItem]] = {k: [] for k in sample_targets}
+    neighbor_vids: Dict[Tuple[int, str], Set[int]] = {k: set() for k in sample_targets}
 
-    ndata_path = netflow_dir / "Ndata.graph"
+    fallback_heaps: Dict[Tuple[int, str], List[MaxHeapItem]] = {k: [] for k in sample_targets}
+    fallback_vids: Dict[Tuple[int, str], Set[int]] = {k: set() for k in sample_targets}
+
     with ndata_path.open("r", encoding="utf-8") as f:
+        line_no = 0
         for line in f:
+            line_no += 1
+            line = line.strip()
+            if not line or line.startswith("#") or line.startswith("c"):
+                continue
+
             if line.startswith("v "):
                 parts = line.split()
                 vid = int(parts[1])
@@ -356,12 +437,19 @@ def generate_netflow_workloads(netflow_dir: Path) -> List[Dict[str, Any]]:
                     u_t, v_t = target[2], target[3]
                     if vid == u_t or vid == v_t:
                         continue
+                    fb_vids = fallback_vids[(s_seed, s_op)]
+                    if vid in fb_vids:
+                        continue
                     h = hashlib.sha256(f"{s_seed}:{vid}".encode("utf-8")).hexdigest()
                     fb_heap = fallback_heaps[(s_seed, s_op)]
                     if len(fb_heap) < 8:
                         heapq.heappush(fb_heap, MaxHeapItem(h, vid))
+                        fb_vids.add(vid)
                     elif h < fb_heap[0].key:
-                        heapq.heappushpop(fb_heap, MaxHeapItem(h, vid))
+                        evicted = heapq.heappushpop(fb_heap, MaxHeapItem(h, vid))
+                        fb_vids.remove(evicted.val)
+                        fb_vids.add(vid)
+
             elif line.startswith("e "):
                 parts = line.split()
                 u, v = int(parts[1]), int(parts[2])
@@ -373,19 +461,24 @@ def generate_netflow_workloads(netflow_dir: Path) -> List[Dict[str, Any]]:
                     elif v == u_t or v == v_t:
                         w = u
                     if w is not None and w != u_t and w != v_t:
-                        s_seen = seen_neighbors[(s_seed, s_op)]
-                        if w not in s_seen:
-                            s_seen.add(w)
-                            h = hashlib.sha256(f"{s_seed}:{w}".encode("utf-8")).hexdigest()
-                            nbr_heap = neighbor_heaps[(s_seed, s_op)]
-                            if len(nbr_heap) < 6:
-                                heapq.heappush(nbr_heap, MaxHeapItem(h, w))
-                            elif h < nbr_heap[0].key:
-                                heapq.heappushpop(nbr_heap, MaxHeapItem(h, w))
+                        nbr_vids = neighbor_vids[(s_seed, s_op)]
+                        if w in nbr_vids:
+                            continue
+                        h = hashlib.sha256(f"{s_seed}:{w}".encode("utf-8")).hexdigest()
+                        nbr_heap = neighbor_heaps[(s_seed, s_op)]
+                        if len(nbr_heap) < 6:
+                            heapq.heappush(nbr_heap, MaxHeapItem(h, w))
+                            nbr_vids.add(w)
+                        elif h < nbr_heap[0].key:
+                            evicted = heapq.heappushpop(nbr_heap, MaxHeapItem(h, w))
+                            nbr_vids.remove(evicted.val)
+                            nbr_vids.add(w)
 
     # Form sets S for all 4 samples
     universe_S: Dict[Tuple[int, str], List[int]] = {}
     universe_S_sets: Dict[Tuple[int, str], Set[int]] = {}
+    all_selected_vids: Set[int] = set()
+
     for (s_seed, s_op), target in sample_targets.items():
         u_t, v_t = target[2], target[3]
         nbr_sorted = sorted(
@@ -403,37 +496,91 @@ def generate_netflow_workloads(netflow_dir: Path) -> List[Dict[str, Any]]:
                 break
             if fb not in S:
                 S.append(fb)
+        if len(S) != 8:
+            raise ValueError(f"Failed to assemble 8 vertices for sample ({s_seed}, {s_op}): got {len(S)}")
         universe_S[(s_seed, s_op)] = S
         universe_S_sets[(s_seed, s_op)] = set(S)
+        all_selected_vids.update(S)
 
-    # 4. Pass 2: Stream Ndata.graph to extract labels and edges for S
-    sample_g0: Dict[Tuple[int, str], DStarEventGraph] = {}
-    for key, S in universe_S.items():
-        g = DStarEventGraph()
-        for vid in S:
-            g.add_vertex(vid, 0)
-        sample_g0[key] = g
+    # 4. Pass 2: Stream Ndata.graph to extract and verify vertex labels and edges for S
+    source_vertex_labels: Dict[int, int] = {}
+    sample_edges: Dict[Tuple[int, str], List[Tuple[int, int, int]]] = {k: [] for k in universe_S}
 
     with ndata_path.open("r", encoding="utf-8") as f:
         for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or line.startswith("c"):
+                continue
+
             if line.startswith("v "):
-                pass  # NetFlow vertices are label 0
+                parts = line.split()
+                vid = int(parts[1])
+                v_label = int(parts[2])
+                if vid in all_selected_vids:
+                    source_vertex_labels[vid] = v_label
+
             elif line.startswith("e "):
                 parts = line.split()
                 u, v, label = int(parts[1]), int(parts[2]), int(parts[3])
                 for key, S_set in universe_S_sets.items():
                     if u in S_set and v in S_set:
-                        sample_g0[key].add_edge(u, v, label)
+                        sample_edges[key].append((u, v, label))
 
-    # 5. Project stream updates for each sample
-    sample_projected_streams: Dict[Tuple[int, str], List[DStarEventUpdate]] = {}
-    for key, S_set in universe_S_sets.items():
-        projected: List[DStarEventUpdate] = []
-        for r in prefix_records:
-            if r[2] in S_set and r[3] in S_set:
-                projected.append(
-                    DStarEventUpdate(operation=r[1], edge=(r[2], r[3]), label=r[4])
+    # Validate that all selected vertices actually exist and check label compliance
+    for key, S in universe_S.items():
+        for vid in S:
+            if vid not in source_vertex_labels:
+                raise ValueError(
+                    f"Selected vertex {vid} does not exist in source {ndata_path}"
                 )
+            actual_label = source_vertex_labels[vid]
+            # NetFlow protocol verification: protocol specifies selected labels must be 0
+            if actual_label != 0:
+                raise ValueError(
+                    f"NetFlow protocol requires vertex label 0, but vertex {vid} has label {actual_label} in {ndata_path}"
+                )
+
+    # Build initial graphs with preserved vertex labels and edges
+    sample_g0: Dict[Tuple[int, str], DStarEventGraph] = {}
+    for key, S in universe_S.items():
+        g = DStarEventGraph()
+        for vid in S:
+            g.add_vertex(vid, source_vertex_labels[vid])
+        for u, v, label in sample_edges[key]:
+            g.add_edge(u, v, label)
+        sample_g0[key] = g
+
+    # 5. Project stream updates for each sample preserving source positions and verifying target containment
+    sample_projected_streams: Dict[Tuple[int, str], List[Dict[str, Any]]] = {}
+    for key, S_set in universe_S_sets.items():
+        target_rec = sample_targets[key]
+        target_op_idx = target_rec[0]
+
+        projected: List[Dict[str, Any]] = []
+        target_found_in_projection = False
+
+        for r in prefix_records:
+            source_op_idx, op_type, u, v, label, line_no, raw_line = r
+            if u in S_set and v in S_set:
+                is_target = (source_op_idx == target_op_idx)
+                if is_target:
+                    target_found_in_projection = True
+                projected.append({
+                    "step": len(projected),
+                    "operation": op_type,
+                    "edge": [u, v],
+                    "label": label,
+                    "source_op_index": source_op_idx,
+                    "physical_line_number": line_no,
+                    "raw_line": raw_line,
+                    "is_target": is_target,
+                })
+
+        if not target_found_in_projection:
+            raise ValueError(
+                f"Target operation {target_rec} was not retained in projected stream for {key}"
+            )
+
         sample_projected_streams[key] = projected
 
     # 6. Build 20 NetFlow probe workloads (4 samples x 5 query/k conditions)
@@ -473,15 +620,13 @@ def generate_netflow_workloads(netflow_dir: Path) -> List[Dict[str, Any]]:
                 "netflow_seed": s_seed,
                 "target_operation": s_op,
                 "target_source_op_index": target_op_idx,
+                "target_physical_line_number": target[5],
                 "target_label": target_label,
-                "target_raw_line": target[5],
+                "target_raw_line": target[6],
                 "sample_universe_S": universe_S[(s_seed, s_op)],
                 "query": q.to_dict(),
                 "initial_graph": g0_sample.to_dict(),
-                "stream": [
-                    {"operation": u.operation, "edge": list(u.edge), "label": u.label}
-                    for u in stream_sample
-                ],
+                "stream": stream_sample,
             }
             workloads.append(workload_obj)
             case_idx += 1
@@ -530,8 +675,6 @@ def verify_workload_m0(workload: Dict[str, Any]) -> Dict[str, Any]:
 
     # Active-set reconstruction check
     active_m0 = set(oracle.current_matches)
-    active_reconstructed: Set[Tuple[int, ...]] = set()
-    # Initial matches
     init_oracle = M0.DStarDynamicOracle(q_m0, M0.DStarGraph.from_dict(g0_data.to_dict()), k=k)
     active_reconstructed = set(init_oracle.current_matches)
     for s in expected_steps:
@@ -550,6 +693,44 @@ def verify_workload_m0(workload: Dict[str, Any]) -> Dict[str, Any]:
         "has_events": (total_entered + total_exited) > 0,
         "steps": expected_steps,
     }
+
+
+def _extract_netflow_in_contained_subproc(netflow_dir: Path) -> List[Dict[str, Any]]:
+    """
+    Invokes generate_netflow_workloads inside an isolated disposable subprocess
+    with hard address space limit (RLIMIT_AS) and timeout.
+    """
+    with tempfile.NamedTemporaryFile("w+", suffix=".json", delete=False) as tmp:
+        tmp_path = Path(tmp.name)
+
+    try:
+        cmd = [
+            sys.executable,
+            str(Path(__file__).resolve()),
+            "--subproc-netflow-worker",
+            "--subproc-out", str(tmp_path),
+            "--netflow-dir", str(netflow_dir),
+        ]
+        res = run_contained_subprocess(
+            cmd,
+            timeout_seconds=DEFAULT_TIMEOUT_SECONDS,
+            limit_as_bytes=DEFAULT_RLIMIT_AS_BYTES,
+        )
+        if res["status"] != "OK":
+            raise RuntimeError(
+                f"Contained NetFlow extraction subprocess failed: status={res['status']}, "
+                f"exit_code={res['exit_code']}, stderr={res['stderr'][:500]}"
+            )
+
+        with tmp_path.open("r", encoding="utf-8") as f:
+            netflow_workloads = json.load(f)
+        return netflow_workloads
+    finally:
+        if tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
 
 
 def main() -> None:
@@ -577,12 +758,33 @@ def main() -> None:
         action="store_true",
         help="Skip M0 verification during generation.",
     )
+    # Subprocess helper flags
+    parser.add_argument(
+        "--subproc-netflow-worker",
+        action="store_true",
+        help="Internal flag: runs NetFlow extraction in contained worker.",
+    )
+    parser.add_argument(
+        "--subproc-out",
+        type=Path,
+        default=None,
+        help="Internal flag: output JSON for contained NetFlow worker.",
+    )
     args = parser.parse_args()
+
+    # Handle internal subprocess worker execution
+    if args.subproc_netflow_worker:
+        if not args.subproc_out or not args.netflow_dir:
+            sys.exit(1)
+        workloads = generate_netflow_workloads(args.netflow_dir)
+        with args.subproc_out.open("w", encoding="utf-8") as f:
+            json.dump(workloads, f)
+        sys.exit(0)
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     args.output_manifest.parent.mkdir(parents=True, exist_ok=True)
 
-    print("Generating DSTAR-03 Workloads...")
+    print("Generating DSTAR-03 Workloads (Protocol v2)...")
 
     # 1. Synthetic Matrix (40 workloads)
     print("Generating 40 Synthetic Matrix workloads...")
@@ -594,7 +796,7 @@ def main() -> None:
     wit_workloads = generate_witness_workloads()
     assert len(wit_workloads) == 5, f"Expected 5 witness workloads, got {len(wit_workloads)}"
 
-    # 3. NetFlow Probes (20 workloads)
+    # 3. NetFlow Probes (20 workloads) in Contained Subprocess
     print("Resolving NetFlow data source...")
     netflow_dir = resolve_netflow_data_dir(str(args.netflow_dir) if args.netflow_dir else None)
     if not netflow_dir:
@@ -602,8 +804,8 @@ def main() -> None:
             "NetFlow data files (Ndata.graph and Ndeletion10.graph) not found in expected locations."
         )
 
-    print(f"Extracting 20 NetFlow Probe workloads from {netflow_dir}...")
-    netflow_workloads = generate_netflow_workloads(netflow_dir)
+    print(f"Extracting 20 NetFlow Probe workloads from {netflow_dir} in contained subprocess...")
+    netflow_workloads = _extract_netflow_in_contained_subproc(netflow_dir)
     assert len(netflow_workloads) == 20, f"Expected 20 NetFlow workloads, got {len(netflow_workloads)}"
 
     all_workloads = syn_workloads + wit_workloads + netflow_workloads
@@ -629,11 +831,11 @@ def main() -> None:
         else:
             w["m0_verification"] = {"verified": False}
 
-        w["sha256_workload"] = sha256_of_obj(w)
+        w["sha256_workload"] = compute_workload_fingerprint(w)
 
         # Write workload fixture
         with fixture_path.open("w", encoding="utf-8") as f:
-            f.write(json.dumps(w, indent=2, sort_keys=True))
+            f.write(json.dumps(w, indent=2, sort_keys=True) + "\n")
 
         # Build manifest entry
         rel_path = str(fixture_path.relative_to(REPO_ROOT))
@@ -653,16 +855,14 @@ def main() -> None:
             "relative_path": rel_path,
         })
 
-    # Read NetFlow source hashes for provenance
-    with (netflow_dir / "Ndata.graph").open("rb") as f:
-        ndata_sha = hashlib.sha256(f.read()).hexdigest()
-    with (netflow_dir / "Ndeletion10.graph").open("rb") as f:
-        ndeletion_sha = hashlib.sha256(f.read()).hexdigest()
+    # Read NetFlow source hashes for provenance using chunked hashing
+    ndata_sha = hash_file_sha256(netflow_dir / "Ndata.graph")
+    ndeletion_sha = hash_file_sha256(netflow_dir / "Ndeletion10.graph")
 
-    manifest_doc = {
-        "manifest_id": "dstar03-pilot-manifest-v1",
-        "description": "Locked 65 registered workloads for DSTAR-03 S4 tiny paired evaluation.",
-        "contract_version": "dstar-v1.0",
+    manifest_doc: Dict[str, Any] = {
+        "manifest_id": "dstar03-pilot-manifest-v2",
+        "description": "Locked 65 registered workloads for DSTAR-03 S4 tiny paired evaluation (remediation v2).",
+        "contract_version": "dstar-v2.0",
         "sink_mode": "COLLECT_VERIFY_SORT_V1",
         "total_registered_workloads": 65,
         "counts_by_family": {
@@ -701,7 +901,7 @@ def main() -> None:
     manifest_doc["manifest_sha256"] = sha256_of_obj(manifest_doc)
 
     with args.output_manifest.open("w", encoding="utf-8") as f:
-        f.write(json.dumps(manifest_doc, indent=2, sort_keys=True))
+        f.write(json.dumps(manifest_doc, indent=2, sort_keys=True) + "\n")
 
     print(f"Manifest written to {args.output_manifest}")
     print(f"Successfully generated and verified all {len(all_workloads)} workloads.")

@@ -1,5 +1,5 @@
 {
-  "contract_version": "dstar-v1.0",
+  "contract_version": "dstar-v2.0",
   "counts_by_family": {
     "NETFLOW_PROBE": 20,
     "STRUCTURED_WITNESS": 5,
@@ -11,7 +11,7 @@
     "prefix_operations_count": 64,
     "source_manifest": "configs/netflow_newsp_manifest.json"
   },
-  "description": "Locked 65 registered workloads for DSTAR-03 S4 tiny paired evaluation.",
+  "description": "Locked 65 registered workloads for DSTAR-03 S4 tiny paired evaluation (remediation v2).",
   "limits": {
     "max_candidates": 100000,
     "max_data_vertices": 8,
@@ -19,8 +19,8 @@
     "max_stream_steps": 100,
     "max_work": 500000
   },
-  "manifest_id": "dstar03-pilot-manifest-v1",
-  "manifest_sha256": "32d5675e9a191344350c734acdc8afd2bdd57c807282163ef9c702e4adb84ef4",
+  "manifest_id": "dstar03-pilot-manifest-v2",
+  "manifest_sha256": "a76bc9d74af390df1590ac6e4b9fc446d20a30a2b434cd9ef0839e4bea0c4a20",
   "protocol": {
     "measured_runs_per_workload": 6,
     "order_parity_rule": "even_case: (M1->M2, M2->M1, M1->M2); odd_case: (M2->M1, M1->M2, M2->M1)",
@@ -47,7 +47,7 @@
       "k": 1,
       "query_name": "diamond_k1",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_00_diamond_k1_n6_p25_uniform.json",
-      "sha256_workload": "788f8cbc1268e7264d206b5b9522a8ba15b8ea8e966bbbf2bddc3a348568f348",
+      "sha256_workload": "defd863d78d079af93d735dc1fce65cb77c9c252c2a71fc2faf1a125cc770ea3",
       "stream_length": 12,
       "total_events": 464,
       "workload_id": "syn_case_00_diamond_k1_n6_p25_uniform"
@@ -62,7 +62,7 @@
       "k": 1,
       "query_name": "diamond_k1",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_01_diamond_k1_n6_p25_mixed.json",
-      "sha256_workload": "4c77d402cbcd5e39f38f8bd5332b1aba04f38a08ef1128eec3770234a8c2d69c",
+      "sha256_workload": "70acccc156ba4cd8c2ecadd7206d852f78d7c921f091ec480008e67677750465",
       "stream_length": 12,
       "total_events": 0,
       "workload_id": "syn_case_01_diamond_k1_n6_p25_mixed"
@@ -77,7 +77,7 @@
       "k": 1,
       "query_name": "diamond_k1",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_02_diamond_k1_n6_p65_uniform.json",
-      "sha256_workload": "dedbdac064f035db1276707f75e5528e644dbebdc4064044baf321b4d7c693c3",
+      "sha256_workload": "7f6f46df58c521fdc488cb079ff2543d779958daa92eaf3f2eea3fa5febbf2a4",
       "stream_length": 12,
       "total_events": 440,
       "workload_id": "syn_case_02_diamond_k1_n6_p65_uniform"
@@ -92,7 +92,7 @@
       "k": 1,
       "query_name": "diamond_k1",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_03_diamond_k1_n6_p65_mixed.json",
-      "sha256_workload": "f96dc7085f7d056c4b9f20e90afcc03b6b67b1ba0e0865911e659f7661507826",
+      "sha256_workload": "1773c8e62d55a5eea9e396389d37d7d9702bad777cbeb59e858b14352f5e4049",
       "stream_length": 12,
       "total_events": 21,
       "workload_id": "syn_case_03_diamond_k1_n6_p65_mixed"
@@ -107,7 +107,7 @@
       "k": 1,
       "query_name": "diamond_k1",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_04_diamond_k1_n8_p25_uniform.json",
-      "sha256_workload": "ca8dcc4ed3717244229a7b874e3c2b8906720b583af2920affcb6cad5b68108a",
+      "sha256_workload": "0e4b010eec0127f189a50e8c2be973dce5e82bb83903be8935423d4a663e3c38",
       "stream_length": 12,
       "total_events": 8,
       "workload_id": "syn_case_04_diamond_k1_n8_p25_uniform"
@@ -122,7 +122,7 @@
       "k": 1,
       "query_name": "diamond_k1",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_05_diamond_k1_n8_p25_mixed.json",
-      "sha256_workload": "b2ac79c774e079c6931e00b2af954701d1d4152c1f686023db63b6f448b8d1e4",
+      "sha256_workload": "17474d367e426fe134f44075b63e5681f89ee5027cf2c5d386205041263c0770",
       "stream_length": 12,
       "total_events": 0,
       "workload_id": "syn_case_05_diamond_k1_n8_p25_mixed"
@@ -137,7 +137,7 @@
       "k": 1,
       "query_name": "diamond_k1",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_06_diamond_k1_n8_p65_uniform.json",
-      "sha256_workload": "0c13d43d98c53ab473354e24d0d7c82a0b796727d13b6dbc563e39f3823b454f",
+      "sha256_workload": "3618e1fa33e4143a24c1ade435857a5a738f448e00ac44ff6e763c5bb74a03fe",
       "stream_length": 12,
       "total_events": 1240,
       "workload_id": "syn_case_06_diamond_k1_n8_p65_uniform"
@@ -152,7 +152,7 @@
       "k": 1,
       "query_name": "diamond_k1",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_07_diamond_k1_n8_p65_mixed.json",
-      "sha256_workload": "83ed0fbdc7cb3d6a9aa11a61ecadaa50b3cc0980e34d9b6fe6eef08d313103b8",
+      "sha256_workload": "400f21a83708866430b8e83cd5297387632d2a1a0d7bde0cbe551a5812c65414",
       "stream_length": 12,
       "total_events": 19,
       "workload_id": "syn_case_07_diamond_k1_n8_p65_mixed"
@@ -167,7 +167,7 @@
       "k": 1,
       "query_name": "k4_k1",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_08_k4_k1_n6_p25_uniform.json",
-      "sha256_workload": "b69bfe32d228767f74288ccf65df999e18b9df39872eda091135b40f090859bf",
+      "sha256_workload": "342a8f9e3b00e020d27e69c64d36099c96812ba5679151bb69197a94106b0824",
       "stream_length": 12,
       "total_events": 0,
       "workload_id": "syn_case_08_k4_k1_n6_p25_uniform"
@@ -182,7 +182,7 @@
       "k": 1,
       "query_name": "k4_k1",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_09_k4_k1_n6_p25_mixed.json",
-      "sha256_workload": "6bd976973f29b3c527df50993c156f79a44b5395b12e3e356da3d43ceb6f948e",
+      "sha256_workload": "3bf5b90b397ee8b7caaad7ae5556cffce0a5e5eff9633481448b6019755b34e1",
       "stream_length": 12,
       "total_events": 4,
       "workload_id": "syn_case_09_k4_k1_n6_p25_mixed"
@@ -197,7 +197,7 @@
       "k": 1,
       "query_name": "k4_k1",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_10_k4_k1_n6_p65_uniform.json",
-      "sha256_workload": "e4e2964018a5d326551c5dca3d55d5ef15821d497576a1ad7c34aa76172419c4",
+      "sha256_workload": "61dca6f21cb3a00c2630cee376d3437fdf23ab41ffb224d01112909e0e497eec",
       "stream_length": 12,
       "total_events": 168,
       "workload_id": "syn_case_10_k4_k1_n6_p65_uniform"
@@ -212,7 +212,7 @@
       "k": 1,
       "query_name": "k4_k1",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_11_k4_k1_n6_p65_mixed.json",
-      "sha256_workload": "9347b050819d6e07e6baf0b6069ced0bc69ac179befd172e065a30097b34de9f",
+      "sha256_workload": "a15bcfab610ae815711fda7eded57031be99d801e5b0cf25484cb99084f805da",
       "stream_length": 12,
       "total_events": 0,
       "workload_id": "syn_case_11_k4_k1_n6_p65_mixed"
@@ -227,7 +227,7 @@
       "k": 1,
       "query_name": "k4_k1",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_12_k4_k1_n8_p25_uniform.json",
-      "sha256_workload": "3765262bc463662330f07cbe8110d839183635f3ec1b52b924d7a99efc773022",
+      "sha256_workload": "cecd7b03a72ddad7df34384d18923081a9eabc738a59ef3ce20220de79093fc3",
       "stream_length": 12,
       "total_events": 24,
       "workload_id": "syn_case_12_k4_k1_n8_p25_uniform"
@@ -242,7 +242,7 @@
       "k": 1,
       "query_name": "k4_k1",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_13_k4_k1_n8_p25_mixed.json",
-      "sha256_workload": "b061555c44c78f638462450366d10689f723f299f64946eff00528a7013a35fb",
+      "sha256_workload": "0f3a57029ca5f24a11b00152613d4f287352426e5485f3bc660e46cd911924ea",
       "stream_length": 12,
       "total_events": 0,
       "workload_id": "syn_case_13_k4_k1_n8_p25_mixed"
@@ -257,7 +257,7 @@
       "k": 1,
       "query_name": "k4_k1",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_14_k4_k1_n8_p65_uniform.json",
-      "sha256_workload": "5cc3f47744ccdcc1f468b65fc302a1545090069aedef0386892472fdb1fff6e4",
+      "sha256_workload": "fc3d35950df89ba859d5c21a99bd659a9ef776b1c0f88762a0d355a71bcab8fb",
       "stream_length": 12,
       "total_events": 312,
       "workload_id": "syn_case_14_k4_k1_n8_p65_uniform"
@@ -272,7 +272,7 @@
       "k": 1,
       "query_name": "k4_k1",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_15_k4_k1_n8_p65_mixed.json",
-      "sha256_workload": "a40012fef62354c7e0e948ffea0a6615e2e54f3b215dc51306c676c0a15ca077",
+      "sha256_workload": "77fc8f45b3524eec3ede767b2dd5528ab7173939ee19308f92064576829ab27e",
       "stream_length": 12,
       "total_events": 0,
       "workload_id": "syn_case_15_k4_k1_n8_p65_mixed"
@@ -287,7 +287,7 @@
       "k": 2,
       "query_name": "k4_k2",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_16_k4_k2_n6_p25_uniform.json",
-      "sha256_workload": "fd4851a3f71473911df67f52b30e417431fbcdbbbead07a63627615da0f8fa8b",
+      "sha256_workload": "61a58864eaeb748ed89f12c482d513d375ac89f7ca8a3270d7e14479e804cdfc",
       "stream_length": 12,
       "total_events": 72,
       "workload_id": "syn_case_16_k4_k2_n6_p25_uniform"
@@ -302,7 +302,7 @@
       "k": 2,
       "query_name": "k4_k2",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_17_k4_k2_n6_p25_mixed.json",
-      "sha256_workload": "d75d754c2fbca7d9b33100df4e1229010dceee3494196fe10842857269ce26db",
+      "sha256_workload": "9ac3c310f648ba7ec7d3337d7a9073f82f792d43867d1897c4595afbd97ea1f5",
       "stream_length": 12,
       "total_events": 0,
       "workload_id": "syn_case_17_k4_k2_n6_p25_mixed"
@@ -317,7 +317,7 @@
       "k": 2,
       "query_name": "k4_k2",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_18_k4_k2_n6_p65_uniform.json",
-      "sha256_workload": "2d9e8bc23fa16359507d25d7eaf1dcec1d2dc793c6b3e0df4b618702beefc678",
+      "sha256_workload": "207b9b581c589a0ffe983f776233b943af3405a37c1cb80b5d13c56e0b81a47c",
       "stream_length": 12,
       "total_events": 552,
       "workload_id": "syn_case_18_k4_k2_n6_p65_uniform"
@@ -332,7 +332,7 @@
       "k": 2,
       "query_name": "k4_k2",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_19_k4_k2_n6_p65_mixed.json",
-      "sha256_workload": "822978b599c8570819cf10e5226ab55ce3aeafd15ef5fc26b45c463fcc8897e4",
+      "sha256_workload": "79015ea63df451bc9ebdbabbaf604e96c24caf8ca46d0a113f25380d954df3f1",
       "stream_length": 12,
       "total_events": 60,
       "workload_id": "syn_case_19_k4_k2_n6_p65_mixed"
@@ -347,7 +347,7 @@
       "k": 2,
       "query_name": "k4_k2",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_20_k4_k2_n8_p25_uniform.json",
-      "sha256_workload": "edfe3aa8251522ca72d745555aea98dc41f59bc826e390cb5149825edf183b29",
+      "sha256_workload": "b4ba5c22924d2de6ef19b0be63409975aef444a96cd5f535c5621202ba03f82c",
       "stream_length": 12,
       "total_events": 144,
       "workload_id": "syn_case_20_k4_k2_n8_p25_uniform"
@@ -362,7 +362,7 @@
       "k": 2,
       "query_name": "k4_k2",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_21_k4_k2_n8_p25_mixed.json",
-      "sha256_workload": "f74a0300b4782b511ccd6fcc4bc3941be4a5de754fa55a82516215f4f5e30fe8",
+      "sha256_workload": "98c0eb6fb5b5e0681fbaefba6fcd31f3b62fa5df2ab6eefa8184f6acfd1d6fd6",
       "stream_length": 12,
       "total_events": 0,
       "workload_id": "syn_case_21_k4_k2_n8_p25_mixed"
@@ -377,7 +377,7 @@
       "k": 2,
       "query_name": "k4_k2",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_22_k4_k2_n8_p65_uniform.json",
-      "sha256_workload": "98ae53434bbdc485765507d27143166dfc56b65568584734939b5e01414e226f",
+      "sha256_workload": "f707bbdb836e57d7e2fd67f0f772fdc8a6e273805778ff7f465d35330c08fb75",
       "stream_length": 12,
       "total_events": 1128,
       "workload_id": "syn_case_22_k4_k2_n8_p65_uniform"
@@ -392,7 +392,7 @@
       "k": 2,
       "query_name": "k4_k2",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_23_k4_k2_n8_p65_mixed.json",
-      "sha256_workload": "5ce32a6aea07c03c5c656a6f5c2f70db6e84923648781479bfc387639f7dd381",
+      "sha256_workload": "fc111ca34ecc2d1e0f432b26992e7ad20cf1daa85e96bc2021a6742adffd9959",
       "stream_length": 12,
       "total_events": 20,
       "workload_id": "syn_case_23_k4_k2_n8_p65_mixed"
@@ -407,7 +407,7 @@
       "k": 0,
       "query_name": "diamond_k0",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_24_diamond_k0_n6_p25_uniform.json",
-      "sha256_workload": "64cea5cc2a740bbd17e059e6640cdad4792a3cd856af8427e89f8a9c3460b0ad",
+      "sha256_workload": "8dd06522548caccb92e3833ddc8ea489ed7e475dda97f401f8f0c21abfb41c05",
       "stream_length": 12,
       "total_events": 12,
       "workload_id": "syn_case_24_diamond_k0_n6_p25_uniform"
@@ -422,7 +422,7 @@
       "k": 0,
       "query_name": "diamond_k0",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_25_diamond_k0_n6_p25_mixed.json",
-      "sha256_workload": "c8488c0505d5f97b4d7be4803436f17964c699297fa176350d235177f1db681c",
+      "sha256_workload": "1b9143b4539869075302159c8c223d66d9564ce271430bf28595d33f8e7a9d96",
       "stream_length": 12,
       "total_events": 0,
       "workload_id": "syn_case_25_diamond_k0_n6_p25_mixed"
@@ -437,7 +437,7 @@
       "k": 0,
       "query_name": "diamond_k0",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_26_diamond_k0_n6_p65_uniform.json",
-      "sha256_workload": "3f9646c2be84b4f573a25c5da1b33a78d04d10e0ba454ecc2d59550a6d06bcb0",
+      "sha256_workload": "317584abdeb6b39e54e52356bf2436c1befdcdd05b6090fc8f50f96acb309c21",
       "stream_length": 12,
       "total_events": 24,
       "workload_id": "syn_case_26_diamond_k0_n6_p65_uniform"
@@ -452,7 +452,7 @@
       "k": 0,
       "query_name": "diamond_k0",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_27_diamond_k0_n6_p65_mixed.json",
-      "sha256_workload": "1c708a4e31a8b9e436180446bb48a12e2f4e21c514a03f6ed0e5eb15f3a35512",
+      "sha256_workload": "bf3e308cbab7d99d96da2ccd06aa1ee807f3be8192451ad2015b7645af96c3b5",
       "stream_length": 12,
       "total_events": 0,
       "workload_id": "syn_case_27_diamond_k0_n6_p65_mixed"
@@ -467,7 +467,7 @@
       "k": 0,
       "query_name": "diamond_k0",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_28_diamond_k0_n8_p25_uniform.json",
-      "sha256_workload": "afad8f3aefead9cc8471cb7d9094f900607dd6ab9562a6937a91e2f89a0262e4",
+      "sha256_workload": "d39fcf7db058ae63c9a544be5b0c3278c76fed08ee5bafeb4c0de50d963c8c74",
       "stream_length": 12,
       "total_events": 64,
       "workload_id": "syn_case_28_diamond_k0_n8_p25_uniform"
@@ -482,7 +482,7 @@
       "k": 0,
       "query_name": "diamond_k0",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_29_diamond_k0_n8_p25_mixed.json",
-      "sha256_workload": "9a50cee32abc8db039d37e630a74bf38a59614b7bdaa49f7daca74550f4d4ef1",
+      "sha256_workload": "7bcbb6942692d7ce5dd8607cf6716076811b0b3465d0a6c7b6df1dbdf31476da",
       "stream_length": 12,
       "total_events": 0,
       "workload_id": "syn_case_29_diamond_k0_n8_p25_mixed"
@@ -497,7 +497,7 @@
       "k": 0,
       "query_name": "diamond_k0",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_30_diamond_k0_n8_p65_uniform.json",
-      "sha256_workload": "e5a09da8c0a4f34825046c5ceba87f8d89206a28fc18ebd323bd8d315b0eb79c",
+      "sha256_workload": "29d80eff3a9717fcae773cc927628426a9fd2fd9c79f3694939a38988f07bd7f",
       "stream_length": 12,
       "total_events": 716,
       "workload_id": "syn_case_30_diamond_k0_n8_p65_uniform"
@@ -512,7 +512,7 @@
       "k": 0,
       "query_name": "diamond_k0",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_31_diamond_k0_n8_p65_mixed.json",
-      "sha256_workload": "27551b2e6b9ecc1e34c5c99a71ef8ab9dd867596368ed3c0b149197186db10e8",
+      "sha256_workload": "9a73a07fef52efb2904f14735acac05ed78bc2480b7f00ff3560eaca164b5be3",
       "stream_length": 12,
       "total_events": 0,
       "workload_id": "syn_case_31_diamond_k0_n8_p65_mixed"
@@ -527,7 +527,7 @@
       "k": 0,
       "query_name": "k4_k0",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_32_k4_k0_n6_p25_uniform.json",
-      "sha256_workload": "2daa78047c3a7291ee9f2736392ab88f624934d27e5d730648e28a9b241fa8c4",
+      "sha256_workload": "108f6bd37dd506df9dfea2a1231fd4ddf81cd99b4e09c89a658e3faf3df85aba",
       "stream_length": 12,
       "total_events": 0,
       "workload_id": "syn_case_32_k4_k0_n6_p25_uniform"
@@ -542,7 +542,7 @@
       "k": 0,
       "query_name": "k4_k0",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_33_k4_k0_n6_p25_mixed.json",
-      "sha256_workload": "318863d5f2f9d7a60aa341ffec180272f141e308e2cd2f7073f50efd181e588c",
+      "sha256_workload": "6c73772a05665631e4cb088a35af30a195367386be80f2dfc5b17720cbb34eef",
       "stream_length": 12,
       "total_events": 0,
       "workload_id": "syn_case_33_k4_k0_n6_p25_mixed"
@@ -557,7 +557,7 @@
       "k": 0,
       "query_name": "k4_k0",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_34_k4_k0_n6_p65_uniform.json",
-      "sha256_workload": "d3fd0397174c4db23869b1bee63fc7b110b342c7d8e20ca0cfe2c712a4e01caa",
+      "sha256_workload": "3134dc96e8e71d7c6cedb574852a1094b1578dab6aaa0d519a9ed45487abbc44",
       "stream_length": 12,
       "total_events": 72,
       "workload_id": "syn_case_34_k4_k0_n6_p65_uniform"
@@ -572,7 +572,7 @@
       "k": 0,
       "query_name": "k4_k0",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_35_k4_k0_n6_p65_mixed.json",
-      "sha256_workload": "fa193abc73dcd3a44f2cbcdd69452e236423c806846a0cb14ac39654987ee2fe",
+      "sha256_workload": "d9d2b9ed806836aaa055cf9630a599946e4dc001fa1fe9308ed62527919efc26",
       "stream_length": 12,
       "total_events": 0,
       "workload_id": "syn_case_35_k4_k0_n6_p65_mixed"
@@ -587,7 +587,7 @@
       "k": 0,
       "query_name": "k4_k0",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_36_k4_k0_n8_p25_uniform.json",
-      "sha256_workload": "350ee125d2222a0009ec07fdbd1cf5e05557658be8466e32d2fcac2aacafa0c6",
+      "sha256_workload": "7314ff66ce14ae4e0241b5b85142dfc49fd1b71a8066d68bf93258555d940f87",
       "stream_length": 12,
       "total_events": 0,
       "workload_id": "syn_case_36_k4_k0_n8_p25_uniform"
@@ -602,7 +602,7 @@
       "k": 0,
       "query_name": "k4_k0",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_37_k4_k0_n8_p25_mixed.json",
-      "sha256_workload": "f15e36049687ef55494fa0f131f91455cd00af7ce3e1496588e091588475a56f",
+      "sha256_workload": "c4cc3bd2ef2d726747f94c89d48590eb935dcd2810979ac83760f56cbb4c3186",
       "stream_length": 12,
       "total_events": 0,
       "workload_id": "syn_case_37_k4_k0_n8_p25_mixed"
@@ -617,7 +617,7 @@
       "k": 0,
       "query_name": "k4_k0",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_38_k4_k0_n8_p65_uniform.json",
-      "sha256_workload": "a8be291ad96200fb4e71a4f9617a3e016241b0d78483d079ffe24c851df67e2a",
+      "sha256_workload": "f01f1db0eeef8234a7cbe09b69f8d7a500d8589833f745e2c48593b7943f7ee3",
       "stream_length": 12,
       "total_events": 720,
       "workload_id": "syn_case_38_k4_k0_n8_p65_uniform"
@@ -632,7 +632,7 @@
       "k": 0,
       "query_name": "k4_k0",
       "relative_path": "tests/fixtures/dstar03/workloads/syn_case_39_k4_k0_n8_p65_mixed.json",
-      "sha256_workload": "4a15d91b1beac8594a60883221d1423a7e4a60defd30ee53d2cea55daa01034a",
+      "sha256_workload": "22fa5df536bac7db6b850abd998575fc82f4f14a38c0e53b8900f506e20c4810",
       "stream_length": 12,
       "total_events": 0,
       "workload_id": "syn_case_39_k4_k0_n8_p65_mixed"
@@ -647,7 +647,7 @@
       "k": 1,
       "query_name": "diamond_k1",
       "relative_path": "tests/fixtures/dstar03/workloads/witness_01_diamond_k1.json",
-      "sha256_workload": "23db6616c8afdcd0031c062045e0dbc189f5eebadcc0902399ebc87a6ac66766",
+      "sha256_workload": "b175921c395a7a01c41d0ab9ab96a03594bbea67af6ba2a49e8589e6805633e3",
       "stream_length": 4,
       "total_events": 2,
       "workload_id": "witness_01_diamond_k1"
@@ -662,7 +662,7 @@
       "k": 1,
       "query_name": "k4_k1",
       "relative_path": "tests/fixtures/dstar03/workloads/witness_02_k4_k1.json",
-      "sha256_workload": "7c0a707384c2bd442b436dbf4ec46f8268ae5141596c8c0e828e24c73127f93b",
+      "sha256_workload": "fac925df843d3c07dfc166895908de4a8226825fd8239226b24390dd52515311",
       "stream_length": 4,
       "total_events": 2,
       "workload_id": "witness_02_k4_k1"
@@ -677,7 +677,7 @@
       "k": 2,
       "query_name": "k4_k2",
       "relative_path": "tests/fixtures/dstar03/workloads/witness_03_k4_k2.json",
-      "sha256_workload": "a820a79d80c8a9e56e47d71f5ddfd5efa241da9337d85a6ba790febe2919e617",
+      "sha256_workload": "475d8f5ee7088da88a01778ab6b18e5500aac4a73c0c1437e31b7471eacf05f1",
       "stream_length": 4,
       "total_events": 2,
       "workload_id": "witness_03_k4_k2"
@@ -692,7 +692,7 @@
       "k": 0,
       "query_name": "diamond_k0",
       "relative_path": "tests/fixtures/dstar03/workloads/witness_04_diamond_k0.json",
-      "sha256_workload": "9159d91845ccbc81249ad454d93a1864c1fe69fc8428e4d099b70d02c676f82a",
+      "sha256_workload": "fe611f50305499a14222aaef48a5eac1bb914ebfa3f74a958fcce99104d4a255",
       "stream_length": 4,
       "total_events": 2,
       "workload_id": "witness_04_diamond_k0"
@@ -707,7 +707,7 @@
       "k": 0,
       "query_name": "k4_k0",
       "relative_path": "tests/fixtures/dstar03/workloads/witness_05_k4_k0.json",
-      "sha256_workload": "b422bfc1ebe95bca94819302f8d8ef53996f35f5201a34497748b098200adc89",
+      "sha256_workload": "fe5b51132fd27e401a5d17b9bb154dc29c9b862e89fec9cd7ebca94029f6c6b9",
       "stream_length": 4,
       "total_events": 2,
       "workload_id": "witness_05_k4_k0"
@@ -722,7 +722,7 @@
       "k": 1,
       "query_name": "diamond_k1",
       "relative_path": "tests/fixtures/dstar03/workloads/netflow_s20261118_insert_diamond_k1.json",
-      "sha256_workload": "e3495e2e70e13414a211d36d29ac3f00834168916783d195626c5850cb78dda9",
+      "sha256_workload": "496a06c7fab341358365c035501c99542dffbf15e307d7e77a9a7d2033c93dc5",
       "stream_length": 1,
       "total_events": 0,
       "workload_id": "netflow_s20261118_insert_diamond_k1"
@@ -737,7 +737,7 @@
       "k": 1,
       "query_name": "k4_k1",
       "relative_path": "tests/fixtures/dstar03/workloads/netflow_s20261118_insert_k4_k1.json",
-      "sha256_workload": "b3dc9a5f8a223236b5e01a643edde915182042549ac141e6c6d5d51e253e7447",
+      "sha256_workload": "865e5d72fabfa1d0972bda75cb89f85cedbc8be775a863434ecf7b5f6f07cb4d",
       "stream_length": 1,
       "total_events": 0,
       "workload_id": "netflow_s20261118_insert_k4_k1"
@@ -752,7 +752,7 @@
       "k": 2,
       "query_name": "k4_k2",
       "relative_path": "tests/fixtures/dstar03/workloads/netflow_s20261118_insert_k4_k2.json",
-      "sha256_workload": "986c66b40b4936ddc6d39ce23e45c223189532be7f8be36cffcf399315fbced5",
+      "sha256_workload": "183eaa6961804182961d899e74c3eac5b29810012d695df081133224dc14da31",
       "stream_length": 1,
       "total_events": 0,
       "workload_id": "netflow_s20261118_insert_k4_k2"
@@ -767,7 +767,7 @@
       "k": 0,
       "query_name": "diamond_k0",
       "relative_path": "tests/fixtures/dstar03/workloads/netflow_s20261118_insert_diamond_k0.json",
-      "sha256_workload": "bc08fc351228dfb89afbc3b2ccb629924b29c660b42e9db9779e00da4c09128b",
+      "sha256_workload": "b95752df66f4f6fea437cd3106a85965e3d588e7bc7938f9868d1ab4129e4883",
       "stream_length": 1,
       "total_events": 0,
       "workload_id": "netflow_s20261118_insert_diamond_k0"
@@ -782,7 +782,7 @@
       "k": 0,
       "query_name": "k4_k0",
       "relative_path": "tests/fixtures/dstar03/workloads/netflow_s20261118_insert_k4_k0.json",
-      "sha256_workload": "f490d02e176801bb264c070cc5905fea9523e556106a2934f28107b49b375e21",
+      "sha256_workload": "c689cb880625b1e99a2da994ee0754ab72f72394c0acb27c9b651b52a5c3b082",
       "stream_length": 1,
       "total_events": 0,
       "workload_id": "netflow_s20261118_insert_k4_k0"
@@ -797,7 +797,7 @@
       "k": 1,
       "query_name": "diamond_k1",
       "relative_path": "tests/fixtures/dstar03/workloads/netflow_s20261118_delete_diamond_k1.json",
-      "sha256_workload": "d55c5bf9f2f1fde9398b7463e4cfaa6c5ddf1c6ac2f479b19252aba5aa3246d7",
+      "sha256_workload": "d2f3ca325789b8f330c5720a21bff63235b7ac0cc267f360469b71772d76f68c",
       "stream_length": 1,
       "total_events": 0,
       "workload_id": "netflow_s20261118_delete_diamond_k1"
@@ -812,7 +812,7 @@
       "k": 1,
       "query_name": "k4_k1",
       "relative_path": "tests/fixtures/dstar03/workloads/netflow_s20261118_delete_k4_k1.json",
-      "sha256_workload": "71a7d185b63ba99cf1ee2f35b875dcff8a37d36697189b0898da38fe99def9ea",
+      "sha256_workload": "6404624042ce06d5e5f3054ab6a61d6c5f57033e88166d62fea0136e41926ffe",
       "stream_length": 1,
       "total_events": 0,
       "workload_id": "netflow_s20261118_delete_k4_k1"
@@ -827,7 +827,7 @@
       "k": 2,
       "query_name": "k4_k2",
       "relative_path": "tests/fixtures/dstar03/workloads/netflow_s20261118_delete_k4_k2.json",
-      "sha256_workload": "39c50f3b3dee24a1ee6ddd307fee2c3435a87402cd245005a902c4ed1258cd67",
+      "sha256_workload": "97c1ed7c845ed7ccb12eb0201be7253de51d07a2de2b34d3b18a679e4bd99ab6",
       "stream_length": 1,
       "total_events": 0,
       "workload_id": "netflow_s20261118_delete_k4_k2"
@@ -842,7 +842,7 @@
       "k": 0,
       "query_name": "diamond_k0",
       "relative_path": "tests/fixtures/dstar03/workloads/netflow_s20261118_delete_diamond_k0.json",
-      "sha256_workload": "0779a23162244c19c937847f4ff40773d4b5063e93d55766dd8e12243a9cb66b",
+      "sha256_workload": "825385e396a5a75f22e92e04432d54d1b8757924bf53f903f86943db8223fe19",
       "stream_length": 1,
       "total_events": 0,
       "workload_id": "netflow_s20261118_delete_diamond_k0"
@@ -857,7 +857,7 @@
       "k": 0,
       "query_name": "k4_k0",
       "relative_path": "tests/fixtures/dstar03/workloads/netflow_s20261118_delete_k4_k0.json",
-      "sha256_workload": "50096faf465f703e8e0b0d144f71a1185934e0c6895a3f37899e0a662f8f04ed",
+      "sha256_workload": "06f1c2f2cc360f1d9e1e4fd63f7933458babe735c9e8d269329ffa71b7f0e72f",
       "stream_length": 1,
       "total_events": 0,
       "workload_id": "netflow_s20261118_delete_k4_k0"
@@ -872,7 +872,7 @@
       "k": 1,
       "query_name": "diamond_k1",
       "relative_path": "tests/fixtures/dstar03/workloads/netflow_s20261119_insert_diamond_k1.json",
-      "sha256_workload": "081e23c63ecdc89c11b00419b3af08b4c0bf76fd8867af55bbb622cf3c48fbad",
+      "sha256_workload": "ae04725b3196346746e3140c992c2fd5704cd485e62f8c5ff2b84ce409b60acb",
       "stream_length": 1,
       "total_events": 0,
       "workload_id": "netflow_s20261119_insert_diamond_k1"
@@ -887,7 +887,7 @@
       "k": 1,
       "query_name": "k4_k1",
       "relative_path": "tests/fixtures/dstar03/workloads/netflow_s20261119_insert_k4_k1.json",
-      "sha256_workload": "cdd91aa42c8e647f6ad8a24cf504c489506cfbbbf71bbabf61c7356ecdd42960",
+      "sha256_workload": "d18c6b25719d6d0185b03dedf310a0ac34e4e58e887c11f8bc429fad9610fe55",
       "stream_length": 1,
       "total_events": 0,
       "workload_id": "netflow_s20261119_insert_k4_k1"
@@ -902,7 +902,7 @@
       "k": 2,
       "query_name": "k4_k2",
       "relative_path": "tests/fixtures/dstar03/workloads/netflow_s20261119_insert_k4_k2.json",
-      "sha256_workload": "eddc47e8ee85ff433f6d3bf7d5df8e2ba0ba25225b048ce2c3d08cb78d645271",
+      "sha256_workload": "dd487dc5b2469e2179cc12ad25bbc3028582cceeb88d38da3a5be22c03a7517d",
       "stream_length": 1,
       "total_events": 0,
       "workload_id": "netflow_s20261119_insert_k4_k2"
@@ -917,7 +917,7 @@
       "k": 0,
       "query_name": "diamond_k0",
       "relative_path": "tests/fixtures/dstar03/workloads/netflow_s20261119_insert_diamond_k0.json",
-      "sha256_workload": "a80229d477e66b7d97cdf799bbfe060fe3b0434356c2ce58ed7a9b2f68d52d89",
+      "sha256_workload": "01bceab059c09f9e09d6cf38833f3c95742cd6b7f9c176cd8ebe8c2fcedc9f30",
       "stream_length": 1,
       "total_events": 0,
       "workload_id": "netflow_s20261119_insert_diamond_k0"
@@ -932,7 +932,7 @@
       "k": 0,
       "query_name": "k4_k0",
       "relative_path": "tests/fixtures/dstar03/workloads/netflow_s20261119_insert_k4_k0.json",
-      "sha256_workload": "f48eb26b504eecb455fd1d2c500cbcf7cb0fb67d00e6b0b93bb7ef50b56c41c7",
+      "sha256_workload": "a7e9fedab977ab32b35077dbf52dd266a5b81121c1c24dbaf1492c3cc2e00064",
       "stream_length": 1,
       "total_events": 0,
       "workload_id": "netflow_s20261119_insert_k4_k0"
@@ -947,7 +947,7 @@
       "k": 1,
       "query_name": "diamond_k1",
       "relative_path": "tests/fixtures/dstar03/workloads/netflow_s20261119_delete_diamond_k1.json",
-      "sha256_workload": "f0015e26d545829f8d3e9e8a2e38f48ef7d08a103c837c23562ef21cf1dc7021",
+      "sha256_workload": "c35b5c36687b3a3eab4996b6e9f18d351238e9faf3eb222a29cbf909071352e2",
       "stream_length": 1,
       "total_events": 0,
       "workload_id": "netflow_s20261119_delete_diamond_k1"
@@ -962,7 +962,7 @@
       "k": 1,
       "query_name": "k4_k1",
       "relative_path": "tests/fixtures/dstar03/workloads/netflow_s20261119_delete_k4_k1.json",
-      "sha256_workload": "bc1148908cddfe5bc273d410d0103dc32ab1d2ab8cee0322f3be56f0b13572e6",
+      "sha256_workload": "c1bebeb034f582d6733f1fd58c9deb82f1869b7c5ef75957929f4654a635847c",
       "stream_length": 1,
       "total_events": 0,
       "workload_id": "netflow_s20261119_delete_k4_k1"
@@ -977,7 +977,7 @@
       "k": 2,
       "query_name": "k4_k2",
       "relative_path": "tests/fixtures/dstar03/workloads/netflow_s20261119_delete_k4_k2.json",
-      "sha256_workload": "487367888f826a55257d5e81e8e4022dbd02471ceff803013fe350bdf8a1b85a",
+      "sha256_workload": "4ee7f5351cd6996c8284bee35cac5be647d5e785d62a11110498204c30a51f2b",
       "stream_length": 1,
       "total_events": 0,
       "workload_id": "netflow_s20261119_delete_k4_k2"
@@ -992,7 +992,7 @@
       "k": 0,
       "query_name": "diamond_k0",
       "relative_path": "tests/fixtures/dstar03/workloads/netflow_s20261119_delete_diamond_k0.json",
-      "sha256_workload": "9b1491c921f6e8dc632caaa2c4d782b75eb464c5bf2c28f2ee82365bd07119a7",
+      "sha256_workload": "781b645f240cc2f2e7032bc7a8addc706cb28497cf2e280e3c78ff72c61ca990",
       "stream_length": 1,
       "total_events": 0,
       "workload_id": "netflow_s20261119_delete_diamond_k0"
@@ -1007,7 +1007,7 @@
       "k": 0,
       "query_name": "k4_k0",
       "relative_path": "tests/fixtures/dstar03/workloads/netflow_s20261119_delete_k4_k0.json",
-      "sha256_workload": "5972475787d8a16c4d6fac2f93f531719961dc2429cc624c84278479915cd35e",
+      "sha256_workload": "fd13a99b24f9f7d0274052dc185431103c9f913af11852d16dac9964d1b0e1d5",
       "stream_length": 1,
       "total_events": 0,
       "workload_id": "netflow_s20261119_delete_k4_k0"

@@ -118,20 +118,26 @@
   ],
   "sha256_initial_graph": "48127606d709320f5677a51da7b3851f2977f7767dd240f61fa922bf8b2db51f",
   "sha256_query": "854af7b9c868734f336e373f28c11ca6c517bba474ef7bdabb6d8eba55c1ed56",
-  "sha256_stream": "24d3471c2d4a42b0c73858b9a63a109e392e0187c96a8dbbc218d0c869019cda",
-  "sha256_workload": "081e23c63ecdc89c11b00419b3af08b4c0bf76fd8867af55bbb622cf3c48fbad",
+  "sha256_stream": "15b21ebb7ee18a9bb15c3287e9ca2de4d8a285772b93f1f83d43f887d66bdb12",
+  "sha256_workload": "ae04725b3196346746e3140c992c2fd5704cd485e62f8c5ff2b84ce409b60acb",
   "stream": [
     {
       "edge": [
         1723290,
         3066455
       ],
+      "is_target": true,
       "label": 2,
-      "operation": "INSERT"
+      "operation": "INSERT",
+      "physical_line_number": 12,
+      "raw_line": "e 1723290 3066455 2",
+      "source_op_index": 11,
+      "step": 0
     }
   ],
   "target_label": 2,
   "target_operation": "INSERT",
+  "target_physical_line_number": 12,
   "target_raw_line": "e 1723290 3066455 2",
   "target_source_op_index": 11,
   "workload_id": "netflow_s20261119_insert_diamond_k1"

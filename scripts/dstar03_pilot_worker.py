@@ -1,24 +1,29 @@
 #!/usr/bin/env python3
 """
-scripts/dstar03_pilot_worker.py — Isolated Execution Worker for DSTAR-03 Pilot.
+scripts/dstar03_pilot_worker.py — Isolated Execution Worker for DSTAR-03 Pilot (v2).
 
 Executes a single repetition of M1 or M2 on a given workload:
-1. Loads workload JSON.
-2. Validates run contract.
+1. Loads workload JSON and validates schema, manifest binding, and component hashes.
+2. Mandatory M0 verification check: rejects missing or truncated M0 ground truth.
 3. Performs untimed warm-up replay on disposable state.
 4. Resets to fresh independent state and new engine instance.
-5. Performs single measured replay timing each engine.process_update call with perf_counter_ns.
-6. Verifies full tuple array canonical order, uniqueness, and expected matches outside timer.
+5. Performs single measured replay timing strictly engine.process_update with perf_counter_ns.
+6. Verifies outside the timer:
+   - Resulting graph edge state matches applied update.
+   - Entered and exited tuple arrays are strictly canonical sorted and deduplicated.
+   - Output tuples strictly match independent M0 ground truth step-for-step.
 7. Measures peak RSS and worker wall time.
-8. Emits structured JSON result to stdout or file.
+8. Emits structured JSON result to stdout and/or output file.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import resource
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -45,6 +50,39 @@ from dstar_m1_enum import M1EnumEngine
 from dstar_m2_event import M2EventEngine
 
 
+def canonical_json_bytes(data: Any) -> bytes:
+    """Produces sorted-keys canonical JSON bytes."""
+    return json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+
+
+def sha256_of_obj(data: Any) -> str:
+    """Computes SHA-256 hex digest of canonical JSON serialization."""
+    return hashlib.sha256(canonical_json_bytes(data)).hexdigest()
+
+
+def compute_workload_fingerprint(workload: Dict[str, Any]) -> str:
+    """Computes SHA-256 fingerprint of workload dictionary excluding self-hash field."""
+    obj_for_hash = {k: v for k, v in workload.items() if k != "sha256_workload"}
+    return sha256_of_obj(obj_for_hash)
+
+
+def get_git_provenance() -> Dict[str, Any]:
+    """Retrieves current Git HEAD and dirty status."""
+    prov: Dict[str, Any] = {"commit": "UNKNOWN", "dirty": False}
+    try:
+        commit = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=str(REPO_ROOT), text=True
+        ).strip()
+        prov["commit"] = commit
+        status_out = subprocess.check_output(
+            ["git", "status", "--porcelain"], cwd=str(REPO_ROOT), text=True
+        ).strip()
+        prov["dirty"] = bool(status_out)
+    except Exception:
+        pass
+    return prov
+
+
 def run_worker(
     workload_path: Path,
     engine_name: str,
@@ -52,6 +90,7 @@ def run_worker(
     output_path: Optional[Path] = None,
 ) -> Dict[str, Any]:
     worker_t0 = time.perf_counter_ns()
+    git_prov = get_git_provenance()
 
     # 1. Load workload
     if not workload_path.exists():
@@ -60,6 +99,7 @@ def run_worker(
             "status": "INPUT_INVALID",
             "error": f"Workload file not found: {workload_path}",
             "worker_wall_ns": time.perf_counter_ns() - worker_t0,
+            "git_provenance": git_prov,
         }
 
     try:
@@ -71,13 +111,98 @@ def run_worker(
             "status": "INPUT_INVALID",
             "error": f"Failed to parse workload JSON: {exc}",
             "worker_wall_ns": time.perf_counter_ns() - worker_t0,
+            "git_provenance": git_prov,
         }
 
-    workload_id = workload["workload_id"]
-    k = workload["k"]
-    q_dict = workload["query"]
-    g0_dict = workload["initial_graph"]
-    stream_dicts = workload["stream"]
+    # 2. Schema and Component Hash Validation
+    workload_id = workload.get("workload_id", "UNKNOWN")
+    k = workload.get("k")
+    q_dict = workload.get("query")
+    g0_dict = workload.get("initial_graph")
+    stream_dicts = workload.get("stream")
+
+    if k is None or q_dict is None or g0_dict is None or stream_dicts is None:
+        return {
+            "attempt_id": attempt_id,
+            "workload_id": workload_id,
+            "status": "INPUT_INVALID",
+            "error": "Workload missing required top-level fields (k, query, initial_graph, stream)",
+            "worker_wall_ns": time.perf_counter_ns() - worker_t0,
+            "git_provenance": git_prov,
+        }
+
+    # Check component hashes if declared
+    declared_q_sha = workload.get("sha256_query")
+    if declared_q_sha and declared_q_sha != sha256_of_obj(q_dict):
+        return {
+            "attempt_id": attempt_id,
+            "workload_id": workload_id,
+            "status": "INPUT_INVALID",
+            "error": f"Query component hash mismatch: declared {declared_q_sha} != actual {sha256_of_obj(q_dict)}",
+            "worker_wall_ns": time.perf_counter_ns() - worker_t0,
+            "git_provenance": git_prov,
+        }
+
+    declared_g0_sha = workload.get("sha256_initial_graph")
+    if declared_g0_sha and declared_g0_sha != sha256_of_obj(g0_dict):
+        return {
+            "attempt_id": attempt_id,
+            "workload_id": workload_id,
+            "status": "INPUT_INVALID",
+            "error": f"Initial graph component hash mismatch: declared {declared_g0_sha} != actual {sha256_of_obj(g0_dict)}",
+            "worker_wall_ns": time.perf_counter_ns() - worker_t0,
+            "git_provenance": git_prov,
+        }
+
+    declared_s_sha = workload.get("sha256_stream")
+    if declared_s_sha and declared_s_sha != sha256_of_obj(stream_dicts):
+        return {
+            "attempt_id": attempt_id,
+            "workload_id": workload_id,
+            "status": "INPUT_INVALID",
+            "error": f"Stream component hash mismatch: declared {declared_s_sha} != actual {sha256_of_obj(stream_dicts)}",
+            "worker_wall_ns": time.perf_counter_ns() - worker_t0,
+            "git_provenance": git_prov,
+        }
+
+    declared_w_sha = workload.get("sha256_workload")
+    if declared_w_sha and declared_w_sha != compute_workload_fingerprint(workload):
+        return {
+            "attempt_id": attempt_id,
+            "workload_id": workload_id,
+            "status": "INPUT_INVALID",
+            "error": f"Workload fingerprint mismatch: declared {declared_w_sha} != actual {compute_workload_fingerprint(workload)}",
+            "worker_wall_ns": time.perf_counter_ns() - worker_t0,
+            "git_provenance": git_prov,
+        }
+
+    # 3. Mandatory M0 Ground Truth Verification Check (F02)
+    m0_info = workload.get("m0_verification")
+    if not m0_info or not isinstance(m0_info, dict) or not m0_info.get("verified"):
+        return {
+            "attempt_id": attempt_id,
+            "workload_id": workload_id,
+            "engine": engine_name,
+            "status": "CORRECTNESS_FAIL",
+            "error": "Mandatory M0 verification missing or unverified in workload fixture",
+            "worker_wall_ns": time.perf_counter_ns() - worker_t0,
+            "git_provenance": git_prov,
+        }
+
+    expected_m0_steps = m0_info.get("steps")
+    if not isinstance(expected_m0_steps, list) or len(expected_m0_steps) != len(stream_dicts):
+        return {
+            "attempt_id": attempt_id,
+            "workload_id": workload_id,
+            "engine": engine_name,
+            "status": "CORRECTNESS_FAIL",
+            "error": (
+                f"M0 expected steps count ({len(expected_m0_steps) if isinstance(expected_m0_steps, list) else 0}) "
+                f"does not match stream length ({len(stream_dicts)})"
+            ),
+            "worker_wall_ns": time.perf_counter_ns() - worker_t0,
+            "git_provenance": git_prov,
+        }
 
     try:
         q = DStarEventGraph.from_dict(q_dict)
@@ -97,7 +222,31 @@ def run_worker(
             "status": "INPUT_INVALID",
             "error": f"Failed to construct graphs/updates: {exc}",
             "worker_wall_ns": time.perf_counter_ns() - worker_t0,
+            "git_provenance": git_prov,
         }
+
+    # Validate M0 steps metadata against stream updates
+    for step_idx, (exp_s, upd) in enumerate(zip(expected_m0_steps, stream)):
+        if exp_s.get("step") != step_idx:
+            return {
+                "attempt_id": attempt_id,
+                "workload_id": workload_id,
+                "engine": engine_name,
+                "status": "CORRECTNESS_FAIL",
+                "error": f"M0 step index mismatch at step {step_idx}: expected {exp_s.get('step')}",
+                "worker_wall_ns": time.perf_counter_ns() - worker_t0,
+                "git_provenance": git_prov,
+            }
+        if exp_s.get("operation") != upd.operation or tuple(exp_s.get("edge", ())) != upd.edge or exp_s.get("label") != upd.label:
+            return {
+                "attempt_id": attempt_id,
+                "workload_id": workload_id,
+                "engine": engine_name,
+                "status": "CORRECTNESS_FAIL",
+                "error": f"M0 step operation mismatch at step {step_idx}: {exp_s} != {upd}",
+                "worker_wall_ns": time.perf_counter_ns() - worker_t0,
+                "git_provenance": git_prov,
+            }
 
     limits = {
         "max_data_vertices": DEFAULT_MAX_DATA_VERTICES,
@@ -118,6 +267,7 @@ def run_worker(
             "status": "INPUT_INVALID",
             "error": f"Run contract violation: {exc}",
             "worker_wall_ns": time.perf_counter_ns() - worker_t0,
+            "git_provenance": git_prov,
         }
 
     def create_engine() -> Any:
@@ -128,7 +278,7 @@ def run_worker(
         else:
             raise ValueError(f"Unknown engine: {engine_name}")
 
-    # 2. Untimed Warm-up Replay on disposable G0 clone
+    # 4. Untimed Warm-up Replay on disposable G0 clone
     warmup_status = "NOT_RUN"
     try:
         warmup_engine = create_engine()
@@ -147,16 +297,17 @@ def run_worker(
             "error": f"Warmup replay failed: {exc}",
             "warmup_status": warmup_status,
             "worker_wall_ns": time.perf_counter_ns() - worker_t0,
+            "git_provenance": git_prov,
         }
 
-    # 3. State Reset & Fresh Engine Construction
+    # 5. State Reset & Fresh Engine Construction
     engine = create_engine()
     g_measured = g0.clone()
 
-    # 4. Measured Replay
+    # 6. Measured Replay
     per_step_records: List[Dict[str, Any]] = []
     stream_engine_ns = 0
-    total_work_units = 0
+    total_budget_units = 0
     total_entered = 0
     total_exited = 0
 
@@ -173,9 +324,6 @@ def run_worker(
         "missing_branches": 0,
         "commitment_checks": 0,
     }
-
-    # Expected events from M0 preflight if embedded in workload
-    expected_m0_steps = workload.get("m0_verification", {}).get("steps", [])
 
     for step_idx, upd in enumerate(stream):
         # Precise boundary around process_update call
@@ -195,6 +343,7 @@ def run_worker(
                 "warmup_status": warmup_status,
                 "stream_engine_ns": stream_engine_ns,
                 "worker_wall_ns": time.perf_counter_ns() - worker_t0,
+                "git_provenance": git_prov,
             }
         t1 = time.perf_counter_ns()
         step_ns = t1 - t0
@@ -206,12 +355,12 @@ def run_worker(
         exi = res.exited
         total_entered += len(ent)
         total_exited += len(exi)
-        step_work_units = (
+        step_budget_units = (
             res.counters.candidate_evaluations
             + res.counters.edge_decisions
             + res.counters.variants_started
         )
-        total_work_units += step_work_units
+        total_budget_units += step_budget_units
 
         # Canonical sort and zero duplicate check
         ent_set = set(ent)
@@ -224,6 +373,7 @@ def run_worker(
                 "status": "CORRECTNESS_FAIL",
                 "error": f"Duplicate entered tuples detected at step {step_idx}",
                 "worker_wall_ns": time.perf_counter_ns() - worker_t0,
+                "git_provenance": git_prov,
             }
         if len(exi) != len(exi_set):
             return {
@@ -233,6 +383,7 @@ def run_worker(
                 "status": "CORRECTNESS_FAIL",
                 "error": f"Duplicate exited tuples detected at step {step_idx}",
                 "worker_wall_ns": time.perf_counter_ns() - worker_t0,
+                "git_provenance": git_prov,
             }
         if ent != sorted(ent):
             return {
@@ -242,6 +393,7 @@ def run_worker(
                 "status": "CORRECTNESS_FAIL",
                 "error": f"Entered tuples not in canonical sorted order at step {step_idx}",
                 "worker_wall_ns": time.perf_counter_ns() - worker_t0,
+                "git_provenance": git_prov,
             }
         if exi != sorted(exi):
             return {
@@ -251,25 +403,52 @@ def run_worker(
                 "status": "CORRECTNESS_FAIL",
                 "error": f"Exited tuples not in canonical sorted order at step {step_idx}",
                 "worker_wall_ns": time.perf_counter_ns() - worker_t0,
+                "git_provenance": git_prov,
             }
 
-        # Compare against M0 expected if available
-        if step_idx < len(expected_m0_steps):
-            exp_step = expected_m0_steps[step_idx]
-            exp_ent = [tuple(t) for t in exp_step.get("entered", [])]
-            exp_exi = [tuple(t) for t in exp_step.get("exited", [])]
-            if ent != exp_ent or exi != exp_exi:
+        # Verify against independent M0 ground truth step
+        exp_step = expected_m0_steps[step_idx]
+        exp_ent = [tuple(t) for t in exp_step.get("entered", [])]
+        exp_exi = [tuple(t) for t in exp_step.get("exited", [])]
+        if ent != exp_ent or exi != exp_exi:
+            return {
+                "attempt_id": attempt_id,
+                "workload_id": workload_id,
+                "engine": engine_name,
+                "status": "CORRECTNESS_FAIL",
+                "error": (
+                    f"M0 ground truth mismatch at step {step_idx}: "
+                    f"engine entered={ent}, m0={exp_ent}; "
+                    f"engine exited={exi}, m0={exp_exi}"
+                ),
+                "failing_step": step_idx,
+                "worker_wall_ns": time.perf_counter_ns() - worker_t0,
+                "git_provenance": git_prov,
+            }
+
+        # Verify resulting graph edge state outside timer
+        u_edge = tuple(sorted(upd.edge))
+        if upd.operation == "INSERT":
+            if u_edge not in g_measured.edges or g_measured.edges[u_edge] != upd.label:
                 return {
                     "attempt_id": attempt_id,
                     "workload_id": workload_id,
                     "engine": engine_name,
                     "status": "CORRECTNESS_FAIL",
-                    "error": (
-                        f"M0 ground truth mismatch at step {step_idx}: "
-                        f"engine entered={ent}, m0={exp_ent}; "
-                        f"engine exited={exi}, m0={exp_exi}"
-                    ),
+                    "error": f"Graph state mismatch after INSERT at step {step_idx}: edge {u_edge} not present with label {upd.label}",
                     "worker_wall_ns": time.perf_counter_ns() - worker_t0,
+                    "git_provenance": git_prov,
+                }
+        elif upd.operation == "DELETE":
+            if u_edge in g_measured.edges:
+                return {
+                    "attempt_id": attempt_id,
+                    "workload_id": workload_id,
+                    "engine": engine_name,
+                    "status": "CORRECTNESS_FAIL",
+                    "error": f"Graph state mismatch after DELETE at step {step_idx}: edge {u_edge} still present",
+                    "worker_wall_ns": time.perf_counter_ns() - worker_t0,
+                    "git_provenance": git_prov,
                 }
 
         # Accumulate counters
@@ -292,7 +471,7 @@ def run_worker(
             "edge": list(upd.edge),
             "label": upd.label,
             "step_ns": step_ns,
-            "work_units": step_work_units,
+            "budget_units": step_budget_units,
             "entered_count": len(ent),
             "exited_count": len(exi),
         })
@@ -324,14 +503,15 @@ def run_worker(
         "total_entered": total_entered,
         "total_exited": total_exited,
         "total_events": total_events,
-        "total_work_units": total_work_units,
+        "total_budget_units": total_budget_units,
         "counters": agg_counters,
         "steps": per_step_records,
+        "git_provenance": git_prov,
     }
 
     if output_path:
         with output_path.open("w", encoding="utf-8") as f:
-            f.write(json.dumps(result_payload, indent=2))
+            f.write(json.dumps(result_payload, indent=2) + "\n")
 
     return result_payload
 
@@ -351,8 +531,8 @@ def main() -> None:
         output_path=args.output_json,
     )
 
-    if not args.output_json:
-        print(json.dumps(result))
+    # Always print JSON to stdout so supervisor can parse even if exit code is non-zero
+    print(json.dumps(result))
 
     sys.exit(0 if result.get("status") in ("SUCCESS_NONEMPTY", "ZERO_RESULT_COMPLETE") else 1)
 

@@ -1,8 +1,8 @@
 # DSTAR-03 S4 Pilot Protocol: Paired M1/M2 Exploratory Evaluation
 
-**Version:** 1.0.0  
-**Issue:** [#26](https://github.com/iamqthanq/Seminar_RapidFlow/issues/26)  
-**Semantics Specification:** D* Semantics (S2, Simple Undirected Graphs, Edge-Defect $k < \lambda(Q)$, Full Tuple Output)  
+**Version:** 2.0.0
+**Issue:** [#26](https://github.com/iamqthanq/Seminar_RapidFlow/issues/26)
+**Semantics Specification:** D* Semantics (S2, Simple Undirected Graphs, Edge-Defect $k < \lambda(Q)$, Full Tuple Output)
 **Target Output Mode:** `COLLECT_VERIFY_SORT_V1` (identical raw tuple list, duplicate validation, canonical lexicographical sort)
 
 ---

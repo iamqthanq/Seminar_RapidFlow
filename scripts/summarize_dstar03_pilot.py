@@ -1,21 +1,26 @@
 #!/usr/bin/env python3
 """
-scripts/summarize_dstar03_pilot.py — Reconciler and Summary Generator for DSTAR-03 Pilot.
+scripts/summarize_dstar03_pilot.py — Reconciler and Summary Generator for DSTAR-03 Pilot (v2).
 
 Reads:
 - configs/dstar03_pilot_manifest.json
 - reports/dstar03/attempts.jsonl
 
 Produces:
-1. reports/dstar03/correctness_summary.json (M0 verification audit)
-2. reports/dstar03/pilot_summary.json (execution completeness, latency medians, work ratios)
+1. reports/dstar03/correctness_summary.json (independent M0 verification audit)
+2. reports/dstar03/pilot_summary.json (execution completeness, latency medians, budget ratios)
 3. reports/dstar03/pilot_results.csv (comprehensive tabular metrics per workload)
 
-Enforces:
+Enforces (Remediation F01, F05, F06):
 - Strict reconciliation: exactly 390 slots accounted for (65 workloads x 6 runs).
-- Zero-event and structured witness separation.
-- Noise tagging for sub-millisecond latencies.
-- Truthful reporting: no timeout substitution, no universal speedup claims.
+- Manifest integrity: exactly 65 workloads (40 syn, 5 wit, 20 netflow) with contiguous case indices 0..64.
+- Zero swallowed errors: malformed JSON lines, duplicate/conflicting completions, unknown IDs,
+  or completions missing start records cause reconciliation failure.
+- Failures (TIMEOUT, RESOURCE_LIMIT, ERROR, INTERRUPTED, CORRECTNESS_FAIL) never become successful slots.
+- PILOT_COMPLETED requires all 390 slots to be successful measured slots; never passes on all-timeout or empty ledger.
+- Correctness never uses all([]) on empty list; requires exactly 65 verified workloads.
+- Metric renamed to budget_units (engine safety budget counters, not invariant algorithmic work).
+- CSV formatting with lineterminator='\\n' to prevent trailing carriage returns and whitespace issues.
 """
 
 from __future__ import annotations
@@ -54,48 +59,124 @@ def summarize_pilot(
 ) -> Dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # 1. Validate Manifest
     if not manifest_path.exists():
         raise FileNotFoundError(f"Manifest not found: {manifest_path}")
 
     with manifest_path.open("r", encoding="utf-8") as f:
         manifest = json.load(f)
 
-    workload_entries = manifest["workloads"]
-    workload_ids = [w["workload_id"] for w in workload_entries]
-    workload_map = {w["workload_id"]: w for w in workload_entries}
-
+    workload_entries = manifest.get("workloads", [])
     total_workloads = len(workload_entries)
-    required_slots_count = total_workloads * 6
+    if total_workloads != 65:
+        raise ValueError(
+            f"Manifest registered workloads count {total_workloads} != 65 required"
+        )
 
-    # 1. Read attempts ledger
+    counts = {"SYNTHETIC_MATRIX": 0, "STRUCTURED_WITNESS": 0, "NETFLOW_PROBE": 0}
+    case_indices: Set[int] = set()
+    workload_ids: List[str] = []
+    workload_map: Dict[str, Dict[str, Any]] = {}
+
+    for w in workload_entries:
+        fam = w.get("family")
+        if fam in counts:
+            counts[fam] += 1
+        else:
+            raise ValueError(f"Unknown workload family {fam} in {w.get('workload_id')}")
+
+        c_idx = w.get("case_index")
+        if c_idx is None or c_idx in case_indices:
+            raise ValueError(f"Duplicate or missing case_index: {c_idx}")
+        case_indices.add(c_idx)
+
+        w_id = w.get("workload_id")
+        if not w_id or w_id in workload_map:
+            raise ValueError(f"Duplicate or missing workload_id: {w_id}")
+        workload_ids.append(w_id)
+        workload_map[w_id] = w
+
+    if counts != {"SYNTHETIC_MATRIX": 40, "STRUCTURED_WITNESS": 5, "NETFLOW_PROBE": 20}:
+        raise ValueError(f"Workload counts breakdown mismatch: {counts}")
+
+    if sorted(case_indices) != list(range(65)):
+        raise ValueError(f"Case indices not contiguous 0..64: {sorted(case_indices)}")
+
+    required_slots_count = 65 * 6  # exactly 390 slots
+    expected_slot_ids: Set[str] = set()
+    for w in workload_entries:
+        w_id = w["workload_id"]
+        for p in (1, 2, 3):
+            rep = p - 1
+            for eng in ("m1", "m2"):
+                expected_slot_ids.add(f"{w_id}_{eng}_pair{p}_rep{rep}")
+
+    assert len(expected_slot_ids) == required_slots_count
+
+    # 2. Read and reconcile attempts ledger
     attempts_by_id: Dict[str, Dict[str, Any]] = {}
     started_ids: Set[str] = set()
-    raw_records_count = 0
+    ledger_records_count = 0
+    duplicate_completions: List[str] = []
+    unknown_completions: List[str] = []
+    completions_missing_start: List[str] = []
 
-    if ledger_path.exists():
-        with ledger_path.open("r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                raw_records_count += 1
-                try:
-                    rec = json.loads(line)
-                    rec_type = rec.get("record_type")
-                    att_id = rec.get("attempt_id")
-                    if rec_type == "ATTEMPT_STARTED":
-                        started_ids.add(att_id)
-                    elif rec_type == "ATTEMPT_COMPLETED":
-                        attempts_by_id[att_id] = rec
-                except Exception:
-                    pass
+    if not ledger_path.exists():
+        raise FileNotFoundError(f"Ledger file not found: {ledger_path}")
 
-    # 2. Reconcile slots
+    with ledger_path.open("r", encoding="utf-8") as f:
+        for line_no, line in enumerate(f, start=1):
+            line = line.strip()
+            if not line:
+                continue
+            ledger_records_count += 1
+            try:
+                rec = json.loads(line)
+            except Exception as exc:
+                raise ValueError(f"Corrupt JSON at line {line_no} in ledger {ledger_path}: {exc}")
+
+            rec_type = rec.get("record_type")
+            att_id = rec.get("attempt_id")
+
+            if rec_type == "ATTEMPT_STARTED":
+                if not att_id:
+                    raise ValueError(f"Line {line_no}: ATTEMPT_STARTED missing attempt_id")
+                started_ids.add(att_id)
+
+            elif rec_type == "ATTEMPT_COMPLETED":
+                if not att_id:
+                    raise ValueError(f"Line {line_no}: ATTEMPT_COMPLETED missing attempt_id")
+                if att_id not in expected_slot_ids:
+                    unknown_completions.append(att_id)
+                if att_id in attempts_by_id:
+                    duplicate_completions.append(att_id)
+                if att_id not in started_ids:
+                    completions_missing_start.append(att_id)
+
+                attempts_by_id[att_id] = rec
+
+    # Check for ledger anomalies
+    if duplicate_completions:
+        raise ValueError(
+            f"Ledger contains duplicate completion records for attempts: {duplicate_completions[:5]}"
+        )
+    if unknown_completions:
+        raise ValueError(
+            f"Ledger contains unknown attempt IDs not in manifest: {unknown_completions[:5]}"
+        )
+    if completions_missing_start:
+        raise ValueError(
+            f"Ledger contains completions with no matching ATTEMPT_STARTED record: {completions_missing_start[:5]}"
+        )
+
+    # 3. Reconcile slots
     status_counts: Dict[str, int] = {}
     workload_attempts: Dict[str, Dict[str, Dict[int, Dict[str, Any]]]] = {
         w_id: {"m1": {}, "m2": {}} for w_id in workload_ids
     }
     missing_slots: List[str] = []
+    successful_measured_slots_count = 0
+    failed_slots_count = 0
 
     for w in workload_entries:
         w_id = w["workload_id"]
@@ -112,7 +193,12 @@ def summarize_pilot(
                     status_counts[st] = status_counts.get(st, 0) + 1
                     workload_attempts[w_id][eng][pair_idx] = rec
 
-    # 3. M0 Correctness Summary
+                    if st in ("SUCCESS_NONEMPTY", "ZERO_RESULT_COMPLETE"):
+                        successful_measured_slots_count += 1
+                    else:
+                        failed_slots_count += 1
+
+    # 4. M0 Correctness Summary Audit
     correctness_rows: List[Dict[str, Any]] = []
     total_entered_all = 0
     total_exited_all = 0
@@ -147,8 +233,13 @@ def summarize_pilot(
             "has_events": tot > 0,
         })
 
+    all_verified = (
+        len(correctness_rows) == 65 and all(r["m0_verified"] for r in correctness_rows)
+    )
+    correctness_status = "CORRECTNESS_VERIFIED" if all_verified else "CORRECTNESS_FAIL"
+
     correctness_summary = {
-        "status": "CORRECTNESS_VERIFIED" if all(r["m0_verified"] for r in correctness_rows) else "FAIL",
+        "status": correctness_status,
         "total_registered_workloads": total_workloads,
         "workloads_with_events": workloads_with_events,
         "workloads_zero_events": workloads_zero_events,
@@ -159,9 +250,9 @@ def summarize_pilot(
     }
 
     with (output_dir / "correctness_summary.json").open("w", encoding="utf-8") as f:
-        json.dump(correctness_summary, f, indent=2)
+        json.dump(correctness_summary, f, indent=2, sort_keys=True)
 
-    # 4. Detailed Per-Workload Metric Aggregation & CSV Generation
+    # 5. Detailed Per-Workload Metric Aggregation & CSV Generation
     csv_rows: List[Dict[str, Any]] = []
     family_stats: Dict[str, Dict[str, Any]] = {}
     overall_speedup_ratios: List[float] = []
@@ -187,22 +278,22 @@ def summarize_pilot(
         m1_med, m1_min, m1_max = compute_median_and_range(m1_times)
         m2_med, m2_min, m2_max = compute_median_and_range(m2_times)
 
-        # Work units
-        m1_work = [
-            rec.get("total_work_units", 0)
+        # Budget units (engine safety counters)
+        m1_budget = [
+            rec.get("total_budget_units", rec.get("total_work_units", 0))
             for rec in m1_runs.values()
             if rec.get("status") in ("SUCCESS_NONEMPTY", "ZERO_RESULT_COMPLETE")
         ]
-        m2_work = [
-            rec.get("total_work_units", 0)
+        m2_budget = [
+            rec.get("total_budget_units", rec.get("total_work_units", 0))
             for rec in m2_runs.values()
             if rec.get("status") in ("SUCCESS_NONEMPTY", "ZERO_RESULT_COMPLETE")
         ]
-        m1_w_med = statistics.median(m1_work) if m1_work else 0
-        m2_w_med = statistics.median(m2_work) if m2_work else 0
-        work_ratio = round(m1_w_med / m2_w_med, 4) if m2_w_med > 0 else 0.0
+        m1_b_med = statistics.median(m1_budget) if m1_budget else 0
+        m2_b_med = statistics.median(m2_budget) if m2_budget else 0
+        budget_ratio = round(m1_b_med / m2_b_med, 4) if m2_b_med > 0 else 0.0
 
-        # Paired ratios (for each matched pair where both sides succeeded)
+        # Paired speedup ratios (matched pair where both sides succeeded)
         paired_ratios: List[float] = []
         for p in (1, 2, 3):
             if (
@@ -220,13 +311,13 @@ def summarize_pilot(
         if speedup_ratio is not None:
             overall_speedup_ratios.append(speedup_ratio)
 
-        # Detailed counters (sum across reps for analysis)
+        # Detailed counters sum across reps
         m1_evals = sum(rec.get("counters", {}).get("candidate_evaluations", 0) for rec in m1_runs.values())
         m2_evals = sum(rec.get("counters", {}).get("candidate_evaluations", 0) for rec in m2_runs.values())
         m2_edge_decisions = sum(rec.get("counters", {}).get("edge_decisions", 0) for rec in m2_runs.values())
         m2_missing_branches = sum(rec.get("counters", {}).get("missing_branches", 0) for rec in m2_runs.values())
 
-        # Status and tags
+        # Tags
         tags: List[str] = []
         if w["has_events"]:
             tags.append("WITH_EVENTS")
@@ -260,9 +351,9 @@ def summarize_pilot(
             "m2_min_ms": m2_min,
             "m2_max_ms": m2_max,
             "speedup_ratio_m1_over_m2": speedup_ratio if speedup_ratio is not None else "N/A",
-            "m1_work_units_median": m1_w_med,
-            "m2_work_units_median": m2_w_med,
-            "work_ratio_m1_over_m2": work_ratio,
+            "m1_budget_units_median": m1_b_med,
+            "m2_budget_units_median": m2_b_med,
+            "budget_ratio_m1_over_m2": budget_ratio,
             "m1_evals_total": m1_evals,
             "m2_evals_total": m2_evals,
             "m2_edge_decisions_total": m2_edge_decisions,
@@ -272,14 +363,13 @@ def summarize_pilot(
         }
         csv_rows.append(csv_row)
 
-        # Family stats
         fam_stat = family_stats.setdefault(
             fam,
             {
                 "workload_count": 0,
                 "completed_workloads": 0,
                 "speedup_ratios": [],
-                "work_ratios": [],
+                "budget_ratios": [],
             },
         )
         fam_stat["workload_count"] += 1
@@ -287,45 +377,51 @@ def summarize_pilot(
             fam_stat["completed_workloads"] += 1
             if speedup_ratio is not None:
                 fam_stat["speedup_ratios"].append(speedup_ratio)
-            if work_ratio > 0:
-                fam_stat["work_ratios"].append(work_ratio)
+            if budget_ratio > 0:
+                fam_stat["budget_ratios"].append(budget_ratio)
 
-    # Write CSV
+    # Write CSV with strict LF lineterminator to prevent git whitespace errors
     csv_path = output_dir / "pilot_results.csv"
     if csv_rows:
         fieldnames = list(csv_rows[0].keys())
         with csv_path.open("w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer = csv.DictWriter(f, fieldnames=fieldnames, lineterminator="\n")
             writer.writeheader()
             writer.writerows(csv_rows)
 
-    # 5. Overall Pilot Summary
+    # 6. Overall Pilot Summary & Completeness
     completed_attempts_count = len(attempts_by_id)
-    execution_completeness = (
-        "PILOT_COMPLETED"
-        if completed_attempts_count == required_slots_count and not missing_slots
-        else "INCOMPLETE"
+    # PILOT_COMPLETED strictly requires all 390 slots to have succeeded
+    is_fully_completed = (
+        completed_attempts_count == required_slots_count
+        and not missing_slots
+        and successful_measured_slots_count == required_slots_count
+        and failed_slots_count == 0
     )
+    execution_completeness = "PILOT_COMPLETED" if is_fully_completed else "INCOMPLETE"
 
     per_family_summary: Dict[str, Any] = {}
     for fam, st in family_stats.items():
         ratios = st["speedup_ratios"]
-        w_ratios = st["work_ratios"]
+        b_ratios = st["budget_ratios"]
         per_family_summary[fam] = {
             "workload_count": st["workload_count"],
             "completed_workloads": st["completed_workloads"],
             "speedup_ratio_median": round(statistics.median(ratios), 4) if ratios else None,
             "speedup_ratio_min": round(min(ratios), 4) if ratios else None,
             "speedup_ratio_max": round(max(ratios), 4) if ratios else None,
-            "work_ratio_median": round(statistics.median(w_ratios), 4) if w_ratios else None,
+            "budget_ratio_median": round(statistics.median(b_ratios), 4) if b_ratios else None,
         }
 
     pilot_summary = {
         "manifest_id": manifest["manifest_id"],
         "execution_completeness": execution_completeness,
+        "correctness_status": correctness_status,
         "total_registered_workloads": total_workloads,
         "total_required_attempts": required_slots_count,
-        "completed_attempts": completed_attempts_count,
+        "attempts_recorded": completed_attempts_count,
+        "successful_measured_slots": successful_measured_slots_count,
+        "failed_slots_count": failed_slots_count,
         "missing_slots_count": len(missing_slots),
         "status_breakdown": status_counts,
         "family_summary": per_family_summary,
@@ -334,11 +430,15 @@ def summarize_pilot(
             "no_speedup_threshold_mandate": True,
             "exploratory_status": "Valid negative/inconclusive pilot outcomes retained truthfully",
             "netflow_zero_event_coverage_noted": True,
+            "state_management_overhead_hypothesis": (
+                "Differences in runtime between M1 and M2 may relate to Python state management "
+                "overhead; this pilot does not isolate language overhead from algorithmic complexity."
+            ),
         },
     }
 
     with (output_dir / "pilot_summary.json").open("w", encoding="utf-8") as f:
-        json.dump(pilot_summary, f, indent=2)
+        json.dump(pilot_summary, f, indent=2, sort_keys=True)
 
     return pilot_summary
 
@@ -353,7 +453,11 @@ def main() -> None:
     summary = summarize_pilot(manifest_path=args.manifest, ledger_path=args.ledger, output_dir=args.out_dir)
     print(json.dumps(summary, indent=2))
 
-    sys.exit(0 if summary.get("execution_completeness") == "PILOT_COMPLETED" else 1)
+    success = (
+        summary.get("execution_completeness") == "PILOT_COMPLETED"
+        and summary.get("correctness_status") == "CORRECTNESS_VERIFIED"
+    )
+    sys.exit(0 if success else 1)
 
 
 if __name__ == "__main__":

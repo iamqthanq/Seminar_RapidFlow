@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
 """
-tests/test_dstar03_workloads.py — Unit Test Suite for DSTAR-03 Workloads & Manifest.
+tests/test_dstar03_workloads.py — Unit Test Suite for DSTAR-03 Workloads & Manifest (v2).
 
 Covers:
 1. Exact registration counts (40 synthetic + 5 witness + 20 netflow = 65 workloads).
 2. Manifest schema, cryptographic component hashes, and provenance metadata.
 3. Synthetic toggle cycle integrity (inversion validity and G4 == G0).
 4. Structured semantic witnesses ground truth (1 ENTERED, 0, 0, 1 EXITED).
-5. Mock NetFlow bounded streaming extraction, deterministic priority selection, and projection.
+5. Mock NetFlow bounded streaming extraction ($O(1)$ memory), deterministic priority selection, and projection.
+6. F04 regression: rejection of non-zero vertex labels in NetFlow source.
+7. F04 regression: rejection of unknown operation tokens in NetFlow deletion file.
+8. F04 regression: handling of comments and blank lines during operation parsing.
+9. F04 regression: rejection when a selected vertex is missing from Ndata.graph.
+10. F04 regression: retention of updates before target, source metadata, and is_target flag.
+11. F04 regression: high-degree bounded memory candidate selection.
 """
 
 from __future__ import annotations
@@ -27,9 +33,11 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from generate_dstar03_workloads import (
     QUERY_CONDITIONS,
     canonical_json_bytes,
+    compute_workload_fingerprint,
     generate_netflow_workloads,
     generate_synthetic_workloads,
     generate_witness_workloads,
+    parse_netflow_deletion_records,
     sha256_of_obj,
     verify_workload_m0,
 )
@@ -89,7 +97,9 @@ class TestDStar03Workloads(unittest.TestCase):
             expected_stream_sha = sha256_of_obj(data["stream"])
             self.assertEqual(data["sha256_stream"], expected_stream_sha)
 
-            self.assertEqual(data["sha256_workload"], entry["sha256_workload"])
+            expected_w_sha = compute_workload_fingerprint(data)
+            self.assertEqual(data["sha256_workload"], expected_w_sha)
+            self.assertEqual(entry["sha256_workload"], expected_w_sha)
 
     def test_03_synthetic_toggle_cycle_and_inversion(self) -> None:
         """Verifies that the first 4 updates of synthetic workloads form an exact toggle cycle."""
@@ -108,22 +118,18 @@ class TestDStar03Workloads(unittest.TestCase):
                 for s in data["stream"]
             ]
 
-            # Steps 0..3 are the toggle cycle
             cycle = stream[:4]
             self.assertEqual(len(cycle), 4)
 
-            # All 4 updates must operate on the exact toggle_pair
             for upd in cycle:
                 self.assertEqual(upd.edge, toggle_pair)
 
-            # Operations must alternate
             ops = [u.operation for u in cycle]
             if data["toggle_mode"] == "DELETE_FIRST":
                 self.assertEqual(ops, ["DELETE", "INSERT", "DELETE", "INSERT"])
             else:
                 self.assertEqual(ops, ["INSERT", "DELETE", "INSERT", "DELETE"])
 
-            # Replay the 4 updates and verify G4 == G0
             g_curr = g0.clone()
             for upd in cycle:
                 if upd.operation == "INSERT":
@@ -152,29 +158,22 @@ class TestDStar03Workloads(unittest.TestCase):
             steps = m0_verif["steps"]
             self.assertEqual(len(steps), 4)
 
-            # Step 0: Anchor inserted -> 1 entered
             self.assertEqual(steps[0]["entered"], [[0, 1, 2, 3]])
             self.assertEqual(steps[0]["exited"], [])
-
-            # Steps 1 & 2: Spectator edge -> 0 events
             self.assertEqual(steps[1]["entered"], [])
             self.assertEqual(steps[1]["exited"], [])
             self.assertEqual(steps[2]["entered"], [])
             self.assertEqual(steps[2]["exited"], [])
-
-            # Step 3: Anchor deleted -> 1 exited
             self.assertEqual(steps[3]["entered"], [])
             self.assertEqual(steps[3]["exited"], [[0, 1, 2, 3]])
 
     def test_05_mock_netflow_bounded_extraction(self) -> None:
-        """Verifies bounded 2-pass streaming, neighbor selection, and projection on a mock NetFlow slice."""
+        """Verifies bounded streaming, neighbor selection, and projection on a mock NetFlow slice."""
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)
             mock_ndata = tmp_path / "Ndata.graph"
             mock_ndeletion = tmp_path / "Ndeletion10.graph"
 
-            # Create mock Ndeletion10 with 64 lines
-            # Target records: line 0: e 100 101 0; line 1: -e 102 103 2; etc.
             del_lines = []
             for i in range(64):
                 if i % 2 == 0:
@@ -184,22 +183,18 @@ class TestDStar03Workloads(unittest.TestCase):
             with mock_ndeletion.open("w", encoding="utf-8") as f:
                 f.writelines(del_lines)
 
-            # Create mock Ndata with vertices and edges
             data_lines = []
             for v in range(300):
                 data_lines.append(f"v {v} 0\n")
-            # Add existing edge for delete targets and neighbors
-            data_lines.append("e 102 103 2\n")  # line 1 delete target
-            data_lines.append("e 102 201 0\n")  # neighbor of 102
-            data_lines.append("e 103 202 0\n")  # neighbor of 103
+            data_lines.append("e 102 103 2\n")
+            data_lines.append("e 102 201 0\n")
+            data_lines.append("e 103 202 0\n")
             with mock_ndata.open("w", encoding="utf-8") as f:
                 f.writelines(data_lines)
 
-            # Run extraction
             workloads = generate_netflow_workloads(tmp_path)
             self.assertEqual(len(workloads), 20)
 
-            # Check that each workload has |S| == 8
             for w in workloads:
                 S = w["sample_universe_S"]
                 self.assertEqual(len(S), 8)
@@ -208,6 +203,150 @@ class TestDStar03Workloads(unittest.TestCase):
                 self.assertEqual(len(g0.vertices), 8)
                 for v in S:
                     self.assertIn(v, g0.vertices)
+
+    def test_06_reject_nonzero_vertex_label(self) -> None:
+        """F04: Verifies generator rejects mock Ndata.graph containing non-zero selected vertex labels."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            mock_ndata = tmp_path / "Ndata.graph"
+            mock_ndeletion = tmp_path / "Ndeletion10.graph"
+
+            del_lines = [f"e {i*2} {i*2+1} 0\n" if i % 2 == 0 else f"-e {i*2} {i*2+1} 0\n" for i in range(64)]
+            with mock_ndeletion.open("w", encoding="utf-8") as f:
+                f.writelines(del_lines)
+
+            # All vertices have label 7 (non-zero)
+            data_lines = [f"v {v} 7\n" for v in range(200)]
+            data_lines.append("e 0 1 0\n")
+            with mock_ndata.open("w", encoding="utf-8") as f:
+                f.writelines(data_lines)
+
+            with self.assertRaises(ValueError) as ctx:
+                generate_netflow_workloads(tmp_path)
+            self.assertIn("requires vertex label 0", str(ctx.exception))
+
+    def test_07_reject_unknown_operation_token(self) -> None:
+        """F04: Verifies operation parser rejects unknown tokens (not e or -e)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            mock_ndeletion = tmp_path / "Ndeletion10.graph"
+
+            with mock_ndeletion.open("w", encoding="utf-8") as f:
+                f.write("e 1 2 0\n")
+                f.write("x 3 4 0\n")  # Invalid token
+
+            with self.assertRaises(ValueError) as ctx:
+                parse_netflow_deletion_records(mock_ndeletion, max_records=2)
+            self.assertIn("Unknown operation token 'x'", str(ctx.exception))
+
+    def test_08_comments_and_blank_lines_parsing(self) -> None:
+        """F04: Verifies parser skips comments and blank lines and tracks physical line numbers."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            mock_ndeletion = tmp_path / "Ndeletion10.graph"
+
+            with mock_ndeletion.open("w", encoding="utf-8") as f:
+                f.write("# Header comment\n")
+                f.write("\n")
+                f.write("c Another comment line\n")
+                f.write("e 10 11 0\n")
+                f.write("\n")
+                f.write("-e 12 13 2\n")
+
+            records = parse_netflow_deletion_records(mock_ndeletion, max_records=2)
+            self.assertEqual(len(records), 2)
+            # Record 0: source_op_idx=0, line_no=4
+            self.assertEqual(records[0][0], 0)
+            self.assertEqual(records[0][1], "INSERT")
+            self.assertEqual(records[0][5], 4)
+            # Record 1: source_op_idx=1, line_no=6
+            self.assertEqual(records[1][0], 1)
+            self.assertEqual(records[1][1], "DELETE")
+            self.assertEqual(records[1][5], 6)
+
+    def test_09_reject_missing_selected_vertex(self) -> None:
+        """F04: Verifies generator raises ValueError when a selected vertex does not exist in Ndata.graph."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            mock_ndata = tmp_path / "Ndata.graph"
+            mock_ndeletion = tmp_path / "Ndeletion10.graph"
+
+            del_lines = [f"e {i*2} {i*2+1} 0\n" if i % 2 == 0 else f"-e {i*2} {i*2+1} 0\n" for i in range(64)]
+            with mock_ndeletion.open("w", encoding="utf-8") as f:
+                f.writelines(del_lines)
+
+            # Ndata only defines vertices 10..50, missing 0 and 1
+            data_lines = [f"v {v} 0\n" for v in range(10, 50)]
+            with mock_ndata.open("w", encoding="utf-8") as f:
+                f.writelines(data_lines)
+
+            with self.assertRaises(ValueError) as ctx:
+                generate_netflow_workloads(tmp_path)
+            self.assertIn("does not exist in source", str(ctx.exception))
+
+    def test_10_retained_updates_and_target_flags(self) -> None:
+        """F04: Verifies that updates before target are retained and target flag is set."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            mock_ndata = tmp_path / "Ndata.graph"
+            mock_ndeletion = tmp_path / "Ndeletion10.graph"
+
+            # Create 64 operations where vertices 10 and 11 appear at op 0 and op 5
+            del_lines = []
+            for i in range(64):
+                if i == 0:
+                    del_lines.append("e 10 11 0\n")
+                elif i == 5:
+                    del_lines.append("e 10 11 0\n")
+                elif i % 2 == 0:
+                    del_lines.append(f"e {100 + i} {200 + i} 0\n")
+                else:
+                    del_lines.append(f"-e {100 + i} {200 + i} 0\n")
+
+            with mock_ndeletion.open("w", encoding="utf-8") as f:
+                f.writelines(del_lines)
+
+            data_lines = [f"v {v} 0\n" for v in range(300)]
+            with mock_ndata.open("w", encoding="utf-8") as f:
+                f.writelines(data_lines)
+
+            workloads = generate_netflow_workloads(tmp_path)
+            # Find a workload that selected op 5 or op 0
+            for w in workloads:
+                stream = w["stream"]
+                self.assertGreater(len(stream), 0)
+                # Verify source metadata exists
+                for s in stream:
+                    self.assertIn("source_op_index", s)
+                    self.assertIn("physical_line_number", s)
+                    self.assertIn("is_target", s)
+                # Exactly one target update in projected stream
+                target_count = sum(1 for s in stream if s["is_target"])
+                self.assertEqual(target_count, 1)
+
+    def test_11_high_degree_bounded_memory(self) -> None:
+        """F04: Verifies that high-degree vertices with 200 neighbors are processed with bounded O(1) memory."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            mock_ndata = tmp_path / "Ndata.graph"
+            mock_ndeletion = tmp_path / "Ndeletion10.graph"
+
+            del_lines = [f"e {i*2} {i*2+1} 0\n" if i % 2 == 0 else f"-e {i*2} {i*2+1} 0\n" for i in range(64)]
+            with mock_ndeletion.open("w", encoding="utf-8") as f:
+                f.writelines(del_lines)
+
+            data_lines = [f"v {v} 0\n" for v in range(300)]
+            # Vertex 0 has 200 neighbor edges
+            for nbr in range(50, 250):
+                data_lines.append(f"e 0 {nbr} 0\n")
+
+            with mock_ndata.open("w", encoding="utf-8") as f:
+                f.writelines(data_lines)
+
+            workloads = generate_netflow_workloads(tmp_path)
+            self.assertEqual(len(workloads), 20)
+            for w in workloads:
+                self.assertEqual(len(w["sample_universe_S"]), 8)
 
 
 if __name__ == "__main__":

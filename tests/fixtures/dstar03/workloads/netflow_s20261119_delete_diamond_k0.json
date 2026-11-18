@@ -123,20 +123,26 @@
   ],
   "sha256_initial_graph": "2774d3e4729d4bc09189931856e0b07ca317b0c6f098cc7ea2ef2ef5ed951f4a",
   "sha256_query": "29bfb2a0a8c9dff8e1c400be53661b7583b168aebd82c8b5cfce62ccd78a6463",
-  "sha256_stream": "8db84848c000d704044b8cc9f220282f89a708755663ca082af3fd198acc01f4",
-  "sha256_workload": "9b1491c921f6e8dc632caaa2c4d782b75eb464c5bf2c28f2ee82365bd07119a7",
+  "sha256_stream": "8aa155c0a63358aae70a451505e150daa74eb56135a25305d7b3f47de8f9bc53",
+  "sha256_workload": "781b645f240cc2f2e7032bc7a8addc706cb28497cf2e280e3c78ff72c61ca990",
   "stream": [
     {
       "edge": [
         129124,
         2759658
       ],
+      "is_target": true,
       "label": 0,
-      "operation": "DELETE"
+      "operation": "DELETE",
+      "physical_line_number": 3,
+      "raw_line": "-e 129124 2759658 0",
+      "source_op_index": 2,
+      "step": 0
     }
   ],
   "target_label": 0,
   "target_operation": "DELETE",
+  "target_physical_line_number": 3,
   "target_raw_line": "-e 129124 2759658 0",
   "target_source_op_index": 2,
   "workload_id": "netflow_s20261119_delete_diamond_k0"

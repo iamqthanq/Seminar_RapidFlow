@@ -123,20 +123,26 @@
   ],
   "sha256_initial_graph": "48127606d709320f5677a51da7b3851f2977f7767dd240f61fa922bf8b2db51f",
   "sha256_query": "2390c221decb6b39aa13626180cae2fd4918cf48d07ae7108625688b8f0a8bbd",
-  "sha256_stream": "24d3471c2d4a42b0c73858b9a63a109e392e0187c96a8dbbc218d0c869019cda",
-  "sha256_workload": "eddc47e8ee85ff433f6d3bf7d5df8e2ba0ba25225b048ce2c3d08cb78d645271",
+  "sha256_stream": "15b21ebb7ee18a9bb15c3287e9ca2de4d8a285772b93f1f83d43f887d66bdb12",
+  "sha256_workload": "dd487dc5b2469e2179cc12ad25bbc3028582cceeb88d38da3a5be22c03a7517d",
   "stream": [
     {
       "edge": [
         1723290,
         3066455
       ],
+      "is_target": true,
       "label": 2,
-      "operation": "INSERT"
+      "operation": "INSERT",
+      "physical_line_number": 12,
+      "raw_line": "e 1723290 3066455 2",
+      "source_op_index": 11,
+      "step": 0
     }
   ],
   "target_label": 2,
   "target_operation": "INSERT",
+  "target_physical_line_number": 12,
   "target_raw_line": "e 1723290 3066455 2",
   "target_source_op_index": 11,
   "workload_id": "netflow_s20261119_insert_k4_k2"

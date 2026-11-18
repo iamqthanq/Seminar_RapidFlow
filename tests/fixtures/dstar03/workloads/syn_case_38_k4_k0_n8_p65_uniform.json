@@ -4634,8 +4634,8 @@
   "seed": 20261156,
   "sha256_initial_graph": "7b77a8686efd25de4ce13a19a005c3dd05e7691e826069b1b69428aeb47e66fb",
   "sha256_query": "827de8732ebf763d6956412ea1ec799c091ec7ccae4cd10f7bff72fc26a25f1b",
-  "sha256_stream": "52a5a30a7219b35fdf32c5fabe3fabc1a86ed37563bdba9e45bb372eccb10fd1",
-  "sha256_workload": "a8be291ad96200fb4e71a4f9617a3e016241b0d78483d079ffe24c851df67e2a",
+  "sha256_stream": "2bf82b9b93d29f7dcec71e84b6f7e196bcff7a0cdfcf815b6f795ac5c092eb49",
+  "sha256_workload": "f01f1db0eeef8234a7cbe09b69f8d7a500d8589833f745e2c48593b7943f7ee3",
   "stream": [
     {
       "edge": [
@@ -4643,7 +4643,8 @@
         7
       ],
       "label": 0,
-      "operation": "INSERT"
+      "operation": "INSERT",
+      "step": 0
     },
     {
       "edge": [
@@ -4651,7 +4652,8 @@
         7
       ],
       "label": 0,
-      "operation": "DELETE"
+      "operation": "DELETE",
+      "step": 1
     },
     {
       "edge": [
@@ -4659,7 +4661,8 @@
         7
       ],
       "label": 0,
-      "operation": "INSERT"
+      "operation": "INSERT",
+      "step": 2
     },
     {
       "edge": [
@@ -4667,7 +4670,8 @@
         7
       ],
       "label": 0,
-      "operation": "DELETE"
+      "operation": "DELETE",
+      "step": 3
     },
     {
       "edge": [
@@ -4675,7 +4679,8 @@
         3
       ],
       "label": 0,
-      "operation": "DELETE"
+      "operation": "DELETE",
+      "step": 4
     },
     {
       "edge": [
@@ -4683,7 +4688,8 @@
         2
       ],
       "label": 0,
-      "operation": "INSERT"
+      "operation": "INSERT",
+      "step": 5
     },
     {
       "edge": [
@@ -4691,7 +4697,8 @@
         2
       ],
       "label": 0,
-      "operation": "INSERT"
+      "operation": "INSERT",
+      "step": 6
     },
     {
       "edge": [
@@ -4699,7 +4706,8 @@
         7
       ],
       "label": 0,
-      "operation": "INSERT"
+      "operation": "INSERT",
+      "step": 7
     },
     {
       "edge": [
@@ -4707,7 +4715,8 @@
         6
       ],
       "label": 0,
-      "operation": "DELETE"
+      "operation": "DELETE",
+      "step": 8
     },
     {
       "edge": [
@@ -4715,7 +4724,8 @@
         7
       ],
       "label": 0,
-      "operation": "INSERT"
+      "operation": "INSERT",
+      "step": 9
     },
     {
       "edge": [
@@ -4723,7 +4733,8 @@
         7
       ],
       "label": 0,
-      "operation": "DELETE"
+      "operation": "DELETE",
+      "step": 10
     },
     {
       "edge": [
@@ -4731,7 +4742,8 @@
         3
       ],
       "label": 0,
-      "operation": "INSERT"
+      "operation": "INSERT",
+      "step": 11
     }
   ],
   "target_p": 0.65,

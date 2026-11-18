@@ -184,8 +184,8 @@
   "query_shape": "diamond",
   "sha256_initial_graph": "3c467bc6e8c6e6bc81285e94edd0fc75ba21f78170da47873e813c00a0522c8c",
   "sha256_query": "734c65048c0aa57b8037a84371c130919d8dac7e8ea3e869c1fd2d2f78c78787",
-  "sha256_stream": "0cab33bd77047d49a13a4f69d1515fe97a4ff97429531ea5f4c804be2e6e1134",
-  "sha256_workload": "9159d91845ccbc81249ad454d93a1864c1fe69fc8428e4d099b70d02c676f82a",
+  "sha256_stream": "892497a48bfe81d5ba11c42641d52daa2451fbda24a7c5cc3b6ea6a5b3722114",
+  "sha256_workload": "fe611f50305499a14222aaef48a5eac1bb914ebfa3f74a958fcce99104d4a255",
   "spectator_edge": [
     4,
     5
@@ -197,7 +197,8 @@
         1
       ],
       "label": 0,
-      "operation": "INSERT"
+      "operation": "INSERT",
+      "step": 0
     },
     {
       "edge": [
@@ -205,7 +206,8 @@
         5
       ],
       "label": 0,
-      "operation": "INSERT"
+      "operation": "INSERT",
+      "step": 1
     },
     {
       "edge": [
@@ -213,7 +215,8 @@
         5
       ],
       "label": 0,
-      "operation": "DELETE"
+      "operation": "DELETE",
+      "step": 2
     },
     {
       "edge": [
@@ -221,7 +224,8 @@
         1
       ],
       "label": 0,
-      "operation": "DELETE"
+      "operation": "DELETE",
+      "step": 3
     }
   ],
   "workload_id": "witness_04_diamond_k0"

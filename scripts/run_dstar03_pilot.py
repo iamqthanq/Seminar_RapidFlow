@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 """
-scripts/run_dstar03_pilot.py — Supervisor Runner for DSTAR-03 Paired Pilot Evaluation.
+scripts/run_dstar03_pilot.py — Supervisor Runner for DSTAR-03 Paired Pilot Evaluation (v2).
 
 Responsibilities:
-1. Environmental and manifest preflight checks.
-2. Independent M0 Ground Truth verification of all workloads outside timed runs.
+1. Environmental and manifest preflight checks:
+   - Verifies system resources (MemAvailable >= 2 GiB, DiskFree >= 1 GiB).
+   - Validates manifest integrity: exactly 65 workloads (40 syn, 5 wit, 20 netflow),
+     unique case indices 0..64, and manifest SHA-256 integrity.
+   - Collects and records source hashes for engines, worker, resources, and runner.
+2. Rejection of source/protocol drift on resume.
 3. Durable append-only journal (reports/dstar03/attempts.jsonl) supporting interruption and resume.
 4. Paired isolated child subprocess executions (3 pairs = 6 runs per workload).
 5. Parity-offset alternating pair ordering to balance thermal/cache effects.
-6. Real-time batch wall-clock monitoring.
-7. Post-run invocation of summarizer to generate reports.
+6. Honest status reporting and structured error preservation (never masking CORRECTNESS_FAIL or RESOURCE_LIMIT).
+7. Strict exit codes: non-zero on partial runs, filter runs, batch interruptions, or slot failures.
 """
 
 from __future__ import annotations
@@ -18,6 +22,7 @@ import argparse
 import json
 import os
 import signal
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -26,13 +31,58 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-from dstar03_resources import check_environment_preflight, run_contained_subprocess
-from generate_dstar03_workloads import sha256_of_obj, verify_workload_m0
+from dstar03_resources import (
+    DEFAULT_RLIMIT_AS_BYTES,
+    DEFAULT_TIMEOUT_SECONDS,
+    check_environment_preflight,
+    hash_file_sha256,
+    run_contained_subprocess,
+    validate_resource_limits,
+)
+from generate_dstar03_workloads import compute_workload_fingerprint, sha256_of_obj
 
 DEFAULT_MANIFEST_PATH = REPO_ROOT / "configs" / "dstar03_pilot_manifest.json"
 DEFAULT_LEDGER_PATH = REPO_ROOT / "reports" / "dstar03" / "attempts.jsonl"
 WORKER_SCRIPT = REPO_ROOT / "scripts" / "dstar03_pilot_worker.py"
 SUMMARIZER_SCRIPT = REPO_ROOT / "scripts" / "summarize_dstar03_pilot.py"
+
+CORE_SOURCE_SCRIPTS = [
+    REPO_ROOT / "scripts" / "dstar_m1_enum.py",
+    REPO_ROOT / "scripts" / "dstar_m2_event.py",
+    REPO_ROOT / "scripts" / "dstar_event_common.py",
+    REPO_ROOT / "scripts" / "dstar_oracle.py",
+    REPO_ROOT / "scripts" / "dstar03_resources.py",
+    REPO_ROOT / "scripts" / "dstar03_pilot_worker.py",
+    REPO_ROOT / "scripts" / "run_dstar03_pilot.py",
+    REPO_ROOT / "scripts" / "summarize_dstar03_pilot.py",
+]
+
+
+def collect_source_provenance() -> Dict[str, Any]:
+    """Collects Git HEAD, dirty state, and SHA-256 hashes of core source scripts."""
+    prov: Dict[str, Any] = {
+        "git_commit": "UNKNOWN",
+        "git_dirty": False,
+        "source_hashes": {},
+    }
+    try:
+        commit = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=str(REPO_ROOT), text=True
+        ).strip()
+        prov["git_commit"] = commit
+        status_out = subprocess.check_output(
+            ["git", "status", "--porcelain"], cwd=str(REPO_ROOT), text=True
+        ).strip()
+        prov["git_dirty"] = bool(status_out)
+    except Exception:
+        pass
+
+    for s_path in CORE_SOURCE_SCRIPTS:
+        if s_path.exists():
+            rel_name = str(s_path.relative_to(REPO_ROOT))
+            prov["source_hashes"][rel_name] = hash_file_sha256(s_path)
+
+    return prov
 
 
 class PilotSupervisor:
@@ -41,8 +91,8 @@ class PilotSupervisor:
         manifest_path: Path = DEFAULT_MANIFEST_PATH,
         ledger_path: Path = DEFAULT_LEDGER_PATH,
         max_wall_seconds: float = 600.0,
-        worker_timeout: float = 60.0,
-        rlimit_as_bytes: int = 512 * 1024 * 1024,
+        worker_timeout: float = DEFAULT_TIMEOUT_SECONDS,
+        rlimit_as_bytes: int = DEFAULT_RLIMIT_AS_BYTES,
     ) -> None:
         self.manifest_path = manifest_path
         self.ledger_path = ledger_path
@@ -50,6 +100,8 @@ class PilotSupervisor:
         self.worker_timeout = worker_timeout
         self.rlimit_as_bytes = rlimit_as_bytes
         self.interrupted = False
+
+        validate_resource_limits(self.worker_timeout, self.rlimit_as_bytes)
 
         # Set up signal handler for graceful shutdown
         signal.signal(signal.SIGINT, self._handle_signal)
@@ -76,48 +128,127 @@ class PilotSupervisor:
         except Exception as exc:
             return {"status": "ERROR", "reason": f"Corrupt manifest: {exc}"}
 
-        # Check manifest SHA
-        m_copy = dict(manifest)
-        saved_sha = m_copy.pop("manifest_sha256", None)
-        calc_sha = sha256_of_obj(m_copy)
-        if saved_sha and saved_sha != calc_sha:
+        # Check manifest SHA-256
+        saved_sha = manifest.get("manifest_sha256")
+        if not saved_sha:
+            return {"status": "ERROR", "reason": "Manifest missing required 'manifest_sha256' field"}
+
+        manifest_for_hash = {k: v for k, v in manifest.items() if k != "manifest_sha256"}
+        calc_sha = sha256_of_obj(manifest_for_hash)
+        if saved_sha != calc_sha:
             return {
                 "status": "ERROR",
                 "reason": f"Manifest hash drift: saved {saved_sha} != calculated {calc_sha}",
             }
 
-        return {"status": "PASS", "manifest": manifest}
+        # Validate registered workloads count and breakdown
+        workloads = manifest.get("workloads", [])
+        if len(workloads) != 65:
+            return {
+                "status": "ERROR",
+                "reason": f"Manifest registered workloads count {len(workloads)} != 65 required",
+            }
 
-    def load_existing_ledger(self) -> Tuple[Set[str], Set[str], List[Dict[str, Any]]]:
+        counts = {"SYNTHETIC_MATRIX": 0, "STRUCTURED_WITNESS": 0, "NETFLOW_PROBE": 0}
+        case_indices: Set[int] = set()
+        workload_ids: Set[str] = set()
+
+        for w in workloads:
+            fam = w.get("family")
+            if fam in counts:
+                counts[fam] += 1
+            else:
+                return {"status": "ERROR", "reason": f"Unknown workload family {fam} in {w.get('workload_id')}"}
+
+            c_idx = w.get("case_index")
+            if c_idx is None or c_idx in case_indices:
+                return {"status": "ERROR", "reason": f"Duplicate or missing case_index: {c_idx}"}
+            case_indices.add(c_idx)
+
+            w_id = w.get("workload_id")
+            if not w_id or w_id in workload_ids:
+                return {"status": "ERROR", "reason": f"Duplicate or missing workload_id: {w_id}"}
+            workload_ids.add(w_id)
+
+            # Check fixture file existence
+            fixture_path = REPO_ROOT / w.get("relative_path", "")
+            if not fixture_path.exists():
+                return {"status": "ERROR", "reason": f"Workload fixture missing on disk: {fixture_path}"}
+
+        expected_counts = {"SYNTHETIC_MATRIX": 40, "STRUCTURED_WITNESS": 5, "NETFLOW_PROBE": 20}
+        if counts != expected_counts:
+            return {
+                "status": "ERROR",
+                "reason": f"Workload counts breakdown mismatch: actual {counts} != expected {expected_counts}",
+            }
+
+        if sorted(case_indices) != list(range(65)):
+            return {
+                "status": "ERROR",
+                "reason": f"Case indices not contiguous 0..64: {sorted(case_indices)}",
+            }
+
+        source_prov = collect_source_provenance()
+
+        return {
+            "status": "PASS",
+            "manifest": manifest,
+            "manifest_sha256": saved_sha,
+            "source_provenance": source_prov,
+        }
+
+    def load_existing_ledger(
+        self, expected_manifest_sha: Optional[str] = None
+    ) -> Tuple[Set[str], Set[str], List[Dict[str, Any]], Optional[str]]:
         """
         Reads existing attempts ledger.
-        Returns (started_attempt_ids, completed_attempt_ids, all_records).
+        Validates ledger integrity: checks for corrupt JSON, conflicting records, and provenance drift.
+        Returns (started_attempt_ids, completed_attempt_ids, all_records, error_msg).
         """
         started: Set[str] = set()
         completed: Set[str] = set()
         records: List[Dict[str, Any]] = []
 
         if not self.ledger_path.exists():
-            return started, completed, records
+            return started, completed, records, None
 
         with self.ledger_path.open("r", encoding="utf-8") as f:
-            for line in f:
+            for line_no, line in enumerate(f, start=1):
                 line = line.strip()
                 if not line:
                     continue
                 try:
                     rec = json.loads(line)
-                    records.append(rec)
-                    rec_type = rec.get("record_type")
-                    att_id = rec.get("attempt_id")
-                    if rec_type == "ATTEMPT_STARTED":
-                        started.add(att_id)
-                    elif rec_type == "ATTEMPT_COMPLETED":
-                        completed.add(att_id)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    return started, completed, records, f"Corrupted JSON line {line_no} in ledger: {exc}"
 
-        return started, completed, records
+                records.append(rec)
+                rec_type = rec.get("record_type")
+                att_id = rec.get("attempt_id")
+
+                if rec_type == "SUPERVISOR_HEADER":
+                    ledger_m_sha = rec.get("manifest_sha256")
+                    if expected_manifest_sha and ledger_m_sha and ledger_m_sha != expected_manifest_sha:
+                        return (
+                            started,
+                            completed,
+                            records,
+                            f"Ledger manifest drift: ledger manifest_sha256 {ledger_m_sha} != current {expected_manifest_sha}",
+                        )
+
+                elif rec_type == "ATTEMPT_STARTED":
+                    if not att_id:
+                        return started, completed, records, f"Line {line_no}: ATTEMPT_STARTED missing attempt_id"
+                    started.add(att_id)
+
+                elif rec_type == "ATTEMPT_COMPLETED":
+                    if not att_id:
+                        return started, completed, records, f"Line {line_no}: ATTEMPT_COMPLETED missing attempt_id"
+                    if att_id in completed:
+                        return started, completed, records, f"Line {line_no}: Duplicate ATTEMPT_COMPLETED for attempt_id={att_id}"
+                    completed.add(att_id)
+
+        return started, completed, records, None
 
     def append_record(self, record: Dict[str, Any]) -> None:
         """Atomically appends a record to the durable ledger."""
@@ -128,15 +259,14 @@ class PilotSupervisor:
             os.fsync(f.fileno())
 
     def run(self, workload_filter: Optional[str] = None) -> Dict[str, Any]:
-        """Main execution loop."""
+        """Main supervisor execution loop."""
         supervisor_t0 = time.time()
-        print("Starting DSTAR-03 Pilot Supervisor...")
+        print("Starting DSTAR-03 Pilot Supervisor (v2)...")
 
         # 1. Preflight
         pf = self.preflight()
         if pf["status"] != "PASS":
             print(f"Supervisor Preflight Failed: {pf['reason']}")
-            # Record blocked attempt
             self.append_record({
                 "record_type": "SUPERVISOR_RUN_BLOCKED",
                 "status": pf["status"],
@@ -146,18 +276,49 @@ class PilotSupervisor:
             return pf
 
         manifest = pf["manifest"]
+        manifest_sha = pf["manifest_sha256"]
+        source_prov = pf["source_provenance"]
         workloads = manifest["workloads"]
 
-        # Filter workloads if requested
+        # Check filter
+        is_filtered_run = bool(workload_filter)
         if workload_filter:
             workloads = [w for w in workloads if workload_filter in w["workload_id"]]
             print(f"Applied filter '{workload_filter}': {len(workloads)} workloads selected.")
+            if len(workloads) == 0:
+                print(f"ERROR: Filter '{workload_filter}' matched 0 workloads!")
+                return {
+                    "status": "ERROR",
+                    "reason": f"Filter '{workload_filter}' matched 0 workloads",
+                    "total_slots": 0,
+                    "executed_this_run": 0,
+                    "total_completed": 0,
+                }
 
         # 2. Check existing ledger
-        started_ids, completed_ids, _ = self.load_existing_ledger()
+        started_ids, completed_ids, existing_records, ledger_err = self.load_existing_ledger(
+            expected_manifest_sha=manifest_sha
+        )
+        if ledger_err:
+            print(f"ERROR loading existing ledger: {ledger_err}")
+            return {"status": "ERROR", "reason": ledger_err}
+
         print(f"Existing ledger has {len(completed_ids)} completed attempts.")
 
-        # Any attempt that was started but never completed is marked INTERRUPTED
+        # Write supervisor session header if ledger is fresh or new session
+        self.append_record({
+            "record_type": "SUPERVISOR_HEADER",
+            "session_id": f"session_{int(supervisor_t0)}",
+            "manifest_sha256": manifest_sha,
+            "git_commit": source_prov["git_commit"],
+            "git_dirty": source_prov["git_dirty"],
+            "source_hashes": source_prov["source_hashes"],
+            "is_filtered_run": is_filtered_run,
+            "filter": workload_filter,
+            "timestamp": supervisor_t0,
+        })
+
+        # Mark any attempt started in a prior run but not completed as INTERRUPTED
         interrupted_ids = started_ids - completed_ids
         for int_id in interrupted_ids:
             print(f"Marking previously interrupted attempt: {int_id}")
@@ -171,12 +332,7 @@ class PilotSupervisor:
             completed_ids.add(int_id)
 
         # 3. Build scheduled slots
-        # For each workload: 3 pairs = 6 runs
-        # Order parity:
-        # even case_index: Pair 1 (M1, M2), Pair 2 (M2, M1), Pair 3 (M1, M2)
-        # odd case_index:  Pair 1 (M2, M1), Pair 2 (M1, M2), Pair 3 (M2, M1)
         scheduled_slots: List[Dict[str, Any]] = []
-
         for w in workloads:
             w_id = w["workload_id"]
             case_idx = w["case_index"]
@@ -191,7 +347,7 @@ class PilotSupervisor:
 
             for pair_idx, (eng_a, eng_b) in enumerate(pair_patterns):
                 for sub_rep, eng in enumerate([eng_a, eng_b]):
-                    rep_idx = pair_idx  # rep 0, 1, 2
+                    rep_idx = pair_idx
                     attempt_id = f"{w_id}_{eng}_pair{pair_idx+1}_rep{rep_idx}"
                     scheduled_slots.append({
                         "workload_id": w_id,
@@ -209,16 +365,19 @@ class PilotSupervisor:
 
         executed_this_run = 0
         skipped_already_done = 0
+        failed_slots_count = 0
+        batch_stopped_early = False
 
         for slot_idx, slot in enumerate(scheduled_slots):
-            # Check elapsed wall time budget
             elapsed_wall = time.time() - supervisor_t0
             if elapsed_wall >= self.max_wall_seconds:
                 print(f"Max wall budget ({self.max_wall_seconds}s) reached. Stopping batch.")
+                batch_stopped_early = True
                 break
 
             if self.interrupted:
                 print("Supervisor interrupted. Stopping execution loop.")
+                batch_stopped_early = True
                 break
 
             att_id = slot["attempt_id"]
@@ -256,7 +415,7 @@ class PilotSupervisor:
                 cwd=str(REPO_ROOT),
             )
 
-            # Process output
+            # Process output and preserve structured errors
             completed_rec: Dict[str, Any] = {
                 "record_type": "ATTEMPT_COMPLETED",
                 "attempt_id": att_id,
@@ -275,20 +434,29 @@ class PilotSupervisor:
             if proc_res["status"] == "TIMEOUT":
                 completed_rec["status"] = "TIMEOUT"
                 completed_rec["error"] = f"Worker exceeded timeout of {self.worker_timeout}s"
+                failed_slots_count += 1
             elif proc_res["status"] == "RESOURCE_LIMIT":
                 completed_rec["status"] = "RESOURCE_LIMIT"
-                completed_rec["error"] = "Worker exceeded memory limit (RLIMIT_AS)"
-            elif proc_res["status"] == "OK":
-                try:
-                    payload = json.loads(proc_res["stdout"])
-                    completed_rec.update(payload)
-                except Exception as exc:
-                    completed_rec["status"] = "ERROR"
-                    completed_rec["error"] = f"Failed to parse child JSON output: {exc}"
-                    completed_rec["raw_stdout"] = proc_res["stdout"][:500]
+                completed_rec["error"] = proc_res.get("termination_reason", "Worker exceeded RLIMIT_AS")
+                failed_slots_count += 1
             else:
-                completed_rec["status"] = "ERROR"
-                completed_rec["error"] = proc_res["stderr"][:500]
+                # Attempt to parse child stdout JSON even if exit code is non-zero
+                child_payload = None
+                if proc_res["stdout"]:
+                    try:
+                        child_payload = json.loads(proc_res["stdout"].strip())
+                    except Exception:
+                        pass
+
+                if child_payload and isinstance(child_payload, dict):
+                    completed_rec.update(child_payload)
+                    st = child_payload.get("status")
+                    if st not in ("SUCCESS_NONEMPTY", "ZERO_RESULT_COMPLETE"):
+                        failed_slots_count += 1
+                else:
+                    completed_rec["status"] = "ERROR"
+                    completed_rec["error"] = proc_res["stderr"][:500] if proc_res["stderr"] else "Nonzero exit with no valid JSON output"
+                    failed_slots_count += 1
 
             self.append_record(completed_rec)
             completed_ids.add(att_id)
@@ -307,11 +475,23 @@ class PilotSupervisor:
             f"Total Completed: {len(completed_ids)}/{total_slots}."
         )
 
+        # Determine supervisor final status
+        if is_filtered_run:
+            final_status = "PARTIAL_RUN"
+        elif batch_stopped_early or len(completed_ids) < total_slots:
+            final_status = "INCOMPLETE_BATCH"
+        elif failed_slots_count > 0:
+            final_status = "SLOT_FAILURES_DETECTED"
+        else:
+            final_status = "PASS"
+
         return {
-            "status": "PASS",
+            "status": final_status,
             "total_slots": total_slots,
             "executed_this_run": executed_this_run,
             "total_completed": len(completed_ids),
+            "failed_slots": failed_slots_count,
+            "is_filtered_run": is_filtered_run,
         }
 
 
@@ -320,7 +500,7 @@ def main() -> None:
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST_PATH, help="Path to manifest JSON.")
     parser.add_argument("--ledger", type=Path, default=DEFAULT_LEDGER_PATH, help="Path to attempts ledger JSONL.")
     parser.add_argument("--max-wall-seconds", type=float, default=600.0, help="Maximum supervisor wall time in seconds.")
-    parser.add_argument("--worker-timeout", type=float, default=60.0, help="Per-worker timeout in seconds.")
+    parser.add_argument("--worker-timeout", type=float, default=DEFAULT_TIMEOUT_SECONDS, help="Per-worker timeout in seconds.")
     parser.add_argument("--filter", type=str, default=None, help="Filter workloads by substring.")
     args = parser.parse_args()
 
@@ -332,7 +512,17 @@ def main() -> None:
     )
     res = supervisor.run(workload_filter=args.filter)
 
-    sys.exit(0 if res.get("status") == "PASS" else 1)
+    # Strict exit codes:
+    # 0 = PASS (complete full pilot with zero failures)
+    # 2 = PARTIAL_RUN (filter used or intentional partial debug execution)
+    # 1 = Any other failure or incomplete batch
+    st = res.get("status")
+    if st == "PASS":
+        sys.exit(0)
+    elif st == "PARTIAL_RUN":
+        sys.exit(2)
+    else:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
