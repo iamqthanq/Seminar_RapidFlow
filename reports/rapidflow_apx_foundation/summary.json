@@ -1,29 +1,24 @@
 {
-  "timestamp_utc": "2026-11-18T10:17:30.979907+00:00",
-  "overall_status": "PASS",
-  "provenance": {
-    "repo_commit": "54ff56e9a84110d32f69c2fbe2cbcf35f82fe994",
-    "upstream_commit": "2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1",
-    "upstream_pristine": true,
-    "verified_at": "2026-11-18T10:17:24.474026+00:00"
+  "timestamp_utc": "2026-11-18T11:03:10.579840+00:00",
+  "runner_mode": "CANONICAL",
+  "overall_status": "P2_FOUNDATION_VERIFIED",
+  "stages": {
+    "PROVENANCE": "PASS",
+    "PREFLIGHT": "PASS",
+    "MANIFEST": "PASS",
+    "BUILD": "PASS",
+    "CASES": "PASS"
   },
-  "binary_sha256": "86c38d0eb8705eaf97ae8cc0feb6c6157017833a8a9294ff3dab2afb37ae7086",
-  "system_resources": {
-    "total_ram_gib": 11.53,
-    "free_disk_gib": 110.01
-  },
-  "total_cases": 8,
-  "passed_cases": 8,
-  "failed_cases": 0,
   "results": [
     {
       "case_id": "codec_boundaries",
       "status": "PASS",
       "diagnostic": "Codec successfully roundtrips 64-bit signed IDs and maintains typed label isolation",
-      "elapsed_seconds": 0.0033,
+      "oracle_verification": "Case verified",
+      "elapsed_seconds": 0.0039,
       "native_report": {
         "data_vertices_count": 6,
-        "binary_sha256": "86c38d0eb8705eaf97ae8cc0feb6c6157017833a8a9294ff3dab2afb37ae7086",
+        "binary_sha256": "10fd1bd4f9a5f93d43076c47658181e6c160568fef861d4fc6f84524b357f402",
         "query_vertices_count": 3,
         "diagnostic": "Codec successfully roundtrips 64-bit signed IDs and maintains typed label isolation",
         "status": "PASS",
@@ -34,9 +29,10 @@
       "case_id": "lifecycle_stream",
       "status": "PASS",
       "diagnostic": "Graph lifecycle, overlays, tombstones, and label precedence verified",
-      "elapsed_seconds": 0.0033,
+      "oracle_verification": "Lifecycle stream verified",
+      "elapsed_seconds": 0.0039,
       "native_report": {
-        "binary_sha256": "86c38d0eb8705eaf97ae8cc0feb6c6157017833a8a9294ff3dab2afb37ae7086",
+        "binary_sha256": "10fd1bd4f9a5f93d43076c47658181e6c160568fef861d4fc6f84524b357f402",
         "final_edges_count": 4,
         "final_vertices_count": 5,
         "diagnostic": "Graph lifecycle, overlays, tombstones, and label precedence verified",
@@ -47,10 +43,11 @@
     {
       "case_id": "transaction_lifecycle",
       "status": "PASS",
-      "diagnostic": "Transaction manager ACID boundaries and fault rollback verified",
-      "elapsed_seconds": 0.0032,
+      "diagnostic": "Transaction manager ACID boundaries, reentrancy guard, and fault rollback verified",
+      "oracle_verification": "Case verified",
+      "elapsed_seconds": 0.0039,
       "native_report": {
-        "binary_sha256": "86c38d0eb8705eaf97ae8cc0feb6c6157017833a8a9294ff3dab2afb37ae7086",
+        "binary_sha256": "10fd1bd4f9a5f93d43076c47658181e6c160568fef861d4fc6f84524b357f402",
         "steps_executed": [
           {
             "status": "SUCCESS",
@@ -85,7 +82,7 @@
             "step_index": 7
           }
         ],
-        "diagnostic": "Transaction manager ACID boundaries and fault rollback verified",
+        "diagnostic": "Transaction manager ACID boundaries, reentrancy guard, and fault rollback verified",
         "status": "PASS",
         "case_id": "transaction_lifecycle"
       }
@@ -93,15 +90,16 @@
     {
       "case_id": "tuple_sink_invariants",
       "status": "PASS",
-      "diagnostic": "Tuple sink canonicalization, injectivity enforcement, and duplicate detection verified",
-      "elapsed_seconds": 0.0038,
+      "diagnostic": "TupleSink injectivity, duplicate rejection, and staging invariants verified",
+      "oracle_verification": "TupleSink invariants verified",
+      "elapsed_seconds": 0.0041,
       "native_report": {
         "discarded_emissions": 1,
         "committed_emissions": 2,
         "unique_emissions": 3,
-        "binary_sha256": "86c38d0eb8705eaf97ae8cc0feb6c6157017833a8a9294ff3dab2afb37ae7086",
+        "binary_sha256": "10fd1bd4f9a5f93d43076c47658181e6c160568fef861d4fc6f84524b357f402",
         "raw_emissions": 4,
-        "diagnostic": "Tuple sink canonicalization, injectivity enforcement, and duplicate detection verified",
+        "diagnostic": "TupleSink injectivity, duplicate rejection, and staging invariants verified",
         "status": "PASS",
         "case_id": "tuple_sink_invariants"
       }
@@ -110,7 +108,8 @@
       "case_id": "k4_exact_enumeration",
       "status": "PASS",
       "diagnostic": "K4 exact enumeration produced exactly 24 unique ordered tuples",
-      "elapsed_seconds": 0.005,
+      "oracle_verification": "Bit-for-bit match with genuine scripts.dstar_oracle (24 unique ordered tuples)",
+      "elapsed_seconds": 0.0036,
       "native_report": {
         "tuples": [
           [
@@ -259,7 +258,7 @@
           ]
         ],
         "unique_emissions": 24,
-        "binary_sha256": "86c38d0eb8705eaf97ae8cc0feb6c6157017833a8a9294ff3dab2afb37ae7086",
+        "binary_sha256": "10fd1bd4f9a5f93d43076c47658181e6c160568fef861d4fc6f84524b357f402",
         "raw_emissions": 24,
         "tuple_count": 24,
         "diagnostic": "K4 exact enumeration produced exactly 24 unique ordered tuples",
@@ -271,16 +270,309 @@
       "case_id": "event_transition_stream",
       "status": "PASS",
       "diagnostic": "Dynamic event transitions on K4 missing edge verified (0 baseline, 24 ENTERED, 24 EXITED)",
-      "elapsed_seconds": 0.0033,
+      "oracle_verification": "Dynamic delta events verified bit-for-bit against scripts.dstar_oracle",
+      "elapsed_seconds": 0.0047,
       "native_report": {
-        "binary_sha256": "86c38d0eb8705eaf97ae8cc0feb6c6157017833a8a9294ff3dab2afb37ae7086",
+        "binary_sha256": "10fd1bd4f9a5f93d43076c47658181e6c160568fef861d4fc6f84524b357f402",
         "events": [
           {
+            "tuples": [
+              [
+                30,
+                40,
+                10,
+                20
+              ],
+              [
+                30,
+                40,
+                20,
+                10
+              ],
+              [
+                40,
+                30,
+                10,
+                20
+              ],
+              [
+                40,
+                30,
+                20,
+                10
+              ],
+              [
+                30,
+                10,
+                40,
+                20
+              ],
+              [
+                30,
+                20,
+                40,
+                10
+              ],
+              [
+                40,
+                10,
+                30,
+                20
+              ],
+              [
+                40,
+                20,
+                30,
+                10
+              ],
+              [
+                30,
+                10,
+                20,
+                40
+              ],
+              [
+                30,
+                20,
+                10,
+                40
+              ],
+              [
+                40,
+                10,
+                20,
+                30
+              ],
+              [
+                40,
+                20,
+                10,
+                30
+              ],
+              [
+                10,
+                30,
+                40,
+                20
+              ],
+              [
+                20,
+                30,
+                40,
+                10
+              ],
+              [
+                10,
+                40,
+                30,
+                20
+              ],
+              [
+                20,
+                40,
+                30,
+                10
+              ],
+              [
+                10,
+                30,
+                20,
+                40
+              ],
+              [
+                20,
+                30,
+                10,
+                40
+              ],
+              [
+                10,
+                40,
+                20,
+                30
+              ],
+              [
+                20,
+                40,
+                10,
+                30
+              ],
+              [
+                10,
+                20,
+                30,
+                40
+              ],
+              [
+                20,
+                10,
+                30,
+                40
+              ],
+              [
+                10,
+                20,
+                40,
+                30
+              ],
+              [
+                20,
+                10,
+                40,
+                30
+              ]
+            ],
             "published_count": 24,
             "event_type": "ENTERED",
             "step": 1
           },
           {
+            "tuples": [
+              [
+                30,
+                40,
+                10,
+                20
+              ],
+              [
+                30,
+                40,
+                20,
+                10
+              ],
+              [
+                40,
+                30,
+                10,
+                20
+              ],
+              [
+                40,
+                30,
+                20,
+                10
+              ],
+              [
+                30,
+                10,
+                40,
+                20
+              ],
+              [
+                30,
+                20,
+                40,
+                10
+              ],
+              [
+                40,
+                10,
+                30,
+                20
+              ],
+              [
+                40,
+                20,
+                30,
+                10
+              ],
+              [
+                30,
+                10,
+                20,
+                40
+              ],
+              [
+                30,
+                20,
+                10,
+                40
+              ],
+              [
+                40,
+                10,
+                20,
+                30
+              ],
+              [
+                40,
+                20,
+                10,
+                30
+              ],
+              [
+                10,
+                30,
+                40,
+                20
+              ],
+              [
+                20,
+                30,
+                40,
+                10
+              ],
+              [
+                10,
+                40,
+                30,
+                20
+              ],
+              [
+                20,
+                40,
+                30,
+                10
+              ],
+              [
+                10,
+                30,
+                20,
+                40
+              ],
+              [
+                20,
+                30,
+                10,
+                40
+              ],
+              [
+                10,
+                40,
+                20,
+                30
+              ],
+              [
+                20,
+                40,
+                10,
+                30
+              ],
+              [
+                10,
+                20,
+                30,
+                40
+              ],
+              [
+                20,
+                10,
+                30,
+                40
+              ],
+              [
+                10,
+                20,
+                40,
+                30
+              ],
+              [
+                20,
+                10,
+                40,
+                30
+              ]
+            ],
             "published_count": 24,
             "event_type": "EXITED",
             "step": 2
@@ -294,14 +586,17 @@
     {
       "case_id": "diamond_k1_fixed",
       "status": "PASS",
-      "diagnostic": "Diamond k=1 fixed-mapping successfully evaluated without exact NLF filtering",
-      "elapsed_seconds": 0.0027,
+      "diagnostic": "Diamond k=1 fixed-mapping successfully evaluated satisfying D-R guard (k < lambda) and S2 spanning connectivity",
+      "oracle_verification": "Diamond k=1 evaluation verified against D-R guard contract",
+      "elapsed_seconds": 0.0035,
       "native_report": {
-        "binary_sha256": "86c38d0eb8705eaf97ae8cc0feb6c6157017833a8a9294ff3dab2afb37ae7086",
+        "binary_sha256": "10fd1bd4f9a5f93d43076c47658181e6c160568fef861d4fc6f84524b357f402",
+        "computed_lambda": 2,
         "missing_edges": 1,
         "is_valid": true,
         "matched_edges": 4,
-        "diagnostic": "Diamond k=1 fixed-mapping successfully evaluated without exact NLF filtering",
+        "diagnostic": "Diamond k=1 fixed-mapping successfully evaluated satisfying D-R guard (k < lambda) and S2 spanning connectivity",
+        "s2_spanning_connected": true,
         "status": "PASS",
         "case_id": "diamond_k1_fixed"
       }
@@ -310,9 +605,10 @@
       "case_id": "irrelevant_update_stream",
       "status": "PASS",
       "diagnostic": "Irrelevant update recorded in authoritative state with zero search emissions",
-      "elapsed_seconds": 0.0026,
+      "oracle_verification": "Irrelevant update verified",
+      "elapsed_seconds": 0.0031,
       "native_report": {
-        "binary_sha256": "86c38d0eb8705eaf97ae8cc0feb6c6157017833a8a9294ff3dab2afb37ae7086",
+        "binary_sha256": "10fd1bd4f9a5f93d43076c47658181e6c160568fef861d4fc6f84524b357f402",
         "edge_recorded": true,
         "diagnostic": "Irrelevant update recorded in authoritative state with zero search emissions",
         "status": "PASS",
@@ -320,5 +616,26 @@
         "case_id": "irrelevant_update_stream"
       }
     }
-  ]
+  ],
+  "provenance": {
+    "repo_commit": "d76909e2ce1e4ca5e4c49a8158b463facf88a673",
+    "repo_clean": true,
+    "upstream_commit": "2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1",
+    "upstream_pristine": true,
+    "tools": {
+      "cmake": "cmake version 3.28.3",
+      "cxx": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]"
+    },
+    "verified_at": "2026-11-18T11:03:10.601867+00:00"
+  },
+  "system_resources": {
+    "available_ram_gib": 5.11,
+    "free_disk_gib": 110.0
+  },
+  "binary_path": "/home/iamqthanq/Desktop/Seminar_RapidFlow_D_INT02/tests/native/rapidflow_apx_foundation/build/rapidflow_apx_foundation_harness",
+  "binary_sha256": "10fd1bd4f9a5f93d43076c47658181e6c160568fef861d4fc6f84524b357f402",
+  "total_cases": 8,
+  "passed_cases": 8,
+  "failed_cases": 0
 }
