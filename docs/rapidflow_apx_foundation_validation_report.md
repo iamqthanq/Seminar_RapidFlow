@@ -7,7 +7,7 @@
 **Base Commit:** `8f6ebdacbf289e48e1c8a80a1c2e93720bcf633e`
 **Feature Branch:** `feature/rf30-d-int02-native-foundation`
 **Pinned Upstream RapidFlow:** `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1`
-**Execution Commit:** `975eb1e8c8a70781766803a0ad94f2b0c7a1ef39`
+**Execution Commit:** `ff41f8edc2129e8048fe03350ed4294f7f2961e6`
 **Native Harness Binary SHA-256:** `56a25a9db6ceee3cc5df9dd17e2333849a080d6d035a4235cdcec38911897d41`
 **Runner Execution Status:** **`PASS (P2_FOUNDATION_VERIFIED)`**
 **Review Status:** `READY_FOR_INDEPENDENT_CLOSURE_REVIEW` (Pending reviewer acceptance)
@@ -18,13 +18,13 @@
 
 Phase P2 delivers the authoritative C++ native foundation for RapidFlow-APX in `extensions/rapidflow_apx/`. All four core components—`ApxTypedCodec`, `ApxAuthoritativeGraph`, `ApxTransactionManager`, and `ApxTupleSink`—have been fully implemented, compiled into `librapidflow_apx_foundation.a`, and linked with genuine upstream RapidFlow components (`Graph` CSR and `GlobalEdgeView`).
 
-All 8 canonical foundation test cases in `configs/rapidflow_apx_foundation_cases.json` and 43 Python unit tests across 12 groups (Groups A through L) in `tests/test_rapidflow_apx_foundation.py` pass cleanly with zero failures and zero flakes. Total repository-wide test suite passes at 507/507 tests.
+All 8 canonical foundation test cases in `configs/rapidflow_apx_foundation_cases.json` and 50 Python unit tests across 13 groups (Groups A through M) in `tests/test_rapidflow_apx_foundation.py` pass cleanly with zero failures and zero flakes. Total repository-wide test suite passes at 514/514 tests.
 
 The targeted closure remediation thoroughly resolves all remaining aspects of P2-F01 through P2-F08:
-- **P2-F01**: Canonical required case registry locked in code (`CANONICAL_REQUIRED_CASE_IDS`); manifest cannot self-shrink; required observation schema strictly verified per case with explicit types (rejecting `bool` for `int`); non-negative bounds and structure strictly enforced; `--dry-run` performs full fixture existence and hash validation; deep validation rejects empty dicts, missing keys in nested dicts (`sink_counters`, `codec_state`), negative counts (`codec_state.edge_labels_count = -1`), `bool` degrees (`degrees = {"30": True}`), unexpected tuple emissions in `transaction_lifecycle` (`published_tuples` must be empty `[]`), and corrupted $K_4$ emissions (`raw=0, unique=999999`).
+- **P2-F01**: Canonical required case registry locked in code (`CANONICAL_REQUIRED_CASE_IDS`); manifest cannot self-shrink; required observation schema strictly verified per case with explicit types (rejecting `bool` for `int`); non-negative bounds and structure strictly enforced; `--dry-run` performs full fixture existence and hash validation; deep validation rejects empty dicts, missing keys in nested dicts (`sink_counters`, `codec_state`), negative counts (`codec_state.edge_labels_count = -1`), `bool` degrees (`degrees = {"30": True}`), unexpected tuple emissions in `transaction_lifecycle` (`published_tuples` must be empty `[]`), and corrupted $K_4$ emissions (`raw=0, unique=999999`); codec counts (`data_vertices_count`, `vertex_labels_count`, `edge_labels_count`) are strictly verified step-by-step against independent reference model values.
 - **P2-F02**: Full exception safety in `ApxTypedCodec` with immediate map-erase rollback on vector insertion throw (no ghost entries); RAII `TransactionScope` ensuring zero-allocation rollback across all exit paths before error string creation; complete elimination of container copy-assignments (`restore_checkpoint`); persistent allocation failure during staging rollback verified.
 - **P2-F03**: Ingestion rejects duplicate external vertex declarations fail-closed; JSON parser decodes Unicode escapes (`\uXXXX`, e.g. `\u0030` -> `"0"`) and rejects invalid escapes (e.g. `\q`).
-- **P2-F04**: Step-by-step differential graph-state verification against independent Python reference models (`simulate_lifecycle_stream` and `simulate_transaction_stream`); compares all active edges, typed labels, degrees, and sorted/unique neighbor lists; dynamic events strictly derive `event_type` from operation semantics (INSERT -> ENTERED, DELETE -> EXITED) without copying expected values; enforces fixed vertices contract in reference model (edge insertion with unknown endpoints is rejected with `PREVALIDATION_FAILED` without expanding vertex set; preserved label typing).
+- **P2-F04**: Step-by-step differential graph-state verification against independent Python reference models (`simulate_lifecycle_stream` and `simulate_transaction_stream`); compares all active edges, typed labels, degrees, and sorted/unique neighbor lists; dynamic events strictly derive `event_type` from operation semantics (INSERT -> ENTERED, DELETE -> EXITED) without copying expected values; enforces fixed vertices contract in reference model (edge insertion with unknown endpoints is rejected with `PREVALIDATION_FAILED` without expanding vertex set; preserved label typing); tracks codec intern dictionaries independently with explicit type discrimination (`(type, val)` where int `0` $\ne$ str `"0"`), retaining interned edge labels upon commit and through edge deletions (monotonic dictionary), while aborts restore checkpoint without dictionary growth.
 - **P2-F05**: D-R guard computes exact $\lambda(Q)$ via min $s$-$t$ cut flow network passes; enforces $0 \le k < \lambda(Q)$; verifies S2 spanning connectivity on matched query edges.
 - **P2-F06**: Resource containment: child process exits with 127 if `setrlimit` fails, failing case immediately; build and runtime use process group `SIGKILL` cleanup.
 - **P2-F07**: Unexpected exceptions in case loop record terminal `FAIL` status in `summary.json`; complete source-binding provenance (SHA-256 for all headers, sources, manifests, fixtures, build commands) included in report; git dirty state honestly differentiated between code modifications and runner outputs.
@@ -36,7 +36,7 @@ The targeted closure remediation thoroughly resolves all remaining aspects of P2
 
 | Metric / Property | Value / Verification Evidence |
 | :--- | :--- |
-| **Execution Commit** | `975eb1e8c8a70781766803a0ad94f2b0c7a1ef39` |
+| **Execution Commit** | `ff41f8edc2129e8048fe03350ed4294f7f2961e6` |
 | **Repository Cleanliness** | Verified CLEAN via `git status --porcelain` |
 | **Upstream RapidFlow Path** | `baselines/rapidflow/source/` (symlink in worktree) |
 | **Upstream Pinned Commit** | `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` |
