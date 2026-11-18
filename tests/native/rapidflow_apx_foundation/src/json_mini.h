@@ -260,7 +260,38 @@ private:
                     case 'n': result += '\n'; break;
                     case 'r': result += '\r'; break;
                     case 't': result += '\t'; break;
-                    default: result += esc; break;
+                    case 'u': {
+                        if (pos + 4 > s.size()) {
+                            throw std::runtime_error("Invalid unicode escape sequence: incomplete hex digits");
+                        }
+                        uint32_t cp = 0;
+                        for (int i = 0; i < 4; ++i) {
+                            char h = s[pos++];
+                            cp <<= 4;
+                            if (h >= '0' && h <= '9') cp |= static_cast<uint32_t>(h - '0');
+                            else if (h >= 'a' && h <= 'f') cp |= static_cast<uint32_t>(h - 'a' + 10);
+                            else if (h >= 'A' && h <= 'F') cp |= static_cast<uint32_t>(h - 'A' + 10);
+                            else throw std::runtime_error(std::string("Invalid hex digit in \\u escape: ") + h);
+                        }
+                        if (cp <= 0x7F) {
+                            result += static_cast<char>(cp);
+                        } else if (cp <= 0x7FF) {
+                            result += static_cast<char>(0xC0 | ((cp >> 6) & 0x1F));
+                            result += static_cast<char>(0x80 | (cp & 0x3F));
+                        } else if (cp <= 0xFFFF) {
+                            result += static_cast<char>(0xE0 | ((cp >> 12) & 0x0F));
+                            result += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+                            result += static_cast<char>(0x80 | (cp & 0x3F));
+                        } else {
+                            result += static_cast<char>(0xF0 | ((cp >> 18) & 0x07));
+                            result += static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
+                            result += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+                            result += static_cast<char>(0x80 | (cp & 0x3F));
+                        }
+                        break;
+                    }
+                    default:
+                        throw std::runtime_error(std::string("Invalid escape sequence: \\") + esc);
                 }
             } else {
                 result += c;

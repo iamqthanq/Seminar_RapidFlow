@@ -34,10 +34,16 @@ mini_json::Value run_codec_boundaries(const mini_json::Value& fixture) {
 
     ApxTypedCodec codec;
 
-    // 1. Query vertices intern/decode roundtrip
+    // 1. Query vertices intern/decode roundtrip with duplicate declaration rejection
     const auto& q_verts = fixture["external_query_vertices"].as_array();
+    std::unordered_set<int64_t> seen_q_decl;
     for (const auto& qv : q_verts) {
         int64_t ext_id = qv["id"].as_int();
+        if (!seen_q_decl.insert(ext_id).second) {
+            report["status"] = "FAIL";
+            report["diagnostic"] = "Duplicate external query vertex declaration: " + std::to_string(ext_id);
+            return report;
+        }
         uint32_t dense = codec.intern_query_vertex(ext_id);
         int64_t decoded = codec.decode_query_vertex(dense);
         if (decoded != ext_id) {
@@ -47,10 +53,16 @@ mini_json::Value run_codec_boundaries(const mini_json::Value& fixture) {
         }
     }
 
-    // 2. Data vertices intern/decode roundtrip
+    // 2. Data vertices intern/decode roundtrip with duplicate declaration rejection
     const auto& d_verts = fixture["external_data_vertices"].as_array();
+    std::unordered_set<int64_t> seen_d_decl;
     for (const auto& dv : d_verts) {
         int64_t ext_id = dv["id"].as_int();
+        if (!seen_d_decl.insert(ext_id).second) {
+            report["status"] = "FAIL";
+            report["diagnostic"] = "Duplicate external data vertex declaration: " + std::to_string(ext_id);
+            return report;
+        }
         uint32_t dense = codec.intern_data_vertex(ext_id);
         int64_t decoded = codec.decode_data_vertex(dense);
         if (decoded != ext_id) {
@@ -60,7 +72,7 @@ mini_json::Value run_codec_boundaries(const mini_json::Value& fixture) {
         }
     }
 
-    // 3. Typed label isolation: int 0 != string "0"
+    // 3. Typed label isolation: int 0 != string "0", and Unicode escape \u0030 == string "0"
     TypedLabel int_zero = TypedLabel::from_int(0);
     TypedLabel str_zero = TypedLabel::from_string("0");
     uint32_t id_int0 = codec.intern_vertex_label(int_zero);
@@ -68,6 +80,29 @@ mini_json::Value run_codec_boundaries(const mini_json::Value& fixture) {
     if (id_int0 == id_str0) {
         report["status"] = "FAIL";
         report["diagnostic"] = "Typed label collision: int 0 and string '0' interned to same ID";
+        return report;
+    }
+
+    // Unicode \u0030 must decode to string "0" and match string "0"
+    mini_json::Value u_json = mini_json::Parser::parse("{\"val\": \"\\u0030\"}");
+    TypedLabel u_lbl = TypedLabel::from_string(u_json["val"].as_string());
+    uint32_t id_u0 = codec.intern_vertex_label(u_lbl);
+    if (id_u0 != id_str0) {
+        report["status"] = "FAIL";
+        report["diagnostic"] = "Unicode escape \\u0030 must intern to same ID as string '0'";
+        return report;
+    }
+
+    // Invalid escape sequence \q must throw parse error
+    bool invalid_esc_caught = false;
+    try {
+        mini_json::Parser::parse("{\"val\": \"\\q\"}");
+    } catch (const std::exception&) {
+        invalid_esc_caught = true;
+    }
+    if (!invalid_esc_caught) {
+        report["status"] = "FAIL";
+        report["diagnostic"] = "Invalid escape sequence \\q was not rejected";
         return report;
     }
 
@@ -92,7 +127,7 @@ mini_json::Value run_codec_boundaries(const mini_json::Value& fixture) {
         return report;
     }
 
-    // 5. Codec checkpoint and zero-allocation rollback verification
+    // 5. Codec checkpoint and zero-allocation rollback verification (no ghost entries)
     auto cp = codec.create_checkpoint();
     size_t orig_q = codec.query_vertices_count();
     size_t orig_d = codec.data_vertices_count();
@@ -110,16 +145,19 @@ mini_json::Value run_codec_boundaries(const mini_json::Value& fixture) {
         codec.vertex_labels_count() != orig_vl ||
         codec.edge_labels_count() != orig_el ||
         codec.has_query_vertex(9999999) ||
-        codec.has_data_vertex(8888888)) {
+        codec.has_data_vertex(8888888) ||
+        codec.has_vertex_label(TypedLabel::from_string("temp_v_lbl")) ||
+        codec.has_edge_label(TypedLabel::from_string("temp_e_lbl"))) {
         report["status"] = "FAIL";
-        report["diagnostic"] = "Codec checkpoint restore failed to restore clean state";
+        report["diagnostic"] = "Codec checkpoint restore failed to restore clean state (ghost entry detected)";
         return report;
     }
 
     report["status"] = "PASS";
     report["diagnostic"] = "Codec successfully roundtrips 64-bit signed IDs and maintains typed label isolation";
-    report["query_vertices_count"] = static_cast<int64_t>(q_verts.size());
-    report["data_vertices_count"] = static_cast<int64_t>(d_verts.size());
+    report["query_vertices_count"] = static_cast<int64_t>(codec.query_vertices_count());
+    report["data_vertices_count"] = static_cast<int64_t>(codec.data_vertices_count());
+    return report;
     return report;
 }
 
@@ -208,6 +246,7 @@ mini_json::Value run_lifecycle_stream(const mini_json::Value& fixture) {
     }
 
     const auto& mutations = fixture["mutations"].as_array();
+    mini_json::Value mut_records = mini_json::Value::make_array();
     for (size_t i = 0; i < mutations.size(); ++i) {
         const auto& m = mutations[i];
         std::string op = m["op"].as_string();
@@ -247,12 +286,22 @@ mini_json::Value run_lifecycle_stream(const mini_json::Value& fixture) {
                 return report;
             }
         }
+
+        mini_json::Value mut_rec = mini_json::Value::make_object();
+        mut_rec["step_index"] = static_cast<int64_t>(i);
+        mut_rec["op"] = op;
+        mut_rec["u"] = static_cast<int64_t>(u);
+        mut_rec["v"] = static_cast<int64_t>(v);
+        mut_rec["edges_count"] = static_cast<int64_t>(graph.get_edges_count());
+        mut_rec["has_edge"] = graph.has_edge(u, v);
+        mut_records.push_back(mut_rec);
     }
 
     report["status"] = "PASS";
     report["diagnostic"] = "Graph lifecycle, overlays, tombstones, and label precedence verified";
     report["final_vertices_count"] = static_cast<int64_t>(graph.get_vertices_count());
     report["final_edges_count"] = static_cast<int64_t>(graph.get_edges_count());
+    report["mutations_executed"] = mut_records;
     return report;
 }
 
@@ -339,6 +388,22 @@ mini_json::Value run_transaction_lifecycle(const mini_json::Value& fixture) {
         mini_json::Value step_rec = mini_json::Value::make_object();
         step_rec["step_index"] = s["step_index"].as_int();
         step_rec["status"] = actual_status;
+        step_rec["op"] = op_str;
+        step_rec["u"] = update.ext_u;
+        step_rec["v"] = update.ext_v;
+        step_rec["current_edges_count"] = static_cast<int64_t>(graph.get_edges_count());
+        step_rec["current_vertices_count"] = static_cast<int64_t>(graph.get_vertices_count());
+        if (codec.has_data_vertex(update.ext_u)) {
+            step_rec["degree_u"] = static_cast<int64_t>(graph.get_degree(codec.get_data_vertex(update.ext_u)));
+        }
+        if (codec.has_data_vertex(update.ext_v)) {
+            step_rec["degree_v"] = static_cast<int64_t>(graph.get_degree(codec.get_data_vertex(update.ext_v)));
+        }
+        if (codec.has_data_vertex(update.ext_u) && codec.has_data_vertex(update.ext_v)) {
+            uint32_t du = codec.get_data_vertex(update.ext_u);
+            uint32_t dv = codec.get_data_vertex(update.ext_v);
+            step_rec["has_edge_uv"] = graph.has_edge(du, dv);
+        }
         step_results.push_back(step_rec);
     }
 
@@ -435,6 +500,77 @@ mini_json::Value run_transaction_lifecycle(const mini_json::Value& fixture) {
             return report;
         }
         tx_mgr.set_fault_injection(ApxTransactionManager::FaultPoint::NONE);
+    }
+
+    // Explicit Verification 5: Callback Stage Tuple then Abort with zero-allocation cleanup
+    {
+        uint32_t initial_edges = graph.get_edges_count();
+        size_t initial_committed = sink.committed_emissions();
+        UpdateOperation stage_op;
+        stage_op.op = UpdateOp::INSERT;
+        stage_op.ext_u = 10;
+        stage_op.ext_v = 30;
+        stage_op.label = TypedLabel::from_int(999);
+
+        auto stage_abort_res = tx_mgr.execute_update(stage_op, [&](
+            const ApxAuthoritativeGraph&,
+            const UpdateOperation&,
+            uint32_t,
+            uint32_t,
+            uint32_t
+        ) -> bool {
+            // Stage a tuple during callback
+            sink.emit_mapping({codec.get_data_vertex(10), codec.get_data_vertex(30)});
+            // Then abort
+            return false;
+        });
+
+        if (stage_abort_res.status != StepStatus::CALLBACK_ABORTED) {
+            report["status"] = "FAIL";
+            report["diagnostic"] = "Callback stage abort failed to return CALLBACK_ABORTED";
+            return report;
+        }
+
+        // Verify graph unchanged
+        if (graph.get_edges_count() != initial_edges) {
+            report["status"] = "FAIL";
+            report["diagnostic"] = "Graph edge count changed after aborted staged update";
+            return report;
+        }
+        uint32_t du10 = codec.get_data_vertex(10);
+        uint32_t dv30 = codec.get_data_vertex(30);
+        if (graph.has_edge(du10, dv30)) {
+            report["status"] = "FAIL";
+            report["diagnostic"] = "Graph retained inserted edge after aborted staged update";
+            return report;
+        }
+
+        // Verify pending output is empty and prior committed output preserved
+        if (sink.committed_emissions() != initial_committed) {
+            report["status"] = "FAIL";
+            report["diagnostic"] = "Committed emissions count changed after aborted step";
+            return report;
+        }
+
+        // Verify manager can process subsequent valid transaction normally
+        UpdateOperation valid_next_op;
+        valid_next_op.op = UpdateOp::INSERT;
+        valid_next_op.ext_u = 10;
+        valid_next_op.ext_v = 30;
+        valid_next_op.label = TypedLabel::from_int(999);
+        auto valid_next_res = tx_mgr.execute_update(valid_next_op, [](const ApxAuthoritativeGraph&, const UpdateOperation&, uint32_t, uint32_t, uint32_t) -> bool {
+            return true;
+        });
+        if (valid_next_res.status != StepStatus::SUCCESS) {
+            report["status"] = "FAIL";
+            report["diagnostic"] = "Manager failed to execute subsequent valid transaction after abort";
+            return report;
+        }
+        // Clean up: delete (10, 30)
+        valid_next_op.op = UpdateOp::DELETE;
+        tx_mgr.execute_update(valid_next_op, [](const ApxAuthoritativeGraph&, const UpdateOperation&, uint32_t, uint32_t, uint32_t) -> bool {
+            return true;
+        });
     }
 
     // Step 0 inserted (10, 40) successfully -> MUST remain in graph
@@ -711,9 +847,13 @@ mini_json::Value run_event_transition_stream(const mini_json::Value& fixture) {
             return report;
         }
 
+        std::string actual_event_type = (update.op == UpdateOp::INSERT) ? "ENTERED" : "EXITED";
         mini_json::Value rec = mini_json::Value::make_object();
         rec["step"] = ev["step"].as_int();
-        rec["event_type"] = ev["expected_event_type"].as_string();
+        rec["op"] = op_str;
+        rec["u"] = update.ext_u;
+        rec["v"] = update.ext_v;
+        rec["event_type"] = actual_event_type;
         rec["published_count"] = static_cast<int64_t>(res.published_tuples.size());
 
         // Materialize and serialize actual tuples for bit-for-bit Oracle verification

@@ -43,8 +43,16 @@ uint32_t ApxTypedCodec::intern_query_vertex(int64_t ext_id) {
         throw CapacityExceededException("Query vertex capacity exceeded uint32_t limit");
     }
     uint32_t dense_id = static_cast<uint32_t>(query_dense_to_ext_.size());
-    query_ext_to_dense_[ext_id] = dense_id;
-    query_dense_to_ext_.push_back(ext_id);
+    auto ins = query_ext_to_dense_.insert({ext_id, dense_id});
+    if (!ins.second) {
+        return ins.first->second;
+    }
+    try {
+        query_dense_to_ext_.push_back(ext_id);
+    } catch (...) {
+        query_ext_to_dense_.erase(ins.first);
+        throw;
+    }
     return dense_id;
 }
 
@@ -57,8 +65,16 @@ uint32_t ApxTypedCodec::intern_data_vertex(int64_t ext_id) {
         throw CapacityExceededException("Data vertex capacity exceeded uint32_t limit");
     }
     uint32_t dense_id = static_cast<uint32_t>(data_dense_to_ext_.size());
-    data_ext_to_dense_[ext_id] = dense_id;
-    data_dense_to_ext_.push_back(ext_id);
+    auto ins = data_ext_to_dense_.insert({ext_id, dense_id});
+    if (!ins.second) {
+        return ins.first->second;
+    }
+    try {
+        data_dense_to_ext_.push_back(ext_id);
+    } catch (...) {
+        data_ext_to_dense_.erase(ins.first);
+        throw;
+    }
     return dense_id;
 }
 
@@ -121,8 +137,16 @@ uint32_t ApxTypedCodec::intern_vertex_label(const TypedLabel& label) {
         throw CapacityExceededException("Vertex label capacity exceeded uint32_t limit");
     }
     uint32_t label_id = static_cast<uint32_t>(vertex_id_to_label_.size());
-    vertex_label_to_id_[label] = label_id;
-    vertex_id_to_label_.push_back(label);
+    auto ins = vertex_label_to_id_.insert({label, label_id});
+    if (!ins.second) {
+        return ins.first->second;
+    }
+    try {
+        vertex_id_to_label_.push_back(label);
+    } catch (...) {
+        vertex_label_to_id_.erase(ins.first);
+        throw;
+    }
     return label_id;
 }
 
@@ -135,8 +159,16 @@ uint32_t ApxTypedCodec::intern_edge_label(const TypedLabel& label) {
         throw CapacityExceededException("Edge label capacity exceeded uint32_t limit");
     }
     uint32_t label_id = static_cast<uint32_t>(edge_id_to_label_.size());
-    edge_label_to_id_[label] = label_id;
-    edge_id_to_label_.push_back(label);
+    auto ins = edge_label_to_id_.insert({label, label_id});
+    if (!ins.second) {
+        return ins.first->second;
+    }
+    try {
+        edge_id_to_label_.push_back(label);
+    } catch (...) {
+        edge_label_to_id_.erase(ins.first);
+        throw;
+    }
     return label_id;
 }
 

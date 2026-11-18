@@ -281,6 +281,132 @@ class TestRapidFlowApxFoundation(unittest.TestCase):
         ok, _ = verify_case_with_oracle("diamond_k1_fixed", {}, bad_report)
         self.assertFalse(ok)
 
+    def test_group_j_p2_f01_shrunk_manifest_rejected_by_canonical_registry(self):
+        # Even if manifest specifies only 1 case and required_case_ids=["codec_boundaries"],
+        # canonical manifest validation must reject it because canonical suite requires all 8 cases.
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+            shrunk = {
+                "manifest_version": "1.0.0",
+                "required_case_ids": ["codec_boundaries"],
+                "cases": [self.cases_by_id["codec_boundaries"]],
+            }
+            json.dump(shrunk, f)
+            temp_path = Path(f.name)
+
+        try:
+            with self.assertRaises(ManifestValidationError) as ctx:
+                validate_manifest(temp_path, is_canonical=True)
+            self.assertIn("missing canonical required case", str(ctx.exception))
+        finally:
+            temp_path.unlink()
+
+    def test_group_j_p2_f01_omitted_required_case_ids_rejected(self):
+        # If required_case_ids is omitted entirely from manifest, canonical validation still enforces canonical cases.
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+            shrunk = {
+                "manifest_version": "1.0.0",
+                "cases": [self.cases_by_id["codec_boundaries"]],
+            }
+            json.dump(shrunk, f)
+            temp_path = Path(f.name)
+
+        try:
+            with self.assertRaises(ManifestValidationError) as ctx:
+                validate_manifest(temp_path, is_canonical=True)
+            self.assertIn("missing canonical required case", str(ctx.exception))
+        finally:
+            temp_path.unlink()
+
+    def test_group_j_p2_f01_missing_fixture_fails_dry_run(self):
+        # If fixture path does not exist, validate_manifest and dry-run must fail.
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+            corrupt = dict(self.manifest)
+            corrupt["cases"] = [dict(c) for c in corrupt["cases"]]
+            corrupt["cases"][0]["fixture_path"] = "non_existent_fixture_path_xyz.json"
+            json.dump(corrupt, f)
+            temp_path = Path(f.name)
+
+        try:
+            with self.assertRaises(ManifestValidationError) as ctx:
+                validate_manifest(temp_path, is_canonical=True)
+            self.assertIn("declared fixture path does not exist", str(ctx.exception))
+        finally:
+            temp_path.unlink()
+
+    def test_group_j_p2_f01_payload_missing_observations_rejected(self):
+        # A payload with status PASS but missing observations must be rejected by run_isolated_case
+        case_def = self.cases_by_id["codec_boundaries"]
+        # run_isolated_case on real binary returns all observations
+        res = run_isolated_case(self.harness_bin, self.binary_sha, case_def)
+        self.assertEqual(res["status"], "PASS")
+
+        # Mock a minimal payload missing query_vertices_count
+        minimal_report = {"case_id": "codec_boundaries", "status": "PASS", "diagnostic": "ok"}
+        with patch("subprocess.Popen") as mock_popen:
+            mock_proc = mock_popen.return_value
+            mock_proc.communicate.return_value = (json.dumps(minimal_report), "")
+            mock_proc.returncode = 0
+            bad_res = run_isolated_case(self.harness_bin, self.binary_sha, case_def)
+            self.assertEqual(bad_res["status"], "FAIL")
+            self.assertIn("Missing required observation field 'query_vertices_count'", bad_res["diagnostic"])
+
+    def test_group_j_p2_f03_duplicate_external_vertices_rejected(self):
+        # Feeding duplicate external IDs in query vertices must be rejected by native codec
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+            fixture = {
+                "external_query_vertices": [{"id": 10}, {"id": 10}, {"id": 10}],
+                "external_data_vertices": [{"id": 100}, {"id": 200}],
+            }
+            json.dump(fixture, f)
+            temp_path = Path(f.name)
+
+        try:
+            proc = subprocess.run(
+                [str(self.harness_bin), "--case", "codec_boundaries", "--fixture", str(temp_path)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            out = json.loads(proc.stdout.strip())
+            self.assertEqual(out["status"], "FAIL")
+            self.assertIn("Duplicate external query vertex declaration", out["diagnostic"])
+        finally:
+            temp_path.unlink()
+
+    def test_group_j_p2_f04_swapped_events_rejected(self):
+        # Swapped ENTERED/EXITED events must fail validation
+        with open(REPO_ROOT / self.cases_by_id["event_transition_stream"]["fixture_path"]) as f:
+            fix_data = json.load(f)
+
+        swapped_report = {
+            "case_id": "event_transition_stream",
+            "status": "PASS",
+            "events": [
+                {"step": 1, "op": "+", "event_type": "EXITED", "published_count": 24, "tuples": []},
+                {"step": 2, "op": "-", "event_type": "ENTERED", "published_count": 24, "tuples": []},
+            ],
+        }
+        ok, msg = verify_case_with_oracle("event_transition_stream", fix_data, swapped_report)
+        self.assertFalse(ok)
+        self.assertIn("event type/op mismatch", msg)
+
+    def test_group_j_p2_f04_step_state_reference_mismatch_rejected(self):
+        # A divergent edge count in transaction lifecycle must be caught by reference model
+        with open(REPO_ROOT / self.cases_by_id["transaction_lifecycle"]["fixture_path"]) as f:
+            fix_data = json.load(f)
+
+        from scripts.run_rapidflow_apx_foundation import simulate_transaction_stream
+        ref_steps = simulate_transaction_stream(fix_data)
+        corrupt_report = {
+            "case_id": "transaction_lifecycle",
+            "status": "PASS",
+            "steps_executed": [dict(s) for s in ref_steps],
+        }
+        corrupt_report["steps_executed"][0]["current_edges_count"] = 9999
+        ok, msg = verify_case_with_oracle("transaction_lifecycle", fix_data, corrupt_report)
+        self.assertFalse(ok)
+        self.assertIn("edges_count mismatch", msg)
+
     def test_group_j_p2_f06_low_ram_fails_preflight(self):
         # Mocking low RAM raises ResourceLimitError
         with patch("scripts.run_rapidflow_apx_foundation.open", create=True) as mock_open:
@@ -289,6 +415,38 @@ class TestRapidFlowApxFoundation(unittest.TestCase):
             with self.assertRaises(ResourceLimitError) as ctx:
                 check_system_resources()
             self.assertIn("Insufficient available RAM", str(ctx.exception))
+
+    def test_group_j_p2_f06_setrlimit_failure_causes_case_failure(self):
+        # If setrlimit fails in preexec, child exits with 127 and parent records containment failure
+        case_def = self.cases_by_id["codec_boundaries"]
+        with patch("subprocess.Popen") as mock_popen:
+            mock_proc = mock_popen.return_value
+            mock_proc.communicate.return_value = ("", "FATAL: Failed to enforce RLIMIT_AS: Operation not permitted")
+            mock_proc.returncode = 127
+            res = run_isolated_case(self.harness_bin, self.binary_sha, case_def)
+            self.assertEqual(res["status"], "FAIL")
+            self.assertEqual(res["exit_code"], 127)
+            self.assertIn("Resource limit containment could not be enforced", res["diagnostic"])
+
+    def test_group_j_p2_f07_case_exception_creates_terminal_failure_record(self):
+        # If an unexpected exception occurs on a case, main() writes terminal FAIL summary
+        from scripts.run_rapidflow_apx_foundation import main
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+            summary_path = Path(f.name)
+
+        try:
+            with patch("sys.argv", ["run_rapidflow_apx_foundation.py", "--case", "codec_boundaries", "--output", str(summary_path)]):
+                with patch("scripts.run_rapidflow_apx_foundation.run_isolated_case", side_effect=RuntimeError("Unexpected fault")):
+                    ret = main()
+                    self.assertNotEqual(ret, 0)
+                    with open(summary_path, "r") as f:
+                        data = json.load(f)
+                    self.assertEqual(data["overall_status"], "FAIL")
+                    self.assertEqual(data["stages"]["CASES"], "FAIL")
+                    self.assertGreater(data["failed_cases"], 0)
+        finally:
+            if summary_path.exists():
+                summary_path.unlink()
 
     def test_group_j_p2_f07_diagnostic_mode_does_not_overwrite_canonical(self):
         canonical_summary = REPO_ROOT / "reports/rapidflow_apx_foundation/summary.json"

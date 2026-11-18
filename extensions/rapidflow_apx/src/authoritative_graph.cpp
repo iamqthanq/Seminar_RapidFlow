@@ -309,13 +309,13 @@ bool ApxAuthoritativeGraph::apply_delete(uint32_t u, uint32_t v, uint32_t label)
     bool in_overlay = (overlay_labels_.find(key) != overlay_labels_.end());
 
     if (in_tx_) {
+        tombstones_.insert(key);
         tx_record_.op = TxOpType::DELETE;
         tx_record_.u = u;
         tx_record_.v = v;
         tx_record_.label = label;
         tx_record_.key = key;
         tx_record_.was_in_overlay = in_overlay;
-        tombstones_.insert(key);
         if (in_overlay) {
             dynamic_edge_count_--;
         }

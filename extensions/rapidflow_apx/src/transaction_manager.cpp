@@ -9,6 +9,41 @@ struct ReentrancyGuard {
     explicit ReentrancyGuard(bool& f) : flag(f) { flag = true; }
     ~ReentrancyGuard() { flag = false; }
 };
+
+class TransactionScope {
+public:
+    TransactionScope(ApxAuthoritativeGraph& graph, ApxTypedCodec& codec, ApxTupleSink& sink)
+        : graph_(graph), codec_(codec), sink_(sink), codec_cp_(codec.create_checkpoint()), committed_(false) {
+        graph_.begin_transaction();
+        sink_.start_step();
+    }
+
+    ~TransactionScope() noexcept {
+        rollback_if_needed();
+    }
+
+    void rollback_if_needed() noexcept {
+        if (!committed_) {
+            graph_.rollback_transaction();
+            codec_.restore_checkpoint(codec_cp_);
+            sink_.abort_step();
+        }
+    }
+
+    void commit() noexcept {
+        graph_.commit_transaction();
+        committed_ = true;
+    }
+
+    bool is_committed() const noexcept { return committed_; }
+
+private:
+    ApxAuthoritativeGraph& graph_;
+    ApxTypedCodec& codec_;
+    ApxTupleSink& sink_;
+    CodecCheckpoint codec_cp_;
+    bool committed_{false};
+};
 } // namespace
 
 ApxTransactionManager::ApxTransactionManager(
@@ -27,17 +62,12 @@ StepResult ApxTransactionManager::execute_update(
     }
     ReentrancyGuard guard(is_in_transaction_);
 
-    // 1. Checkpoint state before any mutation or codec change
-    auto codec_cp = codec_.create_checkpoint();
-    auto graph_cp = graph_.create_checkpoint();
-    graph_.begin_transaction();
-    sink_.start_step();
+    // 1. Transaction Scope provides RAII containment and zero-allocation rollback
+    TransactionScope tx_scope(graph_, codec_, sink_);
 
     auto abort_and_rollback = [&](StepStatus status, const std::string& err) -> StepResult {
-        graph_.rollback_transaction();
-        graph_.restore_checkpoint(graph_cp);
-        codec_.restore_checkpoint(codec_cp);
-        sink_.abort_step();
+        // Run rollback BEFORE creating/returning error payload
+        tx_scope.rollback_if_needed();
         return {status, err, {}};
     };
 
@@ -170,7 +200,7 @@ StepResult ApxTransactionManager::execute_update(
     }
 
     // 6. Commit and publish
-    graph_.commit_transaction();
+    tx_scope.commit();
     auto published_tuples = sink_.commit_step();
     return {StepStatus::SUCCESS, "", std::move(published_tuples)};
 }
