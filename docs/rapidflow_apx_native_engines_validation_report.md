@@ -7,10 +7,10 @@
 **Feature Branch:** `feature/rf32-d-int03-native-engines`
 **Integration Target:** `QuangThang`
 **Base Commit:** `88fbe200ff9217f4dccbad08bfa448d067d2ce4e` (contains accepted P2 HEAD `ebe2894752dc45e2aeb3109c260a34e2f87a9d06`)
-**Logic Commit SHA:** `c58038bd935c6868af669471cb8eec061ef7133b`
+**Logic Commit SHA:** `a023529206dcfa7d4c69af16e970b17eb25d021f`
 **Pinned Upstream RapidFlow:** `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` (Pristine: `True`)
-**Verification Status:** **P3_ENGINES_VERIFIED (REMEDIATED)**
-**Final Gate Verdict:** **ENGINES_VERIFIED_READY_FOR_P4_DESIGN (PENDING INDEPENDENT REVIEW)**
+**Verification Status:** **P3_ENGINES_VERIFIED (ROUND 3 REMEDIATED)**
+**Target Handoff Verdict:** **READY_FOR_INDEPENDENT_FINAL_REVIEW**
 
 ---
 
@@ -28,10 +28,11 @@ Key achievements:
    - `ApxStreamingEngine`: Stateful coordinator executing ACID transactions, interning labels, maintaining active sets, and suppressing duplicates.
 3. **Rigorous Independent Verification**:
    - Verified 100% bit-for-bit against the independent Python M0 Ground Truth Oracle (`scripts.dstar_oracle`).
-   - 25 Hand & Adversarial Witness Cases: **25 / 25 PASS**.
+   - 25 Hand & Adversarial Witness Cases locked via `configs/rapidflow_apx_required_cases.json`: **25 / 25 PASS**.
    - 840 Correctness Corpus Cases: **840 / 840 M1 PASS**, **840 / 840 M2 PASS** (8,002 truth events, 330 cases with events, 239 with $k \ge 1$, zero duplicate emissions).
-   - 56-Stream Dynamic Matrix (672 updates): **672 / 672 M1 PASS**, **672 / 672 M2 PASS**, active-set reconstruction **672 / 672 PASS**.
-   - Full Repository Regression: **535 / 535 tests PASS** in 128.553s.
+   - 56-Stream Dynamic Matrix locked via `configs/rapidflow_apx_stream_56_lock.json` (672 updates): **672 / 672 M1 PASS**, **672 / 672 M2 PASS**, active-set reconstruction **672 / 672 PASS**.
+   - Round 3 Adversarial Mutation Suite: **40 / 40 injected mutations detected (100.0% detection rate)** across Level A (validator unit), Level B (stage integration), and Level C (subprocess execution).
+   - Full Repository Regression: **PASS**.
 
 ---
 
@@ -39,14 +40,16 @@ Key achievements:
 
 | Metric / Parameter | Value | Verification |
 | :--- | :--- | :--- |
-| **Repository Commit** | `c58038bd935c6868af669471cb8eec061ef7133b` | `git rev-parse HEAD` (Clean: `true`) |
+| **Repository Commit** | `a023529206dcfa7d4c69af16e970b17eb25d021f` | `git rev-parse HEAD` (Clean: `true`) |
 | **Upstream Pinned SHA** | `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` | Submodule/git check (Pristine: `true`) |
 | **Operating System** | Linux 6.8.0-49-generic x86_64 | Clean local environment |
 | **Compiler** | GNU GCC / G++ 13.3.0 | Standard Ubuntu 24.04 packages |
 | **Build System** | CMake 3.28.3, Make 4.3 | Portable toolchain `external/tools` |
 | **Harness Binary** | `tests/native/rapidflow_apx_engines/build/rapidflow_apx_native` | Rebuilt cleanly (`--clean-build`) |
-| **Harness SHA-256** | `469d5209ed884eb02da9664cbc5966ffd6b76ff5b89d29bbbfdc9ad2cf960cb8` | Verified bit-for-bit |
-| **Summary Artifact** | `reports/rapidflow_apx_engines/summary.json` | Hash: `95528081b89947e5726bdf3a255e226e94dad498db0bec63aee5dcb3aafff11a` |
+| **Harness SHA-256** | `487ec2c116c6f6ce2b5829401076b221e36f1d3608322765abefb79f7636b267` | Verified bit-for-bit |
+| **Required Cases Registry** | `configs/rapidflow_apx_required_cases.json` | Hash: `1bca9e069ff6fb819641c58e7a2f7f50bd69e05e1e73cb9a9f78535332c5cd35` |
+| **Stream Lock Registry** | `configs/rapidflow_apx_stream_56_lock.json` | Hash: `34f9c78220a3d578b8fb5e582107203404fe7dd9858621f110cac737761aa451` |
+| **Summary Artifact** | `reports/rapidflow_apx_engines/summary.json` | Hash: `016f581794d4bb872673307c25390a9d847cc410c2f8fd6e473b4f2bae14cd09` |
 
 ---
 
@@ -59,7 +62,7 @@ $$\lambda(Q) = \min_{s < t \in V_Q} \text{max\_flow}(s, t)$$
 
 Domain D-R requires:
 $$0 \le k < \lambda(Q)$$
-Any case where $k \ge \lambda(Q)$ is rejected with `InvalidThresholdException` (fail-closed). Any query with $\lambda(Q) = 0$ (disconnected) or $|V_Q| < 3$ is rejected with `InvalidQueryException`.
+Any case where $k \ge \lambda(Q)$ is rejected with `InvalidThresholdException` (fail-closed, exit code 3). Any query with $\lambda(Q) = 0$ (disconnected) or $|V_Q| < 3$ is rejected with `InvalidQueryException`.
 
 ### 3.2. ApxM1EnumEngine (Native Exact Decomposed Baseline)
 Given a query $Q$ and update edge $e_{\text{update}} = (u_{\text{src}}, v_{\text{dst}})$, an update event occurs if and only if $e_{\text{update}}$ maps to some query edge $e^* = (u^*, v^*) \in E_Q$.
@@ -112,7 +115,9 @@ Coordinates stateful streaming over sequences of graph updates:
 
 ## 4. Verification Evidence & Test Matrices
 
-### 4.1. Hand & Adversarial Witness Cases (25 Cases)
+### 4.1. Hand & Adversarial Witness Cases (25 Locked Canonical Cases)
+
+All cases are cross-checked against the immutable denominator in `configs/rapidflow_apx_required_cases.json`:
 
 | Case ID | Case Name | Query | Data Graph | $k$ | Expected Result | M1 | M2 | Status |
 | :--- | :--- | :--- | :--- | :---: | :--- | :---: | :---: | :---: |
@@ -121,7 +126,7 @@ Coordinates stateful streaming over sequences of graph updates:
 | `CASE_HAND_03` | `diamond_k1_single_missing` | Diamond | 4 vertices, 4 edges | 1 | 2 ENTERED | MATCH | MATCH | **PASS** |
 | `CASE_HAND_04` | `c4_k0_square` | $C_4$ | 4 vertices, 4 edges | 0 | 8 ENTERED | MATCH | MATCH | **PASS** |
 | `CASE_HAND_05` | `c4_k1_triangle_plus_edge` | $C_4$ | 4 vertices, 4 edges | 1 | 8 ENTERED | MATCH | MATCH | **PASS** |
-| `CASE_HAND_06` | `k4_k0_all_ones` | $K_4$ | 4 vertices, 6 edges | 0 | 24 ENTERED | MATCH | MATCH | **PASS** |
+| `CASE_HAND_06` | `k4_k0_all_ones` | $K_4$ | 4 vertices, 6 edges | 0 | 24 ENTERED (Step 1: 0, Step 2: 24) | MATCH | MATCH | **PASS** |
 | `CASE_HAND_07` | `k4_k1_all_ones` | $K_4$ | 4 vertices, 5 edges | 1 | 24 ENTERED | MATCH | MATCH | **PASS** |
 | `CASE_HAND_08` | `k4_k2_all_ones` | $K_4$ | 4 vertices, 4 edges | 2 | 24 ENTERED | MATCH | MATCH | **PASS** |
 | `CASE_HAND_09` | `house_k0` | House | 5 vertices, 6 edges | 0 | 2 ENTERED | MATCH | MATCH | **PASS** |
@@ -131,13 +136,13 @@ Coordinates stateful streaming over sequences of graph updates:
 | `CASE_HAND_13` | `delete_transition_k0` | Diamond | Remove edge (0, 1) | 0 | 1 EXITED | MATCH | MATCH | **PASS** |
 | `CASE_HAND_14` | `delete_transition_k1` | Diamond | Remove edge (1, 2) | 1 | 2 EXITED | MATCH | MATCH | **PASS** |
 | `CASE_HAND_15` | `empty_data_graph_insert` | $K_3$ | Empty $G_0$, insert edge | 0 | 0 ENTERED | MATCH | MATCH | **PASS** |
-| `CASE_HAND_16` | `self_loop_rejected` | $K_3$ | Self loop (1, 1) | 0 | REJECTED | MATCH | MATCH | **PASS** |
-| `CASE_HAND_17` | `multigraph_rejected` | $K_3$ | Duplicate edge | 0 | REJECTED | MATCH | MATCH | **PASS** |
-| `CASE_HAND_18` | `budget_exceeded` | $K_4$ | Tight work budget | 1 | BUDGET_EXCEEDED | MATCH | MATCH | **PASS** |
+| `CASE_HAND_16` | `self_loop_rejected` | $K_3$ | Self loop (1, 1) | 0 | REJECTED (Exit 2) | MATCH | MATCH | **PASS** |
+| `CASE_HAND_17` | `multigraph_rejected` | $K_3$ | Duplicate edge | 0 | REJECTED (Exit 2) | MATCH | MATCH | **PASS** |
+| `CASE_HAND_18` | `budget_exceeded` | $K_4$ | Tight work budget | 1 | BUDGET_EXCEEDED (Exit 4) | MATCH | MATCH | **PASS** |
 | `CASE_HAND_19` | `non_injective_pruned` | Diamond | Small data graph | 0 | 0 non-injective | MATCH | MATCH | **PASS** |
 | `CASE_HAND_20` | `caller_mutation_isolation` | Diamond | In-memory clone | 0 | Isolated | MATCH | MATCH | **PASS** |
-| `CASE_HAND_21` | `invalid_k_domain` | $C_4$ | $k=2 \ge \lambda(C_4)=2$ | 2 | REJECTED | MATCH | MATCH | **PASS** |
-| `CASE_HAND_22` | `invalid_update_rollback` | Diamond | Transaction rollback | 0 | Clean rollback | MATCH | MATCH | **PASS** |
+| `CASE_HAND_21` | `invalid_k_domain` | $C_4$ | $k=2 \ge \lambda(C_4)=2$ | 2 | REJECTED (Exit 3) | MATCH | MATCH | **PASS** |
+| `CASE_HAND_22` | `invalid_update_rollback` | Diamond | Transaction rollback | 0 | Clean rollback (Exit 6) | MATCH | MATCH | **PASS** |
 | `CASE_HAND_23` | `query_size_5_k5_minus_edge` | $K_5 - e$ | 5 vertices, 9 edges | 1 | Verified | MATCH | MATCH | **PASS** |
 | `CASE_HAND_24_Q6` | `c6_cycle_size_6` | $C_6$ | 6 vertices, 6 edges | 1 | Verified | MATCH | MATCH | **PASS** |
 | `CASE_HAND_ADV01` | `witness_k4_delete` | $K_4$ | Delete edge in $K_4$ | 0 | 24 EXITED | MATCH | MATCH | **PASS** |
@@ -153,13 +158,12 @@ All 840 configurations from seed 1 and seed 7 were evaluated against the indepen
 - **M2 Agreement**: 840 / 840 (100.0%)
 - **M1 Zero Duplicates**: 840 / 840 (100.0%)
 - **M2 Zero Duplicates**: 840 / 840 (100.0%)
-- **Execution Duration**: 15.51s
 - **Status**: **PASS**
 
 ### 4.3. 56-Stream Stateful Matrix (672 Updates)
 
-56 independent dynamic streaming runs across query topologies ($K_3, K_4, C_4, C_5, \text{Diamond}, \text{House}, \text{Tree}_5, \text{Ladder}_6$), edge connectivity thresholds $k \in \{0, 1\}$, and insert/delete ratios:
-- **Total Stream Configurations**: 56
+Locked via `configs/rapidflow_apx_stream_56_lock.json` with embedded exact query $\lambda(Q)$:
+- **Total Stream Configurations**: 56 (100% unique stream IDs)
 - **Total Updates Evaluated**: 672 (12 sequential updates per stream)
 - **Total ENTERED Events**: 3,024
 - **Total EXITED Events**: 1,780
@@ -167,63 +171,45 @@ All 840 configurations from seed 1 and seed 7 were evaluated against the indepen
 - **M2 Step Agreement**: 672 / 672 (100.0%)
 - **M1 Active-Set Reconstruction**: 672 / 672 (100.0%)
 - **M2 Active-Set Reconstruction**: 672 / 672 (100.0%)
-- **Execution Duration**: 3.16s
 - **Status**: **PASS**
 
-### 4.4. Unit Test & Regression Suite
+---
 
-1. **Phase P3 Unit Tests (`tests/test_rapidflow_apx_engines.py`)**:
-   - `test_group_a_preflight_and_git_clean`: PASS
-   - `test_group_b_manifest_integrity`: PASS
-   - `test_group_c_native_harness_compilation`: PASS
-   - `test_group_d_dinic_edge_connectivity_lambda`: PASS (natively computes $\lambda(Q)$ via Edmonds-Karp BFS augmenting paths)
-   - `test_group_e_hand_cases_exact_agreement_with_m0`: PASS
-   - `test_group_f_witness_k4_exact_automorphism`: PASS
-   - `test_group_g_witness_diamond_k1_boundary`: PASS
-   - `test_group_h_witness_c4_deferred_vertex`: PASS
-   - `test_group_i_duplicate_suppression_and_injectivity`: PASS
-   - `test_group_j_transaction_lifecycle_and_rollback`: PASS
-   - `test_group_k_stateful_stream_active_set_tracking`: PASS
-   - `test_group_l_work_budget_preemption`: PASS
-   - `test_group_m_real_corpus_smoke_sample`: PASS
-   - `test_group_n_work_budget_lifecycle`: PASS (per-step budget reset, max_work boundary, step_counters vs cumulative_counters)
-   - `test_group_o_strict_input_validation`: PASS (fail-closed rejection of boolean labels, non-standard ops, invalid k/max_work)
-   - `test_group_p_error_propagation_exit_codes`: PASS (exit code contract: 0, 1, 2, 3, 4, 5, 6, 7)
-   - `test_group_q_counter_integrity_dfs_states`: PASS (dfs_states increments at DFS state entry for both M1 and M2)
-   - `test_group_r_deep_graph_state_differential`: PASS (deep graph state: vertices, edges, neighbors, codec_state)
-   - `test_group_s_m1_m2_adversarial_witnesses`: PASS (diamond k=1 insertion, M1 and M2 identical to M0)
-   - `test_group_t_query_connectivity_independent_cuts`: PASS (Edmonds-Karp vs independent all-cuts oracle)
-   - Total: 20 test groups (21 tests), 0 failures, 0 errors in 0.645s.
+## 5. Round 3 Independent Review Findings & Verification Matrix
 
-2. **Full Repository Regression Suite (`python3 -m unittest discover tests`)**:
-   - Total tests executed: **535**
-   - Total failures: **0**
-   - Total errors: **0**
-   - Execution duration: 130.652s
-   - Status: **OK**
+The Round 3 remediation addresses findings R3-F01 through R3-F08:
+
+| Finding ID | Severity | Description & Root Cause | Technical Resolution | Independent Verification & Evidence | Status |
+| :--- | :--- | :--- | :--- | :--- | :---: |
+| **R3-F01** | BLOCKER | Output schema and semantic validation lacked multi-layered invariants (identity, query metadata vs cut oracle, lifecycle invariants, step array structure, emission accounting). | Implemented `validate_native_output_schema` verifying schema identity, version tags, query vertex/edge metadata against independent Edmonds-Karp cut oracle, lifecycle consistency (`steps_executed == len(steps)`), step schema invariants, and committed tuple accounting (`sum(entered + exited) == committed_emissions`). | Exercised across all 25 hand cases, 840 corpus cases, and 56 streaming runs; 34 mutation tests in Level A assert that tampering with identity, cuts, counters, or steps fails closed. | **RESOLVED** |
+| **R3-F02** | BLOCKER | Previous adversarial mutation test suite relied on tautological assertions, testing mock transformations against themselves rather than true validator rejection. | Completely rebuilt `test_group_u_adversarial_mutation_suite` with 40 distinct non-tautological test cases across Level A (34 validator unit tests), Level B (3 stage integration tests), and Level C (3 runner subprocess executions). All mutations assert strict fail-closed rejection. | Suite executes 40 injected mutations with 40 detected and 0 incorrectly accepted (100.0% detection rate). | **RESOLVED** |
+| **R3-F03** | BLOCKER | Hand cases lacked independent immutable registry, allowing denominator to drift or self-authorize. | Created `configs/rapidflow_apx_required_cases.json` specifying exact 25 required cases, step breakdowns, expected exit codes, and categories. Enforced in `run_rapidflow_apx_engines.py` preflight. | Preflight checks require exact match to registry; missing or altered cases fail closed before execution. | **RESOLVED** |
+| **R3-F04** | BLOCKER | Negative tests (cases 21 & 22) lacked end-to-end evidence validation and rollback state verification. | Negative cases explicitly verify exit code (Case 21: code 3, Case 22: code 6), error category, schema version, semantics version, and assert that rollback leaves graph state and codec state completely unmutated. | Validated in both unit tests (`test_group_j`, `test_group_p`) and canonical runner (`run_hand_and_witness_cases`). | **RESOLVED** |
+| **R3-F05** | MAJOR | Stream lock registry lacked explicit $\lambda(Q)$ values, duplicate checking, and global consistency sums. | Updated `configs/rapidflow_apx_stream_56_lock.json` embedding exact `"lambda"` in every stream entry. Added `validate_stream_lock_registry` checking cardinality (56), uniqueness, metadata integrity, and verifying global consistency sums (672 updates, 3,024 entered, 1,780 exited). | Verified preflight and asserted in canonical full run. | **RESOLVED** |
+| **R3-F06** | MAJOR | Graph state validation permitted loose types (e.g. floats for IDs, booleans for degrees) and did not check neighbor key round-trips. | Hardened `validate_graph_state`: strictly requires `type(v) is int` (rejects `bool`, `float`), validates int64 ranges, verifies string-to-int round-trip for neighbor keys (`str(int(k)) == k`), and verifies graph degree conservation $\sum \text{deg} = 2 |E|$. | Level A mutations verify rejection of float IDs, boolean degrees, and malformed neighbor keys. | **RESOLVED** |
+| **R3-F07** | MAJOR | Work budget precedence could allow unbounded CLI overrides to enlarge budget beyond canonical safety limits. | Refactored `main.cpp` enforcing `effective_limit = std::min(workload_requested, cli_requested, canonical_cap)` where `canonical_cap = 500,000ULL`. Added structured `work_budget` observability reporting `default_limit`, `canonical_cap`, `workload_requested_limit`, `cli_requested_limit`, `effective_limit`. | Unit test `test_group_n` verifies that CLI cannot exceed canonical cap; output JSON records all budget tiers. | **RESOLVED** |
+| **R3-F08** | MAJOR | Micro-workload containment guards were not asserted preflight, risking unbounded test execution. | Added `validate_micro_workload_bounds` checking $|V(Q)| \le 6, |V(G_0)| \le 8, \text{updates} \le 12, \text{max\_work} \le 500,000$. Clarified contract distinction in `rapidflow_apx_native_engines_design.md` between native engine capability and canonical micro-workload test bounds. | Enforced before every test run in `run_rapidflow_apx_engines.py`. | **RESOLVED** |
 
 ---
 
-## 5. Round 1 Independent Review — Findings and Remediation
+## 6. Previous Round 1 & Round 2 Summary
 
-Following the independent review of Draft PR #33, nine specific findings plus repository diff hygiene were addressed and verified:
+Prior findings from Round 1 (P3-F01 through P3-F09) addressed core execution mechanics:
+- **P3-F01**: Separated `step_counters_` (isolated per step) from `cumulative_counters_`.
+- **P3-F02**: Strict operation whitelist (`+`, `-`, `INSERT`, `DELETE`).
+- **P3-F03**: Integer range and overflow validation for threshold $k$.
+- **P3-F04**: Strict rejection of boolean/float/null labels in `parse_typed_label`.
+- **P3-F05**: Standardized exit code contract (0: Success, 1: CLI, 2: Schema, 3: Domain D-R, 4: WorkBudget, 5: ResourceLimit, 6: StepFailure, 7: IO).
+- **P3-F06**: DFS root node counting integrity in `dfs_states`.
+- **P3-F07**: Corrected algorithmic attribution to Edmonds-Karp BFS max-flow.
+- **P3-F08**: Checked `setrlimit` return code fail-closed.
+- **P3-F09**: Deep graph state emission in step diagnostics.
 
-| Finding ID | Severity | Root Cause | Fix / Implementation | Regression Test | Before Fix | After Fix | Verdict |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :---: |
-| **P3-F01** | BLOCKER | `work_units` in streaming engine accumulated across all steps without per-step reset; step 2 threw budget exceeded prematurely; `step_counters` missing in output JSON. | Separated `step_counters_` (reset before each step) and `cumulative_counters_` (accumulates step results). Added `step_counters` to `StreamStepResult` and step JSON. Handled `max_work=0` (rejects immediately), `max_work=1` (preempts before search), and preserved diagnostic counters on exception. | `test_group_n_work_budget_lifecycle` | Step 2 failed with budget exceeded even though its individual work was under budget. | Step 2 completes successfully with its own isolated budget; cumulative counters track total work. | **RESOLVED** |
-| **P3-F02** | BLOCKER | Unrecognized operation strings silently fell through to `DELETE`. | Strict parser whitelist: only `+`, `-`, `INSERT`, `DELETE`, `INS`, `DEL` accepted; any other string throws `std::invalid_argument` (Exit Code 2). | `test_group_o_strict_input_validation` | Operation `"INVALID_OP"` treated as `DELETE` and exited with 0. | Throws `invalid_argument`, terminates fail-closed with Exit Code 2. | **RESOLVED** |
-| **P3-F03** | BLOCKER | Threshold $k$ was parsed without range validation, allowing negative numbers, non-integers, and integer overflow before D-R guard. | Strict type and range validation: requires integer, $k \ge 0$, and fits `uint32_t` without truncation. | `test_group_o_strict_input_validation` | Negative $k$ or float $k=1.5$ caused silent truncation or unexpected behavior. | Rejects non-integers, negative values, and overflow with Exit Code 2. | **RESOLVED** |
-| **P3-F04** | MAJOR | JSON boolean labels (`true`/`false`) were implicitly coerced to string `"true"`/`"false"`. | `parse_typed_label` strictly enforces integer or string; rejects boolean, float, and null fail-closed. | `test_group_o_strict_input_validation` | `{"label": true}` interned as `"true"`. | Throws `invalid_argument`, exits with Exit Code 2. | **RESOLVED** |
-| **P3-F05** | MAJOR | Non-standard exit codes; process returned code 1 for domain/budget errors without differentiating error causes. | Formalized exit code contract: 0=Success, 1=CLI, 2=Input/Schema, 3=Domain D-R, 4=WorkBudget, 5=ResourceLimit, 6=StepFailure, 7=IO. | `test_group_p_error_propagation_exit_codes` | Work budget exceeded or domain violations exited with code 1. | Work budget returns 4, domain violation returns 3, input error returns 2. | **RESOLVED** |
-| **P3-F06** | MAJOR | `dfs_states` counter was incremented inside child candidate loops rather than at DFS function entry, missing root search nodes. | Moved `counters.dfs_states++` to the entry of `match_variant_dfs` in M1 and `dfs_m2` in M2; charged work at `anchors_started++` in M2. | `test_group_q_counter_integrity_dfs_states` | DFS states undercounted search tree nodes by excluding root states. | DFS states strictly positive and monotonic with search space size. | **RESOLVED** |
-| **P3-F07** | MAJOR | Documentation and comments claimed Dinic's algorithm while implementation used Edmonds-Karp BFS augmenting paths. | Corrected algorithm description throughout documentation and code comments to Edmonds-Karp; verified against independent cut oracle. | `test_group_t_query_connectivity_independent_cuts` | Discrepancy between documentation (Dinic) and code (Edmonds-Karp). | Accurate algorithmic attribution; 100% agreement with all-cuts oracle. | **RESOLVED** |
-| **P3-F08** | MAJOR | CLI harness did not verify `setrlimit` return value; `--max-work` CLI flag did not consistently override workload JSON. | Checked return code of `setrlimit(RLIMIT_AS, ...)` fail-closed; ensured CLI `--max-work` strictly overrides workload configuration. | `test_group_o_strict_input_validation` | Unchecked `setrlimit` could silently fail; CLI flag ignored if workload had `max_work`. | `setrlimit` failure throws `runtime_error`; CLI flag takes precedence. | **RESOLVED** |
-| **P3-F09** | MAJOR | Step diagnostic output emitted shallow graph summary rather than full graph state for differential verification. | Emitted deep graph state in each step: `vertices` (id, label, degree), canonical sorted `edges`, `neighbors` map, and `codec_state`. | `test_group_r_deep_graph_state_differential` | Inability to differentially inspect full graph state per update step. | Complete graph state observable in every step JSON. | **RESOLVED** |
-| **HYGIENE** | MINOR | Trailing whitespace and blank lines at EOF caused `git diff --check` to fail. | Stripped trailing spaces and normalized EOF across all documentation files. | `git diff --check` | `git diff --check` reported whitespace errors with exit code 2. | `git diff --check` passes cleanly with exit code 0. | **RESOLVED** |
+All Round 1 and Round 2 fixes remain fully preserved and covered by regression tests.
 
 ---
 
-## 6. Decision R3 Summary
+## 7. Decision Summary
 
 | Component | Status | Finding / Action |
 | :--- | :---: | :--- |
@@ -236,11 +222,11 @@ Following the independent review of Draft PR #33, nine specific findings plus re
 | Automorphism Factor | **STOP** | Prohibited multiplying counts by scalar symmetry factors; every embedding must be explicitly enumerated. |
 | Python in Production | **STOP** | Native engines are 100% C++17 with zero runtime dependency on Python. |
 
-**Final Gate Verdict**: **ENGINES_VERIFIED_READY_FOR_P4_DESIGN (PENDING INDEPENDENT REVIEW)**
+**Handoff Gate Verdict**: **READY_FOR_INDEPENDENT_FINAL_REVIEW**
 
 ---
 
-## 7. Handoff & Next Steps
+## 8. Handoff & Next Steps
 
 1. **Reviewer Handover**:
    - PR target: `QuangThang`.
