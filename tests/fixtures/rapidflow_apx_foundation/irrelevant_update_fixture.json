@@ -1,0 +1,32 @@
+{
+  "case_id": "irrelevant_update_stream",
+  "description": "Authoritative state updates correctly for updates outside query label signature with zero search emissions",
+  "query": {
+    "vertices": [
+      {"id": 1, "label": {"type": "int", "val": 0}},
+      {"id": 2, "label": {"type": "int", "val": 0}}
+    ],
+    "edges": [
+      {"u": 1, "v": 2, "label": {"type": "int", "val": 1}}
+    ]
+  },
+  "baseline": {
+    "vertices": [
+      {"id": 10, "label": {"type": "int", "val": 0}},
+      {"id": 20, "label": {"type": "int", "val": 0}},
+      {"id": 30, "label": {"type": "int", "val": 0}}
+    ],
+    "edges": [
+      {"u": 10, "v": 20, "label": {"type": "int", "val": 1}}
+    ]
+  },
+  "update": {
+    "op": "+",
+    "u": 20,
+    "v": 30,
+    "label": {"type": "int", "val": 99},
+    "expected_events": 0,
+    "expected_edge_exists": true,
+    "expected_degree_v20": 2
+  }
+}

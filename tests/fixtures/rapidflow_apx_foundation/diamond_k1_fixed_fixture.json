@@ -1,0 +1,44 @@
+{
+  "case_id": "diamond_k1_fixed",
+  "description": "Diamond k=1 fixed-mapping evaluation without exact NLF interference: accepts lambda=2 with 1 missing edge (BC)",
+  "query": {
+    "vertices": [
+      {"id": 1, "label": {"type": "int", "val": 1}},
+      {"id": 2, "label": {"type": "int", "val": 1}},
+      {"id": 3, "label": {"type": "int", "val": 1}},
+      {"id": 4, "label": {"type": "int", "val": 1}}
+    ],
+    "edges": [
+      {"u": 1, "v": 2, "label": {"type": "int", "val": 10}},
+      {"u": 1, "v": 3, "label": {"type": "int", "val": 10}},
+      {"u": 2, "v": 4, "label": {"type": "int", "val": 10}},
+      {"u": 3, "v": 4, "label": {"type": "int", "val": 10}},
+      {"u": 2, "v": 3, "label": {"type": "int", "val": 10}}
+    ]
+  },
+  "data": {
+    "vertices": [
+      {"id": 10, "label": {"type": "int", "val": 1}},
+      {"id": 20, "label": {"type": "int", "val": 1}},
+      {"id": 30, "label": {"type": "int", "val": 1}},
+      {"id": 40, "label": {"type": "int", "val": 1}}
+    ],
+    "edges": [
+      {"u": 10, "v": 20, "label": {"type": "int", "val": 10}},
+      {"u": 10, "v": 30, "label": {"type": "int", "val": 10}},
+      {"u": 20, "v": 40, "label": {"type": "int", "val": 10}},
+      {"u": 30, "v": 40, "label": {"type": "int", "val": 10}}
+    ]
+  },
+  "fixed_mapping_ext": [
+    {"query_ext_id": 1, "data_ext_id": 10},
+    {"query_ext_id": 2, "data_ext_id": 20},
+    {"query_ext_id": 3, "data_ext_id": 30},
+    {"query_ext_id": 4, "data_ext_id": 40}
+  ],
+  "k": 1,
+  "lambda": 2,
+  "expected_matched_edges": 4,
+  "expected_missing_edges": 1,
+  "expected_is_valid": true
+}

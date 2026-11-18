@@ -1,0 +1,98 @@
+{
+  "manifest_version": "1.0.0",
+  "target_engine": "rapidflow_apx_foundation",
+  "default_limits": {
+    "timeout_seconds": 15,
+    "max_address_space_mib": 256
+  },
+  "cases": [
+    {
+      "case_id": "codec_boundaries",
+      "description": "Validation of 64-bit signed IDs, typed label intern isolation, and capacity preflight",
+      "fixture_path": "tests/fixtures/rapidflow_apx_foundation/codec_boundaries_fixture.json",
+      "fixture_sha256": "588d73959c9f92bc7a302efce0b1a52eee539d6333312281848cbd9adec63eb3",
+      "expected_status": "PASS",
+      "limits": {
+        "timeout_seconds": 10,
+        "max_address_space_mib": 128
+      }
+    },
+    {
+      "case_id": "lifecycle_stream",
+      "description": "Lifecycle of baseline CSR, overlay additions, deletions, tombstones, and label precedence",
+      "fixture_path": "tests/fixtures/rapidflow_apx_foundation/lifecycle_stream_fixture.json",
+      "fixture_sha256": "46f3a01794da6d1c5c09b375161129187ee989e5f171ed8256df06914ae1b7fb",
+      "expected_status": "PASS",
+      "limits": {
+        "timeout_seconds": 10,
+        "max_address_space_mib": 128
+      }
+    },
+    {
+      "case_id": "transaction_lifecycle",
+      "description": "Transactional ACID boundaries, snapshot sequencing, fault injection rollback, and committed state preservation",
+      "fixture_path": "tests/fixtures/rapidflow_apx_foundation/transaction_lifecycle_fixture.json",
+      "fixture_sha256": "8cf7fa0f3159fe94289def993a965f4f51b04e1abaf271968ed2f1ccdec6f7bc",
+      "expected_status": "PASS",
+      "limits": {
+        "timeout_seconds": 10,
+        "max_address_space_mib": 128
+      }
+    },
+    {
+      "case_id": "tuple_sink_invariants",
+      "description": "Tuple sink canonicalization by ascending query vertex IDs, injectivity checks, and duplicate raw emission detection",
+      "fixture_path": "tests/fixtures/rapidflow_apx_foundation/tuple_sink_fixture.json",
+      "fixture_sha256": "875fd08364d838987f326e1b2446b85a812fd9dec4a5ffe1faf6df5d0ccc5978",
+      "expected_status": "PASS",
+      "limits": {
+        "timeout_seconds": 10,
+        "max_address_space_mib": 128
+      }
+    },
+    {
+      "case_id": "k4_exact_enumeration",
+      "description": "Exhaustive bare M2 exact enumeration on K4: exactly 24 unique ordered tuples matching M0 without scalar multiplication",
+      "fixture_path": "tests/fixtures/rapidflow_apx_foundation/k4_exact_fixture.json",
+      "fixture_sha256": "b2e95b3ad0e0bb84e3aee1b40af13465b1686f1b2bd724a2808d5fa3c475713e",
+      "expected_status": "PASS",
+      "limits": {
+        "timeout_seconds": 15,
+        "max_address_space_mib": 256
+      }
+    },
+    {
+      "case_id": "event_transition_stream",
+      "description": "Dynamic event transitions on K4 missing edge: 0 baseline, 24 ENTERED on INSERT, 24 EXITED on DELETE",
+      "fixture_path": "tests/fixtures/rapidflow_apx_foundation/event_transition_fixture.json",
+      "fixture_sha256": "1198c242623ac69c8dba5b59c6534fd4c43afe36a57611eb9dbbd0009c000c70",
+      "expected_status": "PASS",
+      "limits": {
+        "timeout_seconds": 15,
+        "max_address_space_mib": 256
+      }
+    },
+    {
+      "case_id": "diamond_k1_fixed",
+      "description": "Diamond k=1 fixed-mapping evaluation without exact NLF interference: accepts lambda=2 with 1 missing edge (BC)",
+      "fixture_path": "tests/fixtures/rapidflow_apx_foundation/diamond_k1_fixed_fixture.json",
+      "fixture_sha256": "6e5b741de60eeb9974a2a8bbed2f433a587d3b09e044c1f5c49222bfbd96ee36",
+      "expected_status": "PASS",
+      "limits": {
+        "timeout_seconds": 10,
+        "max_address_space_mib": 128
+      }
+    },
+    {
+      "case_id": "irrelevant_update_stream",
+      "description": "Authoritative state updates correctly for updates outside query label signature with zero search emissions",
+      "fixture_path": "tests/fixtures/rapidflow_apx_foundation/irrelevant_update_fixture.json",
+      "fixture_sha256": "0d6ed69139a59fc12fd76bd974389c9df837f7d2be3d917f39ecfa23f794d12f",
+      "expected_status": "PASS",
+      "limits": {
+        "timeout_seconds": 10,
+        "max_address_space_mib": 128
+      }
+    }
+  ]
+}

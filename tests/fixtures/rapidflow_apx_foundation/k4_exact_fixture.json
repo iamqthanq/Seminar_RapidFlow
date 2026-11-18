@@ -1,0 +1,37 @@
+{
+  "case_id": "k4_exact_enumeration",
+  "description": "Exhaustive bare M2 exact enumeration on K4: exactly 24 unique ordered tuples matching M0 without scalar multiplication",
+  "query": {
+    "vertices": [
+      {"id": 1, "label": {"type": "int", "val": 0}},
+      {"id": 2, "label": {"type": "int", "val": 0}},
+      {"id": 3, "label": {"type": "int", "val": 0}},
+      {"id": 4, "label": {"type": "int", "val": 0}}
+    ],
+    "edges": [
+      {"u": 1, "v": 2, "label": {"type": "int", "val": 0}},
+      {"u": 1, "v": 3, "label": {"type": "int", "val": 0}},
+      {"u": 1, "v": 4, "label": {"type": "int", "val": 0}},
+      {"u": 2, "v": 3, "label": {"type": "int", "val": 0}},
+      {"u": 2, "v": 4, "label": {"type": "int", "val": 0}},
+      {"u": 3, "v": 4, "label": {"type": "int", "val": 0}}
+    ]
+  },
+  "data": {
+    "vertices": [
+      {"id": 10, "label": {"type": "int", "val": 0}},
+      {"id": 20, "label": {"type": "int", "val": 0}},
+      {"id": 30, "label": {"type": "int", "val": 0}},
+      {"id": 40, "label": {"type": "int", "val": 0}}
+    ],
+    "edges": [
+      {"u": 10, "v": 20, "label": {"type": "int", "val": 0}},
+      {"u": 10, "v": 30, "label": {"type": "int", "val": 0}},
+      {"u": 10, "v": 40, "label": {"type": "int", "val": 0}},
+      {"u": 20, "v": 30, "label": {"type": "int", "val": 0}},
+      {"u": 20, "v": 40, "label": {"type": "int", "val": 0}},
+      {"u": 30, "v": 40, "label": {"type": "int", "val": 0}}
+    ]
+  },
+  "expected_tuple_count": 24
+}

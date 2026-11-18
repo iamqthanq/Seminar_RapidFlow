@@ -1,0 +1,29 @@
+{
+  "case_id": "lifecycle_stream",
+  "description": "Lifecycle of baseline CSR, dynamic overlay additions, deletions, tombstones, and label precedence",
+  "baseline": {
+    "vertices": [
+      {"id": 0, "label": 1},
+      {"id": 1, "label": 1},
+      {"id": 2, "label": 1},
+      {"id": 3, "label": 1},
+      {"id": 4, "label": 1}
+    ],
+    "edges": [
+      {"u": 0, "v": 1, "label": 10},
+      {"u": 1, "v": 2, "label": 10},
+      {"u": 2, "v": 3, "label": 10},
+      {"u": 3, "v": 4, "label": 10},
+      {"u": 4, "v": 0, "label": 10}
+    ]
+  },
+  "mutations": [
+    {"op": "delete_base", "u": 0, "v": 1, "label": 10, "expected_exists": false, "in_tombstones": true},
+    {"op": "reinsert_same", "u": 0, "v": 1, "label": 10, "expected_exists": true, "in_tombstones": false, "in_overlay": true, "expected_label": 10},
+    {"op": "delete_reinserted", "u": 0, "v": 1, "label": 10, "expected_exists": false, "in_tombstones": true},
+    {"op": "reinsert_diff_label", "u": 0, "v": 1, "label": 99, "expected_exists": true, "in_tombstones": false, "in_overlay": true, "expected_label": 99},
+    {"op": "delete_reinserted_diff", "u": 0, "v": 1, "label": 99, "expected_exists": false, "in_tombstones": true},
+    {"op": "insert_dynamic", "u": 1, "v": 3, "label": 50, "expected_exists": true, "in_tombstones": false, "in_overlay": true, "expected_label": 50},
+    {"op": "delete_dynamic", "u": 1, "v": 3, "label": 50, "expected_exists": false, "in_tombstones": false}
+  ]
+}

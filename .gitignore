@@ -11,6 +11,8 @@ external/*
 baselines/rapidflow/source/
 baselines/rapidflow/build/
 tests/native/rapidflow_apx_audit/build/
+tests/native/rapidflow_apx_foundation/build/
+extensions/rapidflow_apx/build/
 results/raw/*
 !results/raw/.gitkeep
 results/logs/*

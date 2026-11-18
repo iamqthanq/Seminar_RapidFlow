@@ -1,0 +1,21 @@
+{
+  "case_id": "tuple_sink_invariants",
+  "description": "Tuple sink canonicalization by ascending query vertex IDs, injectivity checks, and duplicate raw emission detection",
+  "query_vertices": [
+    {"id": 300, "label": {"type": "int", "val": 1}},
+    {"id": 100, "label": {"type": "int", "val": 1}},
+    {"id": 200, "label": {"type": "int", "val": 1}}
+  ],
+  "data_vertices": [
+    {"id": 10, "label": {"type": "int", "val": 1}},
+    {"id": 20, "label": {"type": "int", "val": 1}},
+    {"id": 30, "label": {"type": "int", "val": 1}},
+    {"id": 40, "label": {"type": "int", "val": 1}}
+  ],
+  "valid_emissions": [
+    {"mapping_by_dense_q": [30, 10, 20], "expected_ext_tuple": [10, 20, 30]},
+    {"mapping_by_dense_q": [40, 20, 30], "expected_ext_tuple": [20, 30, 40]}
+  ],
+  "non_injective_emission": {"mapping_by_dense_q": [10, 10, 20]},
+  "duplicate_raw_emission": {"mapping_by_dense_q": [30, 10, 20]}
+}
