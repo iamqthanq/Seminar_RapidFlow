@@ -890,6 +890,217 @@ class TestRapidFlowApxFoundation(unittest.TestCase):
             simulate_transaction_stream(bad_fixture)
         self.assertIn("Step 8: model computed status 'PREVALIDATION_FAILED' does not match fixture 'SUCCESS'", str(ctx.exception))
 
+    # -------------------------------------------------------------------------
+    # Group M: Codec State Independent Counts (P2-F01 & P2-F04 Closure)
+    # -------------------------------------------------------------------------
+
+    def test_group_m_reproducer_baseline_genuine_payload_passes(self):
+        with open(REPO_ROOT / self.cases_by_id["transaction_lifecycle"]["fixture_path"]) as f:
+            fix_data = json.load(f)
+
+        from scripts.run_rapidflow_apx_foundation import verify_case_with_oracle
+        proc = subprocess.run(
+            [str(self.harness_bin), "--case", "transaction_lifecycle", "--fixture", str(REPO_ROOT / self.cases_by_id["transaction_lifecycle"]["fixture_path"])],
+            capture_output=True,
+            text=True,
+        )
+        real_report = json.loads(proc.stdout.strip())
+        ok, msg = verify_case_with_oracle("transaction_lifecycle", fix_data, real_report)
+        self.assertTrue(ok, f"Genuine payload failed: {msg}")
+
+    def test_group_m_reproducer_corrupted_vertex_labels_count_rejected(self):
+        with open(REPO_ROOT / self.cases_by_id["transaction_lifecycle"]["fixture_path"]) as f:
+            fix_data = json.load(f)
+
+        from scripts.run_rapidflow_apx_foundation import verify_case_with_oracle
+        proc = subprocess.run(
+            [str(self.harness_bin), "--case", "transaction_lifecycle", "--fixture", str(REPO_ROOT / self.cases_by_id["transaction_lifecycle"]["fixture_path"])],
+            capture_output=True,
+            text=True,
+        )
+        corrupt_report = json.loads(proc.stdout.strip())
+        corrupt_report["steps_executed"][0]["codec_state"]["vertex_labels_count"] = 999999
+
+        ok, msg = verify_case_with_oracle("transaction_lifecycle", fix_data, corrupt_report)
+        self.assertFalse(ok)
+        self.assertIn("codec_state 'vertex_labels_count' mismatch: expected 1, got 999999", msg)
+
+    def test_group_m_reproducer_corrupted_edge_labels_count_rejected(self):
+        with open(REPO_ROOT / self.cases_by_id["transaction_lifecycle"]["fixture_path"]) as f:
+            fix_data = json.load(f)
+
+        from scripts.run_rapidflow_apx_foundation import verify_case_with_oracle
+        proc = subprocess.run(
+            [str(self.harness_bin), "--case", "transaction_lifecycle", "--fixture", str(REPO_ROOT / self.cases_by_id["transaction_lifecycle"]["fixture_path"])],
+            capture_output=True,
+            text=True,
+        )
+        corrupt_report = json.loads(proc.stdout.strip())
+        corrupt_report["steps_executed"][0]["codec_state"]["edge_labels_count"] = 999999
+
+        ok, msg = verify_case_with_oracle("transaction_lifecycle", fix_data, corrupt_report)
+        self.assertFalse(ok)
+        self.assertIn("codec_state 'edge_labels_count' mismatch: expected 1, got 999999", msg)
+
+    def test_group_m_new_label_commit_increases_edge_labels_count(self):
+        with open(REPO_ROOT / self.cases_by_id["transaction_lifecycle"]["fixture_path"]) as f:
+            fix_data = json.load(f)
+
+        import tempfile
+        from scripts.run_rapidflow_apx_foundation import simulate_transaction_stream, verify_case_with_oracle
+
+        fix = json.loads(json.dumps(fix_data))
+        fix["steps"].append({
+            "step_index": 8,
+            "op": "+",
+            "u": 30,
+            "v": 40,
+            "label": {"type": "int", "val": 200},
+            "fault": "NONE",
+            "expected_status": "SUCCESS",
+        })
+
+        ref = simulate_transaction_stream(fix)
+        self.assertEqual(ref[8]["codec_state"]["edge_labels_count"], 2)
+
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tf:
+            json.dump(fix, tf)
+            tmp_path = tf.name
+
+        proc = subprocess.run(
+            [str(self.harness_bin), "--case", "transaction_lifecycle", "--fixture", tmp_path],
+            capture_output=True,
+            text=True,
+        )
+        native_report = json.loads(proc.stdout.strip())
+        self.assertEqual(native_report["steps_executed"][8]["codec_state"]["edge_labels_count"], 2)
+
+        ok, msg = verify_case_with_oracle("transaction_lifecycle", fix, native_report)
+        self.assertTrue(ok, f"Verification failed: {msg}")
+
+    def test_group_m_delete_edge_retains_interned_edge_label(self):
+        with open(REPO_ROOT / self.cases_by_id["transaction_lifecycle"]["fixture_path"]) as f:
+            fix_data = json.load(f)
+
+        import tempfile
+        from scripts.run_rapidflow_apx_foundation import simulate_transaction_stream, verify_case_with_oracle
+
+        fix = json.loads(json.dumps(fix_data))
+        fix["steps"].append({
+            "step_index": 8,
+            "op": "+",
+            "u": 30,
+            "v": 40,
+            "label": {"type": "int", "val": 200},
+            "fault": "NONE",
+            "expected_status": "SUCCESS",
+        })
+        fix["steps"].append({
+            "step_index": 9,
+            "op": "-",
+            "u": 30,
+            "v": 40,
+            "label": {"type": "int", "val": 200},
+            "fault": "NONE",
+            "expected_status": "SUCCESS",
+        })
+
+        ref = simulate_transaction_stream(fix)
+        # Even after deleting the only edge with label 200, interned dictionary retains label 200
+        self.assertEqual(ref[9]["codec_state"]["edge_labels_count"], 2)
+        self.assertEqual(ref[9]["current_edges_count"], 2)
+
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tf:
+            json.dump(fix, tf)
+            tmp_path = tf.name
+
+        proc = subprocess.run(
+            [str(self.harness_bin), "--case", "transaction_lifecycle", "--fixture", tmp_path],
+            capture_output=True,
+            text=True,
+        )
+        native_report = json.loads(proc.stdout.strip())
+        self.assertEqual(native_report["steps_executed"][9]["codec_state"]["edge_labels_count"], 2)
+        self.assertEqual(native_report["steps_executed"][9]["current_edges_count"], 2)
+
+        ok, msg = verify_case_with_oracle("transaction_lifecycle", fix, native_report)
+        self.assertTrue(ok, f"Verification failed: {msg}")
+
+    def test_group_m_aborted_update_does_not_increase_edge_labels_count(self):
+        with open(REPO_ROOT / self.cases_by_id["transaction_lifecycle"]["fixture_path"]) as f:
+            fix_data = json.load(f)
+
+        import tempfile
+        from scripts.run_rapidflow_apx_foundation import simulate_transaction_stream, verify_case_with_oracle
+
+        fix = json.loads(json.dumps(fix_data))
+        fix["steps"].append({
+            "step_index": 8,
+            "op": "+",
+            "u": 30,
+            "v": 40,
+            "label": {"type": "int", "val": 300},
+            "fault": "AFTER_MUTATION",
+            "expected_status": "FAULT_INJECTED",
+        })
+
+        ref = simulate_transaction_stream(fix)
+        # Aborted transaction rolls back codec checkpoint; edge_labels_count does not increase
+        self.assertEqual(ref[8]["codec_state"]["edge_labels_count"], 1)
+
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tf:
+            json.dump(fix, tf)
+            tmp_path = tf.name
+
+        proc = subprocess.run(
+            [str(self.harness_bin), "--case", "transaction_lifecycle", "--fixture", tmp_path],
+            capture_output=True,
+            text=True,
+        )
+        native_report = json.loads(proc.stdout.strip())
+        self.assertEqual(native_report["steps_executed"][8]["codec_state"]["edge_labels_count"], 1)
+
+        ok, msg = verify_case_with_oracle("transaction_lifecycle", fix, native_report)
+        self.assertTrue(ok, f"Verification failed: {msg}")
+
+    def test_group_m_string_vs_int_label_cardinality_distinction(self):
+        with open(REPO_ROOT / self.cases_by_id["transaction_lifecycle"]["fixture_path"]) as f:
+            fix_data = json.load(f)
+
+        import tempfile
+        from scripts.run_rapidflow_apx_foundation import simulate_transaction_stream, verify_case_with_oracle
+
+        fix = json.loads(json.dumps(fix_data))
+        # Step 8 introduces a string label "100" (baseline already has integer label 100)
+        fix["steps"].append({
+            "step_index": 8,
+            "op": "+",
+            "u": 30,
+            "v": 40,
+            "label": {"type": "string", "val": "100"},
+            "fault": "NONE",
+            "expected_status": "SUCCESS",
+        })
+
+        ref = simulate_transaction_stream(fix)
+        # String "100" is distinct from integer 100, so edge_labels_count increases to 2
+        self.assertEqual(ref[8]["codec_state"]["edge_labels_count"], 2)
+
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tf:
+            json.dump(fix, tf)
+            tmp_path = tf.name
+
+        proc = subprocess.run(
+            [str(self.harness_bin), "--case", "transaction_lifecycle", "--fixture", tmp_path],
+            capture_output=True,
+            text=True,
+        )
+        native_report = json.loads(proc.stdout.strip())
+        self.assertEqual(native_report["steps_executed"][8]["codec_state"]["edge_labels_count"], 2)
+
+        ok, msg = verify_case_with_oracle("transaction_lifecycle", fix, native_report)
+        self.assertTrue(ok, f"Verification failed: {msg}")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -543,6 +543,22 @@ def simulate_lifecycle_stream(fixture_data: Dict[str, Any]) -> List[Dict[str, An
     return expected_records
 
 
+def _label_key(lbl: Any) -> Tuple[str, Any]:
+    """
+    Extracts a canonical typed key for a label: (type, val).
+    Distinguishes integer 0 from string '0', and prevents Python True == 1 equality collision.
+    """
+    if isinstance(lbl, dict):
+        ltype = str(lbl.get("type", "int"))
+        lval = lbl.get("val")
+        if isinstance(lval, bool):
+            return ("bool", lval)
+        return (ltype, lval)
+    if isinstance(lbl, bool):
+        return ("bool", lbl)
+    return ("int", lbl)
+
+
 def simulate_transaction_stream(fixture_data: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     Independent pure-Python reference model that simulates graph transactions
@@ -550,6 +566,9 @@ def simulate_transaction_stream(fixture_data: Dict[str, Any]) -> List[Dict[str, 
     Independently derives prevalidation, fault-injection rollback, and committed states.
     Under the D-R contract, the vertex set is FIXED: vertices cannot be added or
     removed by edge mutations, and both endpoints must exist in data_vertices.
+    Codec state (data_vertices_count, vertex_labels_count, edge_labels_count) is tracked
+    independently: vertex labels are fixed from baseline, while the edge labels dictionary
+    retains committed interned labels (rollback on abort, monotonic across commits/deletions).
     """
     base_v = {v["id"]: dict(v["label"]) for v in fixture_data["baseline"]["vertices"]}
     committed_edges = {}
@@ -560,12 +579,19 @@ def simulate_transaction_stream(fixture_data: Dict[str, Any]) -> List[Dict[str, 
     # Codec tracker: external data vertex IDs (FIXED under D-R contract)
     data_vertices = set(base_v.keys())
 
+    # Codec vertex labels (typed pairs: (type, val)) - fixed from baseline
+    vertex_label_keys = set(_label_key(v["label"]) for v in fixture_data["baseline"]["vertices"])
+
+    # Codec edge labels dictionary (typed pairs: (type, val)) - initialized from baseline
+    committed_edge_labels = set(_label_key(e["label"]) for e in fixture_data["baseline"]["edges"])
+
     expected_steps = []
     for s in fixture_data["steps"]:
         step_idx = s["step_index"]
         op = s["op"]
         u, v = s["u"], s["v"]
         lbl = dict(s["label"])
+        lbl_key = _label_key(lbl)
         key = (min(u, v), max(u, v))
         fault = s.get("fault", "NONE")
         expected_status_decl = s["expected_status"]
@@ -592,7 +618,7 @@ def simulate_transaction_stream(fixture_data: Dict[str, Any]) -> List[Dict[str, 
             elif committed_edges[key].get("type") != lbl.get("type"):
                 status = "PREVALIDATION_FAILED"
 
-        # 2. If prevalidation passed, check fault injection
+        # 2. If prevalidation passed, check fault injection & commit
         effective_edges = dict(committed_edges)
 
         if status == "SUCCESS":
@@ -605,11 +631,12 @@ def simulate_transaction_stream(fixture_data: Dict[str, Any]) -> List[Dict[str, 
 
             if fault in ("AFTER_MUTATION", "DURING_CALLBACK", "BEFORE_PUBLISH"):
                 status = "FAULT_INJECTED"
-                # Rollback! State remains committed_edges
+                # Rollback! State remains committed_edges; codec checkpoint restored
                 effective_edges = dict(committed_edges)
             else:
                 # Commit!
                 committed_edges = temp_edges
+                committed_edge_labels.add(lbl_key)
                 effective_edges = committed_edges
 
         # Check against expectation declared in fixture
@@ -661,6 +688,13 @@ def simulate_transaction_stream(fixture_data: Dict[str, Any]) -> List[Dict[str, 
             "neighbors": neighbors,
             "degrees": degrees,
             "codec_data_vertices_count": len(data_vertices),
+            "codec_vertex_labels_count": len(vertex_label_keys),
+            "codec_edge_labels_count": len(committed_edge_labels),
+            "codec_state": {
+                "data_vertices_count": len(data_vertices),
+                "vertex_labels_count": len(vertex_label_keys),
+                "edge_labels_count": len(committed_edge_labels),
+            },
         })
 
     return expected_steps
@@ -1209,9 +1243,17 @@ def verify_case_with_oracle(
                 if sink_st[sk] != 0:
                     return False, f"Case '{case_id}' step {i} unexpected non-zero sink_counter '{sk}': {sink_st[sk]}"
 
+            # Verify codec_state counts exactly match reference model step-by-step
             codec_st = act.get("codec_state", {})
-            if codec_st.get("data_vertices_count") != ref["codec_data_vertices_count"]:
-                return False, f"Case '{case_id}' step {i} codec data_vertices_count mismatch: expected {ref['codec_data_vertices_count']}, got {codec_st.get('data_vertices_count')}"
+            if not isinstance(codec_st, dict):
+                return False, f"Case '{case_id}' step {i} codec_state must be a dict"
+            for codec_field in ("data_vertices_count", "vertex_labels_count", "edge_labels_count"):
+                ref_cnt = ref["codec_state"][codec_field]
+                act_cnt = codec_st.get(codec_field)
+                if type(act_cnt) is not int or isinstance(act_cnt, bool):
+                    return False, f"Case '{case_id}' step {i} codec_state '{codec_field}' must be integer (not bool), got {type(act_cnt).__name__}"
+                if act_cnt != ref_cnt:
+                    return False, f"Case '{case_id}' step {i} codec_state '{codec_field}' mismatch: expected {ref_cnt}, got {act_cnt}"
 
         return True, "Transaction lifecycle steps verified against Python reference state model"
 
