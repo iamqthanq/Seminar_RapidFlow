@@ -682,6 +682,214 @@ class TestRapidFlowApxFoundation(unittest.TestCase):
         s7_edges = [(e["u"], e["v"]) for e in real_report["steps_executed"][7]["edges"]]
         self.assertIn((10, 40), s7_edges)
 
+    # -------------------------------------------------------------------------
+    # Group L: P2-F01 Deep Observation Checks & P2-F04 Fixed Vertices Contract
+    # -------------------------------------------------------------------------
+
+    def test_group_l_transaction_lifecycle_empty_sink_counters_rejected(self):
+        with open(REPO_ROOT / self.cases_by_id["transaction_lifecycle"]["fixture_path"]) as f:
+            fix_data = json.load(f)
+
+        from scripts.run_rapidflow_apx_foundation import validate_case_observations
+        proc = subprocess.run(
+            [str(self.harness_bin), "--case", "transaction_lifecycle", "--fixture", str(REPO_ROOT / self.cases_by_id["transaction_lifecycle"]["fixture_path"])],
+            capture_output=True,
+            text=True,
+        )
+        real_report = json.loads(proc.stdout.strip())
+        real_report["steps_executed"][0]["sink_counters"] = {}
+        ok, msg = validate_case_observations("transaction_lifecycle", fix_data, real_report)
+        self.assertFalse(ok)
+        self.assertIn("sink_counters cannot be empty", msg)
+
+    def test_group_l_transaction_lifecycle_unexpected_published_tuples_rejected(self):
+        with open(REPO_ROOT / self.cases_by_id["transaction_lifecycle"]["fixture_path"]) as f:
+            fix_data = json.load(f)
+
+        from scripts.run_rapidflow_apx_foundation import validate_case_observations, verify_case_with_oracle
+        proc = subprocess.run(
+            [str(self.harness_bin), "--case", "transaction_lifecycle", "--fixture", str(REPO_ROOT / self.cases_by_id["transaction_lifecycle"]["fixture_path"])],
+            capture_output=True,
+            text=True,
+        )
+        real_report = json.loads(proc.stdout.strip())
+        real_report["steps_executed"][0]["published_tuples"] = [[999999, 999999]]
+
+        ok, msg = validate_case_observations("transaction_lifecycle", fix_data, real_report)
+        self.assertFalse(ok)
+        self.assertIn("published_tuples must be empty list in transaction_lifecycle", msg)
+
+        or_ok, or_msg = verify_case_with_oracle("transaction_lifecycle", fix_data, real_report)
+        self.assertFalse(or_ok)
+        self.assertIn("published_tuples must be empty", or_msg)
+
+    def test_group_l_transaction_lifecycle_negative_codec_state_rejected(self):
+        with open(REPO_ROOT / self.cases_by_id["transaction_lifecycle"]["fixture_path"]) as f:
+            fix_data = json.load(f)
+
+        from scripts.run_rapidflow_apx_foundation import validate_case_observations
+        proc = subprocess.run(
+            [str(self.harness_bin), "--case", "transaction_lifecycle", "--fixture", str(REPO_ROOT / self.cases_by_id["transaction_lifecycle"]["fixture_path"])],
+            capture_output=True,
+            text=True,
+        )
+        real_report = json.loads(proc.stdout.strip())
+        real_report["steps_executed"][0]["codec_state"]["edge_labels_count"] = -1
+        ok, msg = validate_case_observations("transaction_lifecycle", fix_data, real_report)
+        self.assertFalse(ok)
+        self.assertIn("codec_state field 'edge_labels_count' must be non-negative, got -1", msg)
+
+    def test_group_l_transaction_lifecycle_bool_degree_rejected(self):
+        with open(REPO_ROOT / self.cases_by_id["transaction_lifecycle"]["fixture_path"]) as f:
+            fix_data = json.load(f)
+
+        from scripts.run_rapidflow_apx_foundation import validate_case_observations, verify_case_with_oracle
+        proc = subprocess.run(
+            [str(self.harness_bin), "--case", "transaction_lifecycle", "--fixture", str(REPO_ROOT / self.cases_by_id["transaction_lifecycle"]["fixture_path"])],
+            capture_output=True,
+            text=True,
+        )
+        real_report = json.loads(proc.stdout.strip())
+        # Replace integer degree 1 with boolean True (in Python True == 1, but must be rejected)
+        real_report["steps_executed"][0]["degrees"]["30"] = True
+
+        ok, msg = validate_case_observations("transaction_lifecycle", fix_data, real_report)
+        self.assertFalse(ok)
+        self.assertIn("degree for vertex '30' must be integer (not bool), got bool", msg)
+
+        or_ok, or_msg = verify_case_with_oracle("transaction_lifecycle", fix_data, real_report)
+        self.assertFalse(or_ok)
+        self.assertIn("degree for '30' is not strict int", or_msg)
+
+    def test_group_l_lifecycle_stream_bool_degree_rejected(self):
+        with open(REPO_ROOT / self.cases_by_id["lifecycle_stream"]["fixture_path"]) as f:
+            fix_data = json.load(f)
+
+        from scripts.run_rapidflow_apx_foundation import validate_case_observations, verify_case_with_oracle
+        proc = subprocess.run(
+            [str(self.harness_bin), "--case", "lifecycle_stream", "--fixture", str(REPO_ROOT / self.cases_by_id["lifecycle_stream"]["fixture_path"])],
+            capture_output=True,
+            text=True,
+        )
+        real_report = json.loads(proc.stdout.strip())
+        real_report["mutations_executed"][0]["degrees"]["1"] = True
+
+        ok, msg = validate_case_observations("lifecycle_stream", fix_data, real_report)
+        self.assertFalse(ok)
+        self.assertIn("degree for vertex '1' must be integer (not bool), got bool", msg)
+
+        or_ok, or_msg = verify_case_with_oracle("lifecycle_stream", fix_data, real_report)
+        self.assertFalse(or_ok)
+        self.assertIn("degree for '1' is not strict int", or_msg)
+
+    def test_group_l_k4_exact_enumeration_invalid_counters_rejected(self):
+        with open(REPO_ROOT / self.cases_by_id["k4_exact_enumeration"]["fixture_path"]) as f:
+            fix_data = json.load(f)
+
+        from scripts.run_rapidflow_apx_foundation import validate_case_observations
+        proc = subprocess.run(
+            [str(self.harness_bin), "--case", "k4_exact_enumeration", "--fixture", str(REPO_ROOT / self.cases_by_id["k4_exact_enumeration"]["fixture_path"])],
+            capture_output=True,
+            text=True,
+        )
+        real_report = json.loads(proc.stdout.strip())
+        real_report["raw_emissions"] = 0
+        real_report["unique_emissions"] = 999999
+
+        ok, msg = validate_case_observations("k4_exact_enumeration", fix_data, real_report)
+        self.assertFalse(ok)
+        self.assertIn("count mismatch: raw=0, unique=999999", msg)
+
+    def test_group_l_transaction_lifecycle_unknown_endpoint_insert_rejected_by_native_and_model(self):
+        with open(REPO_ROOT / self.cases_by_id["transaction_lifecycle"]["fixture_path"]) as f:
+            fix_data = json.load(f)
+
+        import tempfile
+        from scripts.run_rapidflow_apx_foundation import simulate_transaction_stream, verify_case_with_oracle
+
+        # Extend fixture with Step 8 (unknown vertex insert u=999999) and Step 9 (valid insert u=10, v=20)
+        ext_fixture = {
+            "case_id": fix_data["case_id"],
+            "description": fix_data["description"],
+            "baseline": fix_data["baseline"],
+            "steps": list(fix_data["steps"]) + [
+                {
+                    "step_index": 8,
+                    "op": "+",
+                    "u": 999999,
+                    "v": 10,
+                    "label": {"type": "int", "val": 100},
+                    "fault": "NONE",
+                    "expected_status": "PREVALIDATION_FAILED",
+                },
+                {
+                    "step_index": 9,
+                    "op": "+",
+                    "u": 10,
+                    "v": 20,
+                    "label": {"type": "int", "val": 100},
+                    "fault": "NONE",
+                    "expected_status": "SUCCESS",
+                },
+            ],
+        }
+
+        # 1. Independent reference model simulation must derive PREVALIDATION_FAILED for step 8 and SUCCESS for step 9
+        ref_steps = simulate_transaction_stream(ext_fixture)
+        self.assertEqual(len(ref_steps), 10)
+        self.assertEqual(ref_steps[8]["status"], "PREVALIDATION_FAILED")
+        self.assertEqual(ref_steps[8]["vertex_u_exists"], False)
+        self.assertEqual(ref_steps[8]["vertex_v_exists"], True)
+        self.assertEqual(ref_steps[8]["degree_u"], 0)
+        self.assertEqual(ref_steps[8]["current_edges_count"], 2)  # edges count unchanged from step 7
+        self.assertEqual(ref_steps[9]["status"], "SUCCESS")
+        self.assertEqual(ref_steps[9]["current_edges_count"], 3)  # re-inserted edge (10, 20)
+
+        # 2. Native harness execution on extended fixture
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tf:
+            json.dump(ext_fixture, tf)
+            tmp_path = tf.name
+
+        proc = subprocess.run(
+            [str(self.harness_bin), "--case", "transaction_lifecycle", "--fixture", tmp_path],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(proc.returncode, 0, f"Harness stderr: {proc.stderr}")
+        native_report = json.loads(proc.stdout.strip())
+        self.assertEqual(native_report["status"], "PASS")
+
+        # 3. Step-by-step differential between native execution and reference model
+        ok, msg = verify_case_with_oracle("transaction_lifecycle", ext_fixture, native_report)
+        self.assertTrue(ok, f"Verification failed: {msg}")
+
+    def test_group_l_transaction_lifecycle_model_rejects_step8_if_marked_success(self):
+        with open(REPO_ROOT / self.cases_by_id["transaction_lifecycle"]["fixture_path"]) as f:
+            fix_data = json.load(f)
+
+        from scripts.run_rapidflow_apx_foundation import simulate_transaction_stream
+
+        # If fixture improperly declares expected_status = SUCCESS for unknown vertex insert
+        bad_fixture = {
+            "case_id": fix_data["case_id"],
+            "description": fix_data["description"],
+            "baseline": fix_data["baseline"],
+            "steps": list(fix_data["steps"]) + [
+                {
+                    "step_index": 8,
+                    "op": "+",
+                    "u": 999999,
+                    "v": 10,
+                    "label": {"type": "int", "val": 100},
+                    "fault": "NONE",
+                    "expected_status": "SUCCESS",  # Wrong!
+                },
+            ],
+        }
+        with self.assertRaises(ValueError) as ctx:
+            simulate_transaction_stream(bad_fixture)
+        self.assertIn("Step 8: model computed status 'PREVALIDATION_FAILED' does not match fixture 'SUCCESS'", str(ctx.exception))
+
 
 if __name__ == "__main__":
     unittest.main()
