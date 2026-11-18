@@ -36,7 +36,7 @@ from dstar03_resources import (
     run_contained_subprocess,
     validate_resource_limits,
 )
-from run_dstar03_pilot import PilotSupervisor
+from run_dstar03_pilot import PilotSupervisor, collect_source_provenance, sha256_of_obj
 
 
 class TestDStar03Runner(unittest.TestCase):
@@ -98,8 +98,23 @@ class TestDStar03Runner(unittest.TestCase):
             tmp_path = Path(tmpdir)
             test_ledger = tmp_path / "test_attempts.jsonl"
 
+            with (REPO_ROOT / "configs" / "dstar03_pilot_manifest.json").open("r", encoding="utf-8") as f:
+                manifest = json.load(f)
+            manifest_for_hash = {k: v for k, v in manifest.items() if k != "manifest_sha256"}
+            calc_sha = sha256_of_obj(manifest_for_hash)
+            source_prov = collect_source_provenance()
+
             interrupted_id = "witness_01_diamond_k1_m1_pair1_rep0"
             with test_ledger.open("w", encoding="utf-8") as f:
+                f.write(json.dumps({
+                    "record_type": "SUPERVISOR_HEADER",
+                    "session_id": "session_test",
+                    "manifest_sha256": calc_sha,
+                    "git_commit": source_prov["git_commit"],
+                    "git_dirty": source_prov["git_dirty"],
+                    "source_hashes": source_prov["source_hashes"],
+                    "timestamp": 1000.0,
+                }) + "\n")
                 f.write(json.dumps({
                     "record_type": "ATTEMPT_STARTED",
                     "attempt_id": interrupted_id,
@@ -245,6 +260,111 @@ class TestDStar03Runner(unittest.TestCase):
             self.assertTrue(ev["memory_containment_test"]["passed"])
             self.assertTrue(ev["timeout_containment_test"]["passed"])
             self.assertTrue(ev_file.exists())
+
+    def test_11_reject_missing_component_fingerprints(self) -> None:
+        """F02: Verifies worker strictly rejects fixtures missing any mandatory component fingerprint."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for missing_field in ("sha256_query", "sha256_initial_graph", "sha256_stream", "sha256_workload"):
+                with self.workload_path.open("r", encoding="utf-8") as f:
+                    w_data = json.load(f)
+                del w_data[missing_field]
+                tmp_w = Path(tmpdir) / f"missing_{missing_field}.json"
+                with tmp_w.open("w", encoding="utf-8") as f:
+                    json.dump(w_data, f)
+
+                res = run_worker(workload_path=tmp_w, engine_name="m1", attempt_id=f"test_miss_{missing_field}")
+                self.assertEqual(res["status"], "INPUT_INVALID")
+                self.assertIn(f"mandatory component fingerprint: {missing_field}", res["error"])
+
+    def test_12_supervisor_ledger_header_enforcement(self) -> None:
+        """F02: Verifies load_existing_ledger rejects non-empty ledger if header or source_hashes is missing/empty."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # 1. Ledger with records but missing header
+            no_header_ledger = Path(tmpdir) / "no_header.jsonl"
+            with no_header_ledger.open("w", encoding="utf-8") as f:
+                f.write(json.dumps({"record_type": "ATTEMPT_STARTED", "attempt_id": "slot_1"}) + "\n")
+
+            sup1 = PilotSupervisor(ledger_path=no_header_ledger)
+            _, _, _, err1 = sup1.load_existing_ledger()
+            self.assertIsNotNone(err1)
+            self.assertIn("missing required SUPERVISOR_HEADER", err1)
+
+            # 2. Ledger with header but empty source_hashes
+            empty_hashes_ledger = Path(tmpdir) / "empty_hashes.jsonl"
+            with empty_hashes_ledger.open("w", encoding="utf-8") as f:
+                f.write(json.dumps({
+                    "record_type": "SUPERVISOR_HEADER",
+                    "manifest_sha256": "fake",
+                    "source_hashes": {},
+                }) + "\n")
+
+            sup2 = PilotSupervisor(ledger_path=empty_hashes_ledger)
+            _, _, _, err2 = sup2.load_existing_ledger()
+            self.assertIsNotNone(err2)
+            self.assertIn("missing or empty source_hashes", err2)
+
+    def test_13_supervisor_resume_source_drift_rejection(self) -> None:
+        """F02: Verifies supervisor rejects resume when source hashes drift, but accepts when only commit changes."""
+        source_prov = collect_source_provenance()
+        current_hashes = source_prov["source_hashes"]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ledger_path = Path(tmpdir) / "drift_ledger.jsonl"
+            with ledger_path.open("w", encoding="utf-8") as f:
+                f.write(json.dumps({
+                    "record_type": "SUPERVISOR_HEADER",
+                    "manifest_sha256": "manifest_hash_ok",
+                    "git_commit": "commit_111111",
+                    "source_hashes": current_hashes,
+                }) + "\n")
+
+            sup = PilotSupervisor(ledger_path=ledger_path)
+
+            # Case A: Commit changed to commit_222222, but source_hashes and manifest_sha match -> SUCCESS
+            _, _, _, err_same_hashes = sup.load_existing_ledger(
+                expected_manifest_sha="manifest_hash_ok",
+                expected_source_hashes=current_hashes,
+            )
+            self.assertIsNone(err_same_hashes)
+
+            # Case B: Source drifted -> ERROR
+            drifted_hashes = dict(current_hashes)
+            drifted_hashes["scripts/dstar03_pilot_worker.py"] = "0" * 64
+            _, _, _, err_drift = sup.load_existing_ledger(
+                expected_manifest_sha="manifest_hash_ok",
+                expected_source_hashes=drifted_hashes,
+            )
+            self.assertIsNotNone(err_drift)
+            self.assertIn("source drift", err_drift.lower())
+
+    def test_14_supervisor_preflight_fixture_fingerprint_mismatch(self) -> None:
+        """F02: Verifies preflight returns ERROR if fixture sha256_workload does not match manifest."""
+        fixtures_dir = REPO_ROOT / "tests" / "fixtures"
+        with tempfile.TemporaryDirectory(dir=str(fixtures_dir)) as tmpdir:
+            tmp_m_path = Path(tmpdir) / "manifest.json"
+            tmp_fix_path = Path(tmpdir) / "bad_fixture.json"
+
+            with self.workload_path.open("r", encoding="utf-8") as f:
+                fix_data = json.load(f)
+            fix_data["sha256_workload"] = "mismatch_fingerprint_value"
+            with tmp_fix_path.open("w", encoding="utf-8") as f:
+                json.dump(fix_data, f)
+
+            with (REPO_ROOT / "configs" / "dstar03_pilot_manifest.json").open("r", encoding="utf-8") as f:
+                man_data = json.load(f)
+
+            # Point case 0 relative_path to bad_fixture
+            man_data["workloads"][0]["relative_path"] = str(tmp_fix_path.relative_to(REPO_ROOT))
+            man_data_for_hash = {k: v for k, v in man_data.items() if k != "manifest_sha256"}
+            man_data["manifest_sha256"] = sha256_of_obj(man_data_for_hash)
+
+            with tmp_m_path.open("w", encoding="utf-8") as f:
+                json.dump(man_data, f)
+
+            sup = PilotSupervisor(manifest_path=tmp_m_path)
+            pf = sup.preflight()
+            self.assertEqual(pf["status"], "ERROR")
+            self.assertIn("fixture fingerprint", pf["reason"])
 
 
 if __name__ == "__main__":

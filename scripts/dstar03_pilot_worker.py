@@ -131,47 +131,63 @@ def run_worker(
             "git_provenance": git_prov,
         }
 
-    # Check component hashes if declared
-    declared_q_sha = workload.get("sha256_query")
-    if declared_q_sha and declared_q_sha != sha256_of_obj(q_dict):
+    # Component fingerprints are MANDATORY and non-empty (F02)
+    for comp_field in ("sha256_query", "sha256_initial_graph", "sha256_stream", "sha256_workload"):
+        comp_val = workload.get(comp_field)
+        if not isinstance(comp_val, str) or not comp_val.strip():
+            return {
+                "attempt_id": attempt_id,
+                "workload_id": workload_id,
+                "status": "INPUT_INVALID",
+                "error": f"Workload missing mandatory component fingerprint: {comp_field}",
+                "worker_wall_ns": time.perf_counter_ns() - worker_t0,
+                "git_provenance": git_prov,
+            }
+
+    declared_q_sha = workload["sha256_query"]
+    actual_q_sha = sha256_of_obj(q_dict)
+    if declared_q_sha != actual_q_sha:
         return {
             "attempt_id": attempt_id,
             "workload_id": workload_id,
             "status": "INPUT_INVALID",
-            "error": f"Query component hash mismatch: declared {declared_q_sha} != actual {sha256_of_obj(q_dict)}",
+            "error": f"Query component hash mismatch: declared {declared_q_sha} != actual {actual_q_sha}",
             "worker_wall_ns": time.perf_counter_ns() - worker_t0,
             "git_provenance": git_prov,
         }
 
-    declared_g0_sha = workload.get("sha256_initial_graph")
-    if declared_g0_sha and declared_g0_sha != sha256_of_obj(g0_dict):
+    declared_g0_sha = workload["sha256_initial_graph"]
+    actual_g0_sha = sha256_of_obj(g0_dict)
+    if declared_g0_sha != actual_g0_sha:
         return {
             "attempt_id": attempt_id,
             "workload_id": workload_id,
             "status": "INPUT_INVALID",
-            "error": f"Initial graph component hash mismatch: declared {declared_g0_sha} != actual {sha256_of_obj(g0_dict)}",
+            "error": f"Initial graph component hash mismatch: declared {declared_g0_sha} != actual {actual_g0_sha}",
             "worker_wall_ns": time.perf_counter_ns() - worker_t0,
             "git_provenance": git_prov,
         }
 
-    declared_s_sha = workload.get("sha256_stream")
-    if declared_s_sha and declared_s_sha != sha256_of_obj(stream_dicts):
+    declared_s_sha = workload["sha256_stream"]
+    actual_s_sha = sha256_of_obj(stream_dicts)
+    if declared_s_sha != actual_s_sha:
         return {
             "attempt_id": attempt_id,
             "workload_id": workload_id,
             "status": "INPUT_INVALID",
-            "error": f"Stream component hash mismatch: declared {declared_s_sha} != actual {sha256_of_obj(stream_dicts)}",
+            "error": f"Stream component hash mismatch: declared {declared_s_sha} != actual {actual_s_sha}",
             "worker_wall_ns": time.perf_counter_ns() - worker_t0,
             "git_provenance": git_prov,
         }
 
-    declared_w_sha = workload.get("sha256_workload")
-    if declared_w_sha and declared_w_sha != compute_workload_fingerprint(workload):
+    declared_w_sha = workload["sha256_workload"]
+    actual_w_sha = compute_workload_fingerprint(workload)
+    if declared_w_sha != actual_w_sha:
         return {
             "attempt_id": attempt_id,
             "workload_id": workload_id,
             "status": "INPUT_INVALID",
-            "error": f"Workload fingerprint mismatch: declared {declared_w_sha} != actual {compute_workload_fingerprint(workload)}",
+            "error": f"Workload fingerprint mismatch: declared {declared_w_sha} != actual {actual_w_sha}",
             "worker_wall_ns": time.perf_counter_ns() - worker_t0,
             "git_provenance": git_prov,
         }

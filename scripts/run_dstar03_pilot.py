@@ -170,10 +170,24 @@ class PilotSupervisor:
                 return {"status": "ERROR", "reason": f"Duplicate or missing workload_id: {w_id}"}
             workload_ids.add(w_id)
 
-            # Check fixture file existence
+            # Check fixture file existence and fingerprint
             fixture_path = REPO_ROOT / w.get("relative_path", "")
             if not fixture_path.exists():
                 return {"status": "ERROR", "reason": f"Workload fixture missing on disk: {fixture_path}"}
+
+            try:
+                with fixture_path.open("r", encoding="utf-8") as f:
+                    fix_data = json.load(f)
+            except Exception as exc:
+                return {"status": "ERROR", "reason": f"Corrupt workload fixture {fixture_path}: {exc}"}
+
+            fix_sha = fix_data.get("sha256_workload")
+            man_sha = w.get("sha256_workload")
+            if not fix_sha or fix_sha != man_sha:
+                return {
+                    "status": "ERROR",
+                    "reason": f"Workload {w_id} fixture fingerprint {fix_sha} != manifest {man_sha}",
+                }
 
         expected_counts = {"SYNTHETIC_MATRIX": 40, "STRUCTURED_WITNESS": 5, "NETFLOW_PROBE": 20}
         if counts != expected_counts:
@@ -198,11 +212,14 @@ class PilotSupervisor:
         }
 
     def load_existing_ledger(
-        self, expected_manifest_sha: Optional[str] = None
+        self,
+        expected_manifest_sha: Optional[str] = None,
+        expected_source_hashes: Optional[Dict[str, str]] = None,
     ) -> Tuple[Set[str], Set[str], List[Dict[str, Any]], Optional[str]]:
         """
         Reads existing attempts ledger.
         Validates ledger integrity: checks for corrupt JSON, conflicting records, and provenance drift.
+        Requires header with non-empty source_hashes if ledger exists and has records.
         Returns (started_attempt_ids, completed_attempt_ids, all_records, error_msg).
         """
         started: Set[str] = set()
@@ -211,6 +228,8 @@ class PilotSupervisor:
 
         if not self.ledger_path.exists():
             return started, completed, records, None
+
+        header_rec: Optional[Dict[str, Any]] = None
 
         with self.ledger_path.open("r", encoding="utf-8") as f:
             for line_no, line in enumerate(f, start=1):
@@ -227,14 +246,8 @@ class PilotSupervisor:
                 att_id = rec.get("attempt_id")
 
                 if rec_type == "SUPERVISOR_HEADER":
-                    ledger_m_sha = rec.get("manifest_sha256")
-                    if expected_manifest_sha and ledger_m_sha and ledger_m_sha != expected_manifest_sha:
-                        return (
-                            started,
-                            completed,
-                            records,
-                            f"Ledger manifest drift: ledger manifest_sha256 {ledger_m_sha} != current {expected_manifest_sha}",
-                        )
+                    if header_rec is None:
+                        header_rec = rec
 
                 elif rec_type == "ATTEMPT_STARTED":
                     if not att_id:
@@ -247,6 +260,38 @@ class PilotSupervisor:
                     if att_id in completed:
                         return started, completed, records, f"Line {line_no}: Duplicate ATTEMPT_COMPLETED for attempt_id={att_id}"
                     completed.add(att_id)
+
+        # If ledger exists and is non-empty, reject if missing header or source_hashes is empty
+        if records:
+            if header_rec is None:
+                return started, completed, records, "Ledger missing required SUPERVISOR_HEADER record"
+
+            ledger_source_hashes = header_rec.get("source_hashes")
+            if (
+                not ledger_source_hashes
+                or not isinstance(ledger_source_hashes, dict)
+                or len(ledger_source_hashes) == 0
+            ):
+                return started, completed, records, "Ledger SUPERVISOR_HEADER missing or empty source_hashes"
+
+            if expected_manifest_sha:
+                ledger_m_sha = header_rec.get("manifest_sha256")
+                if not ledger_m_sha or ledger_m_sha != expected_manifest_sha:
+                    return (
+                        started,
+                        completed,
+                        records,
+                        f"Ledger manifest drift: ledger manifest_sha256 {ledger_m_sha} != current {expected_manifest_sha}",
+                    )
+
+            if expected_source_hashes:
+                if ledger_source_hashes != expected_source_hashes:
+                    return (
+                        started,
+                        completed,
+                        records,
+                        "Ledger source drift: recorded source_hashes do not match current session source_hashes",
+                    )
 
         return started, completed, records, None
 
@@ -297,7 +342,8 @@ class PilotSupervisor:
 
         # 2. Check existing ledger
         started_ids, completed_ids, existing_records, ledger_err = self.load_existing_ledger(
-            expected_manifest_sha=manifest_sha
+            expected_manifest_sha=manifest_sha,
+            expected_source_hashes=source_prov["source_hashes"],
         )
         if ledger_err:
             print(f"ERROR loading existing ledger: {ledger_err}")
@@ -306,17 +352,31 @@ class PilotSupervisor:
         print(f"Existing ledger has {len(completed_ids)} completed attempts.")
 
         # Write supervisor session header if ledger is fresh or new session
-        self.append_record({
-            "record_type": "SUPERVISOR_HEADER",
-            "session_id": f"session_{int(supervisor_t0)}",
-            "manifest_sha256": manifest_sha,
-            "git_commit": source_prov["git_commit"],
-            "git_dirty": source_prov["git_dirty"],
-            "source_hashes": source_prov["source_hashes"],
-            "is_filtered_run": is_filtered_run,
-            "filter": workload_filter,
-            "timestamp": supervisor_t0,
-        })
+        has_existing_header = any(r.get("record_type") == "SUPERVISOR_HEADER" for r in existing_records)
+        if not has_existing_header:
+            self.append_record({
+                "record_type": "SUPERVISOR_HEADER",
+                "session_id": f"session_{int(supervisor_t0)}",
+                "manifest_sha256": manifest_sha,
+                "git_commit": source_prov["git_commit"],
+                "git_dirty": source_prov["git_dirty"],
+                "source_hashes": source_prov["source_hashes"],
+                "is_filtered_run": is_filtered_run,
+                "filter": workload_filter,
+                "timestamp": supervisor_t0,
+            })
+        else:
+            self.append_record({
+                "record_type": "SUPERVISOR_RESUME",
+                "session_id": f"resume_{int(supervisor_t0)}",
+                "manifest_sha256": manifest_sha,
+                "git_commit": source_prov["git_commit"],
+                "git_dirty": source_prov["git_dirty"],
+                "source_hashes": source_prov["source_hashes"],
+                "is_filtered_run": is_filtered_run,
+                "filter": workload_filter,
+                "timestamp": supervisor_t0,
+            })
 
         # Mark any attempt started in a prior run but not completed as INTERRUPTED
         interrupted_ids = started_ids - completed_ids

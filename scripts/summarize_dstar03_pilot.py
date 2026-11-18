@@ -116,6 +116,7 @@ def summarize_pilot(
     # 2. Read and reconcile attempts ledger
     attempts_by_id: Dict[str, Dict[str, Any]] = {}
     started_ids: Set[str] = set()
+    header_record: Optional[Dict[str, Any]] = None
     ledger_records_count = 0
     duplicate_completions: List[str] = []
     unknown_completions: List[str] = []
@@ -138,7 +139,11 @@ def summarize_pilot(
             rec_type = rec.get("record_type")
             att_id = rec.get("attempt_id")
 
-            if rec_type == "ATTEMPT_STARTED":
+            if rec_type == "SUPERVISOR_HEADER":
+                if header_record is None:
+                    header_record = rec
+
+            elif rec_type == "ATTEMPT_STARTED":
                 if not att_id:
                     raise ValueError(f"Line {line_no}: ATTEMPT_STARTED missing attempt_id")
                 started_ids.add(att_id)
@@ -169,6 +174,52 @@ def summarize_pilot(
             f"Ledger contains completions with no matching ATTEMPT_STARTED record: {completions_missing_start[:5]}"
         )
 
+    # Header Provenance Check (F02)
+    header_commit: Optional[str] = None
+    if header_record is not None or len(attempts_by_id) > 0:
+        if header_record is None:
+            raise ValueError(
+                f"Ledger {ledger_path} contains {len(attempts_by_id)} completion records but is missing required SUPERVISOR_HEADER"
+            )
+
+        header_commit = header_record.get("git_commit")
+        if not header_commit or not isinstance(header_commit, str):
+            raise ValueError("Ledger SUPERVISOR_HEADER missing or invalid 'git_commit'")
+
+        header_source_hashes = header_record.get("source_hashes")
+        if not header_source_hashes or not isinstance(header_source_hashes, dict) or len(header_source_hashes) == 0:
+            raise ValueError("Ledger SUPERVISOR_HEADER missing or empty 'source_hashes'")
+
+        # Verify source_hashes against git show <header_commit>:<path>
+        import hashlib
+        import subprocess
+
+        for rel_path, expected_hash in header_source_hashes.items():
+            if not isinstance(expected_hash, str) or not expected_hash.strip():
+                raise ValueError(f"Empty hash in SUPERVISOR_HEADER source_hashes for {rel_path}")
+            proc = subprocess.run(
+                ["git", "show", f"{header_commit}:{rel_path}"],
+                capture_output=True,
+                cwd=REPO_ROOT,
+            )
+            if proc.returncode != 0:
+                err_msg = proc.stderr.decode("utf-8", errors="replace").strip()
+                raise ValueError(
+                    f"Provenance verification failed: cannot retrieve {rel_path} from commit {header_commit} via git show: {err_msg}"
+                )
+            calc_hash = hashlib.sha256(proc.stdout).hexdigest()
+            if calc_hash != expected_hash:
+                raise ValueError(
+                    f"Provenance verification failed: header source hash mismatch for {rel_path}: "
+                    f"declared {expected_hash} != git show blob {calc_hash}"
+                )
+
+        # Verify manifest hash against current manifest
+        if header_record.get("manifest_sha256") != manifest.get("manifest_sha256"):
+            raise ValueError(
+                f"Ledger header manifest_sha256 {header_record.get('manifest_sha256')} != manifest {manifest.get('manifest_sha256')}"
+            )
+
     # 3. Reconcile slots
     status_counts: Dict[str, int] = {}
     workload_attempts: Dict[str, Dict[str, Dict[int, Dict[str, Any]]]] = {
@@ -180,23 +231,127 @@ def summarize_pilot(
 
     for w in workload_entries:
         w_id = w["workload_id"]
-        for pair_idx in (1, 2, 3):
+        case_idx = w["case_index"]
+        stream_len = w["stream_length"]
+
+        pair_patterns = [
+            ("m1", "m2") if (case_idx % 2 == 0) else ("m2", "m1"),
+            ("m2", "m1") if (case_idx % 2 == 0) else ("m1", "m2"),
+            ("m1", "m2") if (case_idx % 2 == 0) else ("m2", "m1"),
+        ]
+
+        for pair_idx, (eng_a, eng_b) in enumerate(pair_patterns, start=1):
             rep_idx = pair_idx - 1
-            for eng in ("m1", "m2"):
+            for sub_rep, eng in enumerate([eng_a, eng_b], start=1):
                 att_id = f"{w_id}_{eng}_pair{pair_idx}_rep{rep_idx}"
+                expected_order = sub_rep
+
                 if att_id not in attempts_by_id:
                     missing_slots.append(att_id)
                     status_counts["MISSING"] = status_counts.get("MISSING", 0) + 1
-                else:
-                    rec = attempts_by_id[att_id]
-                    st = rec.get("status", "UNKNOWN")
+                    continue
+
+                rec = attempts_by_id[att_id]
+                st = rec.get("status", "UNKNOWN")
+
+                # Identity check with scheduled slot
+                rec_w_id = rec.get("workload_id")
+                rec_eng = rec.get("engine")
+                rec_pair = rec.get("pair_index")
+                rec_rep = rec.get("rep_index")
+                rec_order = rec.get("order_in_pair")
+
+                if (
+                    rec_w_id != w_id
+                    or rec_eng != eng
+                    or rec_pair != pair_idx
+                    or rec_rep != rep_idx
+                    or rec_order != expected_order
+                ):
+                    raise ValueError(
+                        f"Integrity error for slot {att_id}: scheduled (workload={w_id}, engine={eng}, "
+                        f"pair={pair_idx}, rep={rep_idx}, order={expected_order}) != recorded "
+                        f"(workload={rec_w_id}, engine={rec_eng}, pair={rec_pair}, rep={rec_rep}, order={rec_order})"
+                    )
+
+                # Check worker provenance against header commit (F02)
+                if header_commit:
+                    worker_prov = rec.get("git_provenance")
+                    worker_commit = worker_prov.get("commit") if isinstance(worker_prov, dict) else None
+                    if worker_commit != header_commit:
+                        raise ValueError(
+                            f"Integrity error for slot {att_id}: worker commit {worker_commit} != header commit {header_commit}"
+                        )
+
+                # Successful slot integrity verification (F01)
+                if st in ("SUCCESS_NONEMPTY", "ZERO_RESULT_COMPLETE"):
+                    # 1. exit_code == 0
+                    rec_exit = rec.get("exit_code")
+                    if rec_exit != 0:
+                        raise ValueError(
+                            f"Integrity error for slot {att_id}: status is '{st}' but exit_code is {rec_exit}"
+                        )
+
+                    # 2. subprocess_status == "OK"
+                    rec_sub_st = rec.get("subprocess_status")
+                    if rec_sub_st != "OK":
+                        raise ValueError(
+                            f"Integrity error for slot {att_id}: status is '{st}' but subprocess_status is '{rec_sub_st}'"
+                        )
+
+                    # 3. warmup_status == "SUCCESS"
+                    rec_warmup_st = rec.get("warmup_status")
+                    if rec_warmup_st != "SUCCESS":
+                        raise ValueError(
+                            f"Integrity error for slot {att_id}: status is '{st}' but warmup_status is '{rec_warmup_st}'"
+                        )
+
+                    # 4. Payload step count matches stream length
+                    steps = rec.get("steps")
+                    if not isinstance(steps, list) or len(steps) != stream_len:
+                        raise ValueError(
+                            f"Integrity error for slot {att_id}: payload steps count "
+                            f"{len(steps) if isinstance(steps, list) else None} != workload stream length {stream_len}"
+                        )
+
+                    # 5. Timing and counter validation
+                    t_engine = rec.get("stream_engine_ms")
+                    if not isinstance(t_engine, (int, float)) or isinstance(t_engine, bool) or t_engine < 0:
+                        raise ValueError(
+                            f"Integrity error for slot {att_id}: invalid stream_engine_ms {t_engine}"
+                        )
+
+                    t_worker = rec.get("worker_wall_ms")
+                    if not isinstance(t_worker, (int, float)) or isinstance(t_worker, bool) or t_worker < 0:
+                        raise ValueError(
+                            f"Integrity error for slot {att_id}: invalid worker_wall_ms {t_worker}"
+                        )
+
+                    b_units = rec.get("total_budget_units")
+                    if not isinstance(b_units, int) or isinstance(b_units, bool) or b_units < 0:
+                        raise ValueError(
+                            f"Integrity error for slot {att_id}: invalid total_budget_units {b_units}"
+                        )
+
+                    counters = rec.get("counters")
+                    if not isinstance(counters, dict):
+                        raise ValueError(
+                            f"Integrity error for slot {att_id}: missing or invalid counters {type(counters)}"
+                        )
+
                     status_counts[st] = status_counts.get(st, 0) + 1
                     workload_attempts[w_id][eng][pair_idx] = rec
+                    successful_measured_slots_count += 1
 
-                    if st in ("SUCCESS_NONEMPTY", "ZERO_RESULT_COMPLETE"):
-                        successful_measured_slots_count += 1
-                    else:
-                        failed_slots_count += 1
+                elif st in ("TIMEOUT", "RESOURCE_LIMIT", "ERROR", "INTERRUPTED", "CORRECTNESS_FAIL", "INPUT_INVALID"):
+                    status_counts[st] = status_counts.get(st, 0) + 1
+                    workload_attempts[w_id][eng][pair_idx] = rec
+                    failed_slots_count += 1
+
+                else:
+                    raise ValueError(
+                        f"Integrity error for slot {att_id}: unrecognized status '{st}'"
+                    )
 
     # 4. M0 Correctness Summary Audit
     correctness_rows: List[Dict[str, Any]] = []
@@ -210,6 +365,15 @@ def summarize_pilot(
         fixture_path = REPO_ROOT / w["relative_path"]
         with fixture_path.open("r", encoding="utf-8") as f:
             w_fixture = json.load(f)
+
+        # Check fixture fingerprint against manifest (F02)
+        declared_w_sha = w.get("sha256_workload")
+        fixture_w_sha = w_fixture.get("sha256_workload")
+        if not fixture_w_sha or fixture_w_sha != declared_w_sha:
+            raise ValueError(
+                f"Workload fixture fingerprint mismatch for {w_id}: "
+                f"fixture {fixture_w_sha} != manifest {declared_w_sha}"
+            )
 
         m0_info = w_fixture.get("m0_verification", {})
         verified = m0_info.get("verified", False)

@@ -38,6 +38,55 @@ class TestDStar03Summary(unittest.TestCase):
         cls.manifest_path = REPO_ROOT / "configs" / "dstar03_pilot_manifest.json"
         with cls.manifest_path.open("r", encoding="utf-8") as f:
             cls.manifest = json.load(f)
+        with (REPO_ROOT / "reports" / "dstar03" / "attempts.jsonl").open("r", encoding="utf-8") as f:
+            cls.valid_header = json.loads(f.readline())
+
+    def _make_slot(
+        self,
+        attempt_id: Optional[str] = None,
+        workload_id: str = "witness_01_diamond_k1",
+        engine: str = "m1",
+        pair_index: int = 1,
+        rep_index: int = 0,
+        order_in_pair: int = 1,
+        status: str = "SUCCESS_NONEMPTY",
+        exit_code: int = 0,
+        subprocess_status: str = "OK",
+        warmup_status: str = "SUCCESS",
+        stream_engine_ms: float = 2.0,
+        worker_wall_ms: float = 3.0,
+        total_budget_units: int = 40,
+        counters: Optional[Dict[str, int]] = None,
+        steps: Optional[List[Dict[str, Any]]] = None,
+        git_commit: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        if attempt_id is None:
+            attempt_id = f"{workload_id}_{engine}_pair{pair_index}_rep{rep_index}"
+        if steps is None:
+            steps = [{"step": i, "budget_units": 10} for i in range(4)]
+        if counters is None:
+            counters = {"candidate_evaluations": 10}
+        if git_commit is None:
+            git_commit = self.valid_header["git_commit"]
+        return {
+            "record_type": "ATTEMPT_COMPLETED",
+            "attempt_id": attempt_id,
+            "workload_id": workload_id,
+            "engine": engine,
+            "pair_index": pair_index,
+            "rep_index": rep_index,
+            "order_in_pair": order_in_pair,
+            "status": status,
+            "exit_code": exit_code,
+            "subprocess_status": subprocess_status,
+            "warmup_status": warmup_status,
+            "stream_engine_ms": stream_engine_ms,
+            "worker_wall_ms": worker_wall_ms,
+            "total_budget_units": total_budget_units,
+            "counters": counters,
+            "steps": steps,
+            "git_provenance": {"commit": git_commit},
+        }
 
     def test_01_median_and_range_calculation(self) -> None:
         """Verifies median and range against hand-calculated values."""
@@ -90,18 +139,9 @@ class TestDStar03Summary(unittest.TestCase):
             m2_id = f"{w_id}_m2_pair1_rep0"
 
             records = [
+                self.valid_header,
                 {"record_type": "ATTEMPT_STARTED", "attempt_id": m1_id},
-                {
-                    "record_type": "ATTEMPT_COMPLETED",
-                    "attempt_id": m1_id,
-                    "workload_id": w_id,
-                    "engine": "m1",
-                    "pair_index": 1,
-                    "rep_index": 0,
-                    "status": "SUCCESS_NONEMPTY",
-                    "stream_engine_ms": 2.0,
-                    "total_budget_units": 10,
-                },
+                self._make_slot(workload_id=w_id, engine="m1", pair_index=1, rep_index=0, order_in_pair=1),
                 {"record_type": "ATTEMPT_STARTED", "attempt_id": m2_id},
                 {
                     "record_type": "ATTEMPT_COMPLETED",
@@ -110,8 +150,10 @@ class TestDStar03Summary(unittest.TestCase):
                     "engine": "m2",
                     "pair_index": 1,
                     "rep_index": 0,
+                    "order_in_pair": 2,
                     "status": "TIMEOUT",
                     "error": "Timeout expired",
+                    "git_provenance": {"commit": self.valid_header["git_commit"]},
                 },
             ]
             with ledger.open("w", encoding="utf-8") as f:
@@ -141,11 +183,18 @@ class TestDStar03Summary(unittest.TestCase):
             out_dir = tmp_path / "out"
 
             with ledger.open("w", encoding="utf-8") as f:
+                f.write(json.dumps(self.valid_header) + "\n")
                 for w in self.manifest["workloads"]:
                     w_id = w["workload_id"]
+                    case_idx = w["case_index"]
+                    pair_patterns = [
+                        ("m1", "m2") if (case_idx % 2 == 0) else ("m2", "m1"),
+                        ("m2", "m1") if (case_idx % 2 == 0) else ("m1", "m2"),
+                        ("m1", "m2") if (case_idx % 2 == 0) else ("m2", "m1"),
+                    ]
                     for p in (1, 2, 3):
                         rep = p - 1
-                        for eng in ("m1", "m2"):
+                        for sub_rep, eng in enumerate(pair_patterns[p - 1], start=1):
                             att_id = f"{w_id}_{eng}_pair{p}_rep{rep}"
                             f.write(json.dumps({"record_type": "ATTEMPT_STARTED", "attempt_id": att_id}) + "\n")
                             f.write(json.dumps({
@@ -155,8 +204,10 @@ class TestDStar03Summary(unittest.TestCase):
                                 "engine": eng,
                                 "pair_index": p,
                                 "rep_index": rep,
+                                "order_in_pair": sub_rep,
                                 "status": "TIMEOUT",
                                 "error": "Timed out",
+                                "git_provenance": {"commit": self.valid_header["git_commit"]},
                             }) + "\n")
 
             summary = summarize_pilot(
@@ -193,19 +244,10 @@ class TestDStar03Summary(unittest.TestCase):
             att_id = "witness_01_diamond_k1_m1_pair1_rep0"
 
             with ledger.open("w", encoding="utf-8") as f:
+                f.write(json.dumps(self.valid_header) + "\n")
                 f.write(json.dumps({"record_type": "ATTEMPT_STARTED", "attempt_id": att_id}) + "\n")
-                f.write(json.dumps({
-                    "record_type": "ATTEMPT_COMPLETED",
-                    "attempt_id": att_id,
-                    "status": "SUCCESS_NONEMPTY",
-                    "stream_engine_ms": 1.0,
-                }) + "\n")
-                f.write(json.dumps({
-                    "record_type": "ATTEMPT_COMPLETED",
-                    "attempt_id": att_id,
-                    "status": "SUCCESS_NONEMPTY",
-                    "stream_engine_ms": 1.2,
-                }) + "\n")
+                f.write(json.dumps(self._make_slot()) + "\n")
+                f.write(json.dumps(self._make_slot()) + "\n")
 
             with self.assertRaises(ValueError) as ctx:
                 summarize_pilot(manifest_path=self.manifest_path, ledger_path=ledger, output_dir=tmp_path / "out")
@@ -218,6 +260,7 @@ class TestDStar03Summary(unittest.TestCase):
             ledger = tmp_path / "corrupt_ledger.jsonl"
 
             with ledger.open("w", encoding="utf-8") as f:
+                f.write(json.dumps(self.valid_header) + "\n")
                 f.write('{"record_type": "ATTEMPT_STARTED", "attempt_id": "witness_01_diamond_k1_m1_pair1_rep0"}\n')
                 f.write('{"corrupted_json: incomplete\n')
 
@@ -233,6 +276,7 @@ class TestDStar03Summary(unittest.TestCase):
             fake_id = "fake_workload_m1_pair1_rep0"
 
             with ledger.open("w", encoding="utf-8") as f:
+                f.write(json.dumps(self.valid_header) + "\n")
                 f.write(json.dumps({"record_type": "ATTEMPT_STARTED", "attempt_id": fake_id}) + "\n")
                 f.write(json.dumps({
                     "record_type": "ATTEMPT_COMPLETED",
@@ -249,15 +293,10 @@ class TestDStar03Summary(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)
             ledger = tmp_path / "missing_start.jsonl"
-            att_id = "witness_01_diamond_k1_m1_pair1_rep0"
 
             with ledger.open("w", encoding="utf-8") as f:
-                f.write(json.dumps({
-                    "record_type": "ATTEMPT_COMPLETED",
-                    "attempt_id": att_id,
-                    "status": "SUCCESS_NONEMPTY",
-                    "stream_engine_ms": 1.0,
-                }) + "\n")
+                f.write(json.dumps(self.valid_header) + "\n")
+                f.write(json.dumps(self._make_slot()) + "\n")
 
             with self.assertRaises(ValueError) as ctx:
                 summarize_pilot(manifest_path=self.manifest_path, ledger_path=ledger, output_dir=tmp_path / "out")
@@ -274,6 +313,206 @@ class TestDStar03Summary(unittest.TestCase):
             res = supervisor.run(workload_filter="non_existent_workload_string_12345")
             self.assertEqual(res["status"], "ERROR")
             self.assertEqual(res["total_slots"], 0)
+
+    def test_11_f01_reject_success_with_exit_code_1(self) -> None:
+        """F01 regression: Verifies slot claiming SUCCESS with non-zero exit_code raises ValueError."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            ledger = tmp_path / "bad_exit.jsonl"
+            att_id = "witness_01_diamond_k1_m1_pair1_rep0"
+
+            with ledger.open("w", encoding="utf-8") as f:
+                f.write(json.dumps(self.valid_header) + "\n")
+                f.write(json.dumps({"record_type": "ATTEMPT_STARTED", "attempt_id": att_id}) + "\n")
+                f.write(json.dumps(self._make_slot(exit_code=1)) + "\n")
+
+            with self.assertRaises(ValueError) as ctx:
+                summarize_pilot(manifest_path=self.manifest_path, ledger_path=ledger, output_dir=tmp_path / "out")
+            self.assertIn("exit_code is 1", str(ctx.exception))
+
+    def test_12_f01_reject_success_with_bad_subprocess_status(self) -> None:
+        """F01 regression: Verifies slot claiming SUCCESS with subprocess_status != OK raises ValueError."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            for bad_st in ("ERROR", "TIMEOUT", "RESOURCE_LIMIT"):
+                ledger = tmp_path / f"bad_sub_{bad_st}.jsonl"
+                att_id = "witness_01_diamond_k1_m1_pair1_rep0"
+
+                with ledger.open("w", encoding="utf-8") as f:
+                    f.write(json.dumps(self.valid_header) + "\n")
+                    f.write(json.dumps({"record_type": "ATTEMPT_STARTED", "attempt_id": att_id}) + "\n")
+                    f.write(json.dumps(self._make_slot(subprocess_status=bad_st)) + "\n")
+
+                with self.assertRaises(ValueError) as ctx:
+                    summarize_pilot(manifest_path=self.manifest_path, ledger_path=ledger, output_dir=tmp_path / "out")
+                self.assertIn(f"subprocess_status is '{bad_st}'", str(ctx.exception))
+
+    def test_13_f01_reject_success_with_failed_warmup(self) -> None:
+        """F01 regression: Verifies slot claiming SUCCESS with warmup_status != SUCCESS raises ValueError."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            ledger = tmp_path / "failed_warmup.jsonl"
+            att_id = "witness_01_diamond_k1_m1_pair1_rep0"
+
+            with ledger.open("w", encoding="utf-8") as f:
+                f.write(json.dumps(self.valid_header) + "\n")
+                f.write(json.dumps({"record_type": "ATTEMPT_STARTED", "attempt_id": att_id}) + "\n")
+                f.write(json.dumps(self._make_slot(warmup_status="FAILED")) + "\n")
+
+            with self.assertRaises(ValueError) as ctx:
+                summarize_pilot(manifest_path=self.manifest_path, ledger_path=ledger, output_dir=tmp_path / "out")
+            self.assertIn("warmup_status is 'FAILED'", str(ctx.exception))
+
+    def test_14_f01_reject_payload_wrong_engine_or_workload(self) -> None:
+        """F01 regression: Verifies slot completion with conflicting engine or workload raises ValueError."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+
+            # Conflict 1: scheduled m1, record says m2 inside payload
+            ledger1 = tmp_path / "wrong_engine.jsonl"
+            att_id = "witness_01_diamond_k1_m1_pair1_rep0"
+            with ledger1.open("w", encoding="utf-8") as f:
+                f.write(json.dumps(self.valid_header) + "\n")
+                f.write(json.dumps({"record_type": "ATTEMPT_STARTED", "attempt_id": att_id}) + "\n")
+                f.write(json.dumps(self._make_slot(attempt_id=att_id, engine="m2")) + "\n")
+
+            with self.assertRaises(ValueError) as ctx1:
+                summarize_pilot(manifest_path=self.manifest_path, ledger_path=ledger1, output_dir=tmp_path / "out")
+            self.assertIn("scheduled", str(ctx1.exception))
+            self.assertIn("recorded", str(ctx1.exception))
+
+            # Conflict 2: scheduled witness_01, record says witness_02 inside payload
+            ledger2 = tmp_path / "wrong_workload.jsonl"
+            with ledger2.open("w", encoding="utf-8") as f:
+                f.write(json.dumps(self.valid_header) + "\n")
+                f.write(json.dumps({"record_type": "ATTEMPT_STARTED", "attempt_id": att_id}) + "\n")
+                f.write(json.dumps(self._make_slot(attempt_id=att_id, workload_id="witness_02_diamond_k2")) + "\n")
+
+            with self.assertRaises(ValueError) as ctx2:
+                summarize_pilot(manifest_path=self.manifest_path, ledger_path=ledger2, output_dir=tmp_path / "out")
+            self.assertIn("scheduled", str(ctx2.exception))
+            self.assertIn("recorded", str(ctx2.exception))
+
+    def test_15_f01_reject_payload_wrong_step_count(self) -> None:
+        """F01 regression: Verifies slot claiming SUCCESS with wrong step count raises ValueError."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            ledger = tmp_path / "wrong_steps.jsonl"
+            att_id = "witness_01_diamond_k1_m1_pair1_rep0"
+
+            with ledger.open("w", encoding="utf-8") as f:
+                f.write(json.dumps(self.valid_header) + "\n")
+                f.write(json.dumps({"record_type": "ATTEMPT_STARTED", "attempt_id": att_id}) + "\n")
+                # witness_01 stream_length is 4, provide 2 steps
+                f.write(json.dumps(self._make_slot(steps=[{"step": 0}, {"step": 1}])) + "\n")
+
+            with self.assertRaises(ValueError) as ctx:
+                summarize_pilot(manifest_path=self.manifest_path, ledger_path=ledger, output_dir=tmp_path / "out")
+            self.assertIn("payload steps count", str(ctx.exception))
+
+    def test_16_f02_reject_fake_header_hash(self) -> None:
+        """F02 regression: Verifies fake header hash is caught by provenance git show check."""
+        import copy
+        bad_header = copy.deepcopy(self.valid_header)
+        bad_header["source_hashes"]["scripts/dstar_oracle.py"] = "0" * 64
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            ledger = tmp_path / "fake_header_hash.jsonl"
+            att_id = "witness_01_diamond_k1_m1_pair1_rep0"
+
+            with ledger.open("w", encoding="utf-8") as f:
+                f.write(json.dumps(bad_header) + "\n")
+                f.write(json.dumps({"record_type": "ATTEMPT_STARTED", "attempt_id": att_id}) + "\n")
+                f.write(json.dumps(self._make_slot()) + "\n")
+
+            with self.assertRaises(ValueError) as ctx:
+                summarize_pilot(manifest_path=self.manifest_path, ledger_path=ledger, output_dir=tmp_path / "out")
+            self.assertIn("header source hash mismatch", str(ctx.exception))
+
+    def test_17_f02_reject_header_missing_source_hashes(self) -> None:
+        """F02 regression: Verifies header with missing/empty source_hashes raises ValueError."""
+        import copy
+        bad_header = copy.deepcopy(self.valid_header)
+        bad_header["source_hashes"] = {}
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            ledger = tmp_path / "empty_source_hashes.jsonl"
+            att_id = "witness_01_diamond_k1_m1_pair1_rep0"
+
+            with ledger.open("w", encoding="utf-8") as f:
+                f.write(json.dumps(bad_header) + "\n")
+                f.write(json.dumps({"record_type": "ATTEMPT_STARTED", "attempt_id": att_id}) + "\n")
+                f.write(json.dumps(self._make_slot()) + "\n")
+
+            with self.assertRaises(ValueError) as ctx:
+                summarize_pilot(manifest_path=self.manifest_path, ledger_path=ledger, output_dir=tmp_path / "out")
+            self.assertIn("missing or empty 'source_hashes'", str(ctx.exception))
+
+    def test_18_f02_reject_recorded_commit_mismatch(self) -> None:
+        """F02 regression: Verifies non-existent recorded commit raises ValueError on git show."""
+        import copy
+        bad_header = copy.deepcopy(self.valid_header)
+        bad_header["git_commit"] = "0" * 40
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            ledger = tmp_path / "bad_commit.jsonl"
+            att_id = "witness_01_diamond_k1_m1_pair1_rep0"
+
+            with ledger.open("w", encoding="utf-8") as f:
+                f.write(json.dumps(bad_header) + "\n")
+                f.write(json.dumps({"record_type": "ATTEMPT_STARTED", "attempt_id": att_id}) + "\n")
+                f.write(json.dumps(self._make_slot()) + "\n")
+
+            with self.assertRaises(ValueError) as ctx:
+                summarize_pilot(manifest_path=self.manifest_path, ledger_path=ledger, output_dir=tmp_path / "out")
+            self.assertIn("cannot retrieve", str(ctx.exception))
+
+    def test_19_f02_reject_worker_commit_mismatch_with_header(self) -> None:
+        """F02 regression: Verifies worker git commit mismatch with header commit raises ValueError."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            ledger = tmp_path / "worker_commit_mismatch.jsonl"
+            att_id = "witness_01_diamond_k1_m1_pair1_rep0"
+
+            with ledger.open("w", encoding="utf-8") as f:
+                f.write(json.dumps(self.valid_header) + "\n")
+                f.write(json.dumps({"record_type": "ATTEMPT_STARTED", "attempt_id": att_id}) + "\n")
+                f.write(json.dumps(self._make_slot(git_commit="different_commit_hash_12345")) + "\n")
+
+            with self.assertRaises(ValueError) as ctx:
+                summarize_pilot(manifest_path=self.manifest_path, ledger_path=ledger, output_dir=tmp_path / "out")
+            self.assertIn("worker commit", str(ctx.exception))
+
+    def test_20_f02_reject_fixture_fingerprint_mismatch(self) -> None:
+        """F02 regression: Verifies summarize raises ValueError if fixture fingerprint mismatches manifest."""
+        fixtures_dir = REPO_ROOT / "tests" / "fixtures"
+        with tempfile.TemporaryDirectory(dir=str(fixtures_dir)) as tmpdir:
+            tmp_m_path = Path(tmpdir) / "manifest.json"
+            tmp_fix_path = Path(tmpdir) / "bad_fixture.json"
+
+            with (REPO_ROOT / "tests" / "fixtures" / "dstar03" / "workloads" / "witness_01_diamond_k1.json").open("r", encoding="utf-8") as f:
+                fix_data = json.load(f)
+            fix_data["sha256_workload"] = "mismatch_fingerprint_value"
+            with tmp_fix_path.open("w", encoding="utf-8") as f:
+                json.dump(fix_data, f)
+
+            with self.manifest_path.open("r", encoding="utf-8") as f:
+                man_data = json.load(f)
+
+            man_data["workloads"][0]["relative_path"] = str(tmp_fix_path.relative_to(REPO_ROOT))
+
+            with tmp_m_path.open("w", encoding="utf-8") as f:
+                json.dump(man_data, f)
+
+            empty_ledger = Path(tmpdir) / "empty.jsonl"
+            empty_ledger.touch()
+
+            with self.assertRaises(ValueError) as ctx:
+                summarize_pilot(manifest_path=tmp_m_path, ledger_path=empty_ledger, output_dir=Path(tmpdir) / "out")
+            self.assertIn("fixture fingerprint mismatch", str(ctx.exception).lower())
 
 
 if __name__ == "__main__":
