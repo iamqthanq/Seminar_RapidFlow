@@ -1,0 +1,119 @@
+{
+  "case_index": 53,
+  "family": "NETFLOW_PROBE",
+  "graph_mode": "SUBGRAPH_RELATIVE",
+  "initial_graph": {
+    "edges": [
+      [
+        767706,
+        767707,
+        2
+      ]
+    ],
+    "vertices": {
+      "125532": 0,
+      "206133": 0,
+      "2533397": 0,
+      "2656551": 0,
+      "2659769": 0,
+      "737243": 0,
+      "767706": 0,
+      "767707": 0
+    }
+  },
+  "k": 0,
+  "lambda_val": 2,
+  "m0_verification": {
+    "has_events": false,
+    "steps": [
+      {
+        "edge": [
+          767706,
+          767707
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 2,
+        "operation": "DELETE",
+        "step": 0
+      }
+    ],
+    "total_entered_events": 0,
+    "total_events": 0,
+    "total_exited_events": 0,
+    "verified": true
+  },
+  "netflow_seed": 20261118,
+  "query": {
+    "edges": [
+      [
+        0,
+        1,
+        2
+      ],
+      [
+        0,
+        2,
+        2
+      ],
+      [
+        1,
+        2,
+        2
+      ],
+      [
+        1,
+        3,
+        2
+      ],
+      [
+        2,
+        3,
+        2
+      ]
+    ],
+    "vertices": {
+      "0": 0,
+      "1": 0,
+      "2": 0,
+      "3": 0
+    }
+  },
+  "query_name": "diamond_k0",
+  "query_shape": "diamond",
+  "sample_universe_S": [
+    767706,
+    767707,
+    737243,
+    206133,
+    2533397,
+    2659769,
+    125532,
+    2656551
+  ],
+  "sha256_initial_graph": "7d12f40ca4bdbed7f1caf3106bf94a44073ba713974fe12cae21223f145858db",
+  "sha256_query": "854af7b9c868734f336e373f28c11ca6c517bba474ef7bdabb6d8eba55c1ed56",
+  "sha256_stream": "25221fd215b1b17a3620b753202e67c8abf54c9de575a1601cfe1499066d7ddc",
+  "sha256_workload": "825385e396a5a75f22e92e04432d54d1b8757924bf53f903f86943db8223fe19",
+  "stream": [
+    {
+      "edge": [
+        767706,
+        767707
+      ],
+      "is_target": true,
+      "label": 2,
+      "operation": "DELETE",
+      "physical_line_number": 57,
+      "raw_line": "-e 767706 767707 2",
+      "source_op_index": 56,
+      "step": 0
+    }
+  ],
+  "target_label": 2,
+  "target_operation": "DELETE",
+  "target_physical_line_number": 57,
+  "target_raw_line": "-e 767706 767707 2",
+  "target_source_op_index": 56,
+  "workload_id": "netflow_s20261118_delete_diamond_k0"
+}

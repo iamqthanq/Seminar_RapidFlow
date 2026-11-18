@@ -1,0 +1,113 @@
+{
+  "case_index": 48,
+  "family": "NETFLOW_PROBE",
+  "graph_mode": "SUBGRAPH_RELATIVE",
+  "initial_graph": {
+    "edges": [],
+    "vertices": {
+      "125532": 0,
+      "206133": 0,
+      "2533397": 0,
+      "2656551": 0,
+      "2659769": 0,
+      "3050348": 0,
+      "3050349": 0,
+      "737243": 0
+    }
+  },
+  "k": 0,
+  "lambda_val": 2,
+  "m0_verification": {
+    "has_events": false,
+    "steps": [
+      {
+        "edge": [
+          3050348,
+          3050349
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 0,
+        "operation": "INSERT",
+        "step": 0
+      }
+    ],
+    "total_entered_events": 0,
+    "total_events": 0,
+    "total_exited_events": 0,
+    "verified": true
+  },
+  "netflow_seed": 20261118,
+  "query": {
+    "edges": [
+      [
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        2,
+        0
+      ],
+      [
+        1,
+        2,
+        0
+      ],
+      [
+        1,
+        3,
+        0
+      ],
+      [
+        2,
+        3,
+        0
+      ]
+    ],
+    "vertices": {
+      "0": 0,
+      "1": 0,
+      "2": 0,
+      "3": 0
+    }
+  },
+  "query_name": "diamond_k0",
+  "query_shape": "diamond",
+  "sample_universe_S": [
+    3050348,
+    3050349,
+    737243,
+    206133,
+    2533397,
+    2659769,
+    125532,
+    2656551
+  ],
+  "sha256_initial_graph": "fccc48edaaff85c4ab6f407c059347591e7cc9c6583c2313b189d96bb3502dcf",
+  "sha256_query": "29bfb2a0a8c9dff8e1c400be53661b7583b168aebd82c8b5cfce62ccd78a6463",
+  "sha256_stream": "284d9f9cf7c898b90d23f867adaec17c1501c6297b2655571f4db638406bdba5",
+  "sha256_workload": "b95752df66f4f6fea437cd3106a85965e3d588e7bc7938f9868d1ab4129e4883",
+  "stream": [
+    {
+      "edge": [
+        3050348,
+        3050349
+      ],
+      "is_target": true,
+      "label": 0,
+      "operation": "INSERT",
+      "physical_line_number": 9,
+      "raw_line": "e 3050348 3050349 0",
+      "source_op_index": 8,
+      "step": 0
+    }
+  ],
+  "target_label": 0,
+  "target_operation": "INSERT",
+  "target_physical_line_number": 9,
+  "target_raw_line": "e 3050348 3050349 0",
+  "target_source_op_index": 8,
+  "workload_id": "netflow_s20261118_insert_diamond_k0"
+}

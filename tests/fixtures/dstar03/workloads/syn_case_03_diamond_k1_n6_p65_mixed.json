@@ -1,0 +1,523 @@
+{
+  "case_index": 3,
+  "family": "SYNTHETIC_MATRIX",
+  "graph_mode": "ISOLATED_SYNTHETIC",
+  "initial_graph": {
+    "edges": [
+      [
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        2,
+        1
+      ],
+      [
+        0,
+        3,
+        1
+      ],
+      [
+        0,
+        4,
+        1
+      ],
+      [
+        0,
+        5,
+        0
+      ],
+      [
+        1,
+        2,
+        0
+      ],
+      [
+        1,
+        3,
+        1
+      ],
+      [
+        1,
+        4,
+        0
+      ],
+      [
+        2,
+        3,
+        1
+      ],
+      [
+        2,
+        4,
+        1
+      ],
+      [
+        2,
+        5,
+        0
+      ],
+      [
+        3,
+        5,
+        1
+      ],
+      [
+        4,
+        5,
+        1
+      ]
+    ],
+    "vertices": {
+      "0": 0,
+      "1": 1,
+      "2": 1,
+      "3": 0,
+      "4": 1,
+      "5": 0
+    }
+  },
+  "k": 1,
+  "label_regime": "mixed",
+  "lambda_val": 2,
+  "m0_verification": {
+    "has_events": true,
+    "steps": [
+      {
+        "edge": [
+          4,
+          5
+        ],
+        "entered": [],
+        "exited": [
+          [
+            0,
+            4,
+            5,
+            1
+          ],
+          [
+            5,
+            4,
+            0,
+            1
+          ],
+          [
+            5,
+            4,
+            0,
+            2
+          ]
+        ],
+        "label": 1,
+        "operation": "DELETE",
+        "step": 0
+      },
+      {
+        "edge": [
+          4,
+          5
+        ],
+        "entered": [
+          [
+            0,
+            4,
+            5,
+            1
+          ],
+          [
+            5,
+            4,
+            0,
+            1
+          ],
+          [
+            5,
+            4,
+            0,
+            2
+          ]
+        ],
+        "exited": [],
+        "label": 1,
+        "operation": "INSERT",
+        "step": 1
+      },
+      {
+        "edge": [
+          4,
+          5
+        ],
+        "entered": [],
+        "exited": [
+          [
+            0,
+            4,
+            5,
+            1
+          ],
+          [
+            5,
+            4,
+            0,
+            1
+          ],
+          [
+            5,
+            4,
+            0,
+            2
+          ]
+        ],
+        "label": 1,
+        "operation": "DELETE",
+        "step": 2
+      },
+      {
+        "edge": [
+          4,
+          5
+        ],
+        "entered": [
+          [
+            0,
+            4,
+            5,
+            1
+          ],
+          [
+            5,
+            4,
+            0,
+            1
+          ],
+          [
+            5,
+            4,
+            0,
+            2
+          ]
+        ],
+        "exited": [],
+        "label": 1,
+        "operation": "INSERT",
+        "step": 3
+      },
+      {
+        "edge": [
+          3,
+          4
+        ],
+        "entered": [
+          [
+            0,
+            4,
+            3,
+            1
+          ],
+          [
+            5,
+            4,
+            3,
+            1
+          ]
+        ],
+        "exited": [],
+        "label": 1,
+        "operation": "INSERT",
+        "step": 4
+      },
+      {
+        "edge": [
+          1,
+          5
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 0,
+        "operation": "INSERT",
+        "step": 5
+      },
+      {
+        "edge": [
+          2,
+          3
+        ],
+        "entered": [],
+        "exited": [
+          [
+            0,
+            2,
+            3,
+            1
+          ]
+        ],
+        "label": 1,
+        "operation": "DELETE",
+        "step": 6
+      },
+      {
+        "edge": [
+          0,
+          4
+        ],
+        "entered": [],
+        "exited": [
+          [
+            0,
+            4,
+            3,
+            1
+          ],
+          [
+            0,
+            4,
+            5,
+            1
+          ],
+          [
+            5,
+            4,
+            0,
+            1
+          ],
+          [
+            5,
+            4,
+            0,
+            2
+          ]
+        ],
+        "label": 1,
+        "operation": "DELETE",
+        "step": 7
+      },
+      {
+        "edge": [
+          3,
+          5
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 1,
+        "operation": "DELETE",
+        "step": 8
+      },
+      {
+        "edge": [
+          1,
+          4
+        ],
+        "entered": [],
+        "exited": [
+          [
+            5,
+            4,
+            3,
+            1
+          ]
+        ],
+        "label": 0,
+        "operation": "DELETE",
+        "step": 9
+      },
+      {
+        "edge": [
+          0,
+          4
+        ],
+        "entered": [
+          [
+            5,
+            4,
+            0,
+            2
+          ]
+        ],
+        "exited": [],
+        "label": 1,
+        "operation": "INSERT",
+        "step": 10
+      },
+      {
+        "edge": [
+          1,
+          2
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 0,
+        "operation": "DELETE",
+        "step": 11
+      }
+    ],
+    "total_entered_events": 9,
+    "total_events": 21,
+    "total_exited_events": 12,
+    "verified": true
+  },
+  "max_degree": 5,
+  "n_data": 6,
+  "query": {
+    "edges": [
+      [
+        0,
+        1,
+        1
+      ],
+      [
+        0,
+        2,
+        0
+      ],
+      [
+        1,
+        2,
+        1
+      ],
+      [
+        1,
+        3,
+        0
+      ],
+      [
+        2,
+        3,
+        1
+      ]
+    ],
+    "vertices": {
+      "0": 0,
+      "1": 1,
+      "2": 0,
+      "3": 1
+    }
+  },
+  "query_name": "diamond_k1",
+  "query_shape": "diamond",
+  "realized_density": 0.8667,
+  "seed": 20261121,
+  "sha256_initial_graph": "9ff5b442e5b79e6293ff9fe567c31a9dce42dc8fb602e5a8081e393e729f577d",
+  "sha256_query": "57e66342b4a6b4f0bbb49d198a03a9846392198042b462e2f1da752a57ee4e87",
+  "sha256_stream": "4c44a702e9db898b552d5310af2ddb9548c3b7b8ee7e91644d8794b69ed73e67",
+  "sha256_workload": "1773c8e62d55a5eea9e396389d37d7d9702bad777cbeb59e858b14352f5e4049",
+  "stream": [
+    {
+      "edge": [
+        4,
+        5
+      ],
+      "label": 1,
+      "operation": "DELETE",
+      "step": 0
+    },
+    {
+      "edge": [
+        4,
+        5
+      ],
+      "label": 1,
+      "operation": "INSERT",
+      "step": 1
+    },
+    {
+      "edge": [
+        4,
+        5
+      ],
+      "label": 1,
+      "operation": "DELETE",
+      "step": 2
+    },
+    {
+      "edge": [
+        4,
+        5
+      ],
+      "label": 1,
+      "operation": "INSERT",
+      "step": 3
+    },
+    {
+      "edge": [
+        3,
+        4
+      ],
+      "label": 1,
+      "operation": "INSERT",
+      "step": 4
+    },
+    {
+      "edge": [
+        1,
+        5
+      ],
+      "label": 0,
+      "operation": "INSERT",
+      "step": 5
+    },
+    {
+      "edge": [
+        2,
+        3
+      ],
+      "label": 1,
+      "operation": "DELETE",
+      "step": 6
+    },
+    {
+      "edge": [
+        0,
+        4
+      ],
+      "label": 1,
+      "operation": "DELETE",
+      "step": 7
+    },
+    {
+      "edge": [
+        3,
+        5
+      ],
+      "label": 1,
+      "operation": "DELETE",
+      "step": 8
+    },
+    {
+      "edge": [
+        1,
+        4
+      ],
+      "label": 0,
+      "operation": "DELETE",
+      "step": 9
+    },
+    {
+      "edge": [
+        0,
+        4
+      ],
+      "label": 1,
+      "operation": "INSERT",
+      "step": 10
+    },
+    {
+      "edge": [
+        1,
+        2
+      ],
+      "label": 0,
+      "operation": "DELETE",
+      "step": 11
+    }
+  ],
+  "target_p": 0.65,
+  "toggle_mode": "DELETE_FIRST",
+  "toggle_pair": [
+    4,
+    5
+  ],
+  "workload_id": "syn_case_03_diamond_k1_n6_p65_mixed"
+}

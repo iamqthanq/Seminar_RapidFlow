@@ -1,0 +1,154 @@
+{
+  "case_index": 64,
+  "family": "NETFLOW_PROBE",
+  "graph_mode": "SUBGRAPH_RELATIVE",
+  "initial_graph": {
+    "edges": [
+      [
+        129124,
+        337299,
+        0
+      ],
+      [
+        129124,
+        476744,
+        0
+      ],
+      [
+        129124,
+        617716,
+        0
+      ],
+      [
+        129124,
+        805409,
+        0
+      ],
+      [
+        129124,
+        2759658,
+        0
+      ],
+      [
+        129124,
+        2952303,
+        0
+      ],
+      [
+        129124,
+        3080986,
+        0
+      ]
+    ],
+    "vertices": {
+      "129124": 0,
+      "2759658": 0,
+      "2952303": 0,
+      "3080986": 0,
+      "337299": 0,
+      "476744": 0,
+      "617716": 0,
+      "805409": 0
+    }
+  },
+  "k": 0,
+  "lambda_val": 3,
+  "m0_verification": {
+    "has_events": false,
+    "steps": [
+      {
+        "edge": [
+          129124,
+          2759658
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 0,
+        "operation": "DELETE",
+        "step": 0
+      }
+    ],
+    "total_entered_events": 0,
+    "total_events": 0,
+    "total_exited_events": 0,
+    "verified": true
+  },
+  "netflow_seed": 20261119,
+  "query": {
+    "edges": [
+      [
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        2,
+        0
+      ],
+      [
+        0,
+        3,
+        0
+      ],
+      [
+        1,
+        2,
+        0
+      ],
+      [
+        1,
+        3,
+        0
+      ],
+      [
+        2,
+        3,
+        0
+      ]
+    ],
+    "vertices": {
+      "0": 0,
+      "1": 0,
+      "2": 0,
+      "3": 0
+    }
+  },
+  "query_name": "k4_k0",
+  "query_shape": "k4",
+  "sample_universe_S": [
+    129124,
+    2759658,
+    805409,
+    476744,
+    3080986,
+    2952303,
+    617716,
+    337299
+  ],
+  "sha256_initial_graph": "2774d3e4729d4bc09189931856e0b07ca317b0c6f098cc7ea2ef2ef5ed951f4a",
+  "sha256_query": "827de8732ebf763d6956412ea1ec799c091ec7ccae4cd10f7bff72fc26a25f1b",
+  "sha256_stream": "8aa155c0a63358aae70a451505e150daa74eb56135a25305d7b3f47de8f9bc53",
+  "sha256_workload": "fd13a99b24f9f7d0274052dc185431103c9f913af11852d16dac9964d1b0e1d5",
+  "stream": [
+    {
+      "edge": [
+        129124,
+        2759658
+      ],
+      "is_target": true,
+      "label": 0,
+      "operation": "DELETE",
+      "physical_line_number": 3,
+      "raw_line": "-e 129124 2759658 0",
+      "source_op_index": 2,
+      "step": 0
+    }
+  ],
+  "target_label": 0,
+  "target_operation": "DELETE",
+  "target_physical_line_number": 3,
+  "target_raw_line": "-e 129124 2759658 0",
+  "target_source_op_index": 2,
+  "workload_id": "netflow_s20261119_delete_k4_k0"
+}

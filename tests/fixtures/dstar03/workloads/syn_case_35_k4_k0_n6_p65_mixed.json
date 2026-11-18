@@ -1,0 +1,373 @@
+{
+  "case_index": 35,
+  "family": "SYNTHETIC_MATRIX",
+  "graph_mode": "ISOLATED_SYNTHETIC",
+  "initial_graph": {
+    "edges": [
+      [
+        0,
+        1,
+        1
+      ],
+      [
+        0,
+        3,
+        0
+      ],
+      [
+        0,
+        4,
+        0
+      ],
+      [
+        1,
+        2,
+        0
+      ],
+      [
+        1,
+        4,
+        1
+      ],
+      [
+        2,
+        3,
+        0
+      ],
+      [
+        2,
+        5,
+        1
+      ],
+      [
+        3,
+        4,
+        0
+      ],
+      [
+        3,
+        5,
+        1
+      ]
+    ],
+    "vertices": {
+      "0": 0,
+      "1": 1,
+      "2": 1,
+      "3": 1,
+      "4": 1,
+      "5": 0
+    }
+  },
+  "k": 0,
+  "label_regime": "mixed",
+  "lambda_val": 3,
+  "m0_verification": {
+    "has_events": false,
+    "steps": [
+      {
+        "edge": [
+          1,
+          4
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 1,
+        "operation": "DELETE",
+        "step": 0
+      },
+      {
+        "edge": [
+          1,
+          4
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 1,
+        "operation": "INSERT",
+        "step": 1
+      },
+      {
+        "edge": [
+          1,
+          4
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 1,
+        "operation": "DELETE",
+        "step": 2
+      },
+      {
+        "edge": [
+          1,
+          4
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 1,
+        "operation": "INSERT",
+        "step": 3
+      },
+      {
+        "edge": [
+          0,
+          1
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 1,
+        "operation": "DELETE",
+        "step": 4
+      },
+      {
+        "edge": [
+          1,
+          3
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 1,
+        "operation": "INSERT",
+        "step": 5
+      },
+      {
+        "edge": [
+          0,
+          1
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 0,
+        "operation": "INSERT",
+        "step": 6
+      },
+      {
+        "edge": [
+          3,
+          5
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 1,
+        "operation": "DELETE",
+        "step": 7
+      },
+      {
+        "edge": [
+          1,
+          4
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 1,
+        "operation": "DELETE",
+        "step": 8
+      },
+      {
+        "edge": [
+          2,
+          3
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 0,
+        "operation": "DELETE",
+        "step": 9
+      },
+      {
+        "edge": [
+          0,
+          4
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 0,
+        "operation": "DELETE",
+        "step": 10
+      },
+      {
+        "edge": [
+          1,
+          5
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 1,
+        "operation": "INSERT",
+        "step": 11
+      }
+    ],
+    "total_entered_events": 0,
+    "total_events": 0,
+    "total_exited_events": 0,
+    "verified": true
+  },
+  "max_degree": 4,
+  "n_data": 6,
+  "query": {
+    "edges": [
+      [
+        0,
+        1,
+        1
+      ],
+      [
+        0,
+        2,
+        0
+      ],
+      [
+        0,
+        3,
+        1
+      ],
+      [
+        1,
+        2,
+        1
+      ],
+      [
+        1,
+        3,
+        0
+      ],
+      [
+        2,
+        3,
+        1
+      ]
+    ],
+    "vertices": {
+      "0": 0,
+      "1": 1,
+      "2": 0,
+      "3": 1
+    }
+  },
+  "query_name": "k4_k0",
+  "query_shape": "k4",
+  "realized_density": 0.6,
+  "seed": 20261153,
+  "sha256_initial_graph": "47e7020cf18617f3b9b9d8fdea61e0bd18f5607fc13cc6339af2a7f8e14e92dd",
+  "sha256_query": "5a2a0cd98df75cc739bc2f3fda3b7c810139ccb6b1ab62043b9767865b496ccc",
+  "sha256_stream": "cde54dd77b44e6bed913c965468de353f9dc7753904d2cfbaf96052868ff3787",
+  "sha256_workload": "d9d2b9ed806836aaa055cf9630a599946e4dc001fa1fe9308ed62527919efc26",
+  "stream": [
+    {
+      "edge": [
+        1,
+        4
+      ],
+      "label": 1,
+      "operation": "DELETE",
+      "step": 0
+    },
+    {
+      "edge": [
+        1,
+        4
+      ],
+      "label": 1,
+      "operation": "INSERT",
+      "step": 1
+    },
+    {
+      "edge": [
+        1,
+        4
+      ],
+      "label": 1,
+      "operation": "DELETE",
+      "step": 2
+    },
+    {
+      "edge": [
+        1,
+        4
+      ],
+      "label": 1,
+      "operation": "INSERT",
+      "step": 3
+    },
+    {
+      "edge": [
+        0,
+        1
+      ],
+      "label": 1,
+      "operation": "DELETE",
+      "step": 4
+    },
+    {
+      "edge": [
+        1,
+        3
+      ],
+      "label": 1,
+      "operation": "INSERT",
+      "step": 5
+    },
+    {
+      "edge": [
+        0,
+        1
+      ],
+      "label": 0,
+      "operation": "INSERT",
+      "step": 6
+    },
+    {
+      "edge": [
+        3,
+        5
+      ],
+      "label": 1,
+      "operation": "DELETE",
+      "step": 7
+    },
+    {
+      "edge": [
+        1,
+        4
+      ],
+      "label": 1,
+      "operation": "DELETE",
+      "step": 8
+    },
+    {
+      "edge": [
+        2,
+        3
+      ],
+      "label": 0,
+      "operation": "DELETE",
+      "step": 9
+    },
+    {
+      "edge": [
+        0,
+        4
+      ],
+      "label": 0,
+      "operation": "DELETE",
+      "step": 10
+    },
+    {
+      "edge": [
+        1,
+        5
+      ],
+      "label": 1,
+      "operation": "INSERT",
+      "step": 11
+    }
+  ],
+  "target_p": 0.65,
+  "toggle_mode": "DELETE_FIRST",
+  "toggle_pair": [
+    1,
+    4
+  ],
+  "workload_id": "syn_case_35_k4_k0_n6_p65_mixed"
+}

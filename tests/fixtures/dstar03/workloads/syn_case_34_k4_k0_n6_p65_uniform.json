@@ -1,0 +1,818 @@
+{
+  "case_index": 34,
+  "family": "SYNTHETIC_MATRIX",
+  "graph_mode": "ISOLATED_SYNTHETIC",
+  "initial_graph": {
+    "edges": [
+      [
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        4,
+        0
+      ],
+      [
+        0,
+        5,
+        0
+      ],
+      [
+        1,
+        2,
+        0
+      ],
+      [
+        1,
+        3,
+        0
+      ],
+      [
+        1,
+        5,
+        0
+      ],
+      [
+        2,
+        3,
+        0
+      ],
+      [
+        2,
+        4,
+        0
+      ],
+      [
+        2,
+        5,
+        0
+      ],
+      [
+        3,
+        5,
+        0
+      ],
+      [
+        4,
+        5,
+        0
+      ]
+    ],
+    "vertices": {
+      "0": 0,
+      "1": 0,
+      "2": 0,
+      "3": 0,
+      "4": 0,
+      "5": 0
+    }
+  },
+  "k": 0,
+  "label_regime": "uniform",
+  "lambda_val": 3,
+  "m0_verification": {
+    "has_events": true,
+    "steps": [
+      {
+        "edge": [
+          2,
+          4
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 0,
+        "operation": "DELETE",
+        "step": 0
+      },
+      {
+        "edge": [
+          2,
+          4
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 0,
+        "operation": "INSERT",
+        "step": 1
+      },
+      {
+        "edge": [
+          2,
+          4
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 0,
+        "operation": "DELETE",
+        "step": 2
+      },
+      {
+        "edge": [
+          2,
+          4
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 0,
+        "operation": "INSERT",
+        "step": 3
+      },
+      {
+        "edge": [
+          1,
+          3
+        ],
+        "entered": [],
+        "exited": [
+          [
+            1,
+            2,
+            3,
+            5
+          ],
+          [
+            1,
+            2,
+            5,
+            3
+          ],
+          [
+            1,
+            3,
+            2,
+            5
+          ],
+          [
+            1,
+            3,
+            5,
+            2
+          ],
+          [
+            1,
+            5,
+            2,
+            3
+          ],
+          [
+            1,
+            5,
+            3,
+            2
+          ],
+          [
+            2,
+            1,
+            3,
+            5
+          ],
+          [
+            2,
+            1,
+            5,
+            3
+          ],
+          [
+            2,
+            3,
+            1,
+            5
+          ],
+          [
+            2,
+            3,
+            5,
+            1
+          ],
+          [
+            2,
+            5,
+            1,
+            3
+          ],
+          [
+            2,
+            5,
+            3,
+            1
+          ],
+          [
+            3,
+            1,
+            2,
+            5
+          ],
+          [
+            3,
+            1,
+            5,
+            2
+          ],
+          [
+            3,
+            2,
+            1,
+            5
+          ],
+          [
+            3,
+            2,
+            5,
+            1
+          ],
+          [
+            3,
+            5,
+            1,
+            2
+          ],
+          [
+            3,
+            5,
+            2,
+            1
+          ],
+          [
+            5,
+            1,
+            2,
+            3
+          ],
+          [
+            5,
+            1,
+            3,
+            2
+          ],
+          [
+            5,
+            2,
+            1,
+            3
+          ],
+          [
+            5,
+            2,
+            3,
+            1
+          ],
+          [
+            5,
+            3,
+            1,
+            2
+          ],
+          [
+            5,
+            3,
+            2,
+            1
+          ]
+        ],
+        "label": 0,
+        "operation": "DELETE",
+        "step": 4
+      },
+      {
+        "edge": [
+          0,
+          3
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 0,
+        "operation": "INSERT",
+        "step": 5
+      },
+      {
+        "edge": [
+          0,
+          4
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 0,
+        "operation": "DELETE",
+        "step": 6
+      },
+      {
+        "edge": [
+          0,
+          5
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 0,
+        "operation": "DELETE",
+        "step": 7
+      },
+      {
+        "edge": [
+          1,
+          4
+        ],
+        "entered": [
+          [
+            1,
+            2,
+            4,
+            5
+          ],
+          [
+            1,
+            2,
+            5,
+            4
+          ],
+          [
+            1,
+            4,
+            2,
+            5
+          ],
+          [
+            1,
+            4,
+            5,
+            2
+          ],
+          [
+            1,
+            5,
+            2,
+            4
+          ],
+          [
+            1,
+            5,
+            4,
+            2
+          ],
+          [
+            2,
+            1,
+            4,
+            5
+          ],
+          [
+            2,
+            1,
+            5,
+            4
+          ],
+          [
+            2,
+            4,
+            1,
+            5
+          ],
+          [
+            2,
+            4,
+            5,
+            1
+          ],
+          [
+            2,
+            5,
+            1,
+            4
+          ],
+          [
+            2,
+            5,
+            4,
+            1
+          ],
+          [
+            4,
+            1,
+            2,
+            5
+          ],
+          [
+            4,
+            1,
+            5,
+            2
+          ],
+          [
+            4,
+            2,
+            1,
+            5
+          ],
+          [
+            4,
+            2,
+            5,
+            1
+          ],
+          [
+            4,
+            5,
+            1,
+            2
+          ],
+          [
+            4,
+            5,
+            2,
+            1
+          ],
+          [
+            5,
+            1,
+            2,
+            4
+          ],
+          [
+            5,
+            1,
+            4,
+            2
+          ],
+          [
+            5,
+            2,
+            1,
+            4
+          ],
+          [
+            5,
+            2,
+            4,
+            1
+          ],
+          [
+            5,
+            4,
+            1,
+            2
+          ],
+          [
+            5,
+            4,
+            2,
+            1
+          ]
+        ],
+        "exited": [],
+        "label": 0,
+        "operation": "INSERT",
+        "step": 8
+      },
+      {
+        "edge": [
+          0,
+          2
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 0,
+        "operation": "INSERT",
+        "step": 9
+      },
+      {
+        "edge": [
+          2,
+          5
+        ],
+        "entered": [],
+        "exited": [
+          [
+            1,
+            2,
+            4,
+            5
+          ],
+          [
+            1,
+            2,
+            5,
+            4
+          ],
+          [
+            1,
+            4,
+            2,
+            5
+          ],
+          [
+            1,
+            4,
+            5,
+            2
+          ],
+          [
+            1,
+            5,
+            2,
+            4
+          ],
+          [
+            1,
+            5,
+            4,
+            2
+          ],
+          [
+            2,
+            1,
+            4,
+            5
+          ],
+          [
+            2,
+            1,
+            5,
+            4
+          ],
+          [
+            2,
+            4,
+            1,
+            5
+          ],
+          [
+            2,
+            4,
+            5,
+            1
+          ],
+          [
+            2,
+            5,
+            1,
+            4
+          ],
+          [
+            2,
+            5,
+            4,
+            1
+          ],
+          [
+            4,
+            1,
+            2,
+            5
+          ],
+          [
+            4,
+            1,
+            5,
+            2
+          ],
+          [
+            4,
+            2,
+            1,
+            5
+          ],
+          [
+            4,
+            2,
+            5,
+            1
+          ],
+          [
+            4,
+            5,
+            1,
+            2
+          ],
+          [
+            4,
+            5,
+            2,
+            1
+          ],
+          [
+            5,
+            1,
+            2,
+            4
+          ],
+          [
+            5,
+            1,
+            4,
+            2
+          ],
+          [
+            5,
+            2,
+            1,
+            4
+          ],
+          [
+            5,
+            2,
+            4,
+            1
+          ],
+          [
+            5,
+            4,
+            1,
+            2
+          ],
+          [
+            5,
+            4,
+            2,
+            1
+          ]
+        ],
+        "label": 0,
+        "operation": "DELETE",
+        "step": 10
+      },
+      {
+        "edge": [
+          3,
+          5
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 0,
+        "operation": "DELETE",
+        "step": 11
+      }
+    ],
+    "total_entered_events": 24,
+    "total_events": 72,
+    "total_exited_events": 48,
+    "verified": true
+  },
+  "max_degree": 5,
+  "n_data": 6,
+  "query": {
+    "edges": [
+      [
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        2,
+        0
+      ],
+      [
+        0,
+        3,
+        0
+      ],
+      [
+        1,
+        2,
+        0
+      ],
+      [
+        1,
+        3,
+        0
+      ],
+      [
+        2,
+        3,
+        0
+      ]
+    ],
+    "vertices": {
+      "0": 0,
+      "1": 0,
+      "2": 0,
+      "3": 0
+    }
+  },
+  "query_name": "k4_k0",
+  "query_shape": "k4",
+  "realized_density": 0.7333,
+  "seed": 20261152,
+  "sha256_initial_graph": "2e013fa1e0425f50a4be6df5e324d25b19ce28cc7d98b6911d615fc23e441b6b",
+  "sha256_query": "827de8732ebf763d6956412ea1ec799c091ec7ccae4cd10f7bff72fc26a25f1b",
+  "sha256_stream": "5833bc6cad8094375974a2f4a91bf627c3a57a749cf34723f8d534cbe25e8884",
+  "sha256_workload": "3134dc96e8e71d7c6cedb574852a1094b1578dab6aaa0d519a9ed45487abbc44",
+  "stream": [
+    {
+      "edge": [
+        2,
+        4
+      ],
+      "label": 0,
+      "operation": "DELETE",
+      "step": 0
+    },
+    {
+      "edge": [
+        2,
+        4
+      ],
+      "label": 0,
+      "operation": "INSERT",
+      "step": 1
+    },
+    {
+      "edge": [
+        2,
+        4
+      ],
+      "label": 0,
+      "operation": "DELETE",
+      "step": 2
+    },
+    {
+      "edge": [
+        2,
+        4
+      ],
+      "label": 0,
+      "operation": "INSERT",
+      "step": 3
+    },
+    {
+      "edge": [
+        1,
+        3
+      ],
+      "label": 0,
+      "operation": "DELETE",
+      "step": 4
+    },
+    {
+      "edge": [
+        0,
+        3
+      ],
+      "label": 0,
+      "operation": "INSERT",
+      "step": 5
+    },
+    {
+      "edge": [
+        0,
+        4
+      ],
+      "label": 0,
+      "operation": "DELETE",
+      "step": 6
+    },
+    {
+      "edge": [
+        0,
+        5
+      ],
+      "label": 0,
+      "operation": "DELETE",
+      "step": 7
+    },
+    {
+      "edge": [
+        1,
+        4
+      ],
+      "label": 0,
+      "operation": "INSERT",
+      "step": 8
+    },
+    {
+      "edge": [
+        0,
+        2
+      ],
+      "label": 0,
+      "operation": "INSERT",
+      "step": 9
+    },
+    {
+      "edge": [
+        2,
+        5
+      ],
+      "label": 0,
+      "operation": "DELETE",
+      "step": 10
+    },
+    {
+      "edge": [
+        3,
+        5
+      ],
+      "label": 0,
+      "operation": "DELETE",
+      "step": 11
+    }
+  ],
+  "target_p": 0.65,
+  "toggle_mode": "DELETE_FIRST",
+  "toggle_pair": [
+    2,
+    4
+  ],
+  "workload_id": "syn_case_34_k4_k0_n6_p65_uniform"
+}

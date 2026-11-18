@@ -1,0 +1,788 @@
+{
+  "case_index": 16,
+  "family": "SYNTHETIC_MATRIX",
+  "graph_mode": "ISOLATED_SYNTHETIC",
+  "initial_graph": {
+    "edges": [
+      [
+        1,
+        3,
+        0
+      ],
+      [
+        1,
+        5,
+        0
+      ],
+      [
+        2,
+        4,
+        0
+      ],
+      [
+        2,
+        5,
+        0
+      ],
+      [
+        4,
+        5,
+        0
+      ]
+    ],
+    "vertices": {
+      "0": 0,
+      "1": 0,
+      "2": 0,
+      "3": 0,
+      "4": 0,
+      "5": 0
+    }
+  },
+  "k": 2,
+  "label_regime": "uniform",
+  "lambda_val": 3,
+  "m0_verification": {
+    "has_events": true,
+    "steps": [
+      {
+        "edge": [
+          1,
+          3
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 0,
+        "operation": "DELETE",
+        "step": 0
+      },
+      {
+        "edge": [
+          1,
+          3
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 0,
+        "operation": "INSERT",
+        "step": 1
+      },
+      {
+        "edge": [
+          1,
+          3
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 0,
+        "operation": "DELETE",
+        "step": 2
+      },
+      {
+        "edge": [
+          1,
+          3
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 0,
+        "operation": "INSERT",
+        "step": 3
+      },
+      {
+        "edge": [
+          2,
+          5
+        ],
+        "entered": [],
+        "exited": [
+          [
+            1,
+            2,
+            4,
+            5
+          ],
+          [
+            1,
+            2,
+            5,
+            4
+          ],
+          [
+            1,
+            4,
+            2,
+            5
+          ],
+          [
+            1,
+            4,
+            5,
+            2
+          ],
+          [
+            1,
+            5,
+            2,
+            4
+          ],
+          [
+            1,
+            5,
+            4,
+            2
+          ],
+          [
+            2,
+            1,
+            4,
+            5
+          ],
+          [
+            2,
+            1,
+            5,
+            4
+          ],
+          [
+            2,
+            4,
+            1,
+            5
+          ],
+          [
+            2,
+            4,
+            5,
+            1
+          ],
+          [
+            2,
+            5,
+            1,
+            4
+          ],
+          [
+            2,
+            5,
+            4,
+            1
+          ],
+          [
+            4,
+            1,
+            2,
+            5
+          ],
+          [
+            4,
+            1,
+            5,
+            2
+          ],
+          [
+            4,
+            2,
+            1,
+            5
+          ],
+          [
+            4,
+            2,
+            5,
+            1
+          ],
+          [
+            4,
+            5,
+            1,
+            2
+          ],
+          [
+            4,
+            5,
+            2,
+            1
+          ],
+          [
+            5,
+            1,
+            2,
+            4
+          ],
+          [
+            5,
+            1,
+            4,
+            2
+          ],
+          [
+            5,
+            2,
+            1,
+            4
+          ],
+          [
+            5,
+            2,
+            4,
+            1
+          ],
+          [
+            5,
+            4,
+            1,
+            2
+          ],
+          [
+            5,
+            4,
+            2,
+            1
+          ]
+        ],
+        "label": 0,
+        "operation": "DELETE",
+        "step": 4
+      },
+      {
+        "edge": [
+          3,
+          4
+        ],
+        "entered": [
+          [
+            1,
+            3,
+            4,
+            5
+          ],
+          [
+            1,
+            3,
+            5,
+            4
+          ],
+          [
+            1,
+            4,
+            3,
+            5
+          ],
+          [
+            1,
+            4,
+            5,
+            3
+          ],
+          [
+            1,
+            5,
+            3,
+            4
+          ],
+          [
+            1,
+            5,
+            4,
+            3
+          ],
+          [
+            3,
+            1,
+            4,
+            5
+          ],
+          [
+            3,
+            1,
+            5,
+            4
+          ],
+          [
+            3,
+            4,
+            1,
+            5
+          ],
+          [
+            3,
+            4,
+            5,
+            1
+          ],
+          [
+            3,
+            5,
+            1,
+            4
+          ],
+          [
+            3,
+            5,
+            4,
+            1
+          ],
+          [
+            4,
+            1,
+            3,
+            5
+          ],
+          [
+            4,
+            1,
+            5,
+            3
+          ],
+          [
+            4,
+            3,
+            1,
+            5
+          ],
+          [
+            4,
+            3,
+            5,
+            1
+          ],
+          [
+            4,
+            5,
+            1,
+            3
+          ],
+          [
+            4,
+            5,
+            3,
+            1
+          ],
+          [
+            5,
+            1,
+            3,
+            4
+          ],
+          [
+            5,
+            1,
+            4,
+            3
+          ],
+          [
+            5,
+            3,
+            1,
+            4
+          ],
+          [
+            5,
+            3,
+            4,
+            1
+          ],
+          [
+            5,
+            4,
+            1,
+            3
+          ],
+          [
+            5,
+            4,
+            3,
+            1
+          ]
+        ],
+        "exited": [],
+        "label": 0,
+        "operation": "INSERT",
+        "step": 5
+      },
+      {
+        "edge": [
+          0,
+          3
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 0,
+        "operation": "INSERT",
+        "step": 6
+      },
+      {
+        "edge": [
+          0,
+          3
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 0,
+        "operation": "DELETE",
+        "step": 7
+      },
+      {
+        "edge": [
+          0,
+          1
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 0,
+        "operation": "INSERT",
+        "step": 8
+      },
+      {
+        "edge": [
+          2,
+          4
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 0,
+        "operation": "DELETE",
+        "step": 9
+      },
+      {
+        "edge": [
+          4,
+          5
+        ],
+        "entered": [],
+        "exited": [
+          [
+            1,
+            3,
+            4,
+            5
+          ],
+          [
+            1,
+            3,
+            5,
+            4
+          ],
+          [
+            1,
+            4,
+            3,
+            5
+          ],
+          [
+            1,
+            4,
+            5,
+            3
+          ],
+          [
+            1,
+            5,
+            3,
+            4
+          ],
+          [
+            1,
+            5,
+            4,
+            3
+          ],
+          [
+            3,
+            1,
+            4,
+            5
+          ],
+          [
+            3,
+            1,
+            5,
+            4
+          ],
+          [
+            3,
+            4,
+            1,
+            5
+          ],
+          [
+            3,
+            4,
+            5,
+            1
+          ],
+          [
+            3,
+            5,
+            1,
+            4
+          ],
+          [
+            3,
+            5,
+            4,
+            1
+          ],
+          [
+            4,
+            1,
+            3,
+            5
+          ],
+          [
+            4,
+            1,
+            5,
+            3
+          ],
+          [
+            4,
+            3,
+            1,
+            5
+          ],
+          [
+            4,
+            3,
+            5,
+            1
+          ],
+          [
+            4,
+            5,
+            1,
+            3
+          ],
+          [
+            4,
+            5,
+            3,
+            1
+          ],
+          [
+            5,
+            1,
+            3,
+            4
+          ],
+          [
+            5,
+            1,
+            4,
+            3
+          ],
+          [
+            5,
+            3,
+            1,
+            4
+          ],
+          [
+            5,
+            3,
+            4,
+            1
+          ],
+          [
+            5,
+            4,
+            1,
+            3
+          ],
+          [
+            5,
+            4,
+            3,
+            1
+          ]
+        ],
+        "label": 0,
+        "operation": "DELETE",
+        "step": 10
+      },
+      {
+        "edge": [
+          2,
+          4
+        ],
+        "entered": [],
+        "exited": [],
+        "label": 0,
+        "operation": "INSERT",
+        "step": 11
+      }
+    ],
+    "total_entered_events": 24,
+    "total_events": 72,
+    "total_exited_events": 48,
+    "verified": true
+  },
+  "max_degree": 3,
+  "n_data": 6,
+  "query": {
+    "edges": [
+      [
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        2,
+        0
+      ],
+      [
+        0,
+        3,
+        0
+      ],
+      [
+        1,
+        2,
+        0
+      ],
+      [
+        1,
+        3,
+        0
+      ],
+      [
+        2,
+        3,
+        0
+      ]
+    ],
+    "vertices": {
+      "0": 0,
+      "1": 0,
+      "2": 0,
+      "3": 0
+    }
+  },
+  "query_name": "k4_k2",
+  "query_shape": "k4",
+  "realized_density": 0.3333,
+  "seed": 20261134,
+  "sha256_initial_graph": "71cbde353793857fa4bf7d70c4bd552b5b809b1a97b6b46d077e6317675989bc",
+  "sha256_query": "827de8732ebf763d6956412ea1ec799c091ec7ccae4cd10f7bff72fc26a25f1b",
+  "sha256_stream": "175a6cf95f1a745ceddd94294f95792eab2d2a6d8e36e17df9a0563a8ae3f4d2",
+  "sha256_workload": "61a58864eaeb748ed89f12c482d513d375ac89f7ca8a3270d7e14479e804cdfc",
+  "stream": [
+    {
+      "edge": [
+        1,
+        3
+      ],
+      "label": 0,
+      "operation": "DELETE",
+      "step": 0
+    },
+    {
+      "edge": [
+        1,
+        3
+      ],
+      "label": 0,
+      "operation": "INSERT",
+      "step": 1
+    },
+    {
+      "edge": [
+        1,
+        3
+      ],
+      "label": 0,
+      "operation": "DELETE",
+      "step": 2
+    },
+    {
+      "edge": [
+        1,
+        3
+      ],
+      "label": 0,
+      "operation": "INSERT",
+      "step": 3
+    },
+    {
+      "edge": [
+        2,
+        5
+      ],
+      "label": 0,
+      "operation": "DELETE",
+      "step": 4
+    },
+    {
+      "edge": [
+        3,
+        4
+      ],
+      "label": 0,
+      "operation": "INSERT",
+      "step": 5
+    },
+    {
+      "edge": [
+        0,
+        3
+      ],
+      "label": 0,
+      "operation": "INSERT",
+      "step": 6
+    },
+    {
+      "edge": [
+        0,
+        3
+      ],
+      "label": 0,
+      "operation": "DELETE",
+      "step": 7
+    },
+    {
+      "edge": [
+        0,
+        1
+      ],
+      "label": 0,
+      "operation": "INSERT",
+      "step": 8
+    },
+    {
+      "edge": [
+        2,
+        4
+      ],
+      "label": 0,
+      "operation": "DELETE",
+      "step": 9
+    },
+    {
+      "edge": [
+        4,
+        5
+      ],
+      "label": 0,
+      "operation": "DELETE",
+      "step": 10
+    },
+    {
+      "edge": [
+        2,
+        4
+      ],
+      "label": 0,
+      "operation": "INSERT",
+      "step": 11
+    }
+  ],
+  "target_p": 0.25,
+  "toggle_mode": "DELETE_FIRST",
+  "toggle_pair": [
+    1,
+    3
+  ],
+  "workload_id": "syn_case_16_k4_k2_n6_p25_uniform"
+}
