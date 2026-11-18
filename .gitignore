@@ -10,6 +10,7 @@ external/*
 !external/README.md
 baselines/rapidflow/source/
 baselines/rapidflow/build/
+tests/native/rapidflow_apx_audit/build/
 results/raw/*
 !results/raw/.gitkeep
 results/logs/*

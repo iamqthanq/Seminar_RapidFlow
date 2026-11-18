@@ -1,0 +1,43 @@
+{
+  "name": "k4_k0_microfixture",
+  "description": "K4 complete graph on 4 vertices demonstrating count vs tuple boundary (24 distinct automorphisms)",
+  "query": {
+    "vertices": [
+      {"id": 0, "label": 0},
+      {"id": 1, "label": 0},
+      {"id": 2, "label": 0},
+      {"id": 3, "label": 0}
+    ],
+    "edges": [
+      {"src": 0, "dst": 1, "label": 0},
+      {"src": 0, "dst": 2, "label": 0},
+      {"src": 0, "dst": 3, "label": 0},
+      {"src": 1, "dst": 2, "label": 0},
+      {"src": 1, "dst": 3, "label": 0},
+      {"src": 2, "dst": 3, "label": 0}
+    ],
+    "k": 0,
+    "lambda": 3
+  },
+  "data_graph": {
+    "vertices": [
+      {"id": 0, "label": 0},
+      {"id": 1, "label": 0},
+      {"id": 2, "label": 0},
+      {"id": 3, "label": 0}
+    ],
+    "edges": [
+      {"src": 0, "dst": 1, "label": 0},
+      {"src": 0, "dst": 2, "label": 0},
+      {"src": 0, "dst": 3, "label": 0},
+      {"src": 1, "dst": 2, "label": 0},
+      {"src": 1, "dst": 3, "label": 0},
+      {"src": 2, "dst": 3, "label": 0}
+    ]
+  },
+  "ground_truth_m0": {
+    "automorphism_count": 24,
+    "expected_result_count": 24,
+    "output_mode_requirement": "ORDERED_TUPLES"
+  }
+}

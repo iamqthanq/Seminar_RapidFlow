@@ -2,8 +2,9 @@
 
 **Date:** 2026-11-18 (Updated following 18/11/2026 Architectural Sync)
 **Context:** Seminar RapidFlow / CSM — D* Feasibility Route
-**Current Phase:** DSTAR-03 (Issue #26) Complete
-**Next Phase:** DSTAR-04 (M2 Optimizations: NLF, $\delta'$, candidate ordering or C++ Port)
+**Current Status:** DSTAR-01 through DSTAR-03 COMPLETED (Preserved Historical Validation Assets).
+**Successor Master Plan:** [docs/rapidflow_apx_research_plan.md](rapidflow_apx_research_plan.md) (Direction D: RapidFlow-APX Native Integration).
+**Active Phase:** Direction D, Phase P0–P1 (Issue #28).
 
 ---
 
@@ -42,19 +43,16 @@ Phase 3: S4 Tiny Pilot — Paired M1/M2 Evaluation [COMPLETED IN DSTAR-03 / Issu
    │  ├── scripts/run_dstar03_pilot.py (Resumable durable journal ledger, parity-offset order)
    │  ├── scripts/summarize_dstar03_pilot.py (Reconciles 390 slots, noise and coverage tagging)
    │  ├── reports/dstar03/attempts.jsonl, pilot_summary.json, pilot_results.csv
-   │  └── docs/dstar03_pilot_report.md (390/390 completed, M0 verified, M2 ~34% work reduction)
+   │  └── docs/dstar03_pilot_report.md (390/390 completed, 100% M0 verified)
    │
    ▼
-Phase 4: M2 Algorithmic Optimizations & C++ Implementation [UPCOMING DSTAR-04]
-   │  ├── Static Neighbor Label Frequency (NLF) and Dynamic delta' filtering
-   │  ├── Candidate ordering and failure-driven branch pruning
-   │  └── C++ native implementation of M1-enum and optimized M2
-   │
-   ▼
-Phase 5: Full Workload Benchmarking & Thesis Evaluation [UPCOMING DSTAR-05]
-      ├── Large dynamic graphs & NetFlow workload evaluation
-      ├── Microbenchmarks: latency, work operations, RSS, scalability
-      └── Final comparative assessment: M1-enum vs optimized M2
+Direction D: RapidFlow-APX Native Integration [ACTIVE MASTER PLAN: docs/rapidflow_apx_research_plan.md]
+   ├── P0–P1: Contract Sync, RapidFlow Source Audit, Probes A–F & Decision R1 [ACTIVE: Issue #28]
+   ├── P2: Native Engine Foundation, Transactional Rollback & Tuple Materialization
+   ├── P3: Integrated Native Bare M1 & M2 Engines
+   ├── P4: Safe Approximate Pruning (Partial Mapping Bound delta', Verified NLF)
+   ├── P5: Pilot & Real-World NetFlow Benchmarking
+   └── P6: Comparative Report & Defense Deliverables
 ```
 
 ---
@@ -92,20 +90,15 @@ Phase 5: Full Workload Benchmarking & Thesis Evaluation [UPCOMING DSTAR-05]
 
 ---
 
-## 3. Specifications for Future Gates (DSTAR-03–05)
+## 3. Direction D Architecture and Transition (Replacing Standalone Gates)
 
-### 3.1. DSTAR-03: M2 Optimizations
-- **Static NLF**: Prune query-data vertex candidate pairs using neighbor label frequency multisets.
-- **Dynamic NLF $\delta'$**: Incremental maintenance of data vertex NLF upon edge insertions/deletions.
-- **Candidate Ordering**: Dynamically select frontier edges to minimize branching factor.
-- **Invariant**: All optimizations must preserve 100% tuple-level equivalence against M0 Oracle and M1-enum baseline.
+Following the 18/11/2026 Architectural Sync, the project has replaced standalone Python optimization gates with the **Direction D Native Integration Master Plan** ([docs/rapidflow_apx_research_plan.md](rapidflow_apx_research_plan.md)).
 
-### 3.2. DSTAR-04: Local View Integration & C++ Engine
-- Inspect and adapt RapidFlow's Local View data structure for approximate event traversal.
-- Port M1-enum and M2-Event-k to C++ adhering to RapidFlow binary interface conventions.
-- Confirm raw ordered count and signed delta semantics under C++.
+### 3.1. Methodological Clarifications from Historical Pilot
+1. **Safety Accounting Metric (`budget_units`)**: In DSTAR-03, $W = \text{candidate\_evaluations} + \text{edge\_decisions} + \text{variants\_started}$ served as an internal execution safety budget under `max_work`, rather than an equivalent theoretical work unit. M1 and M2 operations are structurally distinct.
+2. **Search Work Characterization**: The observed synthetic median ratio $W_{\text{M1}}/W_{\text{M2}} \approx 1.52$ reflects internal counter aggregation and must not be cited as a proven "34% search work reduction" without formal algorithmic proof.
+3. **Bound Semantics ($\delta'$)**: $\delta'$ is mathematically defined as a dynamic pruning bound evaluated against a partial mapping $f_p$ and its remaining free query neighbors; it is not simply an incremental data vertex NLF table.
+4. **Horizon Coverage on Real Data**: The zero-event result on 20 NetFlow probes was an artifact of the tiny horizon ($|S| \le 8$) on a sparse graph, not definitive proof that $|S| \ge 64$ is mandatory.
 
-### 3.3. DSTAR-05: Benchmarks and Novelty Evaluation
-- Comprehensive benchmark against NetFlow workloads and synthetic graph families ($C_6, K_{3,3}$).
-- Measure latency, memory RSS, work counters (edge lookups, candidate extensions, branch decisions).
-- Publish truthful empirical results determining the viability and novelty of M2 over M1.
+### 3.2. Native Integration Roadmap
+All subsequent work is governed by [docs/rapidflow_apx_research_plan.md](rapidflow_apx_research_plan.md) and [docs/rapidflow_apx_contract.md](rapidflow_apx_contract.md). Active phase is P0–P1 (Issue #28: contract audit, RapidFlow source audit, native probes A–F, and Decision R1). Native implementation begins in P2.

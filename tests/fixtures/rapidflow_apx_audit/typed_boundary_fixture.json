@@ -1,0 +1,23 @@
+{
+  "name": "typed_boundary_microfixture",
+  "description": "Boundary verification for sparse IDs, negative IDs, IDs > uint32_t, and int 0 vs str '0' labels",
+  "external_vertices": [
+    {"id": -10, "label": 0, "type": "int_negative"},
+    {"id": -5, "label": "0", "type": "str_label_collision_test"},
+    {"id": 100, "label": 1, "type": "sparse_positive"},
+    {"id": 200, "label": 1, "type": "sparse_positive"},
+    {"id": 5000000000, "label": 2, "type": "uint32_overflow_test"}
+  ],
+  "external_edges": [
+    {"src": -10, "dst": -5, "label": 10},
+    {"src": -5, "dst": 100, "label": "10"},
+    {"src": 100, "dst": 200, "label": 20},
+    {"src": 200, "dst": 5000000000, "label": 30}
+  ],
+  "expected_codec_properties": {
+    "dense_indices_range": [0, 4],
+    "distinct_labels_count": 5,
+    "int_zero_differs_from_str_zero": true,
+    "overflow_protection": true
+  }
+}
