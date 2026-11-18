@@ -1,0 +1,846 @@
+{
+  "contract_version": "dstar-v1.0",
+  "run_id": "20261118T024751Z_9b15759c",
+  "timestamp": "2026-11-18T02:47:54.526722+00:00",
+  "runtime_seconds": 2.9051,
+  "environment": {
+    "platform": "Linux-7.0.0-42-generic-x86_64-with-glibc2.39",
+    "python_version": "3.12.3",
+    "cpu_count": 8
+  },
+  "provenance": {
+    "configured_historical_base_sha": "e6cc1dba15955ce9f7f05ec0ca2a1d749181218c",
+    "observed_origin_quangthang_sha": "e6cc1dba15955ce9f7f05ec0ca2a1d749181218c",
+    "observed_merge_base_sha": "e6cc1dba15955ce9f7f05ec0ca2a1d749181218c",
+    "execution_head_sha": "e6cc1dba15955ce9f7f05ec0ca2a1d749181218c",
+    "is_dirty_at_runtime": true,
+    "branch": "feature/rf24-dstar02-event-engines",
+    "source_hashes": {
+      "scripts/dstar_event_common.py": "73798c9dcb6e85a085905877e3115e1c889115e9e76fb32072676ce9c3b8e9a8",
+      "scripts/dstar_m1_enum.py": "1ad27a967b833f668423130ae52f87efe7f45f85f96d1068796c36e9dd9fdfba",
+      "scripts/dstar_m2_event.py": "55c2eb15e4beca068e69123e5a02167fb72a773260dc1580f27de4e9eb47dadf",
+      "scripts/dstar_event_cli.py": "3c756b614669d772e73d7a6c322e7934c4c4f4080b674df21f54e4c1cb537a52",
+      "scripts/generate_dstar02_report.py": "3923ceb1d223fdc106df7b8fadbd04dd5423fe117247da8657c79ae1b947e8b2",
+      "configs/dstar02_correctness_cases.json": "d886b624d22c77ee49ad3df128b3f0c4928d107ce6dfe0c3f98fdfe4f2703b5a",
+      "docs/dstar02_engine_contract.md": "3dd6cdf49d1ab1361be1958fa0b670b09d7c7aa05991f26b51c21b8bc13fc9f6"
+    },
+    "invocation": "python3 scripts/generate_dstar02_report.py --output reports/dstar02/correctness_summary.json"
+  },
+  "overall_status": "PASS",
+  "summary": {
+    "independence_audit_status": "PASS",
+    "hand_cases_count": 24,
+    "hand_cases_passed": 24,
+    "corpus_840_total_cases": 840,
+    "corpus_840_truth_events": 8002,
+    "corpus_840_m1_agreed": 840,
+    "corpus_840_m2_agreed": 840,
+    "stream_56_configurations": 56,
+    "stream_56_updates": 672,
+    "stream_56_agreed_steps": 672,
+    "stream_56_reconstructed_steps": 672,
+    "invariant_violation_guard_status": "PASS",
+    "resource_guards_status": "PASS",
+    "manifest_reconciliation_status": "PASS"
+  },
+  "stages": {
+    "independence_audit": {
+      "status": "PASS",
+      "files_audited": 4,
+      "audit_records": [
+        {
+          "file": "scripts/dstar_event_common.py",
+          "status": "PASS",
+          "forbidden_imports": []
+        },
+        {
+          "file": "scripts/dstar_m1_enum.py",
+          "status": "PASS",
+          "forbidden_imports": []
+        },
+        {
+          "file": "scripts/dstar_m2_event.py",
+          "status": "PASS",
+          "forbidden_imports": []
+        },
+        {
+          "file": "scripts/dstar_event_cli.py",
+          "status": "PASS",
+          "forbidden_imports": []
+        }
+      ]
+    },
+    "hand_cases": [
+      {
+        "case_id": "CASE_HAND_01",
+        "name": "diamond_distinct_labels",
+        "status": "PASS",
+        "k": 0,
+        "m0_entered": 1,
+        "m0_exited": 0,
+        "m1_entered": 1,
+        "m1_exited": 0,
+        "m2_entered": 1,
+        "m2_exited": 0,
+        "agreed": true
+      },
+      {
+        "case_id": "CASE_HAND_02",
+        "name": "diamond_k0_insert",
+        "status": "PASS",
+        "k": 0,
+        "m0_entered": 4,
+        "m0_exited": 0,
+        "m1_entered": 4,
+        "m1_exited": 0,
+        "m2_entered": 4,
+        "m2_exited": 0,
+        "agreed": true
+      },
+      {
+        "case_id": "CASE_HAND_03",
+        "name": "diamond_k0_delete",
+        "status": "PASS",
+        "k": 0,
+        "m0_entered": 0,
+        "m0_exited": 4,
+        "m1_entered": 0,
+        "m1_exited": 4,
+        "m2_entered": 0,
+        "m2_exited": 4,
+        "agreed": true
+      },
+      {
+        "case_id": "CASE_HAND_04",
+        "name": "k4_k1",
+        "status": "PASS",
+        "k": 1,
+        "m0_entered": 24,
+        "m0_exited": 0,
+        "m1_entered": 24,
+        "m1_exited": 0,
+        "m2_entered": 24,
+        "m2_exited": 0,
+        "agreed": true
+      },
+      {
+        "case_id": "CASE_HAND_05",
+        "name": "k4_k2",
+        "status": "PASS",
+        "k": 2,
+        "m0_entered": 24,
+        "m0_exited": 0,
+        "m1_entered": 24,
+        "m1_exited": 0,
+        "m2_entered": 24,
+        "m2_exited": 0,
+        "agreed": true
+      },
+      {
+        "case_id": "CASE_HAND_06_STEP1",
+        "name": "diamond_2step_delete_step1",
+        "status": "PASS",
+        "k": 1,
+        "m0_entered": 0,
+        "m0_exited": 16,
+        "m1_entered": 0,
+        "m1_exited": 16,
+        "m2_entered": 0,
+        "m2_exited": 16,
+        "agreed": true
+      },
+      {
+        "case_id": "CASE_HAND_06_STEP2",
+        "name": "diamond_2step_delete_step2",
+        "status": "PASS",
+        "k": 1,
+        "m0_entered": 0,
+        "m0_exited": 8,
+        "m1_entered": 0,
+        "m1_exited": 8,
+        "m2_entered": 0,
+        "m2_exited": 8,
+        "agreed": true
+      },
+      {
+        "case_id": "CASE_HAND_07",
+        "name": "no_matching_label",
+        "status": "PASS",
+        "k": 0,
+        "m0_entered": 0,
+        "m0_exited": 0,
+        "m1_entered": 0,
+        "m1_exited": 0,
+        "m2_entered": 0,
+        "m2_exited": 0,
+        "agreed": true
+      },
+      {
+        "case_id": "CASE_HAND_08",
+        "name": "non_induced_extra_chords",
+        "status": "PASS",
+        "k": 0,
+        "m0_entered": 8,
+        "m0_exited": 0,
+        "m1_entered": 8,
+        "m1_exited": 0,
+        "m2_entered": 8,
+        "m2_exited": 0,
+        "agreed": true
+      },
+      {
+        "case_id": "CASE_HAND_09",
+        "name": "edge_label_mismatch",
+        "status": "PASS",
+        "k": 1,
+        "m0_entered": 6,
+        "m0_exited": 0,
+        "m1_entered": 6,
+        "m1_exited": 0,
+        "m2_entered": 6,
+        "m2_exited": 0,
+        "agreed": true
+      },
+      {
+        "case_id": "CASE_HAND_10",
+        "name": "vertex_label_mismatch",
+        "status": "PASS",
+        "k": 0,
+        "m0_entered": 0,
+        "m0_exited": 0,
+        "m1_entered": 0,
+        "m1_exited": 0,
+        "m2_entered": 0,
+        "m2_exited": 0,
+        "agreed": true
+      },
+      {
+        "case_id": "CASE_HAND_11",
+        "name": "int_vs_str_labels",
+        "status": "PASS",
+        "k": 0,
+        "m0_entered": 0,
+        "m0_exited": 0,
+        "m1_entered": 0,
+        "m1_exited": 0,
+        "m2_entered": 0,
+        "m2_exited": 0,
+        "agreed": true
+      },
+      {
+        "case_id": "CASE_HAND_12",
+        "name": "sparse_negative_ids",
+        "status": "PASS",
+        "k": 0,
+        "m0_entered": 6,
+        "m0_exited": 0,
+        "m1_entered": 6,
+        "m1_exited": 0,
+        "m2_entered": 6,
+        "m2_exited": 0,
+        "agreed": true
+      },
+      {
+        "case_id": "CASE_HAND_13",
+        "name": "canonical_tuple_order",
+        "status": "PASS",
+        "k": 0,
+        "m0_entered": 8,
+        "m0_exited": 0,
+        "m1_entered": 8,
+        "m1_exited": 0,
+        "m2_entered": 8,
+        "m2_exited": 0,
+        "agreed": true
+      },
+      {
+        "case_id": "CASE_HAND_14",
+        "name": "uniform_k4_k0_automorphisms",
+        "status": "PASS",
+        "k": 0,
+        "m0_entered": 24,
+        "m0_exited": 0,
+        "m1_entered": 24,
+        "m1_exited": 0,
+        "m2_entered": 24,
+        "m2_exited": 0,
+        "agreed": true
+      },
+      {
+        "case_id": "CASE_HAND_15",
+        "name": "c4_k1_deferred_witness",
+        "status": "PASS",
+        "k": 1,
+        "m0_entered": 8,
+        "m0_exited": 0,
+        "m1_entered": 8,
+        "m1_exited": 0,
+        "m2_entered": 8,
+        "m2_exited": 0,
+        "agreed": true
+      },
+      {
+        "case_id": "CASE_HAND_16",
+        "name": "missing_commitment_violation",
+        "status": "PASS",
+        "k": 1,
+        "m0_entered": 16,
+        "m0_exited": 0,
+        "m1_entered": 16,
+        "m1_exited": 0,
+        "m2_entered": 16,
+        "m2_exited": 0,
+        "agreed": true
+      },
+      {
+        "case_id": "CASE_HAND_17",
+        "name": "no_double_charging",
+        "status": "PASS",
+        "k": 0,
+        "m0_entered": 6,
+        "m0_exited": 0,
+        "m1_entered": 6,
+        "m1_exited": 0,
+        "m2_entered": 6,
+        "m2_exited": 0,
+        "agreed": true
+      },
+      {
+        "case_id": "CASE_HAND_18",
+        "name": "rollback_isolation",
+        "status": "PASS",
+        "k": 0,
+        "m0_entered": 8,
+        "m0_exited": 0,
+        "m1_entered": 8,
+        "m1_exited": 0,
+        "m2_entered": 8,
+        "m2_exited": 0,
+        "agreed": true
+      },
+      {
+        "case_id": "CASE_HAND_19",
+        "name": "reversed_endpoints",
+        "status": "PASS"
+      },
+      {
+        "case_id": "CASE_HAND_20",
+        "name": "caller_mutation_isolation",
+        "status": "PASS"
+      },
+      {
+        "case_id": "CASE_HAND_21",
+        "name": "invalid_k_domain",
+        "status": "PASS"
+      },
+      {
+        "case_id": "CASE_HAND_22",
+        "name": "invalid_update_rollback",
+        "status": "PASS"
+      },
+      {
+        "case_id": "CASE_HAND_23",
+        "name": "query_sizes_5_and_6",
+        "status": "PASS",
+        "k": 1,
+        "m0_entered": 96,
+        "m0_exited": 0,
+        "m1_entered": 96,
+        "m1_exited": 0,
+        "m2_entered": 96,
+        "m2_exited": 0,
+        "agreed": true
+      }
+    ],
+    "corpus_840": {
+      "status": "PASS",
+      "total_cases": 840,
+      "total_truth_events": 8002,
+      "cases_with_events": 330,
+      "cases_with_events_k_ge_1": 239,
+      "m1_matching_truth": 840,
+      "m2_matching_truth": 840,
+      "m1_zero_duplicates_cases": 840,
+      "m2_zero_duplicates_cases": 840,
+      "total_m2_search_states": 53386
+    },
+    "stream_56_matrix": {
+      "status": "PASS",
+      "total_configurations": 56,
+      "total_updates": 672,
+      "step_agreement_count": 672,
+      "reconstruction_agreement_count": 672,
+      "total_entered_tuples": 2372,
+      "total_exited_tuples": 2100,
+      "configs": [
+        {
+          "config_id": "CONFIG_01_C4_k0_s0",
+          "query": "C4",
+          "k": 0,
+          "seed": 20261154,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_02_C4_k0_s1",
+          "query": "C4",
+          "k": 0,
+          "seed": 20261192,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_03_C4_k0_s2",
+          "query": "C4",
+          "k": 0,
+          "seed": 20261230,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_04_C4_k0_s3",
+          "query": "C4",
+          "k": 0,
+          "seed": 20261268,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_05_C4_k0_s4",
+          "query": "C4",
+          "k": 0,
+          "seed": 20261306,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_06_C4_k0_s5",
+          "query": "C4",
+          "k": 0,
+          "seed": 20261344,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_07_C4_k0_s6",
+          "query": "C4",
+          "k": 0,
+          "seed": 20261382,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_08_C4_k0_s7",
+          "query": "C4",
+          "k": 0,
+          "seed": 20261420,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_09_C4_k1_s0",
+          "query": "C4",
+          "k": 1,
+          "seed": 20261450,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_10_C4_k1_s1",
+          "query": "C4",
+          "k": 1,
+          "seed": 20261488,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_11_C4_k1_s2",
+          "query": "C4",
+          "k": 1,
+          "seed": 20261526,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_12_C4_k1_s3",
+          "query": "C4",
+          "k": 1,
+          "seed": 20261564,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_13_C4_k1_s4",
+          "query": "C4",
+          "k": 1,
+          "seed": 20261602,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_14_C4_k1_s5",
+          "query": "C4",
+          "k": 1,
+          "seed": 20261640,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_15_C4_k1_s6",
+          "query": "C4",
+          "k": 1,
+          "seed": 20261678,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_16_C4_k1_s7",
+          "query": "C4",
+          "k": 1,
+          "seed": 20261716,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_17_Diamond_k0_s0",
+          "query": "Diamond",
+          "k": 0,
+          "seed": 20261746,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_18_Diamond_k0_s1",
+          "query": "Diamond",
+          "k": 0,
+          "seed": 20261784,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_19_Diamond_k0_s2",
+          "query": "Diamond",
+          "k": 0,
+          "seed": 20261822,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_20_Diamond_k0_s3",
+          "query": "Diamond",
+          "k": 0,
+          "seed": 20261860,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_21_Diamond_k0_s4",
+          "query": "Diamond",
+          "k": 0,
+          "seed": 20261898,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_22_Diamond_k0_s5",
+          "query": "Diamond",
+          "k": 0,
+          "seed": 20261936,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_23_Diamond_k0_s6",
+          "query": "Diamond",
+          "k": 0,
+          "seed": 20261974,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_24_Diamond_k0_s7",
+          "query": "Diamond",
+          "k": 0,
+          "seed": 20262012,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_25_Diamond_k1_s0",
+          "query": "Diamond",
+          "k": 1,
+          "seed": 20262042,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_26_Diamond_k1_s1",
+          "query": "Diamond",
+          "k": 1,
+          "seed": 20262080,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_27_Diamond_k1_s2",
+          "query": "Diamond",
+          "k": 1,
+          "seed": 20262118,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_28_Diamond_k1_s3",
+          "query": "Diamond",
+          "k": 1,
+          "seed": 20262156,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_29_Diamond_k1_s4",
+          "query": "Diamond",
+          "k": 1,
+          "seed": 20262194,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_30_Diamond_k1_s5",
+          "query": "Diamond",
+          "k": 1,
+          "seed": 20262232,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_31_Diamond_k1_s6",
+          "query": "Diamond",
+          "k": 1,
+          "seed": 20262270,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_32_Diamond_k1_s7",
+          "query": "Diamond",
+          "k": 1,
+          "seed": 20262308,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_33_K4_k0_s0",
+          "query": "K4",
+          "k": 0,
+          "seed": 20262338,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_34_K4_k0_s1",
+          "query": "K4",
+          "k": 0,
+          "seed": 20262376,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_35_K4_k0_s2",
+          "query": "K4",
+          "k": 0,
+          "seed": 20262414,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_36_K4_k0_s3",
+          "query": "K4",
+          "k": 0,
+          "seed": 20262452,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_37_K4_k0_s4",
+          "query": "K4",
+          "k": 0,
+          "seed": 20262490,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_38_K4_k0_s5",
+          "query": "K4",
+          "k": 0,
+          "seed": 20262528,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_39_K4_k0_s6",
+          "query": "K4",
+          "k": 0,
+          "seed": 20262566,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_40_K4_k0_s7",
+          "query": "K4",
+          "k": 0,
+          "seed": 20262604,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_41_K4_k1_s0",
+          "query": "K4",
+          "k": 1,
+          "seed": 20262634,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_42_K4_k1_s1",
+          "query": "K4",
+          "k": 1,
+          "seed": 20262672,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_43_K4_k1_s2",
+          "query": "K4",
+          "k": 1,
+          "seed": 20262710,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_44_K4_k1_s3",
+          "query": "K4",
+          "k": 1,
+          "seed": 20262748,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_45_K4_k1_s4",
+          "query": "K4",
+          "k": 1,
+          "seed": 20262786,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_46_K4_k1_s5",
+          "query": "K4",
+          "k": 1,
+          "seed": 20262824,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_47_K4_k1_s6",
+          "query": "K4",
+          "k": 1,
+          "seed": 20262862,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_48_K4_k1_s7",
+          "query": "K4",
+          "k": 1,
+          "seed": 20262900,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_49_K4_k2_s0",
+          "query": "K4",
+          "k": 2,
+          "seed": 20262930,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_50_K4_k2_s1",
+          "query": "K4",
+          "k": 2,
+          "seed": 20262968,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_51_K4_k2_s2",
+          "query": "K4",
+          "k": 2,
+          "seed": 20263006,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_52_K4_k2_s3",
+          "query": "K4",
+          "k": 2,
+          "seed": 20263044,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_53_K4_k2_s4",
+          "query": "K4",
+          "k": 2,
+          "seed": 20263082,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_54_K4_k2_s5",
+          "query": "K4",
+          "k": 2,
+          "seed": 20263120,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_55_K4_k2_s6",
+          "query": "K4",
+          "k": 2,
+          "seed": 20263158,
+          "steps_agreed": 12,
+          "status": "PASS"
+        },
+        {
+          "config_id": "CONFIG_56_K4_k2_s7",
+          "query": "K4",
+          "k": 2,
+          "seed": 20263196,
+          "steps_agreed": 12,
+          "status": "PASS"
+        }
+      ]
+    },
+    "invariant_violation": {
+      "status": "PASS",
+      "invariant_tested": "EMPTY_FRONTIER_INVARIANT",
+      "raised_invariant_violation_error": true
+    },
+    "resource_guards": [
+      {
+        "check": "MAX_WORK_EXCEEDED",
+        "status": "PASS"
+      },
+      {
+        "check": "VERTEX_CAP_EXCEEDED",
+        "status": "PASS"
+      }
+    ],
+    "manifest_reconciliation": {
+      "status": "PASS",
+      "errors": []
+    }
+  }
+}

@@ -70,7 +70,9 @@ Dữ liệu gốc, binary build, raw logs **không được push** vì nặng/gi
 - Cấu hình workflow v2 trên QuangThang commit **814e7d54eda2ea45748dcb7c4f14c2ab2779e6d1** (đọc lại để xem có thay đổi mới).
 - Trước đó PR #3 đã merge phần scaffold ban đầu vào main. **Không coi RF-01 đã merge vào main**.
 - Có thể có Issue/PR mới sau thời điểm snapshot; AI phải tự kiểm tra lại.
-- **D* Feasibility Route (2026-11-17, Issue #22 / DSTAR-01):** Dự án mở hướng nghiên cứu khả thi D* trên bài toán Edge Recall và S2 connectivity ($0 \le k < \lambda(Q)$). Hợp đồng bài toán tại `docs/dstar_problem_contract_v1.md`. Oracle độc lập tại `scripts/dstar_oracle.py`. Báo cáo bằng chứng tại `docs/dstar01_validation_report.md`. Toàn bộ kết quả Model C trước đây (APX-01 đến APX-04) được giữ nguyên làm bằng chứng lịch sử. Thuật toán M2 chưa triển khai. Quyết định Gate 0A của giảng viên vẫn pending.
+- **D* Feasibility Route (2026-11-17, Issue #22 / DSTAR-01 & Issue #24 / DSTAR-02):** Dự án mở hướng nghiên cứu khả thi D* trên bài toán Edge Recall và S2 connectivity ($0 \le k < \lambda(Q)$).
+  - DSTAR-01: Hợp đồng bài toán tại `docs/dstar_problem_contract_v1.md`, Oracle M0 độc lập tại `scripts/dstar_oracle.py`, báo cáo bằng chứng tại `docs/dstar01_validation_report.md`. Toàn bộ kết quả Model C trước đây (APX-01 đến APX-04) được giữ nguyên làm bằng chứng lịch sử.
+  - DSTAR-02 (2026-11-18, Issue #24): Triển khai thành công baseline M1-enum-Exact-k (`scripts/dstar_m1_enum.py`) và thuật toán M2-Event-k trần (`scripts/dstar_m2_event.py`) dựa trên Event Boundary Lemma ($|R| == k$). Khóa hợp đồng engine tại `docs/dstar02_engine_contract.md`. Kiểm chứng 840 ca độc lập (8.002 truth events, zero raw duplicates) và ma trận 56 stream (672 updates) với active-set reconstruction khớp 100% M0 Oracle. Báo cáo bằng chứng tại `docs/dstar02_validation_report.md`. Hướng M1-count đã được tách riêng không chặn M1-enum/M2. Quyết định Gate 0A của giảng viên vẫn pending.
 
 ### 6 số đếm smoke (chỉ là AUTHOR SAMPLE COUNT CHECK)
 | Input | Query | Result count (actual = expected) |
