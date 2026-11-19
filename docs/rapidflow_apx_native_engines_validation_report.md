@@ -7,9 +7,9 @@
 **Feature Branch:** `feature/rf32-d-int03-native-engines`
 **Integration Target:** `QuangThang`
 **Base Commit:** `88fbe200ff9217f4dccbad08bfa448d067d2ce4e` (contains accepted P2 HEAD `ebe2894752dc45e2aeb3109c260a34e2f87a9d06`)
-**Logic Commit SHA:** `40b5fd44387dca16eaf19cdff3838740fb35f166`
+**Logic Commit SHA:** `5a265b31d130ae343102682cf6f5c96ddc374d2e`
 **Pinned Upstream RapidFlow:** `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` (Pristine: `True`)
-**Verification Status:** **P3_ENGINES_VERIFIED (ROUND 4 REMEDIATED)**
+**Verification Status:** **P3_ENGINES_VERIFIED (ROUND 5 REMEDIATED)**
 **Target Handoff Verdict:** **READY_FOR_INDEPENDENT_FINAL_REVIEW**
 
 ---
@@ -26,14 +26,14 @@ Key achievements:
    - `ApxM1EnumEngine`: Native baseline anchored subgraph matching on $Q - D$ with exact missing set check $R(f) = D$.
    - `ApxM2EventEngine`: Bare direct DFS branching on PRESENT vs MISSING edges, deferring unmapped vertices, resolving incident edges, and enforcing $|R(f)| = k$ at event leaves.
    - `ApxStreamingEngine`: Stateful coordinator executing ACID transactions, interning labels, maintaining active sets, and suppressing duplicates.
-3. **Rigorous Independent Verification**:
+3. **Rigorous Independent Verification & Round 5 Remediation**:
    - Verified 100% bit-for-bit against the independent Python M0 Ground Truth Oracle (`scripts.dstar_oracle`).
    - 25 Hand & Adversarial Witness Cases locked via `configs/rapidflow_apx_required_cases.json`: **25 / 25 PASS**.
    - 840 Correctness Corpus Cases: **840 / 840 M1 PASS**, **840 / 840 M2 PASS** (8,002 truth events, 330 cases with events, 239 with $k \ge 1$, zero duplicate emissions).
    - 56-Stream Dynamic Matrix locked via `configs/rapidflow_apx_stream_56_lock.json` (672 updates): **672 / 672 M1 PASS**, **672 / 672 M2 PASS**, active-set reconstruction **672 / 672 PASS**.
-   - Round 4 Adversarial Mutation Suite: **59 / 59 injected mutations detected (100.0% detection rate)** across Level A (34 validator unit tests), Level B (3 stage integration tests), and Level C (22 raw native output interception tests).
-   - Multi-step transaction rollback preservation verified bit-for-bit against reference model.
-   - Full Repository Regression: **538 / 538 tests PASS (0 errors, 0 failures in 138.6s)**.
+   - Round 5 Adversarial Mutation Suite: **76 / 76 injected mutations detected (100.0% detection rate)** across Level A (42 validator unit tests), Level B (4 stage integration tests), and Level C (30 genuine disk interception and subprocess tests).
+   - Real active transaction rollback hook (`AFTER_MUTATION` and `BEFORE_PUBLISH`) verified bit-for-bit against reference model, proving zero published tuples, aborted staged tuples, and uncorrupted graph & codec states.
+   - Full Repository Regression: **542 / 542 tests PASS (0 errors, 0 failures in 113.6s)**.
 
 ---
 
@@ -41,16 +41,16 @@ Key achievements:
 
 | Metric / Parameter | Value | Verification |
 | :--- | :--- | :--- |
-| **Repository Commit** | `40b5fd44387dca16eaf19cdff3838740fb35f166` | `git rev-parse HEAD` (Clean: `true`) |
+| **Repository Commit** | `5a265b31d130ae343102682cf6f5c96ddc374d2e` | `git rev-parse HEAD` (Clean: `true`) |
 | **Upstream Pinned SHA** | `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` | Submodule/git check (Pristine: `true`) |
 | **Operating System** | Linux 6.8.0-49-generic x86_64 | Clean local environment |
 | **Compiler** | GNU GCC / G++ 13.3.0 | Standard Ubuntu 24.04 packages |
 | **Build System** | CMake 3.28.3, Make 4.3 | Portable toolchain `external/tools` |
 | **Harness Binary** | `tests/native/rapidflow_apx_engines/build/rapidflow_apx_native` | Rebuilt cleanly (`--clean-build`) |
-| **Harness SHA-256** | `487ec2c116c6f6ce2b5829401076b221e36f1d3608322765abefb79f7636b267` | Verified bit-for-bit |
-| **Required Cases Registry** | `configs/rapidflow_apx_required_cases.json` | Hash: `4608239c8f7ce4ca3cb7f3bf4d1bfcb4dedb21b9017035192d1cf2c5c129899c` |
+| **Harness SHA-256** | `4013ec0eee08c3e2198efb02230dd060ce070d4344bfe430ca060b86b61384ac` | Verified bit-for-bit |
+| **Required Cases Registry** | `configs/rapidflow_apx_required_cases.json` | Hash: `238e49a9e7b0d13ade92b89c67e9ba96e5a54aeaac4065ae6c0a476c847cd14a` |
 | **Stream Lock Registry** | `configs/rapidflow_apx_stream_56_lock.json` | Hash: `34f9c78220a3d578b8fb5e582107203404fe7dd9858621f110cac737761aa451` |
-| **Summary Artifact** | `reports/rapidflow_apx_engines/summary.json` | Hash: `93e54f2836b0044959f85783609a8ac2c562b11f4a6984ea2c72079f8995f3ad` |
+| **Summary Artifact** | `reports/rapidflow_apx_engines/summary.json` | Hash: `1c2ff53c4eb042075ce9514badce0de6075e91b2fb6d13b34cbf14f7dbb713d9` |
 
 ---
 
@@ -176,7 +176,21 @@ Locked via `configs/rapidflow_apx_stream_56_lock.json` with embedded exact query
 
 ---
 
-## 5. Round 4 Independent Review Findings & Remediation Matrix
+## 5. Round 5 Independent Review Findings & Remediation Matrix
+
+The Round 5 comprehensive engineering remediation addresses findings R5-F01 through R5-F04:
+
+| Finding ID | Severity | Description & Root Cause | Technical Resolution | Independent Verification & Evidence | Status |
+| :--- | :--- | :--- | :--- | :--- | :---: |
+| **R5-F01** | BLOCKER | Negative output verification lacked independent lifecycle error contracts, deep graph-state & codec-state validation on failing steps, and root-step error consistency enforcement. | Hardened `validate_native_output_schema` and `run_hand_and_witness_cases`: enforces root-step error consistency on failure (root status != SUCCESS, non-empty error_category, failing step error_category == root error_category, failing step commit_status == NOT_COMMITTED, zero tuple emissions). For all negative cases with attempted steps, validates graph state and codec state bit-for-bit against `DStarGraph` reference models before and after failed transactions. | Clean execution of `CASE_HAND_21` and `CASE_HAND_22` PASS; verified in Level C disk-interception mutations 67-72. | **RESOLVED** |
+| **R5-F02** | BLOCKER | Registry v2 lacked strict downgrade resistance, mandatory 15-field validation, strict integer typing (preventing bool/float coercion), and per-step event locking. | Enforced strict `registry_version == "2.0.0"` in `validate_required_hand_cases` (rejecting "1.0", "1.0.0", etc.). Enforced all 15 mandatory fields across all 25 cases with strict types (`type(v) is int and not isinstance(v, bool)`), mandatory cryptographic workload SHA-256 verification, and per-step `expected_step_events` sum consistency. | Verified in unit tests and Level A mutations 35-42 (downgrade, missing fields, bool/float types, sum mismatches). | **RESOLVED** |
+| **R5-F03** | MAJOR | Transaction safety tests only tested prevalidation rejection, not proving real active transaction rollback occurring after mutation and before commit. | Implemented native fault injection hook in `tests/native/rapidflow_apx_engines/src/main.cpp` via `streaming_engine.get_tx_manager().set_fault_injection()`. Added dedicated test suite verifying: (1) `AFTER_MUTATION` active rollback where mutated edges are undone, restoring graph state; (2) `BEFORE_PUBLISH` rollback where staged candidate tuples in `ApxTupleSink` are aborted (0 published); (3) post-abort state recovery; (4) output transport failure (exit code 7 IO_ERROR) distinct from transaction abort. | Verified in dedicated Group V unit tests (`test_active_transaction_rollback_after_mutation`, `test_active_transaction_rollback_before_publish_staged_tuples`, `test_active_transaction_recovery_subsequent_step`, `test_postcommit_output_error_classification`). | **RESOLVED** |
+| **R5-F04** | MAJOR | Level C mutation test suite only modified in-memory Python dictionaries without executing actual subprocesses and intercepting raw output on disk. | Rebuilt Level C using `make_disk_intercepting_executor` that wraps `execute_contained_subprocess` to run real native C++ binary subprocesses and intercept output JSON on disk before runner parsing/validation. Added positive and negative baseline controls, 20 positive output disk corruptions, 6 negative output disk corruptions, stage-level interception, and CLI option rejection tests. | Suite achieves 100.0% detection rate across 76 injected mutations (0 false PASS). | **RESOLVED** |
+| **R5-AUDIT-01..04** | AUDIT | Comprehensive re-audit across cross-layer verification consistency, transaction fault coverage, and canonical evidence provenance. | Re-audited full test suite, verified upstream RapidFlow pristine (`2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1`), zero whitespace errors against base `88fbe200ff9217f4dccbad08bfa448d067d2ce4e`, clean Git status, and full test regression. | Full repository regression: 542 / 542 tests PASS (0 failures, 0 errors in 113.6s). | **RESOLVED** |
+
+---
+
+## 6. Round 4 Independent Review Findings & Remediation Matrix
 
 The Round 4 comprehensive remediation addresses findings R4-F01 through R4-F08:
 
@@ -193,7 +207,7 @@ The Round 4 comprehensive remediation addresses findings R4-F01 through R4-F08:
 
 ---
 
-## 6. Round 3 Independent Review Findings & Verification Matrix
+## 7. Round 3 Independent Review Findings & Verification Matrix
 
 The Round 3 remediation addresses findings R3-F01 through R3-F08:
 
@@ -210,7 +224,7 @@ The Round 3 remediation addresses findings R3-F01 through R3-F08:
 
 ---
 
-## 7. Previous Round 1 & Round 2 Summary
+## 8. Previous Round 1 & Round 2 Summary
 
 Prior findings from Round 1 (P3-F01 through P3-F09) addressed core execution mechanics:
 - **P3-F01**: Separated `step_counters_` (isolated per step) from `cumulative_counters_`.
@@ -227,7 +241,7 @@ All Round 1 and Round 2 fixes remain fully preserved and covered by regression t
 
 ---
 
-## 8. Decision Summary
+## 9. Decision Summary
 
 | Component | Status | Finding / Action |
 | :--- | :---: | :--- |
@@ -244,7 +258,7 @@ All Round 1 and Round 2 fixes remain fully preserved and covered by regression t
 
 ---
 
-## 9. Handoff & Next Steps
+## 10. Handoff & Next Steps
 
 1. **Reviewer Handover**:
    - PR target: `QuangThang`.
