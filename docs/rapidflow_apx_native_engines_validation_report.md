@@ -7,9 +7,9 @@
 **Feature Branch:** `feature/rf32-d-int03-native-engines`
 **Integration Target:** `QuangThang`
 **Base Commit:** `88fbe200ff9217f4dccbad08bfa448d067d2ce4e` (contains accepted P2 HEAD `ebe2894752dc45e2aeb3109c260a34e2f87a9d06`)
-**Logic Commit SHA:** `5a265b31d130ae343102682cf6f5c96ddc374d2e`
+**Logic Commit SHA:** `14f90a82a2d055853a3fc7fa0b9255b350154ff7`
 **Pinned Upstream RapidFlow:** `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` (Pristine: `True`)
-**Verification Status:** **P3_ENGINES_VERIFIED (ROUND 5 REMEDIATED)**
+**Verification Status:** **P3_ENGINES_VERIFIED (ROUND 6 REMEDIATED)**
 **Target Handoff Verdict:** **READY_FOR_INDEPENDENT_FINAL_REVIEW**
 
 ---
@@ -26,14 +26,17 @@ Key achievements:
    - `ApxM1EnumEngine`: Native baseline anchored subgraph matching on $Q - D$ with exact missing set check $R(f) = D$.
    - `ApxM2EventEngine`: Bare direct DFS branching on PRESENT vs MISSING edges, deferring unmapped vertices, resolving incident edges, and enforcing $|R(f)| = k$ at event leaves.
    - `ApxStreamingEngine`: Stateful coordinator executing ACID transactions, interning labels, maintaining active sets, and suppressing duplicates.
-3. **Rigorous Independent Verification & Round 5 Remediation**:
+3. **Rigorous Independent Verification & Round 6 Remediation**:
    - Verified 100% bit-for-bit against the independent Python M0 Ground Truth Oracle (`scripts.dstar_oracle`).
    - 25 Hand & Adversarial Witness Cases locked via `configs/rapidflow_apx_required_cases.json`: **25 / 25 PASS**.
    - 840 Correctness Corpus Cases: **840 / 840 M1 PASS**, **840 / 840 M2 PASS** (8,002 truth events, 330 cases with events, 239 with $k \ge 1$, zero duplicate emissions).
    - 56-Stream Dynamic Matrix locked via `configs/rapidflow_apx_stream_56_lock.json` (672 updates): **672 / 672 M1 PASS**, **672 / 672 M2 PASS**, active-set reconstruction **672 / 672 PASS**.
-   - Round 5 Adversarial Mutation Suite: **76 / 76 injected mutations detected (100.0% detection rate)** across Level A (42 validator unit tests), Level B (4 stage integration tests), and Level C (30 genuine disk interception and subprocess tests).
-   - Real active transaction rollback hook (`AFTER_MUTATION` and `BEFORE_PUBLISH`) verified bit-for-bit against reference model, proving zero published tuples, aborted staged tuples, and uncorrupted graph & codec states.
-   - Full Repository Regression: **542 / 542 tests PASS (0 errors, 0 failures in 113.6s)**.
+   - Round 6 Adversarial Mutation Suite: **85 / 85 injected mutations detected (100.0% detection rate)** across Level A (42 validator unit tests), Level B (4 stage integration tests), Level C (38 genuine disk interception and subprocess tests), and Level D (1 stage failure on negative case corruption).
+   - Event-bearing witness staged tuple rollback (C4 Diamond) verified: 8 candidate mappings staged before abort are completely discarded upon rollback (`raw=8, unique=8, committed=0, discarded=8`), with graph state restored bit-for-bit to Step 0 state.
+   - Full transaction lifecycle recovery on the SAME transaction manager instance without reallocating engine: Step A (valid commit) $\to$ Step B (abort and rollback) $\to$ Step C (valid commit matching Oracle) verified on both M1 and M2.
+   - Postcommit transport failure (`ExitCode 7 IO_ERROR`) verified distinct from domain, prevalidation, or transaction abort errors on valid matching C4 workload.
+   - Strict finite-state machine contracts and negative work/emission counter validation fail-closed on disk.
+   - Full Repository Regression: **542 / 542 tests PASS (0 errors, 0 failures in 118.5s)**.
 
 ---
 
@@ -41,16 +44,16 @@ Key achievements:
 
 | Metric / Parameter | Value | Verification |
 | :--- | :--- | :--- |
-| **Repository Commit** | `5a265b31d130ae343102682cf6f5c96ddc374d2e` | `git rev-parse HEAD` (Clean: `true`) |
+| **Repository Commit** | `14f90a82a2d055853a3fc7fa0b9255b350154ff7` | `git rev-parse HEAD` (Clean: `true`) |
 | **Upstream Pinned SHA** | `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` | Submodule/git check (Pristine: `true`) |
 | **Operating System** | Linux 6.8.0-49-generic x86_64 | Clean local environment |
 | **Compiler** | GNU GCC / G++ 13.3.0 | Standard Ubuntu 24.04 packages |
 | **Build System** | CMake 3.28.3, Make 4.3 | Portable toolchain `external/tools` |
 | **Harness Binary** | `tests/native/rapidflow_apx_engines/build/rapidflow_apx_native` | Rebuilt cleanly (`--clean-build`) |
-| **Harness SHA-256** | `4013ec0eee08c3e2198efb02230dd060ce070d4344bfe430ca060b86b61384ac` | Verified bit-for-bit |
+| **Harness SHA-256** | `c50824f2366b19cf2f2e4b488a2bb25a9da77af08581a6ac9328caad16b65ff7` | Verified bit-for-bit |
 | **Required Cases Registry** | `configs/rapidflow_apx_required_cases.json` | Hash: `238e49a9e7b0d13ade92b89c67e9ba96e5a54aeaac4065ae6c0a476c847cd14a` |
 | **Stream Lock Registry** | `configs/rapidflow_apx_stream_56_lock.json` | Hash: `34f9c78220a3d578b8fb5e582107203404fe7dd9858621f110cac737761aa451` |
-| **Summary Artifact** | `reports/rapidflow_apx_engines/summary.json` | Hash: `1c2ff53c4eb042075ce9514badce0de6075e91b2fb6d13b34cbf14f7dbb713d9` |
+| **Summary Artifact** | `reports/rapidflow_apx_engines/summary.json` | Hash: `bce96d8c2fdc396c35fda2d3dc73579253b49df063fdb221fb803276f7d4ffc3` |
 
 ---
 
@@ -176,7 +179,23 @@ Locked via `configs/rapidflow_apx_stream_56_lock.json` with embedded exact query
 
 ---
 
-## 5. Round 5 Independent Review Findings & Remediation Matrix
+## 5. Round 6 Comprehensive Root-Cause Remediation & Acceptance
+
+The Round 6 remediation addresses findings R6-F01 through R6-F06 and R6-AUDIT:
+
+| Finding ID | Severity | Description & Root Cause | Technical Resolution | Independent Verification & Evidence | Status |
+| :--- | :--- | :--- | :--- | :--- | :---: |
+| **R6-F01** | BLOCKER | Negative output schema validation accepted falsified work/emission counters (`committed_emissions = 1`, `raw_emissions = True`, `raw_emissions = -1`, `work_units = 2**62`, `max_work = -1`, `dfs_states = True`, fake emission blocks). | Enforced comprehensive negative counter contract in `validate_native_output_schema` running unconditionally on both SUCCESS and FAILURE. Strictly verifies integer types (`not isinstance(v, bool)`), range bounds ($0 \le v \le 5 \cdot 10^{14}$), canonical cap ($max\_work \le 500,000$), emission invariants ($raw \ge unique$, $unique = committed + discarded$), exact committed equality to step sum, and zero work on prevalidation failures. | All 8 reproducer mutations confirmed rejected fail-closed; verified in Level C disk-interception mutations 76-81. | **RESOLVED** |
+| **R6-F02** | BLOCKER | Negative output accepted arbitrary invalid root and step statuses (e.g. `status = "BANANA"`, `step status = "BANANA"`, missing error categories). | Enforced strict finite-state machine contracts with explicit allowed sets: `ALLOWED_ROOT_STATUSES = {"SUCCESS", "FAIL"}`, `ALLOWED_STEP_STATUSES = {"SUCCESS", "PREVALIDATION_FAILED", "CALLBACK_ABORTED", "FAULT_INJECTED", "ERROR", "UNATTEMPTED"}`, `ALLOWED_COMMIT_STATUSES = {"COMMITTED", "NOT_COMMITTED"}`, and allowed error categories. Root status FAIL strictly requires matching error categories and NOT_COMMITTED step status. | Status "BANANA" at root and step confirmed rejected fail-closed; verified in Level C mutations 74-75. | **RESOLVED** |
+| **R6-F03** | MAJOR | `test_active_transaction_rollback_before_publish_staged_tuples` tested a chord update yielding 0 candidate mappings, not proving staged tuple discard. | Replaced workload with C4 Diamond witness where Step 1 completes a 4-cycle. Verified positive control produces 8 entered mappings ($committed=8$). Verified faulted run with `BEFORE_PUBLISH`: stages 8 mappings in `ApxTupleSink`, aborts, restores graph to Step 0 (4 edges), publishes 0 tuples, and records exact counters: $raw=8, unique=8, committed=0, discarded=8$. | Verified in `test_active_transaction_rollback_before_publish_staged_tuples` on both M1 and M2. | **RESOLVED** |
+| **R6-F04** | MAJOR | `test_active_transaction_recovery_subsequent_step` only inspected post-abort snapshot, not executing a subsequent transaction on the same manager instance. | Implemented `--continue-on-error` in C++ `main.cpp` and `allow_recovery` workload support. Verified full 3-step lifecycle on the SAME `ApxTransactionManager` and `ApxStreamingEngine` instance without reinitialization: Step 0 (valid commit) $\to$ Step 1 (mutate, fault abort, rollback) $\to$ Step 2 (valid transaction applied, 8 entered mappings emitted, matches Oracle). | Verified in `test_active_transaction_recovery_subsequent_step` on both M1 and M2. | **RESOLVED** |
+| **R6-F05** | MAJOR | `test_postcommit_output_error_classification` used an invalid query (0 edges) triggering `DOMAIN_ERROR` on writable paths. | Replaced workload with valid matching C4 Diamond witness emitting 8 entered tuples with ExitCode 0 on normal paths. Verified running with `--output /nonexistent/dir/out.json` and `--output /dev/full` produces `ExitCode 7 (IO_ERROR)` with stderr `Output write failure`, without triggering domain, prevalidation, or rollback errors. | Verified in `test_postcommit_output_error_classification`. | **RESOLVED** |
+| **R6-F06** | MAJOR | Level C mutation test suite lacked negative counter and status corruptions, and lacked stage-level non-zero exit validation on negative case corruption (Level D). | Expanded Level C & D disk-interception suite: added mutations 74-82 covering status "BANANA", committed_emissions=1, negative/bool emissions, 2**62 work units, negative max_work, and Level D runner non-zero exit on negative case corruption. | Suite achieves 100.0% detection rate (85 / 85 detected, 0 false PASS). | **RESOLVED** |
+| **R6-AUDIT** | AUDIT | Comprehensive acceptance re-audit across cross-layer verification consistency, transaction fault coverage, and canonical evidence provenance. | Re-audited full test suite, verified upstream RapidFlow pristine (`2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1`), zero whitespace errors against base `88fbe200ff9217f4dccbad08bfa448d067d2ce4e`, clean Git status, and full test regression. | Full repository regression: 542 / 542 tests PASS (0 failures, 0 errors in 118.5s). Clean-build canonical run PASS. | **RESOLVED** |
+
+---
+
+## 6. Round 5 Independent Review Findings & Remediation Matrix
 
 The Round 5 comprehensive engineering remediation addresses findings R5-F01 through R5-F04:
 
@@ -190,7 +209,7 @@ The Round 5 comprehensive engineering remediation addresses findings R5-F01 thro
 
 ---
 
-## 6. Round 4 Independent Review Findings & Remediation Matrix
+## 7. Round 4 Independent Review Findings & Remediation Matrix
 
 The Round 4 comprehensive remediation addresses findings R4-F01 through R4-F08:
 
@@ -207,7 +226,7 @@ The Round 4 comprehensive remediation addresses findings R4-F01 through R4-F08:
 
 ---
 
-## 7. Round 3 Independent Review Findings & Verification Matrix
+## 8. Round 3 Independent Review Findings & Verification Matrix
 
 The Round 3 remediation addresses findings R3-F01 through R3-F08:
 
@@ -224,7 +243,7 @@ The Round 3 remediation addresses findings R3-F01 through R3-F08:
 
 ---
 
-## 8. Previous Round 1 & Round 2 Summary
+## 9. Previous Round 1 & Round 2 Summary
 
 Prior findings from Round 1 (P3-F01 through P3-F09) addressed core execution mechanics:
 - **P3-F01**: Separated `step_counters_` (isolated per step) from `cumulative_counters_`.
@@ -241,7 +260,7 @@ All Round 1 and Round 2 fixes remain fully preserved and covered by regression t
 
 ---
 
-## 9. Decision Summary
+## 10. Decision Summary
 
 | Component | Status | Finding / Action |
 | :--- | :---: | :--- |
@@ -258,7 +277,7 @@ All Round 1 and Round 2 fixes remain fully preserved and covered by regression t
 
 ---
 
-## 10. Handoff & Next Steps
+## 11. Handoff & Next Steps
 
 1. **Reviewer Handover**:
    - PR target: `QuangThang`.
