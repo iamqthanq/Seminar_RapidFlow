@@ -1,7 +1,7 @@
 {
   "runner_mode": "CANONICAL_FULL_RUN",
   "overall_status": "P3_ENGINES_VERIFIED",
-  "timestamp_utc": "2026-11-19T11:14:43.030097+00:00",
+  "timestamp_utc": "2026-11-19T12:22:21.572675+00:00",
   "manifest_path": "configs/rapidflow_apx_engines_cases.json",
   "manifest_sha256": "6f224fbb477697af0c9f7d9f438c3e85b6cfd349dda99614bcc4f2f763d6c41d",
   "binary_path": "tests/native/rapidflow_apx_engines/build/rapidflow_apx_native",
@@ -10,15 +10,15 @@
   "selected_stage": "all",
   "selected_case": null,
   "provenance": {
-    "repo_commit": "adf8353684188af5129439ffef14fbc4d6e7e19a",
+    "repo_commit": "2e60255b93368b12fb8cabbeeec8204782609e00",
     "repo_clean": true,
     "dirty_state": "CLEAN",
     "upstream_commit": "2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1",
     "upstream_pristine": true
   },
   "system_resources": {
-    "mem_available_gib": 3.3554344177246094,
-    "free_disk_gib": 109.83363342285156,
+    "mem_available_gib": 3.4350624084472656,
+    "free_disk_gib": 109.8245849609375,
     "preflight_passed": true
   },
   "build_provenance": {
@@ -33,7 +33,7 @@
       "-j2"
     ],
     "build_exit_code": 0,
-    "duration_ms": 14942.186369997216
+    "duration_ms": 15181.163221001043
   },
   "stages": {
     "hand_cases": {
@@ -48,8 +48,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 8.275371990748681,
-          "duration_ms_m2": 10.049696007627062
+          "duration_ms_m1": 8.749660002649762,
+          "duration_ms_m2": 7.2880049992818385
         },
         {
           "case_id": "CASE_HAND_02",
@@ -58,8 +58,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 9.642166987759992,
-          "duration_ms_m2": 7.677732995944098
+          "duration_ms_m1": 7.039522999548353,
+          "duration_ms_m2": 7.3704020032892
         },
         {
           "case_id": "CASE_HAND_03",
@@ -68,8 +68,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 7.623797995620407,
-          "duration_ms_m2": 6.624558998737484
+          "duration_ms_m1": 6.6811680007958785,
+          "duration_ms_m2": 6.960698010516353
         },
         {
           "case_id": "CASE_HAND_04",
@@ -78,8 +78,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 6.749387001036666,
-          "duration_ms_m2": 8.370490002562292
+          "duration_ms_m1": 6.630923991906457,
+          "duration_ms_m2": 6.59115900634788
         },
         {
           "case_id": "CASE_HAND_05",
@@ -88,8 +88,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 7.083037999109365,
-          "duration_ms_m2": 6.9016989873489365
+          "duration_ms_m1": 7.44117000431288,
+          "duration_ms_m2": 6.271667996770702
         },
         {
           "case_id": "CASE_HAND_06_STEP1",
@@ -98,8 +98,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 6.561984992004,
-          "duration_ms_m2": 6.3205970072885975
+          "duration_ms_m1": 6.415816009393893,
+          "duration_ms_m2": 6.4697019988670945
         },
         {
           "case_id": "CASE_HAND_06_STEP2",
@@ -108,8 +108,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 6.38685301237274,
-          "duration_ms_m2": 6.834041996626183
+          "duration_ms_m1": 6.0375940083758906,
+          "duration_ms_m2": 5.831021990161389
         },
         {
           "case_id": "CASE_HAND_07",
@@ -118,8 +118,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 7.647245001862757,
-          "duration_ms_m2": 6.919227002072148
+          "duration_ms_m1": 5.738432999351062,
+          "duration_ms_m2": 6.610195996472612
         },
         {
           "case_id": "CASE_HAND_08",
@@ -128,8 +128,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 6.992570008151233,
-          "duration_ms_m2": 7.271466005477123
+          "duration_ms_m1": 6.616145998123102,
+          "duration_ms_m2": 6.098533995100297
         },
         {
           "case_id": "CASE_HAND_09",
@@ -138,8 +138,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 7.695517997490242,
-          "duration_ms_m2": 9.501059001195244
+          "duration_ms_m1": 5.987597993225791,
+          "duration_ms_m2": 8.383865002542734
         },
         {
           "case_id": "CASE_HAND_10",
@@ -148,8 +148,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 7.500445004552603,
-          "duration_ms_m2": 7.419065004796721
+          "duration_ms_m1": 6.777489004889503,
+          "duration_ms_m2": 6.121982994955033
         },
         {
           "case_id": "CASE_HAND_11",
@@ -158,8 +158,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 6.13649700244423,
-          "duration_ms_m2": 7.32571400294546
+          "duration_ms_m1": 5.598945004749112,
+          "duration_ms_m2": 5.597623996436596
         },
         {
           "case_id": "CASE_HAND_12",
@@ -168,8 +168,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 6.19410201034043,
-          "duration_ms_m2": 6.681742990622297
+          "duration_ms_m1": 7.298137003090233,
+          "duration_ms_m2": 5.580430006375536
         },
         {
           "case_id": "CASE_HAND_13",
@@ -178,8 +178,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 5.909038009122014,
-          "duration_ms_m2": 6.139083998277783
+          "duration_ms_m1": 5.595579001237638,
+          "duration_ms_m2": 6.084327003918588
         },
         {
           "case_id": "CASE_HAND_14",
@@ -188,8 +188,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 6.643319997237995,
-          "duration_ms_m2": 5.909686005907133
+          "duration_ms_m1": 5.7956469972850755,
+          "duration_ms_m2": 7.358296992606483
         },
         {
           "case_id": "CASE_HAND_15",
@@ -198,8 +198,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 6.6712279949570075,
-          "duration_ms_m2": 6.340064006508328
+          "duration_ms_m1": 5.662305004079826,
+          "duration_ms_m2": 5.556396004976705
         },
         {
           "case_id": "CASE_HAND_16",
@@ -208,8 +208,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 5.925110002863221,
-          "duration_ms_m2": 5.880235999939032
+          "duration_ms_m1": 5.913639004575089,
+          "duration_ms_m2": 5.720152010326274
         },
         {
           "case_id": "CASE_HAND_17",
@@ -218,8 +218,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 5.654569002217613,
-          "duration_ms_m2": 5.5102539918152615
+          "duration_ms_m1": 5.607376995612867,
+          "duration_ms_m2": 5.576415001996793
         },
         {
           "case_id": "CASE_HAND_18",
@@ -228,8 +228,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 5.913671993766911,
-          "duration_ms_m2": 5.799384001875296
+          "duration_ms_m1": 5.902685996261425,
+          "duration_ms_m2": 5.5510540114482865
         },
         {
           "case_id": "CASE_HAND_19",
@@ -238,8 +238,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 6.161793993669562,
-          "duration_ms_m2": 5.585310005699284
+          "duration_ms_m1": 6.399805992259644,
+          "duration_ms_m2": 5.495484991115518
         },
         {
           "case_id": "CASE_HAND_20",
@@ -248,8 +248,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 6.028221003361978,
-          "duration_ms_m2": 6.250320002436638
+          "duration_ms_m1": 6.983733008382842,
+          "duration_ms_m2": 5.740641005104408
         },
         {
           "case_id": "CASE_HAND_21",
@@ -258,8 +258,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 5.62562899722252,
-          "duration_ms_m2": 6.005174000165425
+          "duration_ms_m1": 6.9157109974185005,
+          "duration_ms_m2": 5.619610994472168
         },
         {
           "case_id": "CASE_HAND_22",
@@ -268,8 +268,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 5.740751003031619,
-          "duration_ms_m2": 6.131964997621253
+          "duration_ms_m1": 6.586885006981902,
+          "duration_ms_m2": 6.296077001024969
         },
         {
           "case_id": "CASE_HAND_23",
@@ -278,8 +278,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 6.892097997479141,
-          "duration_ms_m2": 6.228743004612625
+          "duration_ms_m1": 7.311203997232951,
+          "duration_ms_m2": 6.394961994374171
         },
         {
           "case_id": "CASE_HAND_24_Q6",
@@ -288,8 +288,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 5.826598004205152,
-          "duration_ms_m2": 5.606901002465747
+          "duration_ms_m1": 5.736910999985412,
+          "duration_ms_m2": 6.777870003134012
         }
       ]
     },
@@ -307,7 +307,7 @@
       "m2_zero_duplicates": 840,
       "status": "PASS",
       "error": null,
-      "duration_seconds": 17.815817896000226
+      "duration_seconds": 18.50648979100515
     },
     "stream_56_matrix": {
       "total_configurations": 56,
@@ -330,7 +330,7 @@
       "total_exited_events": 1780,
       "status": "PASS",
       "error": null,
-      "duration_seconds": 3.3100025779858697
+      "duration_seconds": 3.492552462994354
     }
   }
 }

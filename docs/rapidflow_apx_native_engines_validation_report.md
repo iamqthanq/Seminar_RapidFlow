@@ -7,9 +7,9 @@
 **Feature Branch:** `feature/rf32-d-int03-native-engines`
 **Integration Target:** `QuangThang`
 **Base Commit:** `88fbe200ff9217f4dccbad08bfa448d067d2ce4e` (contains accepted P2 HEAD `ebe2894752dc45e2aeb3109c260a34e2f87a9d06`)
-**Logic Commit SHA:** `adf8353684188af5129439ffef14fbc4d6e7e19a`
+**Logic Commit SHA:** `2e60255a0b73c4d9bc2d7831ce8e137f88e154f8`
 **Pinned Upstream RapidFlow:** `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` (Pristine: `True`)
-**Verification Status:** **P3_ENGINES_VERIFIED (ROUND 7 REMEDIATED)**
+**Verification Status:** **P3_ENGINES_VERIFIED (ROUND 8 REMEDIATED)**
 **Target Handoff Verdict:** **READY_FOR_INDEPENDENT_FINAL_REVIEW**
 
 ---
@@ -26,17 +26,20 @@ Key achievements:
    - `ApxM1EnumEngine`: Native baseline anchored subgraph matching on $Q - D$ with exact missing set check $R(f) = D$.
    - `ApxM2EventEngine`: Bare direct DFS branching on PRESENT vs MISSING edges, deferring unmapped vertices, resolving incident edges, and enforcing $|R(f)| = k$ at event leaves.
    - `ApxStreamingEngine`: Stateful coordinator executing ACID transactions, interning labels, maintaining active sets, and suppressing duplicates.
-3. **Rigorous Independent Verification & Round 6 Remediation**:
+3. **Rigorous Independent Verification & Round 8 Targeted Closure**:
    - Verified 100% bit-for-bit against the independent Python M0 Ground Truth Oracle (`scripts.dstar_oracle`).
    - 25 Hand & Adversarial Witness Cases locked via `configs/rapidflow_apx_required_cases.json`: **25 / 25 PASS**.
    - 840 Correctness Corpus Cases: **840 / 840 M1 PASS**, **840 / 840 M2 PASS** (8,002 truth events, 330 cases with events, 239 with $k \ge 1$, zero duplicate emissions).
    - 56-Stream Dynamic Matrix locked via `configs/rapidflow_apx_stream_56_lock.json` (672 updates): **672 / 672 M1 PASS**, **672 / 672 M2 PASS**, active-set reconstruction **672 / 672 PASS**.
-   - Round 7 Adversarial Mutation Suite: **97 / 97 injected mutations detected (100.0% detection rate)** across Level A (42 validator unit tests), Level B (4 stage integration tests), Level C (47 genuine disk interception and subprocess tests), and Level D (4 runner control flow interception and diagnostic tests).
+   - Round 8 Adversarial Mutation Suite: **106 / 106 injected mutations detected (100.0% detection rate)** across Level A (42 validator unit tests), Level B (4 stage integration tests), Level C (56 genuine disk interception and subprocess tests), and Level D (4 runner control flow interception and diagnostic tests including full canonical disk interception).
+   - Negative query metadata integrity verified fail-closed: query plan and codec parameters ($k$, $\lambda(Q)$, query canonical order permutation) are strictly validated on negative/abort outcomes whenever execution was attempted.
+   - UNATTEMPTED step counter integrity verified fail-closed: execution counters are prohibited on UNATTEMPTED steps under Option A canonical contract, preventing fabricated or unmetered metrics.
+   - Genuine full canonical Level D regression verified: runner intercepting disk output in `CANONICAL_FULL_RUN` triggers immediate fail-fast termination, reports overall failure, and exits non-zero without running downstream stages.
    - Event-bearing witness staged tuple rollback (C4 Diamond) verified: 8 candidate mappings staged before abort are completely discarded upon rollback (`raw=8, unique=8, committed=0, discarded=8`), with graph state restored bit-for-bit to Step 0 state.
    - Full transaction lifecycle recovery on the SAME transaction manager instance without reallocating engine: Step A (valid commit) $\to$ Step B (abort and rollback) $\to$ Step C (valid commit matching Oracle) verified on both M1 and M2.
    - Postcommit transport failure (`ExitCode 7 IO_ERROR`) verified distinct from domain, prevalidation, or transaction abort errors on valid matching C4 workload.
    - Strict finite-state machine contracts, mathematical reconciliation between root and step counters, and fail-closed recovery lifecycle verified on disk.
-   - Full Repository Regression: **542 / 542 tests PASS (0 errors, 0 failures in 118.5s)**.
+   - Full Repository Regression: **545 / 545 tests PASS (0 errors, 0 failures in 129.2s)**.
 
 ---
 
@@ -44,7 +47,7 @@ Key achievements:
 
 | Metric / Parameter | Value | Verification |
 | :--- | :--- | :--- |
-| **Repository Commit** | `adf8353684188af5129439ffef14fbc4d6e7e19a` | `git rev-parse HEAD` (Clean: `true`) |
+| **Repository Commit** | `2e60255a0b73c4d9bc2d7831ce8e137f88e154f8` | `git rev-parse HEAD` (Clean: `true`) |
 | **Upstream Pinned SHA** | `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` | Submodule/git check (Pristine: `true`) |
 | **Operating System** | Linux 6.8.0-49-generic x86_64 | Clean local environment |
 | **Compiler** | GNU GCC / G++ 13.3.0 | Standard Ubuntu 24.04 packages |
@@ -53,7 +56,7 @@ Key achievements:
 | **Harness SHA-256** | `199c0528b9f041d15f2c36754414153254668640b900dba4ecc4b5bb22c2d15a` | Verified bit-for-bit |
 | **Required Cases Registry** | `configs/rapidflow_apx_required_cases.json` | Hash: `238e49a9e7b0d13ade92b89c67e9ba96e5a54aeaac4065ae6c0a476c847cd14a` |
 | **Stream Lock Registry** | `configs/rapidflow_apx_stream_56_lock.json` | Hash: `34f9c78220a3d578b8fb5e582107203404fe7dd9858621f110cac737761aa451` |
-| **Summary Artifact** | `reports/rapidflow_apx_engines/summary.json` | Hash: `38152b4fdec9b5d4e9a9435c087322c64ecab869a983e6cc2bac6bf067dcab61` |
+| **Summary Artifact** | `reports/rapidflow_apx_engines/summary.json` | Hash: `aa136af12a946a8b53e2e419b0833889c091e1efd86ba644f5ce8a3eac2f37bf` |
 
 ---
 
@@ -179,7 +182,21 @@ Locked via `configs/rapidflow_apx_stream_56_lock.json` with embedded exact query
 
 ---
 
-## 5. Round 7 Verification Integrity Remediation & P3 Acceptance Closure
+## 5. Round 8 Targeted Verification Closure & P3 Acceptance
+
+The Round 8 remediation addresses findings R8-F01 through R8-F04 and AUDIT:
+
+| Finding ID | Severity | Description & Root Cause | Technical Resolution | Independent Verification & Evidence | Status |
+| :--- | :--- | :--- | :--- | :--- | :---: |
+| **R8-F01** | BLOCKER | Negative query metadata integrity: `query_info` validation was previously bypassed whenever `is_success` was False, allowing corrupted query metadata (e.g. invalid $k$, incorrect $\lambda(Q)$, or corrupted query canonical vertex ordering) to pass unnoticed on failed or aborted executions. | Enforced strict `query_info` validation whenever `is_success` is True OR `attempted_steps > 0`. Missing `query_info` is strictly prohibited unless `attempted_steps == 0` and failure occurred during pre-execution phases (`DOMAIN_ERROR`, `INPUT_SCHEMA_ERROR`, `CLI_ERROR`, `UNCAUGHT_ERROR`). Enforced strict non-negative integer typing for $k$ and $\lambda(Q)$, validated $\lambda(Q)$ against independent max-flow min-cut oracle, validated canonical order permutation against sorted query vertex IDs, and cross-checked vertex/edge counts. | Replicators confirmed corrupt negative query metadata is rejected fail-closed; verified in Level C disk-interception mutations 99-102 and Level D mutation 103 (`D-FULL-01`). | **RESOLVED** |
+| **R8-F02** | MAJOR | UNATTEMPTED step counter integrity: validator previously checked only a subset of fields (`work_units`, `raw_emissions`, `committed_emissions`) for `UNATTEMPTED` steps, allowing non-zero counters (e.g. `candidate_evaluations: 7`) to pass unnoticed. | Enforced Option A canonical contract: `UNATTEMPTED` steps must NOT contain `step_counters` (`"step_counters" in step` is rejected fail-closed). For defensive compatibility, if parsed, all 18 execution counters (`work_units`, `dfs_states`, `candidate_evaluations`, `candidate_extensions`, `edge_lookups`, `vertex_label_checks`, `anchors_started`, `raw_emissions`, `unique_emissions`, `committed_emissions`, `discarded_emissions`, `variants_started`, `raw_exact_results`, `missing_set_rejections`, `edge_decisions`, `missing_branches`, `commitment_checks`, `commitment_rejections`) must be strictly zero non-boolean integers. In root counter reconciliation, step sums are safely aggregated using `s.get("step_counters", {}).get(cf, 0)` over non-unattempted steps. | Replicators confirmed corrupt unattempted step counters rejected fail-closed; verified in Level C disk-interception mutations 94-98 and Level D mutation 104 (`D-FULL-02`). | **RESOLVED** |
+| **R8-F03** | MAJOR | Level D mutation regression lacked full canonical pipeline execution: previous Level D mutations used mock/stubbed environments rather than running `CANONICAL_FULL_RUN` against the real native binary. | Implemented full canonical Level D mutations (`D-FULL-01`, `D-FULL-02`) running in full canonical mode with real native binary `tests/native/rapidflow_apx_engines/build/rapidflow_apx_native`. Injected disk corruption during execution of `CASE_HAND_22`: verified Hand stage failure, runner fail-fast termination, summary report status `FAIL`, process exit code 1, and zero corpus/stream runs triggered. Positive control (`D-FULL-03` / baseline) confirmed clean run passes with exit code 0 and status `P3_ENGINES_VERIFIED`. Total mutations increased from 97 to 106 (100.0% detection rate). | Mutation suite detects 106 / 106 mutations (100.0% detection rate, 0 false PASS). Dedicated unit tests in Group W pass. | **RESOLVED** |
+| **R8-F04** | MINOR | Git provenance & evidence reconciliation: fixed typographic discrepancy in previous handoff report regarding reviewed HEAD (`26a8ebd585921cab534f34436c2c794ef2322ff4`) and synchronized all commit SHAs, binary hashes, and summary hashes with current repository HEAD. | Synchronized validation report metadata, provenance table, and commit hashes bit-for-bit with Git repository state and canonical artifact hashes (`2e60255a0b73c4d9bc2d7831ce8e137f88e154f8`, summary SHA `aa136af12a946a8b53e2e419b0833889c091e1efd86ba644f5ce8a3eac2f37bf`). | Verified with automated consistency test `test_validation_report_consistency_audit`. | **RESOLVED** |
+| **R8-AUDIT** | AUDIT | Cross-layer verification contract closure: comprehensive audit across native C++ emission, schema validation, disk serialization, and test infrastructure. | Verified end-to-end invariant propagation: native C++ `main.cpp` $\to$ stdout JSON $\to$ disk payload $\to$ Python schema validator $\to$ summary report $\to$ automated test suite. Confirmed 0 unverified fields, 0 false PASS mutations, and 0 unhandled edge cases across all 25 hand cases, 840 corpus cases, and 56 stream configurations. | Fully audited; all verification gates closed fail-closed. | **RESOLVED** |
+
+---
+
+## 6. Round 7 Verification Integrity Remediation & P3 Acceptance Closure
 
 The Round 7 remediation addresses findings R7-F01 through R7-F05 and AUDIT:
 
@@ -193,7 +210,7 @@ The Round 7 remediation addresses findings R7-F01 through R7-F05 and AUDIT:
 
 ---
 
-## 6. Round 6 Comprehensive Root-Cause Remediation & Acceptance
+## 7. Round 6 Comprehensive Root-Cause Remediation & Acceptance
 
 The Round 6 remediation addresses findings R6-F01 through R6-F06 and R6-AUDIT:
 
@@ -209,7 +226,7 @@ The Round 6 remediation addresses findings R6-F01 through R6-F06 and R6-AUDIT:
 
 ---
 
-## 7. Round 5 Independent Review Findings & Remediation Matrix
+## 8. Round 5 Independent Review Findings & Remediation Matrix
 
 The Round 5 comprehensive engineering remediation addresses findings R5-F01 through R5-F04:
 
@@ -223,7 +240,7 @@ The Round 5 comprehensive engineering remediation addresses findings R5-F01 thro
 
 ---
 
-## 8. Round 4 Independent Review Findings & Remediation Matrix
+## 9. Round 4 Independent Review Findings & Remediation Matrix
 
 The Round 4 comprehensive remediation addresses findings R4-F01 through R4-F08:
 
@@ -240,7 +257,7 @@ The Round 4 comprehensive remediation addresses findings R4-F01 through R4-F08:
 
 ---
 
-## 9. Round 3 Independent Review Findings & Verification Matrix
+## 10. Round 3 Independent Review Findings & Verification Matrix
 
 The Round 3 remediation addresses findings R3-F01 through R3-F08:
 
@@ -257,7 +274,7 @@ The Round 3 remediation addresses findings R3-F01 through R3-F08:
 
 ---
 
-## 10. Previous Round 1 & Round 2 Summary
+## 11. Previous Round 1 & Round 2 Summary
 
 Prior findings from Round 1 (P3-F01 through P3-F09) addressed core execution mechanics:
 - **P3-F01**: Separated `step_counters_` (isolated per step) from `cumulative_counters_`.
@@ -274,7 +291,7 @@ All Round 1 and Round 2 fixes remain fully preserved and covered by regression t
 
 ---
 
-## 11. Decision Summary
+## 12. Decision Summary
 
 | Component | Status | Finding / Action |
 | :--- | :---: | :--- |
@@ -291,7 +308,7 @@ All Round 1 and Round 2 fixes remain fully preserved and covered by regression t
 
 ---
 
-## 12. Handoff & Next Steps
+## 13. Handoff & Next Steps
 
 1. **Reviewer Handover**:
    - PR target: `QuangThang`.
