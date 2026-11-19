@@ -1170,9 +1170,121 @@ class TestRapidFlowApxEngines(unittest.TestCase):
                 tf_path.unlink()
 
         # -----------------------------------------------------------------
+        # Level A: Registry v2 Strictness & Downgrade Resistance (R5-F02)
+        # -----------------------------------------------------------------
+        # 35. Registry version downgrade to "1.0.0" rejected fail-closed
+        with open(REQUIRED_HAND_CASES_PATH, "r", encoding="utf-8") as f:
+            valid_reg_data = json.load(f)
+        mut_reg = copy.deepcopy(valid_reg_data)
+        mut_reg["registry_version"] = "1.0.0"
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tf:
+            json.dump(mut_reg, tf)
+            tf.flush()
+            tf_path = Path(tf.name)
+        try:
+            reg_ok, _ = validate_required_hand_cases(hand_wls, tf_path)
+            record_mutation("Level A: Registry version downgrade to 1.0.0 rejected", not reg_ok)
+        finally:
+            if tf_path.exists(): tf_path.unlink()
+
+        # 36. Registry total_required_cases not integer 25 rejected
+        mut_reg = copy.deepcopy(valid_reg_data)
+        mut_reg["total_required_cases"] = 24
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tf:
+            json.dump(mut_reg, tf)
+            tf.flush()
+            tf_path = Path(tf.name)
+        try:
+            reg_ok, _ = validate_required_hand_cases(hand_wls, tf_path)
+            record_mutation("Level A: Registry total_required_cases != 25 rejected", not reg_ok)
+        finally:
+            if tf_path.exists(): tf_path.unlink()
+
+        # 37. Missing mandatory field from registry case rejected
+        mut_reg = copy.deepcopy(valid_reg_data)
+        del mut_reg["cases"][0]["canonical_workload_sha256"]
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tf:
+            json.dump(mut_reg, tf)
+            tf.flush()
+            tf_path = Path(tf.name)
+        try:
+            reg_ok, _ = validate_required_hand_cases(hand_wls, tf_path)
+            record_mutation("Level A: Missing canonical_workload_sha256 in registry rejected", not reg_ok)
+        finally:
+            if tf_path.exists(): tf_path.unlink()
+
+        # 38. Float k in registry case rejected
+        mut_reg = copy.deepcopy(valid_reg_data)
+        mut_reg["cases"][0]["k"] = 0.0
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tf:
+            json.dump(mut_reg, tf)
+            tf.flush()
+            tf_path = Path(tf.name)
+        try:
+            reg_ok, _ = validate_required_hand_cases(hand_wls, tf_path)
+            record_mutation("Level A: Float k in registry rejected", not reg_ok)
+        finally:
+            if tf_path.exists(): tf_path.unlink()
+
+        # 39. Boolean k in registry case rejected
+        mut_reg = copy.deepcopy(valid_reg_data)
+        mut_reg["cases"][0]["k"] = False
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tf:
+            json.dump(mut_reg, tf)
+            tf.flush()
+            tf_path = Path(tf.name)
+        try:
+            reg_ok, _ = validate_required_hand_cases(hand_wls, tf_path)
+            record_mutation("Level A: Boolean k in registry rejected", not reg_ok)
+        finally:
+            if tf_path.exists(): tf_path.unlink()
+
+        # 40. Negative case with null expected_error_category in registry rejected
+        mut_reg = copy.deepcopy(valid_reg_data)
+        for c in mut_reg["cases"]:
+            if c["is_negative"]:
+                c["expected_error_category"] = None
+                break
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tf:
+            json.dump(mut_reg, tf)
+            tf.flush()
+            tf_path = Path(tf.name)
+        try:
+            reg_ok, _ = validate_required_hand_cases(hand_wls, tf_path)
+            record_mutation("Level A: Negative case with null expected_error_category rejected", not reg_ok)
+        finally:
+            if tf_path.exists(): tf_path.unlink()
+
+        # 41. Positive case with non-null expected_error_category in registry rejected
+        mut_reg = copy.deepcopy(valid_reg_data)
+        mut_reg["cases"][0]["expected_error_category"] = "UNEXPECTED_ERROR"
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tf:
+            json.dump(mut_reg, tf)
+            tf.flush()
+            tf_path = Path(tf.name)
+        try:
+            reg_ok, _ = validate_required_hand_cases(hand_wls, tf_path)
+            record_mutation("Level A: Positive case with non-null expected_error_category rejected", not reg_ok)
+        finally:
+            if tf_path.exists(): tf_path.unlink()
+
+        # 42. Expected step events sum mismatch with expected_entered_count in registry rejected
+        mut_reg = copy.deepcopy(valid_reg_data)
+        mut_reg["cases"][0]["expected_step_events"][0]["entered_count"] = 999
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tf:
+            json.dump(mut_reg, tf)
+            tf.flush()
+            tf_path = Path(tf.name)
+        try:
+            reg_ok, _ = validate_required_hand_cases(hand_wls, tf_path)
+            record_mutation("Level A: Expected step events sum mismatch rejected", not reg_ok)
+        finally:
+            if tf_path.exists(): tf_path.unlink()
+
+        # -----------------------------------------------------------------
         # Level B: Stage Integration Mutation Tests
         # -----------------------------------------------------------------
-        # 35. Corrupted entered tuple in hand cases stage transitions stage to FAIL (Level B)
+        # 43. Corrupted entered tuple in hand cases stage transitions stage to FAIL (Level B)
         from scripts import run_rapidflow_apx_engines as runner_mod
         orig_run_fn = runner_mod.run_workload_on_binary
 
@@ -1189,7 +1301,7 @@ class TestRapidFlowApxEngines(unittest.TestCase):
         finally:
             runner_mod.run_workload_on_binary = orig_run_fn
 
-        # 36. Dropped required hand case fails hand stage (Level B)
+        # 44. Dropped required hand case fails hand stage (Level B)
         orig_build_fn = runner_mod.build_hand_workloads
         def dropping_build_fn():
             wls = orig_build_fn()
@@ -1202,7 +1314,7 @@ class TestRapidFlowApxEngines(unittest.TestCase):
         finally:
             runner_mod.build_hand_workloads = orig_build_fn
 
-        # 37. Tampered stream lock file fails 56-stream matrix stage (Level B)
+        # 45. Tampered stream lock file fails 56-stream matrix stage (Level B)
         orig_lock_path = runner_mod.STREAM_56_LOCK_PATH
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tf:
             json.dump({"version": "1.0", "total_streams": 0, "streams": []}, tf)
@@ -1217,179 +1329,294 @@ class TestRapidFlowApxEngines(unittest.TestCase):
             if tf_path.exists():
                 tf_path.unlink()
 
+        # 46. Workload query label mismatch fails hand stage via denominator check (Level B)
+        def label_mutating_build_fn():
+            wls = orig_build_fn()
+            wls[0]["query"]["vertices"][0]["label"] = "CORRUPTED_LABEL"
+            return wls
+
+        runner_mod.build_hand_workloads = label_mutating_build_fn
+        try:
+            e2e_results, e2e_ok = run_hand_and_witness_cases(self.binary_path, engine_filter="m1")
+            record_mutation("Level B: Workload hash mismatch fails hand stage", not e2e_ok)
+        finally:
+            runner_mod.build_hand_workloads = orig_build_fn
+
         # -----------------------------------------------------------------
-        # Level C: Runner End-to-End Interception & Subprocess Rejection Tests
+        # Level C: Runner End-to-End Interception & Subprocess Rejection Tests (R5-F04)
         # -----------------------------------------------------------------
-        # Intercept real native binary outputs on positive and negative cases (R4-F07)
+        # Genuine disk interception: intercepts output JSON on disk produced by
+        # real native binary subprocess before runner parses and validates it.
+        orig_exec = runner_mod.execute_contained_subprocess
+
+        def make_disk_intercepting_executor(mutator):
+            def intercepted_exec(cmd, *args, **kwargs):
+                ret, out, err, timed_out = orig_exec(cmd, *args, **kwargs)
+                if "--output" in cmd:
+                    out_idx = cmd.index("--output") + 1
+                    out_path = Path(cmd[out_idx])
+                    if out_path.is_file():
+                        try:
+                            with open(out_path, "r", encoding="utf-8") as rf:
+                                data = json.load(rf)
+                            mutated = mutator(data)
+                            with open(out_path, "w", encoding="utf-8") as wf:
+                                json.dump(mutated, wf)
+                        except Exception:
+                            pass
+                return ret, out, err, timed_out
+            return intercepted_exec
+
         wl_hand01 = next(w for w in hand_wls if w["case_id"] == "CASE_HAND_01")
         wl_hand22 = next(w for w in hand_wls if w["case_id"] == "CASE_HAND_22")
 
-        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as wf, \
-             tempfile.NamedTemporaryFile("r", suffix=".json", delete=False) as of:
-            json.dump(wl_hand01, wf)
-            wf.flush()
-            wf_path = Path(wf.name)
-            of_path = Path(of.name)
+        # Positive and negative controls with clean execution
+        res_ctrl_pos, _, ok_ctrl_pos = run_workload_on_binary(self.binary_path, "m1", wl_hand01)
+        self.assertTrue(ok_ctrl_pos and res_ctrl_pos.get("schema_valid"), "Positive control must pass cleanly")
+
+        res_ctrl_neg, _, _ = run_workload_on_binary(self.binary_path, "m1", wl_hand22)
+        self.assertTrue(res_ctrl_neg.get("schema_valid") and res_ctrl_neg.get("exit_code") == 6, "Negative control must pass schema validation")
+
+        # Interceptions on disk for positive workload output
+        # 47. Missing schema_version on disk rejected fail-closed
+        def mut_47(d): d.pop("schema_version", None); return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_47)
         try:
-            cmd = [str(self.binary_path), "--engine", "m1", "--workload", str(wf_path), "--output", str(of_path)]
-            subprocess.run(cmd, check=True, cwd=REPO_ROOT)
-            with open(of_path, "r", encoding="utf-8") as f:
-                base_raw_output = json.load(f)
-        finally:
-            if wf_path.exists(): wf_path.unlink()
-            if of_path.exists(): of_path.unlink()
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand01)
+            record_mutation("Level C: Missing schema_version on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
 
-        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as wf, \
-             tempfile.NamedTemporaryFile("r", suffix=".json", delete=False) as of:
-            json.dump(wl_hand22, wf)
-            wf.flush()
-            wf_path = Path(wf.name)
-            of_path = Path(of.name)
+        # 48. Unsupported schema_version "2.0.0" on disk rejected fail-closed
+        def mut_48(d): d["schema_version"] = "2.0.0"; return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_48)
         try:
-            cmd = [str(self.binary_path), "--engine", "m1", "--workload", str(wf_path), "--output", str(of_path)]
-            subprocess.run(cmd, cwd=REPO_ROOT)
-            with open(of_path, "r", encoding="utf-8") as f:
-                base_neg_output = json.load(f)
-        finally:
-            if wf_path.exists(): wf_path.unlink()
-            if of_path.exists(): of_path.unlink()
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand01)
+            record_mutation("Level C: Unsupported schema_version 2.0.0 on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
 
-        # Positive controls sanity check
-        p_ok, p_diag = validate_native_output_schema(base_raw_output, "m1", "CASE_HAND_01", None, workload=wl_hand01, is_success=True)
-        self.assertTrue(p_ok, f"Positive control failed: {p_diag}")
-        n_ok, n_diag = validate_native_output_schema(base_neg_output, "m1", "CASE_HAND_22", None, workload=wl_hand22, is_success=False)
-        self.assertTrue(n_ok, f"Negative control failed: {n_diag}")
-
-        # 38. Missing schema_version in raw output (R4-F01)
-        m = copy.deepcopy(base_raw_output); del m["schema_version"]
-        ok, _ = validate_native_output_schema(m, "m1", "CASE_HAND_01", None, workload=wl_hand01, is_success=True)
-        record_mutation("Level C: Missing schema_version rejected fail-closed", not ok)
-
-        # 39. Unsupported schema_version in raw output (R4-F01)
-        m = copy.deepcopy(base_raw_output); m["schema_version"] = "2.0.0"
-        ok, _ = validate_native_output_schema(m, "m1", "CASE_HAND_01", None, workload=wl_hand01, is_success=True)
-        record_mutation("Level C: Unsupported schema_version rejected fail-closed", not ok)
-
-        # 40. Float schema_version in raw output (R4-F01)
-        m = copy.deepcopy(base_raw_output); m["schema_version"] = 1.1
-        ok, _ = validate_native_output_schema(m, "m1", "CASE_HAND_01", None, workload=wl_hand01, is_success=True)
-        record_mutation("Level C: Float schema_version rejected fail-closed", not ok)
-
-        # 41. Missing semantics_version in raw output (R4-F01)
-        m = copy.deepcopy(base_raw_output); del m["semantics_version"]
-        ok, _ = validate_native_output_schema(m, "m1", "CASE_HAND_01", None, workload=wl_hand01, is_success=True)
-        record_mutation("Level C: Missing semantics_version rejected fail-closed", not ok)
-
-        # 42. Float step_index in raw step (R4-F02)
-        m = copy.deepcopy(base_raw_output); m["steps"][0]["step_index"] = 0.0
-        ok, _ = validate_native_output_schema(m, "m1", "CASE_HAND_01", None, workload=wl_hand01, is_success=True)
-        record_mutation("Level C: Float step_index rejected fail-closed", not ok)
-
-        # 43. Boolean endpoint u in raw step (R4-F02)
-        m = copy.deepcopy(base_raw_output); m["steps"][0]["u"] = True
-        ok, _ = validate_native_output_schema(m, "m1", "CASE_HAND_01", None, workload=wl_hand01, is_success=True)
-        record_mutation("Level C: Boolean endpoint u rejected fail-closed", not ok)
-
-        # 44. Boolean endpoint v in raw step (R4-F02)
-        m = copy.deepcopy(base_raw_output); m["steps"][0]["v"] = False
-        ok, _ = validate_native_output_schema(m, "m1", "CASE_HAND_01", None, workload=wl_hand01, is_success=True)
-        record_mutation("Level C: Boolean endpoint v rejected fail-closed", not ok)
-
-        # 45. Root SUCCESS with step status CALLBACK_ABORTED (R4-F02)
-        m = copy.deepcopy(base_raw_output); m["steps"][0]["status"] = "CALLBACK_ABORTED"
-        ok, _ = validate_native_output_schema(m, "m1", "CASE_HAND_01", None, workload=wl_hand01, is_success=True)
-        record_mutation("Level C: Root SUCCESS with CALLBACK_ABORTED step rejected", not ok)
-
-        # 46. Root SUCCESS with step status UNATTEMPTED (R4-F02)
-        m = copy.deepcopy(base_raw_output); m["steps"][0]["status"] = "UNATTEMPTED"
-        ok, _ = validate_native_output_schema(m, "m1", "CASE_HAND_01", None, workload=wl_hand01, is_success=True)
-        record_mutation("Level C: Root SUCCESS with UNATTEMPTED step rejected", not ok)
-
-        # 47. Root SUCCESS with PREVALIDATION_ERROR (R4-F02)
-        m = copy.deepcopy(base_raw_output); m["error_category"] = "PREVALIDATION_ERROR"
-        ok, _ = validate_native_output_schema(m, "m1", "CASE_HAND_01", None, workload=wl_hand01, is_success=True)
-        record_mutation("Level C: Root SUCCESS with non-NONE error_category rejected", not ok)
-
-        # 48. Duplicate tuple in entered_tuples (R4-F02)
-        m = copy.deepcopy(base_raw_output); m["steps"][0]["entered_tuples"] = [[0, 1, 2, 3], [0, 1, 2, 3]]
-        ok, _ = validate_native_output_schema(m, "m1", "CASE_HAND_01", None, workload=wl_hand01, is_success=True)
-        record_mutation("Level C: Duplicate tuple in entered_tuples rejected", not ok)
-
-        # 49. Non-injective tuple in entered_tuples (R4-F02)
-        m = copy.deepcopy(base_raw_output); m["steps"][0]["entered_tuples"] = [[0, 0, 2, 3]]
-        ok, _ = validate_native_output_schema(m, "m1", "CASE_HAND_01", None, workload=wl_hand01, is_success=True)
-        record_mutation("Level C: Non-injective tuple in entered_tuples rejected", not ok)
-
-        # 50. Extra neighbor key in graph_state (R4-F06)
-        m_gs = copy.deepcopy(base_raw_output["steps"][0]["graph_state"])
-        m_gs["neighbors"]["999999999"] = []
-        G_exp = DStarGraph()
-        for v in base_raw_output["steps"][0]["graph_state"]["vertices"]:
-            G_exp.add_vertex(v["id"], v["label"])
-        for e in base_raw_output["steps"][0]["graph_state"]["edges"]:
-            G_exp.add_edge(e["u"], e["v"], e["label"])
-        ok, _ = validate_graph_state(m_gs, G_exp)
-        record_mutation("Level C: Extra neighbor key in graph_state rejected", not ok)
-
-        # 51. Float string neighbor key in graph_state (R4-F06)
-        first_k = next(iter(base_raw_output["steps"][0]["graph_state"]["neighbors"].keys()))
-        m_gs = copy.deepcopy(base_raw_output["steps"][0]["graph_state"])
-        m_gs["neighbors"][f"{first_k}.0"] = m_gs["neighbors"].pop(first_k)
-        ok, _ = validate_graph_state(m_gs, G_exp)
-        record_mutation("Level C: Float string neighbor key in graph_state rejected", not ok)
-
-        # 52. Neighbor key > INT64_MAX in graph_state (R4-F06)
-        m_gs = copy.deepcopy(base_raw_output["steps"][0]["graph_state"])
-        m_gs["neighbors"]["999999999999999999999"] = m_gs["neighbors"].pop(first_k)
-        ok, _ = validate_graph_state(m_gs, G_exp)
-        record_mutation("Level C: Neighbor key > INT64_MAX in graph_state rejected", not ok)
-
-        # 53. Corrupted completed_steps = 123 on negative test (R4-F03)
-        m_neg = copy.deepcopy(base_neg_output)
-        m_neg["execution"]["completed_steps"] = 123
-        ok, _ = validate_native_output_schema(m_neg, "m1", "CASE_HAND_22", None, workload=wl_hand22, is_success=False)
-        record_mutation("Level C: Corrupted negative lifecycle totals rejected", not ok)
-
-        # 54. Negative case treated as success (R4-F03)
-        m_neg = copy.deepcopy(base_neg_output)
-        ok, _ = validate_native_output_schema(m_neg, "m1", "CASE_HAND_22", None, workload=wl_hand22, is_success=True)
-        record_mutation("Level C: Negative case treated as success rejected", not ok)
-
-        # 55. Workload hash mismatch (R4-F04)
-        mut_req_wls = copy.deepcopy(hand_wls)
-        for w in mut_req_wls:
-            if w["case_id"] == "CASE_HAND_04":
-                w["query"]["vertices"][0]["label"] = "TAMPERED_LABEL"
-        req_ok, _ = validate_required_hand_cases(mut_req_wls, REQUIRED_HAND_CASES_PATH)
-        record_mutation("Level C: Workload hash mismatch rejected", not req_ok)
-
-        # 56. Tampered stream lock entry (R4-F05)
-        with open(STREAM_56_LOCK_PATH, "r", encoding="utf-8") as f:
-            stream_lock_data = json.load(f)
-        mut_stream_lock = copy.deepcopy(stream_lock_data)
-        mut_stream_lock["streams"][0]["label_mode"] = "INVALID_MODE"
-        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tf:
-            json.dump(mut_stream_lock, tf)
-            tf.flush()
-            tf_path = Path(tf.name)
+        # 49. Float schema_version 1.1 on disk rejected fail-closed
+        def mut_49(d): d["schema_version"] = 1.1; return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_49)
         try:
-            lock_ok, _ = validate_stream_lock_registry(tf_path)
-            record_mutation("Level C: Tampered stream label_mode rejected", not lock_ok)
-        finally:
-            if tf_path.exists(): tf_path.unlink()
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand01)
+            record_mutation("Level C: Float schema_version on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
 
-        # 57. CLI: Runner invoked with unknown case ID rejected fail-closed (Level C)
+        # 50. Missing semantics_version on disk rejected fail-closed
+        def mut_50(d): d.pop("semantics_version", None); return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_50)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand01)
+            record_mutation("Level C: Missing semantics_version on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 51. Engine mismatch on disk ("m99") rejected fail-closed
+        def mut_51(d): d["engine_name"] = "m99"; return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_51)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand01)
+            record_mutation("Level C: Engine mismatch on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 52. Lifecycle sum violation on disk (completed_steps = 99) rejected fail-closed
+        def mut_52(d): d["execution"]["completed_steps"] = 99; return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_52)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand01)
+            record_mutation("Level C: Lifecycle sum violation on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 53. Float step_index on disk (step_index = 0.0) rejected fail-closed
+        def mut_53(d): d["steps"][0]["step_index"] = 0.0; return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_53)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand01)
+            record_mutation("Level C: Float step_index on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 54. Boolean endpoint u on disk (u = True) rejected fail-closed
+        def mut_54(d): d["steps"][0]["u"] = True; return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_54)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand01)
+            record_mutation("Level C: Boolean endpoint u on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 55. Boolean endpoint v on disk (v = False) rejected fail-closed
+        def mut_55(d): d["steps"][0]["v"] = False; return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_55)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand01)
+            record_mutation("Level C: Boolean endpoint v on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 56. Root SUCCESS with step status CALLBACK_ABORTED on disk rejected fail-closed
+        def mut_56(d): d["steps"][0]["status"] = "CALLBACK_ABORTED"; return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_56)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand01)
+            record_mutation("Level C: Root SUCCESS with CALLBACK_ABORTED step on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 57. Root SUCCESS with step status UNATTEMPTED on disk rejected fail-closed
+        def mut_57(d): d["steps"][0]["status"] = "UNATTEMPTED"; return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_57)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand01)
+            record_mutation("Level C: Root SUCCESS with UNATTEMPTED step on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 58. Root SUCCESS with PREVALIDATION_ERROR on disk rejected fail-closed
+        def mut_58(d): d["error_category"] = "PREVALIDATION_ERROR"; return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_58)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand01)
+            record_mutation("Level C: Root SUCCESS with non-NONE error_category on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 59. Duplicate tuple in entered_tuples on disk rejected fail-closed
+        def mut_59(d): d["steps"][0]["entered_tuples"] = [[0, 1, 2, 3], [0, 1, 2, 3]]; return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_59)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand01)
+            record_mutation("Level C: Duplicate tuple in entered_tuples on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 60. Non-injective tuple in entered_tuples on disk rejected fail-closed
+        def mut_60(d): d["steps"][0]["entered_tuples"] = [[0, 0, 2, 3]]; return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_60)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand01)
+            record_mutation("Level C: Non-injective tuple on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 61. Asymmetric adjacency in graph_state on disk rejected fail-closed
+        def mut_61(d):
+            fk = next(iter(d["steps"][0]["graph_state"]["neighbors"].keys()))
+            d["steps"][0]["graph_state"]["neighbors"][fk].append(999)
+            return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_61)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand01)
+            record_mutation("Level C: Asymmetric adjacency in graph_state on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 62. Extra neighbor key in graph_state on disk rejected fail-closed
+        def mut_62(d): d["steps"][0]["graph_state"]["neighbors"]["999999999"] = []; return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_62)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand01)
+            record_mutation("Level C: Extra neighbor key in graph_state on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 63. Float string neighbor key in graph_state on disk rejected fail-closed
+        def mut_63(d):
+            first_k = next(iter(d["steps"][0]["graph_state"]["neighbors"].keys()))
+            d["steps"][0]["graph_state"]["neighbors"][f"{first_k}.0"] = d["steps"][0]["graph_state"]["neighbors"].pop(first_k)
+            return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_63)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand01)
+            record_mutation("Level C: Float string neighbor key on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 64. Neighbor key > INT64_MAX in graph_state on disk rejected fail-closed
+        def mut_64(d):
+            first_k = next(iter(d["steps"][0]["graph_state"]["neighbors"].keys()))
+            d["steps"][0]["graph_state"]["neighbors"]["999999999999999999999"] = d["steps"][0]["graph_state"]["neighbors"].pop(first_k)
+            return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_64)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand01)
+            record_mutation("Level C: Neighbor key > INT64_MAX on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 65. Corrupted committed_emissions counter on disk rejected fail-closed
+        def mut_65(d): d["counters"]["committed_emissions"] = 99999; return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_65)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand01)
+            record_mutation("Level C: Corrupted committed_emissions counter on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 66. Canonical cap loosened in work_budget on disk (> 500000) rejected fail-closed
+        def mut_66(d): d["work_budget"]["canonical_cap"] = 9999999; return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_66)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand01)
+            record_mutation("Level C: Canonical cap loosened in work_budget on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # Interceptions on disk for negative workload output (CASE_HAND_22)
+        # 67. Negative root status mutated to "SUCCESS" on disk rejected fail-closed
+        def mut_67(d): d["status"] = "SUCCESS"; return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_67)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand22)
+            record_mutation("Level C: Negative root status SUCCESS on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 68. Negative error_category cleared to "NONE" on disk rejected fail-closed
+        def mut_68(d): d["error_category"] = "NONE"; return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_68)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand22)
+            record_mutation("Level C: Negative error_category NONE on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 69. Failing step commit_status mutated to "COMMITTED" on disk rejected fail-closed
+        def mut_69(d): d["steps"][0]["commit_status"] = "COMMITTED"; return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_69)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand22)
+            record_mutation("Level C: Failing step commit_status COMMITTED on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 70. Failing step status mutated to "SUCCESS" on disk rejected fail-closed
+        def mut_70(d): d["steps"][0]["status"] = "SUCCESS"; return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_70)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand22)
+            record_mutation("Level C: Failing step status SUCCESS on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 71. Failing step emitted non-zero entered_tuples on disk rejected fail-closed
+        def mut_71(d): d["steps"][0]["entered_tuples"] = [[1, 2]]; return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_71)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand22)
+            record_mutation("Level C: Failing step emitted tuples on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 72. Failing step graph_state corrupted on disk rejected fail-closed
+        def mut_72(d): d["steps"][0]["graph_state"]["edges_count"] = 999; return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_72)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand22)
+            record_mutation("Level C: Failing step graph_state corrupted on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 73. Stage-level disk interception: mutating entered_tuples on disk fails hand stage
+        def mut_73(d): d["steps"][0]["entered_tuples"] = [[-999, -888]]; return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_73)
+        try:
+            stage_results, stage_ok = run_hand_and_witness_cases(self.binary_path, engine_filter="m1", case_filter="CASE_HAND_01")
+            record_mutation("Level C: Disk interception in stage execution fails hand stage", not stage_ok)
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # CLI invocations
+        # 74. CLI: Runner invoked with unknown case ID rejected fail-closed (Level C)
         runner_script = REPO_ROOT / "scripts" / "run_rapidflow_apx_engines.py"
         cmd_unknown = [sys.executable, str(runner_script), "--case", "NON_EXISTENT_CASE_999"]
         proc_unk = subprocess.run(cmd_unknown, capture_output=True, text=True, cwd=REPO_ROOT)
         record_mutation("Level C: Unknown case filter rejected with non-zero exit", proc_unk.returncode != 0)
 
-        # 58. CLI: Runner invoked with stage mismatch rejected fail-closed (Level C)
+        # 75. CLI: Runner invoked with stage mismatch rejected fail-closed (Level C)
         cmd_mismatch = [sys.executable, str(runner_script), "--stage", "stream", "--case", "CASE_HAND_01"]
         proc_mis = subprocess.run(cmd_mismatch, capture_output=True, text=True, cwd=REPO_ROOT)
         record_mutation("Level C: Case stage mismatch rejected with non-zero exit", proc_mis.returncode != 0)
 
-        # 59. CLI: Runner invoked with invalid engine option rejected fail-closed (Level C)
+        # 76. CLI: Runner invoked with invalid engine option rejected fail-closed (Level C)
         cmd_invalid_eng = [sys.executable, str(runner_script), "--engine", "invalid_engine_name"]
         proc_eng = subprocess.run(cmd_invalid_eng, capture_output=True, text=True, cwd=REPO_ROOT)
         record_mutation("Level C: Invalid engine option rejected with non-zero exit", proc_eng.returncode != 0)
@@ -1412,8 +1639,8 @@ class TestRapidFlowApxEngines(unittest.TestCase):
     # =========================================================================
     # Group V: Multi-Step Transaction Rollback & Report Consistency Audit
     # =========================================================================
-    def test_transaction_rollback_multistep_preservation(self):
-        """Verifies multi-step transaction rollback preservation (R4-F07).
+    def test_multistep_prevalidation_failure_preserves_prior_commits(self):
+        """Verifies multi-step transaction rollback preservation on prevalidation failure (R4-F07, R5-F03 Test A).
         Step 0: Valid insertion (+edge) commits successfully and is preserved in graph state.
         Step 1: Invalid update (self-loop) fails prevalidation, rolls back, and does NOT contaminate graph state.
         Step 2: Subsequent update remains UNATTEMPTED with NOT_COMMITTED status.
@@ -1466,6 +1693,166 @@ class TestRapidFlowApxEngines(unittest.TestCase):
             # Step 2: Unattempted
             self.assertEqual(steps[2]["status"], "UNATTEMPTED")
             self.assertEqual(steps[2]["commit_status"], "NOT_COMMITTED")
+
+    def test_active_transaction_rollback_after_mutation(self):
+        """Verifies active transaction rollback occurring AFTER graph/codec mutation and BEFORE commit (R5-F03 Test B).
+        Step 0: Valid update commits 4th edge and emits entered tuples.
+        Step 1: Active transaction mutates graph (adds 5th edge), then fault injection (AFTER_MUTATION) fires.
+                Transaction manager aborts transaction, undos graph & codec mutations, and restores graph state.
+                Step 1 is marked FAULT_INJECTED with commit_status NOT_COMMITTED and 0 published tuples.
+        Step 2: Subsequent step remains UNATTEMPTED with NOT_COMMITTED status."""
+        wl = {
+            "case_id": "test_active_tx_rollback_after_mutation",
+            "query": {
+                "vertices": [{"id": i, "label": 0} for i in range(4)],
+                "edges": [{"u": 0, "v": 1, "label": 0}, {"u": 0, "v": 2, "label": 0}, {"u": 1, "v": 3, "label": 0}, {"u": 2, "v": 3, "label": 0}]
+            },
+            "k": 0,
+            "initial_graph": {
+                "vertices": [{"id": i, "label": 0} for i in range(4)],
+                "edges": [{"u": 0, "v": 1, "label": 0}, {"u": 0, "v": 2, "label": 0}, {"u": 1, "v": 3, "label": 0}]
+            },
+            "updates": [
+                {"op": "+", "u": 2, "v": 3, "label": 0},
+                {"op": "+", "u": 1, "v": 2, "label": 0, "fault": "AFTER_MUTATION"},
+                {"op": "+", "u": 0, "v": 3, "label": 0}
+            ]
+        }
+        for eng in ["m1", "m2"]:
+            res, dur, _ = run_workload_on_binary(self.binary_path, eng, wl)
+            self.assertEqual(res.get("status"), "FAIL")
+            self.assertEqual(res.get("exit_code"), 6)
+            self.assertEqual(res.get("error_category"), "FAULT_INJECTED")
+            self.assertTrue(res.get("schema_valid"), f"Schema must be valid: {res.get('schema_error')}")
+
+            exec_info = res.get("execution", {})
+            self.assertEqual(exec_info.get("total_steps"), 3)
+            self.assertEqual(exec_info.get("completed_steps"), 1)
+            self.assertEqual(exec_info.get("failed_steps"), 1)
+            self.assertEqual(exec_info.get("unattempted_steps"), 1)
+
+            steps = res.get("steps", [])
+            self.assertEqual(len(steps), 3)
+
+            # Step 0: Committed successfully
+            self.assertEqual(steps[0]["status"], "SUCCESS")
+            self.assertEqual(steps[0]["commit_status"], "COMMITTED")
+            self.assertEqual(steps[0]["graph_state"]["edges_count"], 4)
+            self.assertGreater(len(steps[0]["entered_tuples"]), 0)
+
+            # Step 1: Active transaction rolled back after mutation
+            self.assertEqual(steps[1]["status"], "FAULT_INJECTED")
+            self.assertEqual(steps[1]["commit_status"], "NOT_COMMITTED")
+            self.assertEqual(len(steps[1]["entered_tuples"]), 0)
+            self.assertEqual(len(steps[1]["exited_tuples"]), 0)
+            # Edge count restored to 4 (the mutated (1,2) edge was undone)
+            self.assertEqual(steps[1]["graph_state"]["edges_count"], 4)
+            self.assertEqual(steps[1]["graph_state"]["vertices_count"], 4)
+            # Neighbor list of 1 does not contain 2
+            self.assertNotIn(2, steps[1]["graph_state"]["neighbors"].get("1", []))
+
+            # Step 2: Unattempted
+            self.assertEqual(steps[2]["status"], "UNATTEMPTED")
+            self.assertEqual(steps[2]["commit_status"], "NOT_COMMITTED")
+
+    def test_active_transaction_rollback_before_publish_staged_tuples(self):
+        """Verifies active transaction rollback occurring BEFORE publish, proving staged tuples are discarded (R5-F03 Test B).
+        Step 0: Valid update commits 4th edge.
+        Step 1: Update begins, mutates graph, stages candidate tuples in tuple sink, then fault injection (BEFORE_PUBLISH) fires.
+                Transaction manager aborts transaction, discards all staged tuples in sink (0 emitted), and restores graph state."""
+        wl = {
+            "case_id": "test_active_tx_rollback_before_publish",
+            "query": {
+                "vertices": [{"id": i, "label": 0} for i in range(4)],
+                "edges": [{"u": 0, "v": 1, "label": 0}, {"u": 0, "v": 2, "label": 0}, {"u": 1, "v": 3, "label": 0}, {"u": 2, "v": 3, "label": 0}]
+            },
+            "k": 0,
+            "initial_graph": {
+                "vertices": [{"id": i, "label": 0} for i in range(4)],
+                "edges": [{"u": 0, "v": 1, "label": 0}, {"u": 0, "v": 2, "label": 0}, {"u": 1, "v": 3, "label": 0}]
+            },
+            "updates": [
+                {"op": "+", "u": 2, "v": 3, "label": 0},
+                {"op": "+", "u": 1, "v": 2, "label": 0, "fault": "BEFORE_PUBLISH"},
+                {"op": "+", "u": 0, "v": 3, "label": 0}
+            ]
+        }
+        for eng in ["m1", "m2"]:
+            res, dur, _ = run_workload_on_binary(self.binary_path, eng, wl)
+            self.assertEqual(res.get("status"), "FAIL")
+            self.assertEqual(res.get("exit_code"), 6)
+            self.assertEqual(res.get("error_category"), "FAULT_INJECTED")
+
+            steps = res.get("steps", [])
+            self.assertEqual(len(steps), 3)
+
+            # Step 0: Committed
+            self.assertEqual(steps[0]["status"], "SUCCESS")
+            self.assertEqual(steps[0]["commit_status"], "COMMITTED")
+
+            # Step 1: Staged tuples discarded from sink on abort
+            self.assertEqual(steps[1]["status"], "FAULT_INJECTED")
+            self.assertEqual(steps[1]["commit_status"], "NOT_COMMITTED")
+            self.assertEqual(len(steps[1]["entered_tuples"]), 0, "Staged tuples must be aborted, not published")
+            self.assertEqual(len(steps[1]["exited_tuples"]), 0)
+            self.assertEqual(steps[1]["graph_state"]["edges_count"], 4)
+
+            # Step 2: Unattempted
+            self.assertEqual(steps[2]["status"], "UNATTEMPTED")
+
+    def test_active_transaction_recovery_subsequent_step(self):
+        """Verifies that after an aborted transaction, the underlying graph and engine structures remain consistent (R5-F03)."""
+        G_ref = DStarGraph()
+        for i in range(4):
+            G_ref.add_vertex(i, 0)
+        G_ref.add_edge(0, 1, 0)
+        G_ref.add_edge(0, 2, 0)
+        G_ref.add_edge(1, 3, 0)
+        G_ref.add_edge(2, 3, 0)  # state after Step 0
+
+        wl = {
+            "case_id": "test_active_tx_recovery",
+            "query": {
+                "vertices": [{"id": i, "label": 0} for i in range(4)],
+                "edges": [{"u": 0, "v": 1, "label": 0}, {"u": 0, "v": 2, "label": 0}, {"u": 1, "v": 3, "label": 0}, {"u": 2, "v": 3, "label": 0}]
+            },
+            "k": 0,
+            "initial_graph": {
+                "vertices": [{"id": i, "label": 0} for i in range(4)],
+                "edges": [{"u": 0, "v": 1, "label": 0}, {"u": 0, "v": 2, "label": 0}, {"u": 1, "v": 3, "label": 0}]
+            },
+            "updates": [
+                {"op": "+", "u": 2, "v": 3, "label": 0},
+                {"op": "+", "u": 1, "v": 2, "label": 0, "fault": "AFTER_MUTATION"}
+            ]
+        }
+        res, _, _ = run_workload_on_binary(self.binary_path, "m1", wl)
+        step1_gs = res["steps"][1]["graph_state"]
+        g_ok, g_diag = validate_graph_state(step1_gs, G_ref, "recovery", "m1", 1)
+        self.assertTrue(g_ok, f"Graph state after rollback must match reference model: {g_diag}")
+
+    def test_postcommit_output_error_classification(self):
+        """Verifies that output transport failures (e.g. unwritable output file path) return ExitCode 7 (IO_ERROR),
+        which is classified as an output serialization/transport error distinct from transaction rollback (R5-F03)."""
+        wl = {
+            "case_id": "test_postcommit_io_error",
+            "query": {"vertices": [{"id": 0, "label": 0}], "edges": []},
+            "k": 0,
+            "initial_graph": {"vertices": [{"id": 0, "label": 0}], "edges": []},
+            "updates": [{"op": "+", "u": 0, "v": 0, "label": 0}]
+        }
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as wf:
+            json.dump(wl, wf)
+            wf.flush()
+            wf_path = wf.name
+
+        try:
+            cmd = [str(self.binary_path), "--engine", "m1", "--workload", wf_path, "--output", "/nonexistent/invalid_dir/output.json"]
+            proc = subprocess.run(cmd, capture_output=True, text=True, cwd=REPO_ROOT)
+            self.assertEqual(proc.returncode, 7, f"Output transport failure must exit with code 7 (IO_ERROR), got {proc.returncode}")
+        finally:
+            if Path(wf_path).exists():
+                Path(wf_path).unlink()
 
     def test_validation_report_consistency_audit(self):
         """Audits docs/rapidflow_apx_native_engines_validation_report.md Section 4.1 against

@@ -579,6 +579,22 @@ int main(int argc, char* argv[]) {
                 step_json["v"] = json::Value(ext_v);
                 step_json["label"] = typed_label_to_json(lbl);
 
+                // Controlled test-only fault injection hook for active transaction verification (P3-R5-F03)
+                if (upd_val.contains("fault") && upd_val["fault"].is_string()) {
+                    std::string fault_str = upd_val["fault"].as_string();
+                    if (fault_str == "AFTER_MUTATION") {
+                        streaming_engine.get_tx_manager().set_fault_injection(ApxTransactionManager::FaultPoint::AFTER_MUTATION);
+                    } else if (fault_str == "DURING_CALLBACK") {
+                        streaming_engine.get_tx_manager().set_fault_injection(ApxTransactionManager::FaultPoint::DURING_CALLBACK);
+                    } else if (fault_str == "BEFORE_PUBLISH") {
+                        streaming_engine.get_tx_manager().set_fault_injection(ApxTransactionManager::FaultPoint::BEFORE_PUBLISH);
+                    } else {
+                        streaming_engine.get_tx_manager().set_fault_injection(ApxTransactionManager::FaultPoint::NONE);
+                    }
+                } else {
+                    streaming_engine.get_tx_manager().set_fault_injection(ApxTransactionManager::FaultPoint::NONE);
+                }
+
                 UpdateOperation upd{op, ext_u, ext_v, lbl};
                 StreamStepResult step_res = streaming_engine.execute_step(upd, static_cast<uint32_t>(step_idx));
 
@@ -646,6 +662,9 @@ int main(int argc, char* argv[]) {
                     } else if (step_res.status == StepStatus::PREVALIDATION_FAILED) {
                         first_failing_category = "PREVALIDATION_ERROR";
                         first_failing_exit = ExitCode::STEP_FAILURE;
+                    } else if (step_res.status == StepStatus::FAULT_INJECTED) {
+                        first_failing_category = "FAULT_INJECTED";
+                        first_failing_exit = ExitCode::STEP_FAILURE;
                     } else {
                         first_failing_category = "STEP_FAILURE";
                         first_failing_exit = ExitCode::STEP_FAILURE;
@@ -656,6 +675,16 @@ int main(int argc, char* argv[]) {
                     for (size_t rem = step_idx + 1; rem < total_steps; ++rem) {
                         json::Value un_step = json::Value::make_object();
                         un_step["step_index"] = json::Value(static_cast<int64_t>(rem));
+                        if (rem < upd_arr.size()) {
+                            const auto& un_upd = upd_arr[rem];
+                            if (un_upd.is_object() && un_upd.contains("op") && un_upd.contains("u") && un_upd.contains("v") && un_upd.contains("label")) {
+                                std::string u_op_str = un_upd["op"].as_string();
+                                un_step["op"] = json::Value((u_op_str == "+" || u_op_str == "INSERT" || u_op_str == "INS") ? "+" : "-");
+                                un_step["u"] = json::Value(un_upd["u"].as_int());
+                                un_step["v"] = json::Value(un_upd["v"].as_int());
+                                un_step["label"] = un_upd["label"];
+                            }
+                        }
                         un_step["status"] = json::Value("UNATTEMPTED");
                         un_step["commit_status"] = json::Value("NOT_COMMITTED");
                         un_step["error"] = json::Value("");
@@ -685,6 +714,16 @@ int main(int argc, char* argv[]) {
                 for (size_t rem = step_idx + 1; rem < total_steps; ++rem) {
                     json::Value un_step = json::Value::make_object();
                     un_step["step_index"] = json::Value(static_cast<int64_t>(rem));
+                    if (rem < upd_arr.size()) {
+                        const auto& un_upd = upd_arr[rem];
+                        if (un_upd.is_object() && un_upd.contains("op") && un_upd.contains("u") && un_upd.contains("v") && un_upd.contains("label")) {
+                            std::string u_op_str = un_upd["op"].as_string();
+                            un_step["op"] = json::Value((u_op_str == "+" || u_op_str == "INSERT" || u_op_str == "INS") ? "+" : "-");
+                            un_step["u"] = json::Value(un_upd["u"].as_int());
+                            un_step["v"] = json::Value(un_upd["v"].as_int());
+                            un_step["label"] = un_upd["label"];
+                        }
+                    }
                     un_step["status"] = json::Value("UNATTEMPTED");
                     un_step["commit_status"] = json::Value("NOT_COMMITTED");
                     un_step["error"] = json::Value("");

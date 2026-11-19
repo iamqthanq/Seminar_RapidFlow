@@ -551,7 +551,14 @@
       "canonical_workload_sha256": "db07600552817c34f2ccb20310d76558415de0c3b70e05f67d6c49fa81e3fd00",
       "expected_entered_count": 0,
       "expected_exited_count": 0,
-      "expected_step_events": []
+      "expected_step_events": [
+        {
+          "step_index": 0,
+          "op": "+",
+          "entered_count": 0,
+          "exited_count": 0
+        }
+      ]
     },
     {
       "case_id": "CASE_HAND_23",

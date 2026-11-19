@@ -368,15 +368,27 @@ def validate_required_hand_cases(
     if not isinstance(reg, dict):
         return False, "Required hand cases registry is not an object"
 
-    if reg.get("registry_version") not in ("1.0.0", "1.0", "2.0.0"):
-        return False, f"Registry version mismatch: {reg.get('registry_version')}"
+    if reg.get("registry_version") != "2.0.0":
+        return False, f"Registry version mismatch: {reg.get('registry_version')} (strictly expected '2.0.0', downgrade rejected)"
 
-    if reg.get("total_required_cases") != 25:
-        return False, f"Registry total_required_cases mismatch: {reg.get('total_required_cases')} (expected 25)"
+    if type(reg.get("total_required_cases")) is not int or isinstance(reg.get("total_required_cases"), bool) or reg.get("total_required_cases") != 25:
+        return False, f"Registry total_required_cases mismatch or not integer: {reg.get('total_required_cases')} (expected integer 25)"
+
+    for rk in ["registry_version", "contract", "total_required_cases", "cases"]:
+        if rk not in reg:
+            return False, f"Registry root missing mandatory field '{rk}'"
 
     cases = reg.get("cases")
     if not isinstance(cases, list) or len(cases) != 25:
         return False, f"Registry cases array length mismatch: {len(cases) if isinstance(cases, list) else None} != 25"
+
+    REQUIRED_CASE_FIELDS = [
+        "canonical_workload_sha256", "case_id", "case_name",
+        "expected_entered_count", "expected_error_category", "expected_exit_code",
+        "expected_exited_count", "expected_step_events", "is_negative",
+        "k", "lambda", "query_edges_count", "query_vertices_count",
+        "required_engines", "updates_count"
+    ]
 
     reg_map = {}
     for c in cases:
@@ -387,6 +399,82 @@ def validate_required_hand_cases(
             return False, f"Registry case missing or invalid case_id: {cid}"
         if cid in reg_map:
             return False, f"Duplicate case_id in required registry: {cid}"
+
+        # Enforce all 15 mandatory fields (R5-F02)
+        for mf in REQUIRED_CASE_FIELDS:
+            if mf not in c:
+                return False, f"Registry case {cid} missing mandatory field '{mf}'"
+
+        # Strict type validations
+        if not isinstance(c["case_name"], str) or not c["case_name"]:
+            return False, f"Registry case {cid} invalid case_name: {c['case_name']}"
+        if type(c["k"]) is not int or isinstance(c["k"], bool) or c["k"] < 0:
+            return False, f"Registry case {cid} k not non-negative integer: {c['k']} (type={type(c['k'])})"
+        if type(c["lambda"]) is not int or isinstance(c["lambda"], bool) or c["lambda"] < 0:
+            return False, f"Registry case {cid} lambda not non-negative integer: {c['lambda']} (type={type(c['lambda'])})"
+        if type(c["is_negative"]) is not bool:
+            return False, f"Registry case {cid} is_negative not boolean: {c['is_negative']} (type={type(c['is_negative'])})"
+        if type(c["expected_exit_code"]) is not int or isinstance(c["expected_exit_code"], bool) or c["expected_exit_code"] < 0:
+            return False, f"Registry case {cid} expected_exit_code not non-negative integer: {c['expected_exit_code']}"
+        if c["is_negative"]:
+            if not isinstance(c["expected_error_category"], str) or not c["expected_error_category"]:
+                return False, f"Registry case {cid} negative case missing string expected_error_category: {c['expected_error_category']}"
+        else:
+            if c["expected_error_category"] is not None:
+                return False, f"Registry case {cid} positive case must have null expected_error_category, got: {c['expected_error_category']}"
+        if c["required_engines"] not in ("both", "m1", "m2"):
+            return False, f"Registry case {cid} invalid required_engines: {c['required_engines']}"
+        if type(c["query_vertices_count"]) is not int or isinstance(c["query_vertices_count"], bool) or c["query_vertices_count"] <= 0:
+            return False, f"Registry case {cid} query_vertices_count not positive integer: {c['query_vertices_count']}"
+        if type(c["query_edges_count"]) is not int or isinstance(c["query_edges_count"], bool) or c["query_edges_count"] < 0:
+            return False, f"Registry case {cid} query_edges_count not non-negative integer: {c['query_edges_count']}"
+        if type(c["updates_count"]) is not int or isinstance(c["updates_count"], bool) or c["updates_count"] < 0:
+            return False, f"Registry case {cid} updates_count not non-negative integer: {c['updates_count']}"
+        sha_val = c["canonical_workload_sha256"]
+        if not isinstance(sha_val, str) or len(sha_val) != 64 or not all(ch in "0123456789abcdefABCDEF" for ch in sha_val):
+            return False, f"Registry case {cid} canonical_workload_sha256 not valid 64-hex string: {sha_val}"
+        if type(c["expected_entered_count"]) is not int or isinstance(c["expected_entered_count"], bool) or c["expected_entered_count"] < 0:
+            return False, f"Registry case {cid} expected_entered_count not non-negative integer: {c['expected_entered_count']}"
+        if type(c["expected_exited_count"]) is not int or isinstance(c["expected_exited_count"], bool) or c["expected_exited_count"] < 0:
+            return False, f"Registry case {cid} expected_exited_count not non-negative integer: {c['expected_exited_count']}"
+
+        # Per-step expected events validation
+        ev_list = c["expected_step_events"]
+        if not isinstance(ev_list, list):
+            return False, f"Registry case {cid} expected_step_events is not a list: {type(ev_list)}"
+        if not c["is_negative"]:
+            if len(ev_list) != c["updates_count"]:
+                return False, f"Registry case {cid} expected_step_events length mismatch: obs={len(ev_list)} vs updates={c['updates_count']}"
+        elif c["expected_error_category"] == "DOMAIN_ERROR":
+            if len(ev_list) != 0:
+                return False, f"Registry case {cid} DOMAIN_ERROR must have 0 expected_step_events, got {len(ev_list)}"
+        else:
+            if len(ev_list) != c["updates_count"]:
+                return False, f"Registry case {cid} expected_step_events length mismatch: obs={len(ev_list)} vs updates={c['updates_count']}"
+
+        ent_sum = 0
+        ext_sum = 0
+        for s_idx, ev in enumerate(ev_list):
+            if not isinstance(ev, dict):
+                return False, f"Registry case {cid} expected_step_events[{s_idx}] is not a dict: {ev}"
+            if type(ev.get("step_index")) is not int or isinstance(ev.get("step_index"), bool) or ev.get("step_index") != s_idx:
+                return False, f"Registry case {cid} expected_step_events[{s_idx}] invalid step_index: {ev.get('step_index')}"
+            if ev.get("op") not in ("+", "-", "INSERT", "DELETE", "INS", "DEL"):
+                return False, f"Registry case {cid} expected_step_events[{s_idx}] invalid op: {ev.get('op')}"
+            ent_cnt = ev.get("entered_count")
+            ext_cnt = ev.get("exited_count")
+            if type(ent_cnt) is not int or isinstance(ent_cnt, bool) or ent_cnt < 0:
+                return False, f"Registry case {cid} expected_step_events[{s_idx}] entered_count not non-negative integer: {ent_cnt}"
+            if type(ext_cnt) is not int or isinstance(ext_cnt, bool) or ext_cnt < 0:
+                return False, f"Registry case {cid} expected_step_events[{s_idx}] exited_count not non-negative integer: {ext_cnt}"
+            ent_sum += ent_cnt
+            ext_sum += ext_cnt
+
+        if ent_sum != c["expected_entered_count"]:
+            return False, f"Registry case {cid} expected_step_events entered sum mismatch: sum={ent_sum} vs expected={c['expected_entered_count']}"
+        if ext_sum != c["expected_exited_count"]:
+            return False, f"Registry case {cid} expected_step_events exited sum mismatch: sum={ext_sum} vs expected={c['expected_exited_count']}"
+
         reg_map[cid] = c
 
     wl_ids = [w.get("case_id") for w in workloads if isinstance(w, dict)]
@@ -406,42 +494,38 @@ def validate_required_hand_cases(
     for w in workloads:
         cid = w["case_id"]
         req = reg_map[cid]
-        c_name = req.get("case_name") or req.get("name")
+        c_name = req["case_name"]
         if w.get("name") != c_name:
             return False, f"Case {cid} name mismatch: obs='{w.get('name')}' vs exp='{c_name}'"
-        if w.get("k") != req.get("k"):
-            return False, f"Case {cid} threshold k mismatch: obs={w.get('k')} vs exp={req.get('k')}"
-        if "query_vertices_count" in req:
-            exp_qv = req["query_vertices_count"]
-            obs_qv = len(w.get("query", {}).get("vertices", []))
-            if obs_qv != exp_qv:
-                return False, f"Case {cid} query vertices count mismatch: obs={obs_qv} vs exp={exp_qv}"
-        if "query_edges_count" in req:
-            exp_qe = req["query_edges_count"]
-            obs_qe = len(w.get("query", {}).get("edges", []))
-            if obs_qe != exp_qe:
-                return False, f"Case {cid} query edges count mismatch: obs={obs_qe} vs exp={exp_qe}"
-        if "updates_count" in req:
-            exp_upd = req["updates_count"]
-            obs_upd = len(w.get("updates", []))
-            if obs_upd != exp_upd:
-                return False, f"Case {cid} updates count mismatch: obs={obs_upd} vs exp={exp_upd}"
+        if w.get("k") != req["k"]:
+            return False, f"Case {cid} threshold k mismatch: obs={w.get('k')} vs exp={req['k']}"
+        exp_qv = req["query_vertices_count"]
+        obs_qv = len(w.get("query", {}).get("vertices", []))
+        if obs_qv != exp_qv:
+            return False, f"Case {cid} query vertices count mismatch: obs={obs_qv} vs exp={exp_qv}"
+        exp_qe = req["query_edges_count"]
+        obs_qe = len(w.get("query", {}).get("edges", []))
+        if obs_qe != exp_qe:
+            return False, f"Case {cid} query edges count mismatch: obs={obs_qe} vs exp={exp_qe}"
+        exp_upd = req["updates_count"]
+        obs_upd = len(w.get("updates", []))
+        if obs_upd != exp_upd:
+            return False, f"Case {cid} updates count mismatch: obs={obs_upd} vs exp={exp_upd}"
 
-        # Cryptographic content locking (P3-R4-F04)
-        if "canonical_workload_sha256" in req:
-            exp_w_sha = req["canonical_workload_sha256"]
-            obs_w_sha = compute_canonical_workload_sha256(w)
-            if obs_w_sha != exp_w_sha:
-                return False, f"Case {cid} canonical workload SHA-256 mismatch: obs={obs_w_sha} vs locked={exp_w_sha}"
+        # Mandatory cryptographic content locking (R5-F02)
+        exp_w_sha = req["canonical_workload_sha256"]
+        obs_w_sha = compute_canonical_workload_sha256(w)
+        if obs_w_sha != exp_w_sha:
+            return False, f"Case {cid} canonical workload SHA-256 mismatch: obs={obs_w_sha} vs locked={exp_w_sha}"
 
         is_neg = w.get("expected_error", False)
-        if is_neg != req.get("is_negative"):
-            return False, f"Case {cid} is_negative mismatch: obs={is_neg} vs exp={req.get('is_negative')}"
+        if is_neg != req["is_negative"]:
+            return False, f"Case {cid} is_negative mismatch: obs={is_neg} vs exp={req['is_negative']}"
         if is_neg:
-            if w.get("expected_exit_code") != req.get("expected_exit_code"):
-                return False, f"Case {cid} expected_exit_code mismatch: obs={w.get('expected_exit_code')} vs exp={req.get('expected_exit_code')}"
-            if w.get("expected_error_category") != req.get("expected_error_category"):
-                return False, f"Case {cid} expected_error_category mismatch: obs={w.get('expected_error_category')} vs exp={req.get('expected_error_category')}"
+            if w.get("expected_exit_code") != req["expected_exit_code"]:
+                return False, f"Case {cid} expected_exit_code mismatch: obs={w.get('expected_exit_code')} vs exp={req['expected_exit_code']}"
+            if w.get("expected_error_category") != req["expected_error_category"]:
+                return False, f"Case {cid} expected_error_category mismatch: obs={w.get('expected_error_category')} vs exp={req['expected_error_category']}"
 
     return True, ""
 
@@ -922,6 +1006,12 @@ def validate_native_output_schema(
                     return False, f"Failing step {s_idx} must have commit_status NOT_COMMITTED: {commit_stat}"
                 if err_cat in (None, "", "NONE"):
                     return False, f"Failing step {s_idx} missing error_category: {err_cat}"
+                if err_cat != res_data.get("error_category"):
+                    return False, f"Failing step {s_idx} error_category mismatch with root: obs={err_cat} vs root={res_data.get('error_category')}"
+                if len(step.get("entered_tuples", [])) != 0:
+                    return False, f"Failing step {s_idx} must have 0 entered tuples, got {len(step.get('entered_tuples', []))}"
+                if len(step.get("exited_tuples", [])) != 0:
+                    return False, f"Failing step {s_idx} must have 0 exited tuples, got {len(step.get('exited_tuples', []))}"
             else:
                 if step_stat != "UNATTEMPTED":
                     return False, f"Future step {s_idx} after failure must have status UNATTEMPTED: {step_stat}"
@@ -969,6 +1059,103 @@ def validate_native_output_schema(
                 if t_tuple in seen_tuples:
                     return False, f"Step {s_idx} duplicate tuple in {event_type}: {tup}"
                 seen_tuples.add(t_tuple)
+
+        # Structural graph_state validation whenever present (R5-F01)
+        if "graph_state" in step:
+            gs = step["graph_state"]
+            if not isinstance(gs, dict):
+                return False, f"Step {s_idx} graph_state is not an object: {type(gs)}"
+            vc = gs.get("vertices_count")
+            ec = gs.get("edges_count")
+            if type(vc) is not int or isinstance(vc, bool) or vc < 0:
+                return False, f"Step {s_idx} graph_state vertices_count invalid: {vc} (type={type(vc)})"
+            if type(ec) is not int or isinstance(ec, bool) or ec < 0:
+                return False, f"Step {s_idx} graph_state edges_count invalid: {ec} (type={type(ec)})"
+
+            v_list = gs.get("vertices")
+            if not isinstance(v_list, list) or len(v_list) != vc:
+                return False, f"Step {s_idx} graph_state vertices list length mismatch: obs={len(v_list) if isinstance(v_list, list) else None} vs vc={vc}"
+
+            v_ids = set()
+            for v_obj in v_list:
+                if not isinstance(v_obj, dict):
+                    return False, f"Step {s_idx} graph_state vertex is not an object: {v_obj}"
+                vid = v_obj.get("id")
+                if type(vid) is not int or isinstance(vid, bool) or vid < -9223372036854775808 or vid > 9223372036854775807:
+                    return False, f"Step {s_idx} graph_state vertex id not signed int64: {vid}"
+                if vid in v_ids:
+                    return False, f"Step {s_idx} duplicate vertex id in graph_state: {vid}"
+                v_ids.add(vid)
+                deg = v_obj.get("degree")
+                if type(deg) is not int or isinstance(deg, bool) or deg < 0:
+                    return False, f"Step {s_idx} graph_state vertex {vid} degree not non-negative int: {deg}"
+
+            e_list = gs.get("edges")
+            if not isinstance(e_list, list) or len(e_list) != ec:
+                return False, f"Step {s_idx} graph_state edges list length mismatch: obs={len(e_list) if isinstance(e_list, list) else None} vs ec={ec}"
+
+            e_set = set()
+            for e_obj in e_list:
+                if not isinstance(e_obj, dict):
+                    return False, f"Step {s_idx} graph_state edge is not an object: {e_obj}"
+                u = e_obj.get("u")
+                v = e_obj.get("v")
+                lbl = e_obj.get("label")
+                if type(u) is not int or type(v) is not int or isinstance(u, bool) or isinstance(v, bool) or u < -9223372036854775808 or u > 9223372036854775807 or v < -9223372036854775808 or v > 9223372036854775807:
+                    return False, f"Step {s_idx} edge endpoints not signed int64: u={u}, v={v}"
+                if u == v:
+                    return False, f"Step {s_idx} self-loop in graph_state edges: ({u}, {v})"
+                can_e = (min(u, v), max(u, v), lbl, type(lbl))
+                if can_e in e_set:
+                    return False, f"Step {s_idx} duplicate edge in graph_state: {can_e}"
+                e_set.add(can_e)
+
+            nbrs = gs.get("neighbors")
+            if not isinstance(nbrs, dict):
+                return False, f"Step {s_idx} graph_state neighbors is not an object"
+            exp_nbr_keys = {str(vid) for vid in v_ids}
+            obs_nbr_keys = set(nbrs.keys())
+            if obs_nbr_keys != exp_nbr_keys:
+                return False, f"Step {s_idx} neighbor keys mismatch with vertices: extra={obs_nbr_keys - exp_nbr_keys}, missing={exp_nbr_keys - obs_nbr_keys}"
+
+            nbr_deg_sum = 0
+            for k_str, nbr_list in nbrs.items():
+                if str(int(k_str)) != k_str:
+                    return False, f"Step {s_idx} neighbor key integer round-trip failed: '{k_str}'"
+                k_int = int(k_str)
+                if k_int < -9223372036854775808 or k_int > 9223372036854775807:
+                    return False, f"Step {s_idx} neighbor key out of int64 range: {k_int}"
+                if not isinstance(nbr_list, list):
+                    return False, f"Step {s_idx} neighbor list for {k_str} is not a list"
+                for nid in nbr_list:
+                    if type(nid) is not int or isinstance(nid, bool) or nid < -9223372036854775808 or nid > 9223372036854775807:
+                        return False, f"Step {s_idx} neighbor ID not signed int64: {nid}"
+                    if nid == k_int:
+                        return False, f"Step {s_idx} self-loop neighbor detected for {k_str}"
+                    # Symmetric adjacency
+                    str_nid = str(nid)
+                    if str_nid not in nbrs or k_int not in nbrs[str_nid]:
+                        return False, f"Step {s_idx} asymmetric adjacency: {k_str} -> {nid} but not reverse"
+                if len(nbr_list) != len(set(nbr_list)):
+                    return False, f"Step {s_idx} duplicate neighbor in list for {k_str}: {nbr_list}"
+                nbr_deg_sum += len(nbr_list)
+
+            if nbr_deg_sum != 2 * ec:
+                return False, f"Step {s_idx} graph_state degree sum consistency violated: sum={nbr_deg_sum} vs 2*E={2 * ec}"
+            if sum(v["degree"] for v in v_list) != 2 * ec:
+                return False, f"Step {s_idx} graph_state vertex degree sum mismatch: sum={sum(v['degree'] for v in v_list)} vs 2*E={2 * ec}"
+
+        # Structural codec_state validation whenever present (R5-F01)
+        if "codec_state" in step:
+            cs = step["codec_state"]
+            if not isinstance(cs, dict):
+                return False, f"Step {s_idx} codec_state is not an object: {type(cs)}"
+            for csf in ["query_vertices_count", "data_vertices_count", "vertex_labels_count", "edge_labels_count"]:
+                if csf not in cs:
+                    return False, f"Step {s_idx} codec_state missing field '{csf}'"
+                cval = cs.get(csf)
+                if type(cval) is not int or isinstance(cval, bool) or cval < 0:
+                    return False, f"Step {s_idx} codec_state field '{csf}' not non-negative integer: {cval}"
 
     # 4. Query Metadata & Independent Cut Oracle (P3-R3-F01)
     if is_success and workload and "query" in workload:
@@ -1738,22 +1925,96 @@ def run_hand_and_witness_cases(
                     case_ok = False
                     diag += f"{eng_name} engine_name mismatch on negative test: obs={eng_res.get('engine_name')}. "
 
-                # If the case failed at a step (e.g. CASE_HAND_22), check rollback and commit_status
-                if cid == "CASE_HAND_22":
-                    steps = eng_res.get("steps", [])
-                    if len(steps) != 1:
-                        case_ok = False
-                        diag += f"{eng_name} CASE_HAND_22 steps length mismatch: {len(steps)} != 1. "
+                # Negative execution lifecycle & rollback validation (P3-R5-F01, P3-R5-F03)
+                steps = eng_res.get("steps", [])
+                completed = eng_res.get("execution", {}).get("completed_steps", 0)
+                attempted = eng_res.get("execution", {}).get("attempted_steps", 0)
+
+                # Validate expected_step_events locked contract if present
+                if req_entry and "expected_step_events" in req_entry:
+                    exp_evs = req_entry["expected_step_events"]
+                    if len(exp_evs) > 0:
+                        if len(steps) != len(exp_evs):
+                            case_ok = False
+                            diag += f"{eng_name} steps length mismatch with registry: obs={len(steps)} vs exp={len(exp_evs)}. "
+                        for s_idx, exp_ev in enumerate(exp_evs):
+                            if s_idx < len(steps):
+                                obs_ent = len(steps[s_idx].get("entered_tuples", []))
+                                obs_ext = len(steps[s_idx].get("exited_tuples", []))
+                                if obs_ent != exp_ev.get("entered_count", 0):
+                                    case_ok = False
+                                    diag += f"{eng_name} step {s_idx} entered count mismatch: obs={obs_ent} vs locked={exp_ev.get('entered_count')}. "
+                                if obs_ext != exp_ev.get("exited_count", 0):
+                                    case_ok = False
+                                    diag += f"{eng_name} step {s_idx} exited count mismatch: obs={obs_ext} vs locked={exp_ev.get('exited_count')}. "
                     else:
-                        s0 = steps[0]
-                        if s0.get("commit_status") != "NOT_COMMITTED":
+                        if len(steps) != 0:
                             case_ok = False
-                            diag += f"{eng_name} CASE_HAND_22 failing step not marked NOT_COMMITTED: {s0.get('commit_status')}. "
-                        # Check graph state was not mutated (initial graph had 2 vertices, 0 edges)
-                        g_state = s0.get("graph_state", {})
-                        if g_state.get("vertices_count") != 2 or g_state.get("edges_count") != 0:
+                            diag += f"{eng_name} domain failure expected 0 steps executed, got {len(steps)}. "
+
+                # If steps were attempted, build reference graph model and verify prior & failing step states
+                if attempted > 0 and len(steps) > 0:
+                    G_ref = DStarGraph()
+                    for v_obj in w.get("initial_graph", {}).get("vertices", []):
+                        G_ref.add_vertex(v_obj["id"], v_obj["label"])
+                    for e_obj in w.get("initial_graph", {}).get("edges", []):
+                        G_ref.add_edge(e_obj["u"], e_obj["v"], e_obj["label"])
+
+                    q_v_count = len(w.get("query", {}).get("vertices", []))
+                    d_v_count = len(w.get("initial_graph", {}).get("vertices", []))
+                    all_v_labels = set(v.get("label") for v in w.get("query", {}).get("vertices", []) + w.get("initial_graph", {}).get("vertices", []))
+                    all_e_labels = set(e.get("label") for e in w.get("query", {}).get("edges", []) + w.get("initial_graph", {}).get("edges", []))
+                    codec_ref = {
+                        "query_vertices_count": q_v_count,
+                        "data_vertices_count": d_v_count,
+                        "vertex_labels_count": len(all_v_labels),
+                        "edge_labels_count": len(all_e_labels),
+                    }
+
+                    # Verify completed steps before failure (if any)
+                    updates = w.get("updates", [])
+                    for s_idx in range(completed):
+                        if s_idx < len(updates):
+                            upd = updates[s_idx]
+                            op = "INSERT" if upd.get("op") in ("+", "INSERT", "INS") else "DELETE"
+                            if op == "INSERT":
+                                G_ref.add_edge(upd["u"], upd["v"], upd.get("label", 0))
+                            else:
+                                G_ref.remove_edge(upd["u"], upd["v"])
+                        g_ok, g_diag = validate_graph_state(steps[s_idx].get("graph_state", {}), G_ref, case_id=cid, engine=eng_name, step_index=s_idx)
+                        if not g_ok:
                             case_ok = False
-                            diag += f"{eng_name} CASE_HAND_22 graph mutated despite rollback: v={g_state.get('vertices_count')}, e={g_state.get('edges_count')}. "
+                            diag += f"{eng_name} completed step {s_idx} graph state mismatch: {g_diag}. "
+                        c_ok, c_diag = validate_codec_state(steps[s_idx].get("codec_state", {}), codec_ref, case_id=cid, engine=eng_name, step_index=s_idx)
+                        if not c_ok:
+                            case_ok = False
+                            diag += f"{eng_name} completed step {s_idx} codec state mismatch: {c_diag}. "
+
+                    # Verify failing step (s_idx == completed)
+                    if completed < len(steps):
+                        f_step = steps[completed]
+                        if f_step.get("status") == "SUCCESS":
+                            case_ok = False
+                            diag += f"{eng_name} failing step {completed} has status SUCCESS. "
+                        if f_step.get("commit_status") != "NOT_COMMITTED":
+                            case_ok = False
+                            diag += f"{eng_name} failing step {completed} not marked NOT_COMMITTED: {f_step.get('commit_status')}. "
+                        if f_step.get("error_category") != exp_cat:
+                            case_ok = False
+                            diag += f"{eng_name} failing step {completed} error_category mismatch: obs={f_step.get('error_category')} vs exp={exp_cat}. "
+                        if len(f_step.get("entered_tuples", [])) != 0 or len(f_step.get("exited_tuples", [])) != 0:
+                            case_ok = False
+                            diag += f"{eng_name} failing step {completed} emitted non-zero tuples: entered={len(f_step.get('entered_tuples', []))}, exited={len(f_step.get('exited_tuples', []))}. "
+
+                        # Deep graph-state validation against G_ref (state BEFORE the failed step mutation)
+                        g_ok, g_diag = validate_graph_state(f_step.get("graph_state", {}), G_ref, case_id=cid, engine=eng_name, step_index=completed)
+                        if not g_ok:
+                            case_ok = False
+                            diag += f"{eng_name} failing step {completed} graph state corrupted (rollback failed): {g_diag}. "
+                        c_ok, c_diag = validate_codec_state(f_step.get("codec_state", {}), codec_ref, case_id=cid, engine=eng_name, step_index=completed)
+                        if not c_ok:
+                            case_ok = False
+                            diag += f"{eng_name} failing step {completed} codec state corrupted: {c_diag}. "
         else:
             if run_m1 and (not ok_m1 or not res_m1.get("schema_valid", False)):
                 case_ok = False
