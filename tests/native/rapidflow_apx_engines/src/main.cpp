@@ -357,9 +357,21 @@ int main(int argc, char* argv[]) {
         std::string case_id = root_in.contains("case_id") ? root_in["case_id"].as_string() : "unknown";
         root_out["case_id"] = json::Value(case_id);
 
-        if ((root_in.contains("continue_on_error") && root_in["continue_on_error"].is_bool() && root_in["continue_on_error"].as_bool()) ||
-            (root_in.contains("allow_recovery") && root_in["allow_recovery"].is_bool() && root_in["allow_recovery"].as_bool())) {
-            continue_on_error = true;
+        if (root_in.contains("continue_on_error")) {
+            if (!root_in["continue_on_error"].is_bool()) {
+                throw std::invalid_argument("Field 'continue_on_error' must be boolean, got non-boolean type");
+            }
+            if (root_in["continue_on_error"].as_bool()) {
+                continue_on_error = true;
+            }
+        }
+        if (root_in.contains("allow_recovery")) {
+            if (!root_in["allow_recovery"].is_bool()) {
+                throw std::invalid_argument("Field 'allow_recovery' must be boolean, got non-boolean type");
+            }
+            if (root_in["allow_recovery"].as_bool()) {
+                continue_on_error = true;
+            }
         }
 
         if (root_in.contains("updates") && root_in["updates"].is_array()) {
@@ -636,6 +648,10 @@ int main(int argc, char* argv[]) {
                 step_cnt["edge_lookups"] = json::Value(step_res.step_counters.edge_lookups);
                 step_cnt["vertex_label_checks"] = json::Value(step_res.step_counters.vertex_label_checks);
                 step_cnt["anchors_started"] = json::Value(step_res.step_counters.anchors_started);
+                step_cnt["raw_emissions"] = json::Value(step_res.step_counters.raw_emissions);
+                step_cnt["unique_emissions"] = json::Value(step_res.step_counters.unique_emissions);
+                step_cnt["committed_emissions"] = json::Value(step_res.step_counters.committed_emissions);
+                step_cnt["discarded_emissions"] = json::Value(step_res.step_counters.discarded_emissions);
                 if (engine_type == EngineType::M1) {
                     step_cnt["variants_started"] = json::Value(step_res.step_counters.variants_started);
                     step_cnt["raw_exact_results"] = json::Value(step_res.step_counters.raw_exact_results);

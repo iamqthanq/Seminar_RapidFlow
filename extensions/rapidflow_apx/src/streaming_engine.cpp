@@ -115,7 +115,17 @@ StreamStepResult ApxStreamingEngine::execute_step(const UpdateOperation& update,
         return true;
     };
 
+    uint64_t raw_before = sink_.raw_emissions();
+    uint64_t uniq_before = sink_.unique_emissions();
+    uint64_t com_before = sink_.committed_emissions();
+    uint64_t disc_before = sink_.discarded_emissions();
+
     StepResult step_res = tx_manager_.execute_update(update, callback);
+
+    step_counters_.raw_emissions = sink_.raw_emissions() - raw_before;
+    step_counters_.unique_emissions = sink_.unique_emissions() - uniq_before;
+    step_counters_.committed_emissions = sink_.committed_emissions() - com_before;
+    step_counters_.discarded_emissions = sink_.discarded_emissions() - disc_before;
 
     res.status = step_res.status;
     res.error_message = step_res.error_message;

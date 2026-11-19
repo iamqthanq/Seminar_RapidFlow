@@ -341,6 +341,15 @@ def validate_micro_workload_bounds(workload: Dict[str, Any]) -> Tuple[bool, str]
     if mw is not None and (type(mw) is not int or mw > CANONICAL_MAX_WORK_CAP):
         return False, f"Micro-workload containment violation: max_work={mw} exceeds cap {CANONICAL_MAX_WORK_CAP}"
 
+    if "continue_on_error" in workload:
+        coe = workload["continue_on_error"]
+        if type(coe) is not bool:
+            return False, f"Invalid continue_on_error: must be boolean, got {type(coe).__name__}"
+    if "allow_recovery" in workload:
+        ar = workload["allow_recovery"]
+        if type(ar) is not bool:
+            return False, f"Invalid allow_recovery: must be boolean, got {type(ar).__name__}"
+
     return True, ""
 
 
@@ -847,6 +856,10 @@ def validate_step_counters(
         "edge_lookups",
         "vertex_label_checks",
         "anchors_started",
+        "raw_emissions",
+        "unique_emissions",
+        "committed_emissions",
+        "discarded_emissions",
     ]
     if engine == "m1":
         mandatory_fields.extend(["variants_started", "raw_exact_results", "missing_set_rejections"])
@@ -857,10 +870,15 @@ def validate_step_counters(
         if f not in step_counters:
             return False, f"[{case_id}:{engine}:s{step_index}] step_counters missing required field: {f}"
         val = step_counters[f]
-        if type(val) is not int:
+        if type(val) is not int or isinstance(val, bool):
             return False, f"[{case_id}:{engine}:s{step_index}] step_counters field {f} is not an integer: {val} (type={type(val)})"
-        if val < 0:
-            return False, f"[{case_id}:{engine}:s{step_index}] step_counters field {f} is negative: {val}"
+        if val < 0 or val > 500000000000000:
+            return False, f"[{case_id}:{engine}:s{step_index}] step_counters field {f} is out of bounds (0..5e14): {val}"
+
+    if step_counters["raw_emissions"] < step_counters["unique_emissions"]:
+        return False, f"[{case_id}:{engine}:s{step_index}] step_counters emission invariant violated: raw ({step_counters['raw_emissions']}) < unique ({step_counters['unique_emissions']})"
+    if step_counters["unique_emissions"] != step_counters["committed_emissions"] + step_counters["discarded_emissions"]:
+        return False, f"[{case_id}:{engine}:s{step_index}] step_counters emission invariant violated: unique ({step_counters['unique_emissions']}) != committed ({step_counters['committed_emissions']}) + discarded ({step_counters['discarded_emissions']})"
 
     if step_counters["max_work"] != max_work:
         return False, f"[{case_id}:{engine}:s{step_index}] max_work mismatch: obs={step_counters['max_work']} vs exp={max_work}"
@@ -917,7 +935,42 @@ def validate_native_output_schema(
         if obs_sha != exp_sha:
             return False, f"raw_input_sha256 mismatch: obs={obs_sha} vs exp={exp_sha}"
 
-    # 2. Execution Lifecycle Invariants (P3-R4-F02)
+    # 2. Work Budget Precedence & Authority (P3-R3-F07, P3-R7-F01)
+    wb = res_data.get("work_budget")
+    if not isinstance(wb, dict):
+        return False, "Missing 'work_budget' object in native output"
+    for wbf in ["default_limit", "canonical_cap", "workload_requested_limit", "cli_requested_limit", "effective_limit"]:
+        if wbf not in wb:
+            return False, f"work_budget missing required field '{wbf}'"
+        val = wb.get(wbf)
+        if type(val) is not int or isinstance(val, bool) or val <= 0:
+            return False, f"work_budget field '{wbf}' invalid: {val} (type={type(val)})"
+    if wb["default_limit"] != 500000 or wb["canonical_cap"] != 500000:
+        return False, f"Canonical cap loosened: default={wb['default_limit']}, cap={wb['canonical_cap']}"
+    if wb["effective_limit"] > 500000:
+        return False, f"Effective limit exceeds canonical cap: {wb['effective_limit']} > 500000"
+    exp_eff = min(wb["workload_requested_limit"], wb["cli_requested_limit"], wb["canonical_cap"])
+    if wb["effective_limit"] != exp_eff:
+        return False, f"Effective limit precedence violated: obs={wb['effective_limit']} vs exp={exp_eff}"
+    effective_limit = wb["effective_limit"]
+
+    # Recovery mode strictly requires boolean in workload (R7-F03)
+    allow_recovery = False
+    if workload:
+        coe = workload.get("continue_on_error")
+        if coe is not None:
+            if type(coe) is not bool:
+                return False, f"Invalid continue_on_error in workload: must be boolean, got {type(coe).__name__}"
+            if coe:
+                allow_recovery = True
+        ar = workload.get("allow_recovery")
+        if ar is not None:
+            if type(ar) is not bool:
+                return False, f"Invalid allow_recovery in workload: must be boolean, got {type(ar).__name__}"
+            if ar:
+                allow_recovery = True
+
+    # 3. Execution Lifecycle Invariants (P3-R4-F02, P3-R7-F02)
     exec_info = res_data.get("execution")
     if not isinstance(exec_info, dict):
         return False, "Missing or invalid 'execution' summary object"
@@ -955,6 +1008,14 @@ def validate_native_output_schema(
         "WORK_BUDGET_EXCEEDED", "INPUT_SCHEMA_ERROR", "STEP_FAILURE",
         "IO_ERROR", "RESOURCE_LIMIT", "CONTAINMENT_VIOLATION", "UNCAUGHT_ERROR"
     }
+    ALLOWED_STATUS_CATEGORY_MAP = {
+        "SUCCESS": {"NONE"},
+        "UNATTEMPTED": {"NONE"},
+        "PREVALIDATION_FAILED": {"PREVALIDATION_ERROR"},
+        "FAULT_INJECTED": {"FAULT_INJECTED"},
+        "CALLBACK_ABORTED": {"WORK_BUDGET_EXCEEDED", "CALLBACK_ABORTED", "STEP_FAILURE"},
+        "ERROR": {"INPUT_SCHEMA_ERROR", "STEP_FAILURE", "DOMAIN_ERROR", "IO_ERROR", "UNCAUGHT_ERROR"},
+    }
 
     root_status = res_data.get("status")
     if type(root_status) is not str or root_status not in ALLOWED_ROOT_STATUSES:
@@ -979,16 +1040,41 @@ def validate_native_output_schema(
         if attempted_steps > 0 and failed_steps == 0:
             return False, f"Failing execution with attempted_steps={attempted_steps} must have failed_steps > 0"
 
-    # 3. Steps Array Structural Integrity & Strict Typing (P3-R4-F02, P3-R4-F06)
+    # 4. Steps Array Structural Integrity & Strict Typing (P3-R4-F02, P3-R4-F06, P3-R7-F02)
     steps = res_data.get("steps")
     if not isinstance(steps, list):
         return False, "Missing or invalid 'steps' array"
-    if is_success:
+    if attempted_steps > 0 or is_success:
         if len(steps) != total_steps:
-            return False, f"Steps array length mismatch on SUCCESS: obs={len(steps)} vs total_steps={total_steps}"
+            return False, f"Steps array length mismatch with total_steps: obs={len(steps)} vs total_steps={total_steps}"
+
+        # Step-derived lifecycle counts (R7-F02)
+        obs_completed = sum(1 for s in steps if isinstance(s, dict) and s.get("status") == "SUCCESS")
+        obs_failed = sum(1 for s in steps if isinstance(s, dict) and s.get("status") in {"PREVALIDATION_FAILED", "CALLBACK_ABORTED", "FAULT_INJECTED", "ERROR"})
+        obs_unattempted = sum(1 for s in steps if isinstance(s, dict) and s.get("status") == "UNATTEMPTED")
+        obs_attempted = obs_completed + obs_failed
+
+        if obs_completed != completed_steps:
+            return False, f"Execution summary completed_steps mismatch with steps array: summary={completed_steps} vs steps_observed={obs_completed}"
+        if obs_failed != failed_steps:
+            return False, f"Execution summary failed_steps mismatch with steps array: summary={failed_steps} vs steps_observed={obs_failed}"
+        if obs_unattempted != unattempted_steps:
+            return False, f"Execution summary unattempted_steps mismatch with steps array: summary={unattempted_steps} vs steps_observed={obs_unattempted}"
+        if obs_attempted != attempted_steps:
+            return False, f"Execution summary attempted_steps mismatch with steps array: summary={attempted_steps} vs steps_observed={obs_attempted}"
     else:
-        if attempted_steps > 0 and len(steps) != total_steps:
-            return False, f"Steps array length mismatch on step failure: obs={len(steps)} vs total_steps={total_steps}"
+        # Pre-execution rejection (e.g. DOMAIN_ERROR before update loop started)
+        if len(steps) != 0:
+            return False, f"Pre-execution rejection must have 0 steps in array, got {len(steps)}"
+
+    if not is_success and failed_steps > 0:
+        first_failing_step = next(s for s in steps if isinstance(s, dict) and s.get("status") in {"PREVALIDATION_FAILED", "CALLBACK_ABORTED", "FAULT_INJECTED", "ERROR"})
+        if root_err_cat != first_failing_step.get("error_category"):
+            return False, f"Root error_category mismatch with first failing step: root={root_err_cat} vs step={first_failing_step.get('error_category')}"
+
+    if not is_success and not allow_recovery:
+        if failed_steps > 1:
+            return False, f"Strict default mode allows at most 1 failed step, got {failed_steps}"
 
     workload_updates = workload.get("updates", []) if workload else []
     for s_idx, step in enumerate(steps):
@@ -1010,11 +1096,13 @@ def validate_native_output_schema(
         if type(err_cat) is not str or err_cat not in ALLOWED_ERROR_CATEGORIES:
             return False, f"Step {s_idx} error_category invalid: '{err_cat}'"
 
+        allowed_cats = ALLOWED_STATUS_CATEGORY_MAP.get(step_stat, set())
+        if err_cat not in allowed_cats:
+            return False, f"Step {s_idx} status '{step_stat}' incompatible with error_category '{err_cat}' (allowed: {sorted(allowed_cats)})"
+
         if step_stat == "SUCCESS":
             if commit_stat != "COMMITTED":
                 return False, f"Step {s_idx} status is SUCCESS but commit_status is not COMMITTED: {commit_stat}"
-            if err_cat != "NONE":
-                return False, f"Step {s_idx} status is SUCCESS but error_category is not NONE: {err_cat}"
         else:
             if commit_stat != "NOT_COMMITTED":
                 return False, f"Step {s_idx} status is '{step_stat}' but commit_status is not NOT_COMMITTED: {commit_stat}"
@@ -1023,14 +1111,6 @@ def validate_native_output_schema(
             if len(step.get("exited_tuples", [])) != 0:
                 return False, f"Non-success step {s_idx} must have 0 exited tuples, got {len(step.get('exited_tuples', []))}"
 
-        if step_stat == "UNATTEMPTED":
-            if err_cat != "NONE":
-                return False, f"UNATTEMPTED step {s_idx} error_category must be NONE: {err_cat}"
-        elif step_stat in ("PREVALIDATION_FAILED", "CALLBACK_ABORTED", "FAULT_INJECTED", "ERROR"):
-            if err_cat in (None, "", "NONE"):
-                return False, f"Failing step {s_idx} missing error_category: {err_cat}"
-
-        allow_recovery = bool(workload.get("continue_on_error") or workload.get("allow_recovery")) if workload else False
         if is_success:
             if step_stat != "SUCCESS":
                 return False, f"Root status is SUCCESS but step {s_idx} status is not SUCCESS: {step_stat}"
@@ -1042,30 +1122,52 @@ def validate_native_output_schema(
                 elif s_idx == completed_steps:
                     if step_stat == "SUCCESS":
                         return False, f"Failing step {s_idx} must not have status SUCCESS"
-                    if err_cat != root_err_cat:
-                        return False, f"Failing step {s_idx} error_category mismatch with root: obs={err_cat} vs root={root_err_cat}"
                 else:
                     if step_stat != "UNATTEMPTED":
                         return False, f"Future step {s_idx} after failure must have status UNATTEMPTED: {step_stat}"
 
-        # Step counters structural & semantic validation (R6-F01)
-        if "step_counters" in step:
+        # Step counters structural & semantic validation (R6-F01, R7-F01)
+        if step_stat != "UNATTEMPTED":
+            if "step_counters" not in step:
+                return False, f"Attempted step {s_idx} missing required 'step_counters' object"
             sc = step["step_counters"]
-            if not isinstance(sc, dict):
-                return False, f"Step {s_idx} step_counters is not an object: {type(sc)}"
-            for k, val in sc.items():
-                if type(val) is not int or isinstance(val, bool) or val < 0 or val > 500000000000000:
-                    return False, f"Step {s_idx} step_counters field '{k}' invalid: {val} (type={type(val)})"
-            if "max_work" in sc:
-                if sc["max_work"] <= 0 or sc["max_work"] > 500000:
-                    return False, f"Step {s_idx} step_counters max_work out of range (1..500000): {sc['max_work']}"
-            if "work_units" in sc and "max_work" in sc:
-                if sc["work_units"] > sc["max_work"]:
-                    return False, f"Step {s_idx} step_counters work_units ({sc['work_units']}) exceeds max_work ({sc['max_work']})"
+            val_sc_ok, val_sc_diag = validate_step_counters(
+                step_counters=sc,
+                engine=expected_engine,
+                max_work=effective_limit,
+                is_success=(step_stat == "SUCCESS"),
+                case_id=obs_case_id,
+                step_index=s_idx,
+            )
+            if not val_sc_ok:
+                return False, val_sc_diag
+
+            if step_stat == "SUCCESS":
+                exp_step_tuples = len(step.get("entered_tuples", [])) + len(step.get("exited_tuples", []))
+                if sc["committed_emissions"] != exp_step_tuples:
+                    return False, f"Step {s_idx} committed_emissions ({sc['committed_emissions']}) != tuple count ({exp_step_tuples})"
+                if sc["discarded_emissions"] != 0:
+                    return False, f"Step {s_idx} SUCCESS step must have discarded_emissions == 0, got {sc['discarded_emissions']}"
+            else:
+                if sc["committed_emissions"] != 0:
+                    return False, f"Step {s_idx} failed step must have committed_emissions == 0, got {sc['committed_emissions']}"
+
             if step_stat in ("PREVALIDATION_FAILED", "UNATTEMPTED"):
-                for zero_f in ("work_units", "dfs_states", "candidate_evaluations", "candidate_extensions", "anchors_started", "raw_exact_results", "variants_started"):
+                for zero_f in (
+                    "work_units", "dfs_states", "candidate_evaluations", "candidate_extensions",
+                    "edge_lookups", "vertex_label_checks", "anchors_started",
+                    "raw_emissions", "unique_emissions", "committed_emissions", "discarded_emissions",
+                    "variants_started", "raw_exact_results", "missing_set_rejections",
+                    "edge_decisions", "missing_branches", "commitment_checks", "commitment_rejections"
+                ):
                     if sc.get(zero_f, 0) != 0:
                         return False, f"Step {s_idx} with status '{step_stat}' must have {zero_f} == 0, got {sc.get(zero_f)}"
+        else:
+            if "step_counters" in step:
+                sc = step["step_counters"]
+                for zero_f in ("work_units", "dfs_states", "raw_emissions", "committed_emissions", "discarded_emissions"):
+                    if sc.get(zero_f, 0) != 0:
+                        return False, f"UNATTEMPTED step {s_idx} step_counters field {zero_f} must be 0, got {sc.get(zero_f)}"
 
         if s_idx < len(workload_updates) and step_stat != "UNATTEMPTED":
             upd = workload_updates[s_idx]
@@ -1229,21 +1331,32 @@ def validate_native_output_schema(
         if obs_lambda != oracle_lambda:
             return False, f"computed_lambda mismatch with independent cut oracle: obs={obs_lambda} vs exp={oracle_lambda}"
 
-    # 5. Emission Accounting & Global Counters (P3-R3-F01, P3-R6-F01)
-    if "counters" in res_data:
+    # 5. Emission Accounting & Global Counters (P3-R3-F01, P3-R6-F01, P3-R7-F01)
+    if attempted_steps > 0:
+        if "counters" not in res_data:
+            return False, "Missing required 'counters' object in native output for attempted execution"
         cnt = res_data["counters"]
         if not isinstance(cnt, dict):
             return False, "'counters' in native output is not an object"
-        for ef in ["raw_emissions", "unique_emissions", "committed_emissions", "discarded_emissions"]:
-            if ef not in cnt:
-                return False, f"Root counters missing required emission field '{ef}'"
-            val = cnt.get(ef)
-            if type(val) is not int or isinstance(val, bool) or val < 0 or val > 500000000000000:
-                return False, f"Emission counter '{ef}' invalid: {val} (type={type(val)})"
+        mandatory_root_fields = [
+            "raw_emissions", "unique_emissions", "committed_emissions", "discarded_emissions",
+            "work_units", "max_work", "anchors_started", "dfs_states",
+            "candidate_evaluations", "candidate_extensions", "edge_lookups", "vertex_label_checks",
+        ]
+        if expected_engine == "m1":
+            mandatory_root_fields.extend(["variants_started", "raw_exact_results", "missing_set_rejections"])
+        elif expected_engine == "m2":
+            mandatory_root_fields.extend(["edge_decisions", "missing_branches", "commitment_checks", "commitment_rejections"])
 
-        for ck, cval in cnt.items():
-            if type(cval) is not int or isinstance(cval, bool) or cval < 0 or cval > 500000000000000:
-                return False, f"Root counter '{ck}' invalid: {cval} (type={type(cval)})"
+        for cf in mandatory_root_fields:
+            if cf not in cnt:
+                return False, f"Root counters missing required field '{cf}'"
+            val = cnt[cf]
+            if type(val) is not int or isinstance(val, bool) or val < 0 or val > 500000000000000:
+                return False, f"Root counter '{cf}' invalid: {val} (type={type(val)})"
+
+        if cnt["max_work"] != effective_limit:
+            return False, f"Root max_work mismatch with effective limit: obs={cnt['max_work']} vs exp={effective_limit}"
 
         if cnt["raw_emissions"] < cnt["unique_emissions"]:
             return False, f"Emission invariant violated: raw ({cnt['raw_emissions']}) < unique ({cnt['unique_emissions']})"
@@ -1258,27 +1371,35 @@ def validate_native_output_schema(
         if total_committed_tuples != cnt["committed_emissions"]:
             return False, f"Committed emissions mismatch: step sum={total_committed_tuples} vs counter={cnt['committed_emissions']}"
 
+        # Reconciliation: Root counters MUST equal sum of step counters across attempted steps (R7-F01)
+        reconciliation_fields = [
+            "raw_emissions", "unique_emissions", "committed_emissions", "discarded_emissions",
+            "work_units", "anchors_started", "dfs_states",
+            "candidate_evaluations", "candidate_extensions",
+            "edge_lookups", "vertex_label_checks",
+        ]
+        if expected_engine == "m1":
+            reconciliation_fields.extend(["variants_started", "raw_exact_results", "missing_set_rejections"])
+        elif expected_engine == "m2":
+            reconciliation_fields.extend(["edge_decisions", "missing_branches", "commitment_checks", "commitment_rejections"])
+
+        for rf in reconciliation_fields:
+            step_sum = sum(s["step_counters"][rf] for s in steps if "step_counters" in s)
+            if cnt[rf] != step_sum:
+                return False, f"Root counter '{rf}' mismatch with sum of step counters: root={cnt[rf]} vs step_sum={step_sum}"
+
+        # Zero-side-effect verification: If all attempted steps are PREVALIDATION_FAILED, root work and emissions MUST be 0
+        all_preval = all(s.get("status") == "PREVALIDATION_FAILED" for s in steps if s.get("status") != "UNATTEMPTED")
+        if all_preval:
+            for zf in ("raw_emissions", "unique_emissions", "committed_emissions", "discarded_emissions", "work_units", "dfs_states"):
+                if cnt[zf] != 0:
+                    return False, f"Execution failed at prevalidation must have root {zf} == 0, got {cnt[zf]}"
+
         if is_success:
             if cnt["discarded_emissions"] != 0:
                 return False, f"Canonical run must have 0 discarded emissions (zero duplicates), got: {cnt['discarded_emissions']}"
     elif is_success:
         return False, "Missing required 'counters' object on SUCCESS"
-
-    # 6. Work Budget Precedence & Authority (P3-R3-F07)
-    wb = res_data.get("work_budget")
-    if not isinstance(wb, dict):
-        return False, "Missing 'work_budget' object in native output"
-    for wbf in ["default_limit", "canonical_cap", "workload_requested_limit", "cli_requested_limit", "effective_limit"]:
-        val = wb.get(wbf)
-        if type(val) is not int or val <= 0:
-            return False, f"work_budget field '{wbf}' invalid: {val} (type={type(val)})"
-    if wb["default_limit"] != 500000 or wb["canonical_cap"] != 500000:
-        return False, f"Canonical cap loosened: default={wb['default_limit']}, cap={wb['canonical_cap']}"
-    if wb["effective_limit"] > 500000:
-        return False, f"Effective limit exceeds canonical cap: {wb['effective_limit']} > 500000"
-    exp_eff = min(wb["workload_requested_limit"], wb["cli_requested_limit"], wb["canonical_cap"])
-    if wb["effective_limit"] != exp_eff:
-        return False, f"Effective limit precedence violated: obs={wb['effective_limit']} vs exp={exp_eff}"
 
     return True, ""
 
@@ -1992,10 +2113,19 @@ def run_hand_and_witness_cases(
                     case_ok = False
                     diag += f"{eng_name} engine_name mismatch on negative test: obs={eng_res.get('engine_name')}. "
 
-                # Negative execution lifecycle & rollback validation (P3-R5-F01, P3-R5-F03)
+                # Negative execution lifecycle & rollback validation (P3-R5-F01, P3-R5-F03, P3-R7-F01)
                 steps = eng_res.get("steps", [])
                 completed = eng_res.get("execution", {}).get("completed_steps", 0)
                 attempted = eng_res.get("execution", {}).get("attempted_steps", 0)
+
+                if c_cat == "PREVALIDATION_ERROR" and completed == 0:
+                    cnt = eng_res.get("counters", {})
+                    if cnt.get("raw_emissions", 0) != 0 or cnt.get("unique_emissions", 0) != 0 or cnt.get("committed_emissions", 0) != 0 or cnt.get("discarded_emissions", 0) != 0:
+                        case_ok = False
+                        diag += f"{eng_name} prevalidation failure must have zero emissions, got: raw={cnt.get('raw_emissions')}, unique={cnt.get('unique_emissions')}, committed={cnt.get('committed_emissions')}, discarded={cnt.get('discarded_emissions')}. "
+                    if cnt.get("work_units", 0) != 0 or cnt.get("dfs_states", 0) != 0:
+                        case_ok = False
+                        diag += f"{eng_name} prevalidation failure must have zero work, got work_units={cnt.get('work_units')}, dfs_states={cnt.get('dfs_states')}. "
 
                 # Validate expected_step_events locked contract if present
                 if req_entry and "expected_step_events" in req_entry:
@@ -2044,10 +2174,15 @@ def run_hand_and_witness_cases(
                         if s_idx < len(updates):
                             upd = updates[s_idx]
                             op = "INSERT" if upd.get("op") in ("+", "INSERT", "INS") else "DELETE"
-                            if op == "INSERT":
-                                G_ref.add_edge(upd["u"], upd["v"], upd.get("label", 0))
-                            else:
-                                G_ref.remove_edge(upd["u"], upd["v"])
+                            try:
+                                if op == "INSERT":
+                                    G_ref.add_edge(upd["u"], upd["v"], upd.get("label", 0))
+                                else:
+                                    G_ref.remove_edge(upd["u"], upd["v"])
+                            except Exception as ex:
+                                case_ok = False
+                                diag += f"{eng_name} failed to apply completed step {s_idx} update to reference graph: {ex}. "
+                                break
                         g_ok, g_diag = validate_graph_state(steps[s_idx].get("graph_state", {}), G_ref, case_id=cid, engine=eng_name, step_index=s_idx)
                         if not g_ok:
                             case_ok = False

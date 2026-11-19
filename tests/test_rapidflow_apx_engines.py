@@ -1020,12 +1020,40 @@ class TestRapidFlowApxEngines(unittest.TestCase):
                 "error_category": "NONE",
                 "entered_tuples": [],
                 "exited_tuples": [],
+                "step_counters": {
+                    "work_units": 0,
+                    "max_work": 500000,
+                    "dfs_states": 0,
+                    "candidate_evaluations": 0,
+                    "candidate_extensions": 0,
+                    "edge_lookups": 0,
+                    "vertex_label_checks": 0,
+                    "anchors_started": 0,
+                    "raw_emissions": 0,
+                    "unique_emissions": 0,
+                    "committed_emissions": 0,
+                    "discarded_emissions": 0,
+                    "variants_started": 0,
+                    "raw_exact_results": 0,
+                    "missing_set_rejections": 0,
+                },
             }],
             "counters": {
                 "raw_emissions": 0,
                 "unique_emissions": 0,
                 "committed_emissions": 0,
                 "discarded_emissions": 0,
+                "work_units": 0,
+                "max_work": 500000,
+                "anchors_started": 0,
+                "dfs_states": 0,
+                "candidate_evaluations": 0,
+                "candidate_extensions": 0,
+                "edge_lookups": 0,
+                "vertex_label_checks": 0,
+                "variants_started": 0,
+                "raw_exact_results": 0,
+                "missing_set_rejections": 0,
             },
             "work_budget": {
                 "default_limit": 500000,
@@ -1691,6 +1719,166 @@ class TestRapidFlowApxEngines(unittest.TestCase):
         cmd_invalid_eng = [sys.executable, str(runner_script), "--engine", "invalid_engine_name"]
         proc_eng = subprocess.run(cmd_invalid_eng, capture_output=True, text=True, cwd=REPO_ROOT)
         record_mutation("Level C: Invalid engine option rejected with non-zero exit", proc_eng.returncode != 0)
+
+        # -----------------------------------------------------------------
+        # Round 7 Remediation Mutations (R7-F01, R7-F02, R7-F03, R7-F04)
+        # -----------------------------------------------------------------
+        # 86. Negative step with fake emissions on disk rejected fail-closed (R7-F01)
+        def mut_86(d):
+            d["counters"]["raw_emissions"] = 10
+            d["counters"]["unique_emissions"] = 10
+            d["counters"]["committed_emissions"] = 0
+            d["counters"]["discarded_emissions"] = 10
+            return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_86)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand22)
+            record_mutation("Level C: fake emissions (10,10,0,10) on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 87. Negative step with fake work units on disk rejected fail-closed (R7-F01)
+        def mut_87(d):
+            d["counters"]["work_units"] = 1
+            return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_87)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand22)
+            record_mutation("Level C: fake work_units=1 on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 88. Negative root max_work mutated to 1 on disk rejected fail-closed (R7-F01)
+        def mut_88(d):
+            d["counters"]["max_work"] = 1
+            return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_88)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand22)
+            record_mutation("Level C: root max_work=1 on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 89. Recovery execution summary mismatch on disk rejected fail-closed (R7-F02)
+        def mut_89(d):
+            d["execution"]["failed_steps"] = 1
+            d["execution"]["completed_steps"] = 2
+            d["steps"][0]["status"] = "FAULT_INJECTED"
+            d["steps"][0]["commit_status"] = "NOT_COMMITTED"
+            d["steps"][0]["error_category"] = "FAULT_INJECTED"
+            return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_89)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand22)
+            record_mutation("Level C: Recovery execution summary mismatch on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 90. Status FAULT_INJECTED with incompatible error_category ERROR on disk rejected (R7-F02)
+        def mut_90(d):
+            d["steps"][0]["error_category"] = "INPUT_SCHEMA_ERROR"
+            return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_90)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand22)
+            record_mutation("Level C: Incompatible status-category on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 91. Status PREVALIDATION_FAILED with incompatible error_category on disk rejected (R7-F02)
+        def mut_91(d):
+            d["steps"][0]["error_category"] = "CALLBACK_ABORTED"
+            return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_91)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand22)
+            record_mutation("Level C: PREVALIDATION_FAILED with CALLBACK_ABORTED rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 92. Workload with string continue_on_error rejected fail-closed (R7-F03)
+        wl_str_coe = copy.deepcopy(wl_hand01)
+        wl_str_coe["continue_on_error"] = "true"
+        r_str, _, _ = run_workload_on_binary(self.binary_path, "m1", wl_str_coe)
+        record_mutation("Level C: String continue_on_error rejected with containment error", r_str.get("status") == "CONTAINMENT_VIOLATION")
+
+        # 93. Workload with int continue_on_error rejected fail-closed (R7-F03)
+        wl_int_coe = copy.deepcopy(wl_hand01)
+        wl_int_coe["continue_on_error"] = 1
+        r_int, _, _ = run_workload_on_binary(self.binary_path, "m1", wl_int_coe)
+        record_mutation("Level C: Integer continue_on_error rejected with containment error", r_int.get("status") == "CONTAINMENT_VIOLATION")
+
+        # 94. Level D (D01): End-to-end canonical runner control flow rejects corrupted emissions on CASE_HAND_22 (R7-F04)
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tf:
+            d01_sum_path = Path(tf.name)
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_86)
+        runner_mod.check_git_provenance = lambda: ({"dirty_state": "CLEAN", "repo_commit": "HEAD", "upstream_commit": "2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1", "upstream_pristine": True}, True)
+        d01_exit_code = 0
+        try:
+            sys.argv = ["run_rapidflow_apx_engines.py", "--stage", "hand", "--output", str(d01_sum_path)]
+            try:
+                runner_mod.main()
+            except SystemExit as se:
+                d01_exit_code = se.code
+            d01_sum = json.loads(d01_sum_path.read_text()) if d01_sum_path.is_file() else {}
+            d01_failed = (d01_exit_code != 0 and d01_sum.get("stages", {}).get("hand_cases", {}).get("status") == "FAIL" and d01_sum.get("overall_status") != "P3_ENGINES_VERIFIED")
+            record_mutation("Level D: Corrupted emissions fails canonical runner and exits nonzero", d01_failed)
+        finally:
+            runner_mod.execute_contained_subprocess = orig_exec
+            runner_mod.check_git_provenance = check_git_provenance
+            if d01_sum_path.exists(): d01_sum_path.unlink()
+
+        # 95. Level D (D02): End-to-end canonical runner rejects corrupted work_units on CASE_HAND_22 (R7-F04)
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tf:
+            d02_sum_path = Path(tf.name)
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_87)
+        runner_mod.check_git_provenance = lambda: ({"dirty_state": "CLEAN", "repo_commit": "HEAD", "upstream_commit": "2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1", "upstream_pristine": True}, True)
+        d02_exit_code = 0
+        try:
+            sys.argv = ["run_rapidflow_apx_engines.py", "--stage", "hand", "--output", str(d02_sum_path)]
+            try:
+                runner_mod.main()
+            except SystemExit as se:
+                d02_exit_code = se.code
+            d02_sum = json.loads(d02_sum_path.read_text()) if d02_sum_path.is_file() else {}
+            d02_failed = (d02_exit_code != 0 and d02_sum.get("stages", {}).get("hand_cases", {}).get("status") == "FAIL" and d02_sum.get("overall_status") != "P3_ENGINES_VERIFIED")
+            record_mutation("Level D: Corrupted work units fails canonical runner and exits nonzero", d02_failed)
+        finally:
+            runner_mod.execute_contained_subprocess = orig_exec
+            runner_mod.check_git_provenance = check_git_provenance
+            if d02_sum_path.exists(): d02_sum_path.unlink()
+
+        # 96. Level D (D03): Diagnostic runner rejects corrupted recovery lifecycle on disk (R7-F04)
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tf:
+            d03_sum_path = Path(tf.name)
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_89)
+        runner_mod.check_git_provenance = lambda: ({"dirty_state": "CLEAN", "repo_commit": "HEAD", "upstream_commit": "2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1", "upstream_pristine": True}, True)
+        d03_exit_code = 0
+        try:
+            sys.argv = ["run_rapidflow_apx_engines.py", "--stage", "hand", "--case", "CASE_HAND_22", "--output", str(d03_sum_path)]
+            try:
+                runner_mod.main()
+            except SystemExit as se:
+                d03_exit_code = se.code
+            d03_sum = json.loads(d03_sum_path.read_text()) if d03_sum_path.is_file() else {}
+            d03_failed = (d03_exit_code != 0 and d03_sum.get("overall_status") != "DIAGNOSTIC_SUBSET_PASS")
+            record_mutation("Level D: Recovery lifecycle mismatch fails diagnostic runner and exits nonzero", d03_failed)
+        finally:
+            runner_mod.execute_contained_subprocess = orig_exec
+            runner_mod.check_git_provenance = check_git_provenance
+            if d03_sum_path.exists(): d03_sum_path.unlink()
+
+        # 97. Level D (D04): Positive canonical control uncorrupted execution passes cleanly (R7-F04)
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tf:
+            d04_sum_path = Path(tf.name)
+        runner_mod.check_git_provenance = lambda: ({"dirty_state": "CLEAN", "repo_commit": "HEAD", "upstream_commit": "2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1", "upstream_pristine": True}, True)
+        d04_exit_code = 0
+        try:
+            sys.argv = ["run_rapidflow_apx_engines.py", "--stage", "hand", "--case", "CASE_HAND_01", "--output", str(d04_sum_path)]
+            try:
+                runner_mod.main()
+            except SystemExit as se:
+                d04_exit_code = se.code
+            d04_sum = json.loads(d04_sum_path.read_text()) if d04_sum_path.is_file() else {}
+            d04_passed = (d04_exit_code == 0 and d04_sum.get("overall_status") == "DIAGNOSTIC_SUBSET_PASS")
+            record_mutation("Level D: Positive canonical control passes with exit code 0", d04_passed)
+        finally:
+            runner_mod.check_git_provenance = check_git_provenance
+            if d04_sum_path.exists(): d04_sum_path.unlink()
 
         # Verify 100% mutation detection score (Part 18.5)
         detection_rate = (mutations_detected / mutations_injected) * 100.0
