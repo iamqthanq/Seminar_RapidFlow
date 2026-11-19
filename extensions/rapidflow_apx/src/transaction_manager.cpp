@@ -1,4 +1,5 @@
 #include "rapidflow_apx/transaction_manager.h"
+#include "rapidflow_apx/engine_counters.h"
 #include <new>
 
 namespace rapidflow_apx {
@@ -152,6 +153,8 @@ StepResult ApxTransactionManager::execute_update(
     bool callback_ok = false;
     try {
         callback_ok = callback(graph_, update, dense_u, dense_v, dense_label);
+    } catch (const FaultInjectedException& ex) {
+        return abort_and_rollback(StepStatus::FAULT_INJECTED, std::string("Fault injected in callback: ") + ex.what());
     } catch (const DuplicateEmissionException& ex) {
         return abort_and_rollback(StepStatus::CALLBACK_ABORTED, std::string("Duplicate raw emission detected in callback: ") + ex.what());
     } catch (const NonInjectiveMappingException& ex) {

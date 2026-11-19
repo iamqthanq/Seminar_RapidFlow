@@ -33,6 +33,11 @@ public:
     explicit InvalidQueryException(const std::string& msg) : EngineException(msg) {}
 };
 
+class FaultInjectedException : public EngineException {
+public:
+    explicit FaultInjectedException(const std::string& msg) : EngineException(msg) {}
+};
+
 struct EngineCounters {
     // Common event search counters
     uint64_t anchors_started{0};

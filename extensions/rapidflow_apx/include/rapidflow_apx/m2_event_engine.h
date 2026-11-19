@@ -16,11 +16,32 @@ enum class EdgeCommitment : uint8_t {
     MISSING = 2
 };
 
+enum class M2FaultHook : uint8_t {
+    NONE = 0,
+    AFTER_MISSING_COMMITMENT = 1,
+    AFTER_VERTEX_ASSIGNMENT = 2
+};
+
 class ApxM2EventEngine {
 public:
     static constexpr uint32_t UNASSIGNED = 0xFFFFFFFF;
 
     explicit ApxM2EventEngine() = default;
+
+    // Controlled test-only fault hook
+    void set_fault_hook(M2FaultHook hook) noexcept { fault_hook_ = hook; }
+    M2FaultHook get_fault_hook() const noexcept { return fault_hook_; }
+
+    // Helper used by dfs_m2 to find the best frontier edge across the cut.
+    // If no frontier edge exists while unmapped vertices remain and missing_count <= k,
+    // it enforces the empty frontier invariant and throws InvariantViolationException.
+    static int find_frontier_edge(
+        const std::vector<uint32_t>& mapping,
+        const std::vector<EdgeCommitment>& status,
+        uint32_t missing_count,
+        uint32_t assigned_count,
+        const ApxQueryPlan& query_plan
+    );
 
     // Searches for entered or exited events around the updated edge
     // snapshot must be G_after for INSERT and G_before for DELETE
@@ -35,6 +56,8 @@ public:
     );
 
 private:
+    M2FaultHook fault_hook_{M2FaultHook::NONE};
+
     void dfs_m2(
         std::vector<uint32_t>& mapping,
         std::vector<bool>& used_data,

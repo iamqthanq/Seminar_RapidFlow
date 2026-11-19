@@ -2558,6 +2558,178 @@ class TestRapidFlowApxEngines(unittest.TestCase):
             self.assertFalse(v_ok, "UNATTEMPTED step with empty step_counters must be rejected under Option A")
             self.assertIn("must not contain 'step_counters'", v_diag)
 
+    # =========================================================================
+    # Group X: Final Acceptance Verification & Seam Tests (FC-03, FC-04)
+    # =========================================================================
+
+    def test_native_empty_frontier_invariant_witness(self):
+        """FC-03: Verifies native C++ empty frontier invariant witness via --test-empty-frontier.
+        Asserts positive control passes, artificial empty frontier throws InvariantViolationException,
+        state integrity is preserved, and D-R public guard rejects k >= lambda(Q) pre-search."""
+        # 1. Native C++ seam execution
+        proc = subprocess.run(
+            [str(self.binary_path), "--test-empty-frontier"],
+            capture_output=True,
+            text=True,
+            cwd=str(REPO_ROOT)
+        )
+        self.assertEqual(proc.returncode, 0, f"Native empty frontier test failed: {proc.stderr}")
+        self.assertIn('"test": "native_empty_frontier_invariant"', proc.stdout)
+        self.assertIn('"status": "PASS"', proc.stdout)
+        self.assertIn('"positive_control": "PASS"', proc.stdout)
+        self.assertIn('"negative_control": "PASS"', proc.stdout)
+        self.assertIn('"state_integrity": "PASS"', proc.stdout)
+
+        # 2. D-R isolation: public workload with k >= lambda(Q) rejected at domain preflight (ExitCode 3)
+        cases = runner_mod.build_hand_workloads()
+        c21 = [c for c in cases if c["case_id"] == "CASE_HAND_21"][0]
+        res, _, _ = run_workload_on_binary(self.binary_path, "m2", c21)
+        self.assertEqual(res.get("exit_code"), 3, "CASE_HAND_21 with k >= lambda(Q) must exit with code 3 (DOMAIN_ERROR)")
+        self.assertEqual(res.get("error_category"), "DOMAIN_ERROR")
+
+    def test_m2_fault_isolation_after_missing_commitment(self):
+        """FC-04: Verifies fault isolation immediately after MISSING commitment in M2 DFS.
+        Positive control: CASE_HAND_15 executes with missing_branches > 0, producing 8 entered tuples.
+        Faulted run: injects AFTER_MISSING_COMMITMENT fault hook ->
+                     transaction aborts, 0 tuples committed, graph restored, codec restored,
+                     honest work counters recorded."""
+        cases = runner_mod.build_hand_workloads()
+        c15 = [c for c in cases if c["case_id"] == "CASE_HAND_15"][0]
+
+        # Positive control
+        res_pos, _, _ = run_workload_on_binary(self.binary_path, "m2", c15)
+        self.assertEqual(res_pos.get("exit_code"), 0)
+        self.assertEqual(res_pos.get("status"), "SUCCESS")
+        self.assertGreater(res_pos.get("counters", {}).get("missing_branches", 0), 0)
+        self.assertEqual(len(res_pos["steps"][0]["entered_tuples"]), 8)
+
+        # Faulted run
+        c15_fault = copy.deepcopy(c15)
+        c15_fault["updates"][0]["fault"] = "AFTER_MISSING_COMMITMENT"
+        res_fault, _, _ = run_workload_on_binary(self.binary_path, "m2", c15_fault)
+        self.assertEqual(res_fault.get("status"), "FAIL")
+        self.assertEqual(res_fault.get("exit_code"), 6)
+        self.assertEqual(res_fault.get("error_category"), "FAULT_INJECTED")
+        self.assertTrue(res_fault.get("schema_valid"))
+
+        step = res_fault["steps"][0]
+        self.assertEqual(step["status"], "FAULT_INJECTED")
+        self.assertEqual(step["commit_status"], "NOT_COMMITTED")
+        self.assertIn("Simulated fault injected AFTER_MISSING_COMMITMENT", step["error"])
+        self.assertEqual(len(step["entered_tuples"]), 0)
+        self.assertEqual(step["graph_state"]["edges_count"], 2)  # Restored to 2 edges
+        self.assertEqual(step["step_counters"]["missing_branches"], 1)
+
+    def test_m2_fault_isolation_after_vertex_assignment(self):
+        """FC-04: Verifies fault isolation immediately after vertex assignment in M2 DFS.
+        Injects AFTER_VERTEX_ASSIGNMENT fault hook ->
+        transaction aborts, 0 tuples committed, graph restored, codec restored."""
+        cases = runner_mod.build_hand_workloads()
+        c15 = [c for c in cases if c["case_id"] == "CASE_HAND_15"][0]
+
+        c15_fault = copy.deepcopy(c15)
+        c15_fault["updates"][0]["fault"] = "AFTER_VERTEX_ASSIGNMENT"
+        res_fault, _, _ = run_workload_on_binary(self.binary_path, "m2", c15_fault)
+        self.assertEqual(res_fault.get("status"), "FAIL")
+        self.assertEqual(res_fault.get("exit_code"), 6)
+        self.assertEqual(res_fault.get("error_category"), "FAULT_INJECTED")
+        self.assertTrue(res_fault.get("schema_valid"))
+
+        step = res_fault["steps"][0]
+        self.assertEqual(step["status"], "FAULT_INJECTED")
+        self.assertEqual(step["commit_status"], "NOT_COMMITTED")
+        self.assertIn("Simulated fault injected AFTER_VERTEX_ASSIGNMENT", step["error"])
+        self.assertEqual(len(step["entered_tuples"]), 0)
+        self.assertEqual(step["graph_state"]["edges_count"], 2)  # Restored to 2 edges
+        self.assertEqual(step["step_counters"]["anchors_started"], 1)
+
+    def test_m2_recovery_lifecycle_after_missing_commitment_fault(self):
+        """FC-04: Verifies full transaction lifecycle recovery on the SAME engine instance after MISSING commitment fault:
+        Step 0: Valid transaction commits -> graph has 2 edges, 0 entered.
+        Step 1: Active transaction enters MISSING branch and aborts (AFTER_MISSING_COMMITMENT fault) ->
+                rolls back graph, restores codec, discards staged tuples, commit_status NOT_COMMITTED.
+        Step 2: Subsequent valid transaction on SAME engine instance without reinitialization ->
+                successfully applies mutation, computes 8 entered tuples matching DStar Oracle, and commits!"""
+        cases = runner_mod.build_hand_workloads()
+        c15 = [c for c in cases if c["case_id"] == "CASE_HAND_15"][0]
+        wl = {
+            "case_id": "test_m2_recovery_lifecycle",
+            "query": c15["query"],
+            "k": c15["k"],
+            "initial_graph": {
+                "vertices": [{"id": v, "label": 0} for v in (10, 20, 30, 40)],
+                "edges": [{"u": 10, "v": 20, "label": 0}]
+            },
+            "continue_on_error": True,
+            "updates": [
+                {"op": "+", "u": 20, "v": 30, "label": 0},
+                {"op": "+", "u": 30, "v": 40, "label": 0, "fault": "AFTER_MISSING_COMMITMENT"},
+                {"op": "+", "u": 30, "v": 40, "label": 0}
+            ]
+        }
+        res, _, _ = run_workload_on_binary(self.binary_path, "m2", wl)
+        self.assertEqual(res.get("status"), "FAIL")
+        self.assertEqual(res.get("exit_code"), 6)
+        exec_info = res.get("execution", {})
+        self.assertEqual(exec_info.get("total_steps"), 3)
+        self.assertEqual(exec_info.get("completed_steps"), 2)
+        self.assertEqual(exec_info.get("failed_steps"), 1)
+
+        s0, s1, s2 = res["steps"]
+        self.assertEqual(s0["status"], "SUCCESS")
+        self.assertEqual(s0["commit_status"], "COMMITTED")
+        self.assertEqual(s0["graph_state"]["edges_count"], 2)
+
+        self.assertEqual(s1["status"], "FAULT_INJECTED")
+        self.assertEqual(s1["commit_status"], "NOT_COMMITTED")
+        self.assertEqual(s1["graph_state"]["edges_count"], 2)  # Rolled back
+        self.assertEqual(len(s1["entered_tuples"]), 0)
+
+        self.assertEqual(s2["status"], "SUCCESS")
+        self.assertEqual(s2["commit_status"], "COMMITTED")
+        self.assertEqual(s2["graph_state"]["edges_count"], 3)
+        self.assertEqual(len(s2["entered_tuples"]), 8)
+
+    def test_m2_dfs_sibling_rollback_isolation(self):
+        """FC-04: Verifies DFS sibling branch rollback isolation in M2 (CASE_HAND_16).
+        M2 commits MISSING on chord, extension encounters chord presence in data graph, branch rolls back commitments,
+        and sibling branches continue exploring to find all 16 automorphisms without contamination."""
+        cases = runner_mod.build_hand_workloads()
+        c16 = [c for c in cases if c["case_id"] == "CASE_HAND_16"][0]
+        res, _, _ = run_workload_on_binary(self.binary_path, "m2", c16)
+        self.assertEqual(res.get("status"), "SUCCESS")
+        self.assertEqual(res.get("exit_code"), 0)
+        counters = res.get("counters", {})
+        self.assertGreater(counters.get("commitment_checks", 0), 0)
+        self.assertGreater(counters.get("missing_branches", 0), 0)
+        self.assertEqual(len(res["steps"][0]["entered_tuples"]), 16)
+        self.assertEqual(counters.get("raw_emissions"), 16)
+        self.assertEqual(counters.get("committed_emissions"), 16)
+        self.assertEqual(counters.get("discarded_emissions"), 0)
+
+    def test_work_limit_exhaustion_approximate_path(self):
+        """FC-04: Verifies work-limit exhaustion on approximate path (k=1) with genuine search.
+        Workload CASE_HAND_15 (108 work units) executed with max_work=10 ->
+        aborts with exit code 4 (WORK_BUDGET_EXCEEDED), 0 partial tuples committed,
+        graph state rolled back, honest work units reported (work_units=11 > max_work=10)."""
+        cases = runner_mod.build_hand_workloads()
+        c15 = [c for c in cases if c["case_id"] == "CASE_HAND_15"][0]
+        c15_lim = copy.deepcopy(c15)
+        c15_lim["max_work"] = 10
+        res, _, _ = run_workload_on_binary(self.binary_path, "m2", c15_lim)
+        self.assertEqual(res.get("exit_code"), 4, "Expected exit code 4 (WORK_BUDGET_EXCEEDED)")
+        self.assertEqual(res.get("status"), "FAIL")
+        self.assertEqual(res.get("error_category"), "WORK_BUDGET_EXCEEDED")
+        self.assertTrue(res.get("schema_valid"))
+
+        step = res["steps"][0]
+        self.assertEqual(step["status"], "CALLBACK_ABORTED")
+        self.assertEqual(step["commit_status"], "NOT_COMMITTED")
+        self.assertEqual(len(step["entered_tuples"]), 0)
+        self.assertEqual(step["graph_state"]["edges_count"], 2)  # Rolled back to 2 edges
+        self.assertEqual(res["counters"]["work_units"], 11)
+        self.assertEqual(res["work_budget"]["effective_limit"], 10)
+
 
 if __name__ == "__main__":
     unittest.main()

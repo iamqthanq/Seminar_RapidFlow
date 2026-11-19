@@ -9,18 +9,20 @@
 - Distinguish count-only from full explicit delta embeddings. Do not claim correctness or speedup from only a smoke count.
 - Every PR requires complete attempted cases, input SHA-256, exact commands, CPU/RAM/compiler/flags, exit code, times, RSS, logs, limitations and independent oracle evidence when requested.
 - Classify claims PAPER/BUILD/SMOKE/CORRECT/BENCHMARK/HYPOTHESIS. All phases need manager review, external AI critique and explicit approval before next gate.
-- Current Active Direction: **Direction D (Issue #32 / Draft PR #32 / D-INT-03 / Phase P3)**. Objective: Implement native C++ M1-enum and bare M2 event search engines in `extensions/rapidflow_apx`, integrate with Phase P2 foundation, verify 100% against independent Python M0 Ground Truth Oracle across 840 corpus cases and 56 dynamic streams, and complete Decision Record R3.
+- Current Active Direction: **Direction D (Issue #32 / Draft PR #33 / D-INT-03 / Phase P3)**. Objective: Implement native C++ M1-enum and bare M2 event search engines in `extensions/rapidflow_apx`, integrate with Phase P2 foundation, verify 100% against independent Python M0 Ground Truth Oracle across 840 corpus cases and 56 dynamic streams, and complete Decision Record R3.
 - **Status of Phase P2:** Merged into `QuangThang` via Draft PR #31 (`88fbe200ff9217f4dccbad08bfa448d067d2ce4e`), Issue #30 closed.
-- **Status of Phase P3:** Implementation and canonical verification complete.
+- **Status of Phase P3:** Implementation and canonical verification complete (Final Definition of Done Closure).
   - Implemented `ApxQueryPlan` (native $\lambda(Q)$ via Edmonds-Karp BFS augmenting path max-flow, fail-closed D-R validation $0 \le k < \lambda(Q)$, incident edge indexing).
   - Implemented `ApxM1EnumEngine` (exact $Q - D$ variant search, anchored seed mapping, strict $R(f) = D$ missing set filter).
-  - Implemented `ApxM2EventEngine` (bare direct DFS branching on PRESENT/MISSING, deferred vertex commitments, incident edge resolution, leaf invariant guard).
+  - Implemented `ApxM2EventEngine` (bare direct DFS branching on PRESENT/MISSING, deferred vertex commitments, incident edge resolution, leaf invariant guard, exposed `find_frontier_edge` seam, deterministic fault hooks).
   - Implemented `ApxStreamingEngine` (ACID transaction execution, label interning, duplicate suppression, active-set tracking).
-  - Built standalone native harness `tests/native/rapidflow_apx_engines/build/rapidflow_apx_native` (SHA-256: `1983466500e00570a15dcb8f28b8d1bdee51f1cb5657dd3f21413d2211593654`).
+  - Standalone native harness `tests/native/rapidflow_apx_engines/build/rapidflow_apx_native` rebuilt cleanly.
   - Verification: 25 hand & adversarial cases (25/25 PASS); 840 correctness corpus cases (840/840 M1 & 840/840 M2 bit-for-bit with M0 Oracle, 8,002 truth events, zero duplicates); 56-stream matrix (672/672 M1 & 672/672 M2 step agreements, 672/672 active-set reconstructions match M0).
-  - Unit tests: 14 tests in `tests/test_rapidflow_apx_engines.py` (Groups A-M) PASS.
-  - Repository regression: 528 tests in repository test suite PASS in 119.184s.
-  - Decision R3 completed (`docs/research_decisions/D-R3-native-engines.md`) with verdict `ENGINES_VERIFIED_READY_FOR_P4_DESIGN`.
-  - Upstream pinned `2ea4f4c...` remains 100% pristine.
-  - Status: `READY_FOR_INDEPENDENT_REVIEW`.
-- **Next action:** Review Draft PR into `QuangThang` for Issue #32, merge upon approval, and begin Phase P4 (dynamic pruning $\delta'$ & NLF filters). Do not start Phase P4 without explicit user approval.
+  - Mutation & Fail-Closed Suite: 106/106 adversarial mutations detected (100.0% detection rate) across Levels A–D.
+  - Native Witness Suite (Group X): 6 dedicated invariant and fault isolation tests passing cleanly.
+  - Repository regression: 551 tests in repository test suite PASS with 0 failures and 0 errors in ~130s.
+  - Decision R3 completed (`docs/research_decisions/D-R3-native-engines.md`) answering all 12 questions with verdict `ENGINES_VERIFIED_READY_FOR_P4_DESIGN (PENDING INDEPENDENT REVIEW / MERGE APPROVAL)`.
+  - Comprehensive closure audit completed in `docs/rapidflow_apx_p3_issue32_closure_audit.md`.
+  - Upstream pinned `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` remains 100% pristine.
+  - Status: `READY_FOR_INDEPENDENT_FINAL_REVIEW`.
+- **Next action:** Independent final review and merge of Draft PR #33 into `QuangThang` for Issue #32 by user/maintainer. Phase P4 (approximate pruning $\delta'$ & NLF filters) design will begin only after explicit user approval.

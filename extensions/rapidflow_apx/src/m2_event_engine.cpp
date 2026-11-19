@@ -3,6 +3,44 @@
 
 namespace rapidflow_apx {
 
+int ApxM2EventEngine::find_frontier_edge(
+    const std::vector<uint32_t>& mapping,
+    const std::vector<EdgeCommitment>& status,
+    uint32_t missing_count,
+    uint32_t assigned_count,
+    const ApxQueryPlan& query_plan
+) {
+    uint32_t num_q = query_plan.get_vertices_count();
+    uint32_t num_m = query_plan.get_edges_count();
+    if (assigned_count >= num_q) {
+        return -1;
+    }
+
+    int best_frontier_edge = -1;
+    for (uint32_t j = 0; j < num_m; ++j) {
+        if (status[j] == EdgeCommitment::UNKNOWN) {
+            const auto& q_edge = query_plan.get_edge(j);
+            bool u_mapped = (mapping[q_edge.u] != UNASSIGNED);
+            bool v_mapped = (mapping[q_edge.v] != UNASSIGNED);
+            if (u_mapped != v_mapped) {
+                best_frontier_edge = static_cast<int>(j);
+                break;
+            }
+        }
+    }
+
+    // Invariant guard: empty frontier when unmapped vertices remain and missing_count <= k
+    uint32_t k = query_plan.get_k();
+    if (best_frontier_edge == -1 && missing_count <= k) {
+        throw InvariantViolationException(
+            "M2 invariant violation: empty frontier while unmapped vertices remain and missing_count=" +
+            std::to_string(missing_count) + " <= k=" + std::to_string(k) +
+            ". Domain condition k < lambda(Q) required."
+        );
+    }
+    return best_frontier_edge;
+}
+
 uint64_t ApxM2EventEngine::search_event(
     const ApxQueryPlan& query_plan,
     const ApxAuthoritativeGraph& snapshot,
@@ -134,29 +172,9 @@ void ApxM2EventEngine::dfs_m2(
     }
 
     // Frontier: query edges with UNKNOWN status across cut
-    int best_frontier_edge = -1;
-    for (uint32_t j = 0; j < num_m; ++j) {
-        if (status[j] == EdgeCommitment::UNKNOWN) {
-            const auto& q_edge = query_plan.get_edge(j);
-            bool u_mapped = (mapping[q_edge.u] != UNASSIGNED);
-            bool v_mapped = (mapping[q_edge.v] != UNASSIGNED);
-            if (u_mapped != v_mapped) {
-                if (best_frontier_edge == -1 || static_cast<int>(j) < best_frontier_edge) {
-                    best_frontier_edge = static_cast<int>(j);
-                    // Since we iterate in ascending edge order, the first found is minimum index
-                    break;
-                }
-            }
-        }
-    }
-
-    // Invariant guard: empty frontier when unmapped vertices remain and missing_count <= k
+    int best_frontier_edge = find_frontier_edge(mapping, status, missing_count, assigned_count, query_plan);
     if (best_frontier_edge == -1) {
-        throw InvariantViolationException(
-            "M2 invariant violation: empty frontier while unmapped vertices remain and missing_count=" +
-            std::to_string(missing_count) + " <= k=" + std::to_string(k) +
-            ". Domain condition k < lambda(Q) required."
-        );
+        return;
     }
 
     uint32_t e = static_cast<uint32_t>(best_frontier_edge);
@@ -196,6 +214,10 @@ void ApxM2EventEngine::dfs_m2(
         mapping[v_q] = cand;
         used_data[cand] = true;
         status[e] = EdgeCommitment::PRESENT;
+
+        if (fault_hook_ == M2FaultHook::AFTER_VERTEX_ASSIGNMENT) {
+            throw FaultInjectedException("Simulated fault injected AFTER_VERTEX_ASSIGNMENT in M2 DFS");
+        }
 
         std::vector<std::pair<uint32_t, EdgeCommitment>> status_undo;
         status_undo.emplace_back(e, EdgeCommitment::UNKNOWN);
@@ -272,6 +294,11 @@ void ApxM2EventEngine::dfs_m2(
 
     status[e] = EdgeCommitment::MISSING;
     uint32_t new_missing_count = missing_count + 1;
+
+    if (fault_hook_ == M2FaultHook::AFTER_MISSING_COMMITMENT) {
+        throw FaultInjectedException("Simulated fault injected AFTER_MISSING_COMMITMENT in M2 DFS");
+    }
+
     if (new_missing_count <= k) {
         // Defer vertex assignment: mapping and assigned_count remain unchanged
         dfs_m2(

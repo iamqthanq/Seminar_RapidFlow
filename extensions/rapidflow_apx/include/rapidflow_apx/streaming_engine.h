@@ -53,6 +53,7 @@ public:
     EngineType get_engine_type() const noexcept { return engine_type_; }
 
     ApxTransactionManager& get_tx_manager() noexcept { return tx_manager_; }
+    void set_m2_fault_hook(M2FaultHook hook) noexcept { m2_engine_.set_fault_hook(hook); }
 
 private:
     ApxAuthoritativeGraph& graph_;

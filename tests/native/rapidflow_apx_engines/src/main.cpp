@@ -211,6 +211,81 @@ static json::Value build_graph_state_json(const ApxAuthoritativeGraph& graph, co
     return g_state;
 }
 
+int run_native_empty_frontier_test() {
+    std::cout << "Running native empty-frontier invariant witness test...\n";
+    try {
+        // 1. Build a valid Diamond query plan: 4 vertices, 5 edges (diamond with chord (1, 2)), k=1, lambda=2
+        // Edges: 0: (0, 1), 1: (0, 2), 2: (1, 2), 3: (1, 3), 4: (2, 3)
+        ApxQueryPlan qp;
+        std::vector<uint32_t> v_labels = {0, 0, 0, 0};
+        std::vector<QueryEdge> q_edges = {
+            {0, 1, 0}, {0, 2, 0}, {1, 2, 0}, {1, 3, 0}, {2, 3, 0}
+        };
+        std::vector<uint32_t> can_order = {0, 1, 2, 3};
+        qp.build(4, v_labels, q_edges, can_order, 1);
+
+        if (qp.get_k() != 1 || qp.get_lambda() != 2) {
+            std::cerr << "FAILED: Diamond query plan build error\n";
+            return 1;
+        }
+
+        // --- Positive Control ---
+        // S = {0, 1} mapped, T = {2, 3} unmapped.
+        // Status of edges: 0 (0, 1) is PRESENT; edges 1, 2, 3, 4 are UNKNOWN.
+        std::vector<uint32_t> mapping_pos(4, ApxM2EventEngine::UNASSIGNED);
+        mapping_pos[0] = 10;
+        mapping_pos[1] = 20;
+        std::vector<EdgeCommitment> status_pos(5, EdgeCommitment::UNKNOWN);
+        status_pos[0] = EdgeCommitment::PRESENT;
+
+        int pos_edge = ApxM2EventEngine::find_frontier_edge(mapping_pos, status_pos, 0, 2, qp);
+        if (pos_edge < 0 || pos_edge >= 5) {
+            std::cerr << "FAILED: Positive control returned invalid frontier edge: " << pos_edge << "\n";
+            return 1;
+        }
+
+        // --- Negative Control ---
+        // Artificial internal state:
+        // S = {0, 1} mapped, T = {2, 3} unmapped.
+        // All cut edges (1, 2, 3) are marked MISSING or PRESENT, so NO UNKNOWN edges exist across the cut.
+        // missing_count = 1 <= k = 1.
+        std::vector<uint32_t> mapping_neg(4, ApxM2EventEngine::UNASSIGNED);
+        mapping_neg[0] = 10;
+        mapping_neg[1] = 20;
+        std::vector<EdgeCommitment> status_neg(5, EdgeCommitment::MISSING);
+        status_neg[0] = EdgeCommitment::PRESENT; // internal mapped edge
+
+        bool threw_invariant = false;
+        try {
+            ApxM2EventEngine::find_frontier_edge(mapping_neg, status_neg, 1, 2, qp);
+        } catch (const InvariantViolationException& ex) {
+            threw_invariant = true;
+            std::string msg = ex.what();
+            if (msg.find("M2 invariant violation: empty frontier while unmapped vertices remain") == std::string::npos) {
+                std::cerr << "FAILED: Exception message unexpected: " << msg << "\n";
+                return 1;
+            }
+        }
+
+        if (!threw_invariant) {
+            std::cerr << "FAILED: Negative control did NOT throw InvariantViolationException!\n";
+            return 1;
+        }
+
+        // --- State Integrity Verification ---
+        if (qp.get_vertices_count() != 4 || qp.get_edges_count() != 5 || qp.get_k() != 1 || qp.get_lambda() != 2) {
+            std::cerr << "FAILED: Query plan state corrupted after seam test\n";
+            return 1;
+        }
+
+        std::cout << "{\"test\": \"native_empty_frontier_invariant\", \"status\": \"PASS\", \"positive_control\": \"PASS\", \"negative_control\": \"PASS\", \"state_integrity\": \"PASS\"}\n";
+        return 0;
+    } catch (const std::exception& e) {
+        std::cerr << "FAILED: Unexpected exception: " << e.what() << "\n";
+        return 1;
+    }
+}
+
 int main(int argc, char* argv[]) {
     std::string engine_str = "m2";
     std::string workload_path = "";
@@ -226,7 +301,9 @@ int main(int argc, char* argv[]) {
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
-        if (arg == "--engine") {
+        if (arg == "--test-empty-frontier") {
+            return run_native_empty_frontier_test();
+        } else if (arg == "--engine") {
             if (seen_engine) {
                 std::cerr << "Error: Duplicate --engine argument\n";
                 return static_cast<int>(ExitCode::CLI_ARG_ERROR);
@@ -599,20 +676,31 @@ int main(int argc, char* argv[]) {
                 step_json["v"] = json::Value(ext_v);
                 step_json["label"] = typed_label_to_json(lbl);
 
-                // Controlled test-only fault injection hook for active transaction verification (P3-R5-F03)
+                // Controlled test-only fault injection hook for active transaction verification (P3-R5-F03, P3-FC-04)
                 if (upd_val.contains("fault") && upd_val["fault"].is_string()) {
                     std::string fault_str = upd_val["fault"].as_string();
                     if (fault_str == "AFTER_MUTATION") {
                         streaming_engine.get_tx_manager().set_fault_injection(ApxTransactionManager::FaultPoint::AFTER_MUTATION);
+                        streaming_engine.set_m2_fault_hook(M2FaultHook::NONE);
                     } else if (fault_str == "DURING_CALLBACK") {
                         streaming_engine.get_tx_manager().set_fault_injection(ApxTransactionManager::FaultPoint::DURING_CALLBACK);
+                        streaming_engine.set_m2_fault_hook(M2FaultHook::NONE);
                     } else if (fault_str == "BEFORE_PUBLISH") {
                         streaming_engine.get_tx_manager().set_fault_injection(ApxTransactionManager::FaultPoint::BEFORE_PUBLISH);
+                        streaming_engine.set_m2_fault_hook(M2FaultHook::NONE);
+                    } else if (fault_str == "AFTER_MISSING_COMMITMENT") {
+                        streaming_engine.get_tx_manager().set_fault_injection(ApxTransactionManager::FaultPoint::NONE);
+                        streaming_engine.set_m2_fault_hook(M2FaultHook::AFTER_MISSING_COMMITMENT);
+                    } else if (fault_str == "AFTER_VERTEX_ASSIGNMENT") {
+                        streaming_engine.get_tx_manager().set_fault_injection(ApxTransactionManager::FaultPoint::NONE);
+                        streaming_engine.set_m2_fault_hook(M2FaultHook::AFTER_VERTEX_ASSIGNMENT);
                     } else {
                         streaming_engine.get_tx_manager().set_fault_injection(ApxTransactionManager::FaultPoint::NONE);
+                        streaming_engine.set_m2_fault_hook(M2FaultHook::NONE);
                     }
                 } else {
                     streaming_engine.get_tx_manager().set_fault_injection(ApxTransactionManager::FaultPoint::NONE);
+                    streaming_engine.set_m2_fault_hook(M2FaultHook::NONE);
                 }
 
                 UpdateOperation upd{op, ext_u, ext_v, lbl};
@@ -709,6 +797,7 @@ int main(int argc, char* argv[]) {
 
                     if (continue_on_error) {
                         streaming_engine.get_tx_manager().set_fault_injection(ApxTransactionManager::FaultPoint::NONE);
+                        streaming_engine.set_m2_fault_hook(M2FaultHook::NONE);
                         continue;
                     }
 
@@ -755,6 +844,7 @@ int main(int argc, char* argv[]) {
 
                 if (continue_on_error) {
                     streaming_engine.get_tx_manager().set_fault_injection(ApxTransactionManager::FaultPoint::NONE);
+                    streaming_engine.set_m2_fault_hook(M2FaultHook::NONE);
                     continue;
                 }
 
