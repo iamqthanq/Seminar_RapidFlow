@@ -7,7 +7,7 @@
 **Feature Branch:** `feature/rf32-d-int03-native-engines`
 **Integration Target:** `QuangThang`
 **Base Commit:** `88fbe200ff9217f4dccbad08bfa448d067d2ce4e` (contains accepted P2 HEAD `ebe2894752dc45e2aeb3109c260a34e2f87a9d06`)
-**Logic Commit SHA:** `2e60255b93368b12fb8cabbeeec8204782609e00` (Audited real Git commit object)
+**Logic Commit SHA:** `d83097b403cbcf767f01244d6b824dda43b75136` (Audited real Git commit object)
 **Pinned Upstream RapidFlow:** `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` (Pristine: `True`)
 **Verification Status:** **P3_ENGINES_VERIFIED (FINAL DEFINITION OF DONE CLOSED)**
 **Target Handoff Verdict:** **READY_FOR_INDEPENDENT_FINAL_REVIEW**
@@ -47,16 +47,16 @@ Key achievements:
 
 | Metric / Parameter | Value | Verification |
 | :--- | :--- | :--- |
-| **Repository Commit** | `2e60255b93368b12fb8cabbeeec8204782609e00` | `git rev-parse HEAD` (Audited real git commit object) |
+| **Repository Commit** | `d83097b403cbcf767f01244d6b824dda43b75136` | `git rev-parse HEAD` (Audited real git commit object) |
 | **Upstream Pinned SHA** | `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` | Submodule/git check (Pristine: `true`) |
 | **Operating System** | Linux 6.8.0-49-generic x86_64 | Clean local environment |
 | **Compiler** | GNU GCC / G++ 13.3.0 | Standard Ubuntu 24.04 packages |
 | **Build System** | CMake 3.28.3, Make 4.3 | Portable toolchain `external/tools` |
 | **Harness Binary** | `tests/native/rapidflow_apx_engines/build/rapidflow_apx_native` | Rebuilt cleanly (`--clean-build`) |
-| **Harness SHA-256** | `199c0528b9f041d15f2c36754414153254668640b900dba4ecc4b5bb22c2d15a` | Verified bit-for-bit |
+| **Harness SHA-256** | `6f1fa65481c599095acafe4e2ab328f94fd23ecc7a6670174fb978c9dbdcf5ef` | Verified bit-for-bit |
 | **Required Cases Registry** | `configs/rapidflow_apx_required_cases.json` | Hash: `238e49a9e7b0d13ade92b89c67e9ba96e5a54aeaac4065ae6c0a476c847cd14a` |
 | **Stream Lock Registry** | `configs/rapidflow_apx_stream_56_lock.json` | Hash: `34f9c78220a3d578b8fb5e582107203404fe7dd9858621f110cac737761aa451` |
-| **Summary Artifact** | `reports/rapidflow_apx_engines/summary.json` | Hash: `aa136af12a946a8b53e2e419b0833889c091e1efd86ba644f5ce8a3eac2f37bf` |
+| **Summary Artifact** | `reports/rapidflow_apx_engines/summary.json` | Hash: `527f2fe9946b8915b717c390333ebe98548644c65653e534b4e03d4c7e44d0ba` |
 
 ---
 
