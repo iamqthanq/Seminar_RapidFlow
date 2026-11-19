@@ -1163,11 +1163,24 @@ def validate_native_output_schema(
                     if sc.get(zero_f, 0) != 0:
                         return False, f"Step {s_idx} with status '{step_stat}' must have {zero_f} == 0, got {sc.get(zero_f)}"
         else:
+            # Step is UNATTEMPTED (R8-F02)
             if "step_counters" in step:
                 sc = step["step_counters"]
-                for zero_f in ("work_units", "dfs_states", "raw_emissions", "committed_emissions", "discarded_emissions"):
-                    if sc.get(zero_f, 0) != 0:
-                        return False, f"UNATTEMPTED step {s_idx} step_counters field {zero_f} must be 0, got {sc.get(zero_f)}"
+                if not isinstance(sc, dict) or isinstance(sc, bool):
+                    return False, f"Step {s_idx} with status 'UNATTEMPTED' has invalid step_counters type: {type(sc)}"
+                all_exec_counters = (
+                    "work_units", "dfs_states", "candidate_evaluations", "candidate_extensions",
+                    "edge_lookups", "vertex_label_checks", "anchors_started",
+                    "raw_emissions", "unique_emissions", "committed_emissions", "discarded_emissions",
+                    "variants_started", "raw_exact_results", "missing_set_rejections",
+                    "edge_decisions", "missing_branches", "commitment_checks", "commitment_rejections"
+                )
+                for zero_f in all_exec_counters:
+                    if zero_f in sc:
+                        val = sc[zero_f]
+                        if type(val) is not int or isinstance(val, bool) or val != 0:
+                            return False, f"UNATTEMPTED step {s_idx} step_counters field '{zero_f}' must be 0, got {val}"
+                return False, f"Step {s_idx} with status 'UNATTEMPTED' must not contain 'step_counters'"
 
         if s_idx < len(workload_updates) and step_stat != "UNATTEMPTED":
             upd = workload_updates[s_idx]
@@ -1308,28 +1321,84 @@ def validate_native_output_schema(
                 if type(cval) is not int or isinstance(cval, bool) or cval < 0:
                     return False, f"Step {s_idx} codec_state field '{csf}' not non-negative integer: {cval}"
 
-    # 4. Query Metadata & Independent Cut Oracle (P3-R3-F01)
-    if is_success and workload and "query" in workload:
-        q_info = res_data.get("query_info")
-        if not isinstance(q_info, dict):
-            return False, "Missing or invalid 'query_info' object on SUCCESS"
-        if q_info.get("k") != workload.get("k", 0):
-            return False, f"query_info k mismatch: obs={q_info.get('k')} vs exp={workload.get('k', 0)}"
-
+    # 4. Query Metadata & Independent Cut Oracle (P3-R3-F01, R8-F01)
+    if workload and "query" in workload:
         q_v = workload["query"].get("vertices", [])
         q_vids = [v["id"] for v in q_v]
         expected_can_order = sorted(q_vids)
-        obs_can_order = q_info.get("query_canonical_order")
-        if obs_can_order != expected_can_order:
-            return False, f"query_canonical_order mismatch: obs={obs_can_order} vs exp={expected_can_order}"
-
         q_e = workload["query"].get("edges", [])
         v_to_idx = {vid: i for i, vid in enumerate(expected_can_order)}
         mapped_edges = [(v_to_idx[e["u"]], v_to_idx[e["v"]]) for e in q_e if e["u"] in v_to_idx and e["v"] in v_to_idx]
         oracle_lambda = independent_edge_connectivity_cut_oracle(len(q_vids), mapped_edges)
-        obs_lambda = q_info.get("computed_lambda")
-        if obs_lambda != oracle_lambda:
-            return False, f"computed_lambda mismatch with independent cut oracle: obs={obs_lambda} vs exp={oracle_lambda}"
+
+        has_query_info = "query_info" in res_data
+        # Category A vs B presence policy (R8-F01):
+        # query_info is strictly required when:
+        # - Execution was successful (is_success == True)
+        # - Or execution attempted steps (attempted_steps > 0), because query plan must have been built
+        if is_success or attempted_steps > 0:
+            if not has_query_info:
+                return False, f"Missing required 'query_info' object (is_success={is_success}, attempted_steps={attempted_steps})"
+
+        if has_query_info:
+            q_info = res_data["query_info"]
+            if not isinstance(q_info, dict) or isinstance(q_info, bool):
+                return False, f"Invalid 'query_info' object type: {type(q_info)}"
+
+            # 1. Validate k
+            if "k" not in q_info:
+                return False, "query_info missing required field 'k'"
+            obs_k = q_info["k"]
+            if type(obs_k) is not int or isinstance(obs_k, bool):
+                return False, f"query_info 'k' must be integer, got: {obs_k} (type={type(obs_k)})"
+            exp_k = workload.get("k", 0)
+            if obs_k != exp_k:
+                return False, f"query_info k mismatch: obs={obs_k} vs exp={exp_k}"
+
+            # 2. Validate query_canonical_order
+            if "query_canonical_order" not in q_info:
+                return False, "query_info missing required field 'query_canonical_order'"
+            obs_can_order = q_info["query_canonical_order"]
+            if not isinstance(obs_can_order, list):
+                return False, f"query_canonical_order must be a list, got: {type(obs_can_order)}"
+            if len(obs_can_order) != len(q_vids):
+                return False, f"query_canonical_order length mismatch: obs={len(obs_can_order)} vs exp={len(q_vids)}"
+            for vid in obs_can_order:
+                if type(vid) is not int or isinstance(vid, bool) or vid < -9223372036854775808 or vid > 9223372036854775807:
+                    return False, f"query_canonical_order vertex ID not signed int64: {vid} (type={type(vid)})"
+            if len(set(obs_can_order)) != len(obs_can_order):
+                return False, f"query_canonical_order contains duplicate IDs: {obs_can_order}"
+            if obs_can_order != expected_can_order:
+                return False, f"query_canonical_order mismatch: obs={obs_can_order} vs exp={expected_can_order}"
+
+            # 3. Validate computed_lambda
+            if "computed_lambda" not in q_info:
+                return False, "query_info missing required field 'computed_lambda'"
+            obs_lambda = q_info["computed_lambda"]
+            if type(obs_lambda) is not int or isinstance(obs_lambda, bool) or obs_lambda < 0:
+                return False, f"query_info 'computed_lambda' not non-negative integer: {obs_lambda} (type={type(obs_lambda)})"
+            if obs_lambda != oracle_lambda:
+                return False, f"computed_lambda mismatch with independent cut oracle: obs={obs_lambda} vs exp={oracle_lambda}"
+
+            # 4. Optional query structure counts if present
+            if "vertices_count" in q_info:
+                vc = q_info["vertices_count"]
+                if type(vc) is not int or isinstance(vc, bool) or vc != len(q_vids):
+                    return False, f"query_info 'vertices_count' mismatch: obs={vc} vs exp={len(q_vids)}"
+            if "edges_count" in q_info:
+                ec = q_info["edges_count"]
+                if type(ec) is not int or isinstance(ec, bool) or ec != len(q_e):
+                    return False, f"query_info 'edges_count' mismatch: obs={ec} vs exp={len(q_e)}"
+
+        # Validate top-level computed_lambda and query_canonical_order if present
+        if "computed_lambda" in res_data:
+            root_lam = res_data["computed_lambda"]
+            if type(root_lam) is not int or isinstance(root_lam, bool) or root_lam != oracle_lambda:
+                return False, f"Top-level 'computed_lambda' mismatch with independent cut oracle: obs={root_lam} vs exp={oracle_lambda}"
+        if "query_canonical_order" in res_data:
+            root_order = res_data["query_canonical_order"]
+            if not isinstance(root_order, list) or root_order != expected_can_order:
+                return False, f"Top-level 'query_canonical_order' mismatch: obs={root_order} vs exp={expected_can_order}"
 
     # 5. Emission Accounting & Global Counters (P3-R3-F01, P3-R6-F01, P3-R7-F01)
     if attempted_steps > 0:
@@ -1384,7 +1453,7 @@ def validate_native_output_schema(
             reconciliation_fields.extend(["edge_decisions", "missing_branches", "commitment_checks", "commitment_rejections"])
 
         for rf in reconciliation_fields:
-            step_sum = sum(s["step_counters"][rf] for s in steps if "step_counters" in s)
+            step_sum = sum(s.get("step_counters", {}).get(rf, 0) for s in steps if s.get("status") != "UNATTEMPTED" and "step_counters" in s)
             if cnt[rf] != step_sum:
                 return False, f"Root counter '{rf}' mismatch with sum of step counters: root={cnt[rf]} vs step_sum={step_sum}"
 

@@ -34,6 +34,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
+import scripts.run_rapidflow_apx_engines as runner_mod
+
 from scripts.run_rapidflow_apx_engines import (
     build_native_binary,
     check_git_provenance,
@@ -80,6 +82,26 @@ def independent_edge_connectivity_cut_oracle(num_vertices: int, edges: list[tupl
             if cut_edges < min_cut:
                 min_cut = cut_edges
     return min_cut
+
+
+def make_disk_intercepting_executor(mutator):
+    orig_exec = runner_mod.execute_contained_subprocess
+    def intercepted_exec(cmd, *args, **kwargs):
+        ret, out, err, timed_out = orig_exec(cmd, *args, **kwargs)
+        if "--output" in cmd:
+            out_idx = cmd.index("--output") + 1
+            out_path = Path(cmd[out_idx])
+            if out_path.is_file():
+                try:
+                    with open(out_path, "r", encoding="utf-8") as rf:
+                        data = json.load(rf)
+                    mutated = mutator(data)
+                    with open(out_path, "w", encoding="utf-8") as wf:
+                        json.dump(mutated, wf)
+                except Exception:
+                    pass
+        return ret, out, err, timed_out
+    return intercepted_exec
 
 
 class TestRapidFlowApxEngines(unittest.TestCase):
@@ -1802,47 +1824,175 @@ class TestRapidFlowApxEngines(unittest.TestCase):
         r_int, _, _ = run_workload_on_binary(self.binary_path, "m1", wl_int_coe)
         record_mutation("Level C: Integer continue_on_error rejected with containment error", r_int.get("status") == "CONTAINMENT_VIOLATION")
 
-        # 94. Level D (D01): End-to-end canonical runner control flow rejects corrupted emissions on CASE_HAND_22 (R7-F04)
+        # UNATTEMPTED workload for R8-F02 tests
+        wl_unattempted = {
+            "case_id": "test_unattempted_mutation",
+            "k": 0,
+            "query": {
+                "vertices": [{"id": 0, "label": 0}, {"id": 1, "label": 0}],
+                "edges": [{"u": 0, "v": 1, "label": 0}]
+            },
+            "initial_graph": {
+                "vertices": [{"id": 0, "label": 0}, {"id": 1, "label": 0}],
+                "edges": []
+            },
+            "updates": [
+                {"op": "+", "u": 0, "v": 1, "label": 0},
+                {"op": "+", "u": 1, "v": 1, "label": 0},
+                {"op": "+", "u": 0, "v": 1, "label": 0}
+            ]
+        }
+
+        # 94. UNATTEMPTED step with candidate_evaluations=7 on disk rejected fail-closed (R8-F02)
+        def mut_94(d):
+            if len(d.get("steps", [])) > 2:
+                d["steps"][2]["step_counters"] = {"candidate_evaluations": 7}
+                if "counters" in d: d["counters"]["candidate_evaluations"] = d["counters"].get("candidate_evaluations", 0) + 7
+            return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_94)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_unattempted)
+            record_mutation("Level C: UNATTEMPTED candidate_evaluations=7 on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 95. UNATTEMPTED step with candidate_extensions=7 on disk rejected fail-closed (R8-F02)
+        def mut_95(d):
+            if len(d.get("steps", [])) > 2:
+                d["steps"][2]["step_counters"] = {"candidate_extensions": 7}
+                if "counters" in d: d["counters"]["candidate_extensions"] = d["counters"].get("candidate_extensions", 0) + 7
+            return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_95)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_unattempted)
+            record_mutation("Level C: UNATTEMPTED candidate_extensions=7 on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 96. UNATTEMPTED step with work_units=7 on disk rejected fail-closed (R8-F02)
+        def mut_96(d):
+            if len(d.get("steps", [])) > 2:
+                d["steps"][2]["step_counters"] = {"work_units": 7}
+                if "counters" in d: d["counters"]["work_units"] = d["counters"].get("work_units", 0) + 7
+            return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_96)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_unattempted)
+            record_mutation("Level C: UNATTEMPTED work_units=7 on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 97. UNATTEMPTED step with raw_emissions=7 on disk rejected fail-closed (R8-F02)
+        def mut_97(d):
+            if len(d.get("steps", [])) > 2:
+                d["steps"][2]["step_counters"] = {"raw_emissions": 7}
+                if "counters" in d: d["counters"]["raw_emissions"] = d["counters"].get("raw_emissions", 0) + 7
+            return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_97)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_unattempted)
+            record_mutation("Level C: UNATTEMPTED raw_emissions=7 on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 98. UNATTEMPTED step with empty step_counters on disk rejected fail-closed (R8-F02 Option A)
+        def mut_98(d):
+            if len(d.get("steps", [])) > 2:
+                d["steps"][2]["step_counters"] = {}
+            return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_98)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_unattempted)
+            record_mutation("Level C: UNATTEMPTED empty step_counters on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 99. Negative CASE_HAND_22 with k=999 on disk rejected fail-closed (R8-F01)
+        def mut_99(d):
+            if d.get("case_id") == "CASE_HAND_22" and "query_info" in d:
+                d["query_info"]["k"] = 999
+            return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_99)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand22)
+            record_mutation("Level C: Negative output k=999 on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 100. Negative CASE_HAND_22 with computed_lambda=777 on disk rejected fail-closed (R8-F01)
+        def mut_100(d):
+            if d.get("case_id") == "CASE_HAND_22" and "query_info" in d:
+                d["query_info"]["computed_lambda"] = 777
+            return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_100)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand22)
+            record_mutation("Level C: Negative output computed_lambda=777 on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 101. Negative CASE_HAND_22 with query_canonical_order=[999, 998] on disk rejected fail-closed (R8-F01)
+        def mut_101(d):
+            if d.get("case_id") == "CASE_HAND_22" and "query_info" in d:
+                d["query_info"]["query_canonical_order"] = [999, 998]
+            return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_101)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand22)
+            record_mutation("Level C: Negative output query_canonical_order=[999, 998] on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 102. Negative CASE_HAND_22 with missing query_info on disk rejected fail-closed (R8-F01)
+        def mut_102(d):
+            if d.get("case_id") == "CASE_HAND_22" and "query_info" in d:
+                d.pop("query_info", None)
+            return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_102)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand22)
+            record_mutation("Level C: Negative output missing query_info on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 103. Level D (D-FULL-01): Full canonical runner (CANONICAL_FULL_RUN) rejects negative query metadata corruption on CASE_HAND_22 (R8-F01, R8-F03)
+        def mut_dfull01(d):
+            if d.get("case_id") == "CASE_HAND_22" and "query_info" in d:
+                d["query_info"]["k"] = 999
+                d["query_info"]["computed_lambda"] = 777
+                d["query_info"]["query_canonical_order"] = [999, 998]
+            return d
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tf:
             d01_sum_path = Path(tf.name)
-        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_86)
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_dfull01)
         runner_mod.check_git_provenance = lambda: ({"dirty_state": "CLEAN", "repo_commit": "HEAD", "upstream_commit": "2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1", "upstream_pristine": True}, True)
         d01_exit_code = 0
         try:
-            sys.argv = ["run_rapidflow_apx_engines.py", "--stage", "hand", "--output", str(d01_sum_path)]
+            sys.argv = ["run_rapidflow_apx_engines.py", "--output", str(d01_sum_path)]
             try:
                 runner_mod.main()
             except SystemExit as se:
                 d01_exit_code = se.code
             d01_sum = json.loads(d01_sum_path.read_text()) if d01_sum_path.is_file() else {}
-            d01_failed = (d01_exit_code != 0 and d01_sum.get("stages", {}).get("hand_cases", {}).get("status") == "FAIL" and d01_sum.get("overall_status") != "P3_ENGINES_VERIFIED")
-            record_mutation("Level D: Corrupted emissions fails canonical runner and exits nonzero", d01_failed)
+            d01_failed = (d01_exit_code != 0 and d01_sum.get("runner_mode") == "CANONICAL_FULL_RUN" and d01_sum.get("stages", {}).get("hand_cases", {}).get("status") == "FAIL" and d01_sum.get("overall_status") != "P3_ENGINES_VERIFIED")
+            record_mutation("Level D: Full canonical runner rejects negative query metadata corruption on disk", d01_failed)
         finally:
             runner_mod.execute_contained_subprocess = orig_exec
             runner_mod.check_git_provenance = check_git_provenance
             if d01_sum_path.exists(): d01_sum_path.unlink()
 
-        # 95. Level D (D02): End-to-end canonical runner rejects corrupted work_units on CASE_HAND_22 (R7-F04)
+        # 104. Level D (D-FULL-02): Full canonical runner (CANONICAL_FULL_RUN) rejects missing negative query_info on CASE_HAND_22 (R8-F01, R8-F03)
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tf:
             d02_sum_path = Path(tf.name)
-        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_87)
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_102)
         runner_mod.check_git_provenance = lambda: ({"dirty_state": "CLEAN", "repo_commit": "HEAD", "upstream_commit": "2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1", "upstream_pristine": True}, True)
         d02_exit_code = 0
         try:
-            sys.argv = ["run_rapidflow_apx_engines.py", "--stage", "hand", "--output", str(d02_sum_path)]
+            sys.argv = ["run_rapidflow_apx_engines.py", "--output", str(d02_sum_path)]
             try:
                 runner_mod.main()
             except SystemExit as se:
                 d02_exit_code = se.code
             d02_sum = json.loads(d02_sum_path.read_text()) if d02_sum_path.is_file() else {}
-            d02_failed = (d02_exit_code != 0 and d02_sum.get("stages", {}).get("hand_cases", {}).get("status") == "FAIL" and d02_sum.get("overall_status") != "P3_ENGINES_VERIFIED")
-            record_mutation("Level D: Corrupted work units fails canonical runner and exits nonzero", d02_failed)
+            d02_failed = (d02_exit_code != 0 and d02_sum.get("runner_mode") == "CANONICAL_FULL_RUN" and d02_sum.get("stages", {}).get("hand_cases", {}).get("status") == "FAIL" and d02_sum.get("overall_status") != "P3_ENGINES_VERIFIED")
+            record_mutation("Level D: Full canonical runner rejects missing negative query_info on disk", d02_failed)
         finally:
             runner_mod.execute_contained_subprocess = orig_exec
             runner_mod.check_git_provenance = check_git_provenance
             if d02_sum_path.exists(): d02_sum_path.unlink()
 
-        # 96. Level D (D03): Diagnostic runner rejects corrupted recovery lifecycle on disk (R7-F04)
+        # 105. Level D (D03): Diagnostic runner rejects corrupted recovery lifecycle on disk (R7-F04)
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tf:
             d03_sum_path = Path(tf.name)
         runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_89)
@@ -1862,7 +2012,7 @@ class TestRapidFlowApxEngines(unittest.TestCase):
             runner_mod.check_git_provenance = check_git_provenance
             if d03_sum_path.exists(): d03_sum_path.unlink()
 
-        # 97. Level D (D04): Positive canonical control uncorrupted execution passes cleanly (R7-F04)
+        # 106. Level D (D04): Positive canonical control uncorrupted execution passes cleanly (R7-F04)
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tf:
             d04_sum_path = Path(tf.name)
         runner_mod.check_git_provenance = lambda: ({"dirty_state": "CLEAN", "repo_commit": "HEAD", "upstream_commit": "2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1", "upstream_pristine": True}, True)
@@ -2272,6 +2422,141 @@ class TestRapidFlowApxEngines(unittest.TestCase):
         self.assertEqual(len(missing_from_report), 0, f"Cases missing from report: {missing_from_report}")
         obsolete_in_report = parsed_case_ids - set(reg_cases.keys())
         self.assertEqual(len(obsolete_in_report), 0, f"Obsolete cases in report: {obsolete_in_report}")
+
+    # =========================================================================
+    # Group W: Round 8 Genuine Full Canonical Level D & Lifecycle Tests (R8-F01, R8-F02, R8-F03)
+    # =========================================================================
+    def test_full_canonical_rejects_negative_query_metadata_corruption(self):
+        """Genuine Level D (D-FULL-01): Verifies that full canonical runner (CANONICAL_FULL_RUN)
+        intercepting mutated negative query metadata on CASE_HAND_22 fails hand stage, fails overall status,
+        and terminates with non-zero exit code (R8-F01, R8-F03)."""
+        orig_exec = runner_mod.execute_contained_subprocess
+        orig_prov = runner_mod.check_git_provenance
+        mutation_count = 0
+
+        def mut_query_meta(d):
+            nonlocal mutation_count
+            if d.get("case_id") == "CASE_HAND_22" and "query_info" in d:
+                d["query_info"]["k"] = 999
+                d["query_info"]["computed_lambda"] = 777
+                d["query_info"]["query_canonical_order"] = [999, 998]
+                mutation_count += 1
+            return d
+
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tf:
+            sum_path = Path(tf.name)
+
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_query_meta)
+        runner_mod.check_git_provenance = lambda: ({"dirty_state": "CLEAN", "repo_commit": "HEAD", "upstream_commit": "2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1", "upstream_pristine": True}, True)
+        exit_code = 0
+        try:
+            sys.argv = ["run_rapidflow_apx_engines.py", "--output", str(sum_path)]
+            try:
+                runner_mod.main()
+            except SystemExit as se:
+                exit_code = se.code
+            sum_data = json.loads(sum_path.read_text()) if sum_path.is_file() else {}
+            self.assertEqual(mutation_count, 2, "Both M1 and M2 outputs must be intercepted on CASE_HAND_22")
+            self.assertEqual(sum_data.get("runner_mode"), "CANONICAL_FULL_RUN", "Runner must operate in full canonical mode")
+            self.assertNotEqual(exit_code, 0, "Corrupted negative query metadata must cause non-zero process exit")
+            self.assertEqual(sum_data.get("stages", {}).get("hand_cases", {}).get("status"), "FAIL", "Hand cases stage must FAIL")
+            self.assertEqual(sum_data.get("overall_status"), "FAIL", "Overall status must be FAIL")
+            self.assertNotIn("corpus_840", sum_data.get("stages", {}), "Corpus stage must not run after hand stage failure (fail-fast)")
+            self.assertNotIn("stream_56_matrix", sum_data.get("stages", {}), "Stream stage must not run after hand stage failure (fail-fast)")
+        finally:
+            runner_mod.execute_contained_subprocess = orig_exec
+            runner_mod.check_git_provenance = orig_prov
+            if sum_path.exists():
+                sum_path.unlink()
+
+    def test_full_canonical_rejects_missing_negative_query_info(self):
+        """Genuine Level D (D-FULL-02): Verifies that full canonical runner (CANONICAL_FULL_RUN)
+        intercepting missing query_info on CASE_HAND_22 fails hand stage, fails overall status,
+        and terminates with non-zero exit code (R8-F01, R8-F03)."""
+        orig_exec = runner_mod.execute_contained_subprocess
+        orig_prov = runner_mod.check_git_provenance
+        mutation_count = 0
+
+        def mut_missing_qinfo(d):
+            nonlocal mutation_count
+            if d.get("case_id") == "CASE_HAND_22" and "query_info" in d:
+                d.pop("query_info", None)
+                mutation_count += 1
+            return d
+
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tf:
+            sum_path = Path(tf.name)
+
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_missing_qinfo)
+        runner_mod.check_git_provenance = lambda: ({"dirty_state": "CLEAN", "repo_commit": "HEAD", "upstream_commit": "2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1", "upstream_pristine": True}, True)
+        exit_code = 0
+        try:
+            sys.argv = ["run_rapidflow_apx_engines.py", "--output", str(sum_path)]
+            try:
+                runner_mod.main()
+            except SystemExit as se:
+                exit_code = se.code
+            sum_data = json.loads(sum_path.read_text()) if sum_path.is_file() else {}
+            self.assertEqual(mutation_count, 2, "Both M1 and M2 outputs must be intercepted on CASE_HAND_22")
+            self.assertEqual(sum_data.get("runner_mode"), "CANONICAL_FULL_RUN", "Runner must operate in full canonical mode")
+            self.assertNotEqual(exit_code, 0, "Missing query_info must cause non-zero process exit")
+            self.assertEqual(sum_data.get("stages", {}).get("hand_cases", {}).get("status"), "FAIL", "Hand cases stage must FAIL")
+            self.assertEqual(sum_data.get("overall_status"), "FAIL", "Overall status must be FAIL")
+        finally:
+            runner_mod.execute_contained_subprocess = orig_exec
+            runner_mod.check_git_provenance = orig_prov
+            if sum_path.exists():
+                sum_path.unlink()
+
+    def test_unattempted_step_counters_strict_rejection(self):
+        """Verifies strict fail-closed rejection of fabricated counters or step_counters objects on UNATTEMPTED steps (R8-F02)."""
+        wl = {
+            "case_id": "test_unattempted_strict_contract",
+            "k": 0,
+            "query": {
+                "vertices": [{"id": 0, "label": 0}, {"id": 1, "label": 0}],
+                "edges": [{"u": 0, "v": 1, "label": 0}]
+            },
+            "initial_graph": {
+                "vertices": [{"id": 0, "label": 0}, {"id": 1, "label": 0}],
+                "edges": []
+            },
+            "updates": [
+                {"op": "+", "u": 0, "v": 1, "label": 0},
+                {"op": "+", "u": 1, "v": 1, "label": 0},
+                {"op": "+", "u": 0, "v": 1, "label": 0}
+            ]
+        }
+        for eng in ("m1", "m2"):
+            res, _, _ = run_workload_on_binary(self.binary_path, eng, wl)
+            self.assertEqual(res.get("exit_code"), 6, f"Expected exit code 6 on self-loop update for {eng}")
+            self.assertTrue(res.get("schema_valid"), f"Uncorrupted multi-step execution must be schema valid: {res.get('schema_error')}")
+            steps = res.get("steps", [])
+            self.assertEqual(len(steps), 3)
+            self.assertEqual(steps[2]["status"], "UNATTEMPTED")
+            self.assertNotIn("step_counters", steps[2], "Native UNATTEMPTED step must not emit step_counters")
+
+            # 1. Mutate: inject candidate_evaluations = 7
+            d_ce = copy.deepcopy(res)
+            d_ce["steps"][2]["step_counters"] = {"candidate_evaluations": 7}
+            d_ce["counters"]["candidate_evaluations"] = d_ce["counters"].get("candidate_evaluations", 0) + 7
+            v_ok, v_diag = runner_mod.validate_native_output_schema(d_ce, eng, wl["case_id"], is_success=False, workload=wl)
+            self.assertFalse(v_ok, "UNATTEMPTED step with candidate_evaluations=7 must be rejected")
+            self.assertIn("candidate_evaluations", v_diag)
+
+            # 2. Mutate: inject raw_emissions = 7
+            d_re = copy.deepcopy(res)
+            d_re["steps"][2]["step_counters"] = {"raw_emissions": 7}
+            d_re["counters"]["raw_emissions"] = d_re["counters"].get("raw_emissions", 0) + 7
+            v_ok, v_diag = runner_mod.validate_native_output_schema(d_re, eng, wl["case_id"], is_success=False, workload=wl)
+            self.assertFalse(v_ok, "UNATTEMPTED step with raw_emissions=7 must be rejected")
+
+            # 3. Mutate: inject empty step_counters = {}
+            d_em = copy.deepcopy(res)
+            d_em["steps"][2]["step_counters"] = {}
+            v_ok, v_diag = runner_mod.validate_native_output_schema(d_em, eng, wl["case_id"], is_success=False, workload=wl)
+            self.assertFalse(v_ok, "UNATTEMPTED step with empty step_counters must be rejected under Option A")
+            self.assertIn("must not contain 'step_counters'", v_diag)
 
 
 if __name__ == "__main__":
