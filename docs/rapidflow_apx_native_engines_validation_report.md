@@ -7,9 +7,9 @@
 **Feature Branch:** `feature/rf32-d-int03-native-engines`
 **Integration Target:** `QuangThang`
 **Base Commit:** `88fbe200ff9217f4dccbad08bfa448d067d2ce4e` (contains accepted P2 HEAD `ebe2894752dc45e2aeb3109c260a34e2f87a9d06`)
-**Logic Commit SHA:** `14f90a82a2d055853a3fc7fa0b9255b350154ff7`
+**Logic Commit SHA:** `adf8353684188af5129439ffef14fbc4d6e7e19a`
 **Pinned Upstream RapidFlow:** `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` (Pristine: `True`)
-**Verification Status:** **P3_ENGINES_VERIFIED (ROUND 6 REMEDIATED)**
+**Verification Status:** **P3_ENGINES_VERIFIED (ROUND 7 REMEDIATED)**
 **Target Handoff Verdict:** **READY_FOR_INDEPENDENT_FINAL_REVIEW**
 
 ---
@@ -31,11 +31,11 @@ Key achievements:
    - 25 Hand & Adversarial Witness Cases locked via `configs/rapidflow_apx_required_cases.json`: **25 / 25 PASS**.
    - 840 Correctness Corpus Cases: **840 / 840 M1 PASS**, **840 / 840 M2 PASS** (8,002 truth events, 330 cases with events, 239 with $k \ge 1$, zero duplicate emissions).
    - 56-Stream Dynamic Matrix locked via `configs/rapidflow_apx_stream_56_lock.json` (672 updates): **672 / 672 M1 PASS**, **672 / 672 M2 PASS**, active-set reconstruction **672 / 672 PASS**.
-   - Round 6 Adversarial Mutation Suite: **85 / 85 injected mutations detected (100.0% detection rate)** across Level A (42 validator unit tests), Level B (4 stage integration tests), Level C (38 genuine disk interception and subprocess tests), and Level D (1 stage failure on negative case corruption).
+   - Round 7 Adversarial Mutation Suite: **97 / 97 injected mutations detected (100.0% detection rate)** across Level A (42 validator unit tests), Level B (4 stage integration tests), Level C (47 genuine disk interception and subprocess tests), and Level D (4 runner control flow interception and diagnostic tests).
    - Event-bearing witness staged tuple rollback (C4 Diamond) verified: 8 candidate mappings staged before abort are completely discarded upon rollback (`raw=8, unique=8, committed=0, discarded=8`), with graph state restored bit-for-bit to Step 0 state.
    - Full transaction lifecycle recovery on the SAME transaction manager instance without reallocating engine: Step A (valid commit) $\to$ Step B (abort and rollback) $\to$ Step C (valid commit matching Oracle) verified on both M1 and M2.
    - Postcommit transport failure (`ExitCode 7 IO_ERROR`) verified distinct from domain, prevalidation, or transaction abort errors on valid matching C4 workload.
-   - Strict finite-state machine contracts and negative work/emission counter validation fail-closed on disk.
+   - Strict finite-state machine contracts, mathematical reconciliation between root and step counters, and fail-closed recovery lifecycle verified on disk.
    - Full Repository Regression: **542 / 542 tests PASS (0 errors, 0 failures in 118.5s)**.
 
 ---
@@ -44,16 +44,16 @@ Key achievements:
 
 | Metric / Parameter | Value | Verification |
 | :--- | :--- | :--- |
-| **Repository Commit** | `14f90a82a2d055853a3fc7fa0b9255b350154ff7` | `git rev-parse HEAD` (Clean: `true`) |
+| **Repository Commit** | `adf8353684188af5129439ffef14fbc4d6e7e19a` | `git rev-parse HEAD` (Clean: `true`) |
 | **Upstream Pinned SHA** | `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` | Submodule/git check (Pristine: `true`) |
 | **Operating System** | Linux 6.8.0-49-generic x86_64 | Clean local environment |
 | **Compiler** | GNU GCC / G++ 13.3.0 | Standard Ubuntu 24.04 packages |
 | **Build System** | CMake 3.28.3, Make 4.3 | Portable toolchain `external/tools` |
 | **Harness Binary** | `tests/native/rapidflow_apx_engines/build/rapidflow_apx_native` | Rebuilt cleanly (`--clean-build`) |
-| **Harness SHA-256** | `c50824f2366b19cf2f2e4b488a2bb25a9da77af08581a6ac9328caad16b65ff7` | Verified bit-for-bit |
+| **Harness SHA-256** | `199c0528b9f041d15f2c36754414153254668640b900dba4ecc4b5bb22c2d15a` | Verified bit-for-bit |
 | **Required Cases Registry** | `configs/rapidflow_apx_required_cases.json` | Hash: `238e49a9e7b0d13ade92b89c67e9ba96e5a54aeaac4065ae6c0a476c847cd14a` |
 | **Stream Lock Registry** | `configs/rapidflow_apx_stream_56_lock.json` | Hash: `34f9c78220a3d578b8fb5e582107203404fe7dd9858621f110cac737761aa451` |
-| **Summary Artifact** | `reports/rapidflow_apx_engines/summary.json` | Hash: `bce96d8c2fdc396c35fda2d3dc73579253b49df063fdb221fb803276f7d4ffc3` |
+| **Summary Artifact** | `reports/rapidflow_apx_engines/summary.json` | Hash: `38152b4fdec9b5d4e9a9435c087322c64ecab869a983e6cc2bac6bf067dcab61` |
 
 ---
 
@@ -179,7 +179,21 @@ Locked via `configs/rapidflow_apx_stream_56_lock.json` with embedded exact query
 
 ---
 
-## 5. Round 6 Comprehensive Root-Cause Remediation & Acceptance
+## 5. Round 7 Verification Integrity Remediation & P3 Acceptance Closure
+
+The Round 7 remediation addresses findings R7-F01 through R7-F05 and AUDIT:
+
+| Finding ID | Severity | Description & Root Cause | Technical Resolution | Independent Verification & Evidence | Status |
+| :--- | :--- | :--- | :--- | :--- | :---: |
+| **R7-F01** | CRITICAL | Step counters omitted emission metrics (`raw`, `unique`, `committed`, `discarded`), and root counters were validated only against global sink totals without reconciling against the sum of step counters. Prevalidation failed steps could have nonzero work/emission metrics. | Tracked per-step emission deltas from `sink_` in `ApxStreamingEngine` and emitted `raw_emissions`, `unique_emissions`, `committed_emissions`, `discarded_emissions` in step JSON `step_counters`. In runner, enforced mandatory emission fields with range and arithmetic checks ($raw \ge unique$, $unique = committed + discarded$). Enforced universal mathematical reconciliation: $root.counters[cf] == \sum_{step \in steps} step.step\_counters[cf]$ across all attempted steps. Enforced strictly zero work and emissions on prevalidation failures (`status == "PREVALIDATION_FAILED"`) and unattempted steps (`status == "UNATTEMPTED"`). Reconciled root `max_work` to `effective_limit`. | Replicators confirmed rejected fail-closed; verified in Level C disk-interception mutations 83-93 and Level D mutations 94-95. | **RESOLVED** |
+| **R7-F02** | BLOCKER | `validate_native_output_schema` calculated step counts independently of `steps[]`, allowing status mismatches (e.g. step `FAULT_INJECTED` with error category `NONE`). Root `error_category` was not reconciled against the first failing step. Default execution mode (`not allow_recovery`) did not enforce fail-closed termination after the first failure. | Derived `obs_completed`, `obs_failed`, `obs_unattempted`, `obs_attempted` directly from `steps[]` and asserted 1:1 match with summary totals (`total_steps`, `completed_steps`, `failed_steps`, `unattempted_steps`). Added `ALLOWED_STATUS_CATEGORY_MAP` with strict bidirectional mapping (`SUCCESS -> NONE`, `UNATTEMPTED -> NONE`, `PREVALIDATION_FAILED -> PREVALIDATION_ERROR`, `FAULT_INJECTED -> FAULT_INJECTED`, `CALLBACK_ABORTED -> WORK_BUDGET_EXCEEDED\|CALLBACK_ABORTED\|STEP_FAILURE`, `ERROR -> INPUT_SCHEMA_ERROR\|...`). Enforced that root `error_category` matches the first failing step. Enforced that default mode permits at most 1 failed step followed only by `UNATTEMPTED`. Handled domain rejections with empty `steps[]` when `attempted_steps == 0`. | Replicators confirmed rejected fail-closed; verified in Level C disk-interception mutations 85-87 and Level D mutation 96. | **RESOLVED** |
+| **R7-F03** | MAJOR | In C++ `main.cpp`, `continue_on_error` and `allow_recovery` were not validated with strict JSON boolean typing (`j.is_boolean()`), leading to divergence with Python truthiness (e.g. string `"true"` was treated as True in Python but non-boolean in C++). | Enforced `j.is_boolean()` in `main.cpp` for both `continue_on_error` and `allow_recovery`; non-boolean types throw `std::invalid_argument` triggering `INPUT_SCHEMA_ERROR` (exit code 2). In runner preflight and schema validator, strictly rejected non-boolean values (`CONTAINMENT_VIOLATION` / schema violation). | Injected string/numeric booleans confirmed rejected fail-closed; verified in Level C mutations 88-89. | **RESOLVED** |
+| **R7-F04** | MAJOR | Level D mutation tests in `test_rapidflow_apx_engines.py` were limited and did not test stage-level runner failure when disk output had corrupted transaction-aware counters or recovery lifecycles. | Added Level D mutations 94-97 using `make_disk_intercepting_executor` to corrupt `raw_emissions`, `work_units`, and recovery lifecycles during runner execution, confirming hand stage failure, overall status `DIAGNOSTIC_SUBSET_FAIL`, and non-zero exit code. Added positive control mutation 97 confirming clean execution passes with exit code 0. Overall mutation suite now covers 97 / 97 mutations (100.0% detection rate). | Mutation suite detects 97 / 97 mutations (100.0% detection rate, 0 false PASS). | **RESOLVED** |
+| **R7-F05** | MINOR | Corrected report typographical references and updated mutation count to reflect true 97 mutations. Synchronized all provenance hashes and Git commit SHAs. | Synchronized validation report metadata, provenance table, and commit hashes bit-for-bit with Git repository state and canonical artifact hashes. | Verified with automated consistency test `test_validation_report_consistency_audit`. | **RESOLVED** |
+
+---
+
+## 6. Round 6 Comprehensive Root-Cause Remediation & Acceptance
 
 The Round 6 remediation addresses findings R6-F01 through R6-F06 and R6-AUDIT:
 
@@ -195,7 +209,7 @@ The Round 6 remediation addresses findings R6-F01 through R6-F06 and R6-AUDIT:
 
 ---
 
-## 6. Round 5 Independent Review Findings & Remediation Matrix
+## 7. Round 5 Independent Review Findings & Remediation Matrix
 
 The Round 5 comprehensive engineering remediation addresses findings R5-F01 through R5-F04:
 
@@ -209,7 +223,7 @@ The Round 5 comprehensive engineering remediation addresses findings R5-F01 thro
 
 ---
 
-## 7. Round 4 Independent Review Findings & Remediation Matrix
+## 8. Round 4 Independent Review Findings & Remediation Matrix
 
 The Round 4 comprehensive remediation addresses findings R4-F01 through R4-F08:
 
@@ -226,7 +240,7 @@ The Round 4 comprehensive remediation addresses findings R4-F01 through R4-F08:
 
 ---
 
-## 8. Round 3 Independent Review Findings & Verification Matrix
+## 9. Round 3 Independent Review Findings & Verification Matrix
 
 The Round 3 remediation addresses findings R3-F01 through R3-F08:
 
@@ -243,7 +257,7 @@ The Round 3 remediation addresses findings R3-F01 through R3-F08:
 
 ---
 
-## 9. Previous Round 1 & Round 2 Summary
+## 10. Previous Round 1 & Round 2 Summary
 
 Prior findings from Round 1 (P3-F01 through P3-F09) addressed core execution mechanics:
 - **P3-F01**: Separated `step_counters_` (isolated per step) from `cumulative_counters_`.
@@ -260,7 +274,7 @@ All Round 1 and Round 2 fixes remain fully preserved and covered by regression t
 
 ---
 
-## 10. Decision Summary
+## 11. Decision Summary
 
 | Component | Status | Finding / Action |
 | :--- | :---: | :--- |
@@ -277,7 +291,7 @@ All Round 1 and Round 2 fixes remain fully preserved and covered by regression t
 
 ---
 
-## 11. Handoff & Next Steps
+## 12. Handoff & Next Steps
 
 1. **Reviewer Handover**:
    - PR target: `QuangThang`.
