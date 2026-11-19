@@ -217,6 +217,7 @@ int main(int argc, char* argv[]) {
     std::string output_path = "";
     bool cli_max_work_set = false;
     uint64_t cli_max_work = 500000;
+    bool continue_on_error = false;
 
     bool seen_engine = false;
     bool seen_workload = false;
@@ -274,8 +275,10 @@ int main(int argc, char* argv[]) {
             }
             cli_max_work_set = true;
             seen_max_work = true;
+        } else if (arg == "--continue-on-error") {
+            continue_on_error = true;
         } else if (arg == "--help" || arg == "-h") {
-            std::cout << "Usage: rapidflow_apx_native --engine <m1|m2> --workload <INPUT.json> --output <OUTPUT.json> [--max-work <N>]\n";
+            std::cout << "Usage: rapidflow_apx_native --engine <m1|m2> --workload <INPUT.json> --output <OUTPUT.json> [--max-work <N>] [--continue-on-error]\n";
             return static_cast<int>(ExitCode::SUCCESS);
         } else {
             std::cerr << "Error: Unknown or unsupported option: " << arg << "\n";
@@ -353,6 +356,11 @@ int main(int argc, char* argv[]) {
 
         std::string case_id = root_in.contains("case_id") ? root_in["case_id"].as_string() : "unknown";
         root_out["case_id"] = json::Value(case_id);
+
+        if ((root_in.contains("continue_on_error") && root_in["continue_on_error"].is_bool() && root_in["continue_on_error"].as_bool()) ||
+            (root_in.contains("allow_recovery") && root_in["allow_recovery"].is_bool() && root_in["allow_recovery"].as_bool())) {
+            continue_on_error = true;
+        }
 
         if (root_in.contains("updates") && root_in["updates"].is_array()) {
             int64_t total_u = static_cast<int64_t>(root_in["updates"].as_array().size());
@@ -653,24 +661,40 @@ int main(int argc, char* argv[]) {
 
                 if (step_res.status != StepStatus::SUCCESS) {
                     any_failure = true;
-                    failed_steps = 1;
-                    first_failing_error = step_res.error_message;
-                    if (step_res.status == StepStatus::CALLBACK_ABORTED &&
-                        step_res.error_message.find("Work budget exceeded") != std::string::npos) {
-                        first_failing_category = "WORK_BUDGET_EXCEEDED";
-                        first_failing_exit = ExitCode::WORK_BUDGET_EXCEEDED;
-                    } else if (step_res.status == StepStatus::PREVALIDATION_FAILED) {
-                        first_failing_category = "PREVALIDATION_ERROR";
-                        first_failing_exit = ExitCode::STEP_FAILURE;
-                    } else if (step_res.status == StepStatus::FAULT_INJECTED) {
-                        first_failing_category = "FAULT_INJECTED";
-                        first_failing_exit = ExitCode::STEP_FAILURE;
-                    } else {
-                        first_failing_category = "STEP_FAILURE";
-                        first_failing_exit = ExitCode::STEP_FAILURE;
+                    failed_steps++;
+                    if (first_failing_error.empty()) {
+                        first_failing_error = step_res.error_message;
+                        if (step_res.status == StepStatus::CALLBACK_ABORTED &&
+                            step_res.error_message.find("Work budget exceeded") != std::string::npos) {
+                            first_failing_category = "WORK_BUDGET_EXCEEDED";
+                            first_failing_exit = ExitCode::WORK_BUDGET_EXCEEDED;
+                        } else if (step_res.status == StepStatus::PREVALIDATION_FAILED) {
+                            first_failing_category = "PREVALIDATION_ERROR";
+                            first_failing_exit = ExitCode::STEP_FAILURE;
+                        } else if (step_res.status == StepStatus::FAULT_INJECTED) {
+                            first_failing_category = "FAULT_INJECTED";
+                            first_failing_exit = ExitCode::STEP_FAILURE;
+                        } else {
+                            first_failing_category = "STEP_FAILURE";
+                            first_failing_exit = ExitCode::STEP_FAILURE;
+                        }
                     }
-                    step_json["error_category"] = json::Value(first_failing_category);
+                    std::string cur_step_cat = "STEP_FAILURE";
+                    if (step_res.status == StepStatus::PREVALIDATION_FAILED) {
+                        cur_step_cat = "PREVALIDATION_ERROR";
+                    } else if (step_res.status == StepStatus::FAULT_INJECTED) {
+                        cur_step_cat = "FAULT_INJECTED";
+                    } else if (step_res.status == StepStatus::CALLBACK_ABORTED &&
+                               step_res.error_message.find("Work budget exceeded") != std::string::npos) {
+                        cur_step_cat = "WORK_BUDGET_EXCEEDED";
+                    }
+                    step_json["error_category"] = json::Value(cur_step_cat);
                     steps_arr.push_back(step_json);
+
+                    if (continue_on_error) {
+                        streaming_engine.get_tx_manager().set_fault_injection(ApxTransactionManager::FaultPoint::NONE);
+                        continue;
+                    }
 
                     for (size_t rem = step_idx + 1; rem < total_steps; ++rem) {
                         json::Value un_step = json::Value::make_object();
@@ -700,16 +724,23 @@ int main(int argc, char* argv[]) {
                 completed_steps++;
             } catch (const std::exception& e) {
                 any_failure = true;
-                failed_steps = 1;
-                first_failing_error = e.what();
-                first_failing_category = "INPUT_SCHEMA_ERROR";
-                first_failing_exit = ExitCode::INPUT_PARSE_ERROR;
+                failed_steps++;
+                if (first_failing_error.empty()) {
+                    first_failing_error = e.what();
+                    first_failing_category = "INPUT_SCHEMA_ERROR";
+                    first_failing_exit = ExitCode::INPUT_PARSE_ERROR;
+                }
 
                 step_json["status"] = json::Value("ERROR");
                 step_json["commit_status"] = json::Value("NOT_COMMITTED");
                 step_json["error"] = json::Value(e.what());
                 step_json["error_category"] = json::Value("INPUT_SCHEMA_ERROR");
                 steps_arr.push_back(step_json);
+
+                if (continue_on_error) {
+                    streaming_engine.get_tx_manager().set_fault_injection(ApxTransactionManager::FaultPoint::NONE);
+                    continue;
+                }
 
                 for (size_t rem = step_idx + 1; rem < total_steps; ++rem) {
                     json::Value un_step = json::Value::make_object();
@@ -801,12 +832,12 @@ int main(int argc, char* argv[]) {
         root_out["error_message"] = json::Value(e.what());
         final_exit_code = ExitCode::WORK_BUDGET_EXCEEDED;
     } catch (const std::invalid_argument& e) {
-        root_out["status"] = json::Value("ERROR");
+        root_out["status"] = json::Value("FAIL");
         root_out["error_category"] = json::Value("INPUT_SCHEMA_ERROR");
         root_out["error_message"] = json::Value(e.what());
         final_exit_code = ExitCode::INPUT_PARSE_ERROR;
     } catch (const std::exception& e) {
-        root_out["status"] = json::Value("ERROR");
+        root_out["status"] = json::Value("FAIL");
         root_out["error_category"] = json::Value("UNCAUGHT_ERROR");
         root_out["error_message"] = json::Value(e.what());
         final_exit_code = ExitCode::UNCAUGHT_ERROR;

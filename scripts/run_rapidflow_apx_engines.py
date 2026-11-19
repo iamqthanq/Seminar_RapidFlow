@@ -944,22 +944,38 @@ def validate_native_output_schema(
         if total_steps != exp_total:
             return False, f"Execution total_steps mismatch: obs={total_steps} vs exp={exp_total}"
 
+    ALLOWED_ROOT_STATUSES = {"SUCCESS", "FAIL"}
+    ALLOWED_STEP_STATUSES = {
+        "SUCCESS", "PREVALIDATION_FAILED", "CALLBACK_ABORTED",
+        "FAULT_INJECTED", "ERROR", "UNATTEMPTED"
+    }
+    ALLOWED_COMMIT_STATUSES = {"COMMITTED", "NOT_COMMITTED"}
+    ALLOWED_ERROR_CATEGORIES = {
+        "NONE", "DOMAIN_ERROR", "PREVALIDATION_ERROR", "FAULT_INJECTED",
+        "WORK_BUDGET_EXCEEDED", "INPUT_SCHEMA_ERROR", "STEP_FAILURE",
+        "IO_ERROR", "RESOURCE_LIMIT", "CONTAINMENT_VIOLATION", "UNCAUGHT_ERROR"
+    }
+
     root_status = res_data.get("status")
-    if type(root_status) is not str:
-        return False, f"Root status is not string: {root_status}"
+    if type(root_status) is not str or root_status not in ALLOWED_ROOT_STATUSES:
+        return False, f"Root status invalid: '{root_status}' (must be string 'SUCCESS' or 'FAIL')"
+
+    root_err_cat = res_data.get("error_category")
+    if type(root_err_cat) is not str or root_err_cat not in ALLOWED_ERROR_CATEGORIES:
+        return False, f"Root error_category invalid: '{root_err_cat}'"
 
     if is_success:
         if root_status != "SUCCESS":
             return False, f"Expected root status SUCCESS, got: {root_status}"
-        if res_data.get("error_category") != "NONE":
-            return False, f"Expected error_category NONE on SUCCESS, got: {res_data.get('error_category')}"
+        if root_err_cat != "NONE":
+            return False, f"Expected error_category NONE on SUCCESS, got: {root_err_cat}"
         if completed_steps != total_steps or failed_steps != 0 or unattempted_steps != 0 or attempted_steps != total_steps:
             return False, f"Inconsistent execution lifecycle on SUCCESS: completed={completed_steps}, failed={failed_steps}, unattempted={unattempted_steps}, attempted={attempted_steps}, total={total_steps}"
     else:
-        if root_status == "SUCCESS":
-            return False, "Expected failing status, got SUCCESS"
-        if res_data.get("error_category") in (None, "", "NONE"):
-            return False, f"Expected non-NONE error_category on failure, got: {res_data.get('error_category')}"
+        if root_status != "FAIL":
+            return False, f"Expected root status FAIL on failure, got: {root_status}"
+        if root_err_cat in (None, "", "NONE"):
+            return False, f"Expected non-NONE error_category on failure, got: {root_err_cat}"
         if attempted_steps > 0 and failed_steps == 0:
             return False, f"Failing execution with attempted_steps={attempted_steps} must have failed_steps > 0"
 
@@ -983,40 +999,73 @@ def validate_native_output_schema(
             return False, f"Step item {s_idx} has mismatched or non-integer step_index: {s_step_index} (type={type(s_step_index)})"
 
         step_stat = step.get("status")
-        commit_stat = step.get("commit_status")
-        err_cat = step.get("error_category")
+        if type(step_stat) is not str or step_stat not in ALLOWED_STEP_STATUSES:
+            return False, f"Step {s_idx} status invalid: '{step_stat}' (must be one of {sorted(ALLOWED_STEP_STATUSES)})"
 
+        commit_stat = step.get("commit_status")
+        if type(commit_stat) is not str or commit_stat not in ALLOWED_COMMIT_STATUSES:
+            return False, f"Step {s_idx} commit_status invalid: '{commit_stat}' (must be one of {sorted(ALLOWED_COMMIT_STATUSES)})"
+
+        err_cat = step.get("error_category")
+        if type(err_cat) is not str or err_cat not in ALLOWED_ERROR_CATEGORIES:
+            return False, f"Step {s_idx} error_category invalid: '{err_cat}'"
+
+        if step_stat == "SUCCESS":
+            if commit_stat != "COMMITTED":
+                return False, f"Step {s_idx} status is SUCCESS but commit_status is not COMMITTED: {commit_stat}"
+            if err_cat != "NONE":
+                return False, f"Step {s_idx} status is SUCCESS but error_category is not NONE: {err_cat}"
+        else:
+            if commit_stat != "NOT_COMMITTED":
+                return False, f"Step {s_idx} status is '{step_stat}' but commit_status is not NOT_COMMITTED: {commit_stat}"
+            if len(step.get("entered_tuples", [])) != 0:
+                return False, f"Non-success step {s_idx} must have 0 entered tuples, got {len(step.get('entered_tuples', []))}"
+            if len(step.get("exited_tuples", [])) != 0:
+                return False, f"Non-success step {s_idx} must have 0 exited tuples, got {len(step.get('exited_tuples', []))}"
+
+        if step_stat == "UNATTEMPTED":
+            if err_cat != "NONE":
+                return False, f"UNATTEMPTED step {s_idx} error_category must be NONE: {err_cat}"
+        elif step_stat in ("PREVALIDATION_FAILED", "CALLBACK_ABORTED", "FAULT_INJECTED", "ERROR"):
+            if err_cat in (None, "", "NONE"):
+                return False, f"Failing step {s_idx} missing error_category: {err_cat}"
+
+        allow_recovery = bool(workload.get("continue_on_error") or workload.get("allow_recovery")) if workload else False
         if is_success:
             if step_stat != "SUCCESS":
                 return False, f"Root status is SUCCESS but step {s_idx} status is not SUCCESS: {step_stat}"
-            if commit_stat != "COMMITTED":
-                return False, f"Root status is SUCCESS but step {s_idx} commit_status is not COMMITTED: {commit_stat}"
-            if err_cat != "NONE":
-                return False, f"Root status is SUCCESS but step {s_idx} error_category is not NONE: {err_cat}"
         else:
-            if s_idx < completed_steps:
-                if step_stat != "SUCCESS":
-                    return False, f"Prior step {s_idx} before failure must have status SUCCESS: {step_stat}"
-                if commit_stat != "COMMITTED":
-                    return False, f"Prior step {s_idx} before failure must have commit_status COMMITTED: {commit_stat}"
-            elif s_idx == completed_steps:
-                if step_stat == "SUCCESS":
-                    return False, f"Failing step {s_idx} must not have status SUCCESS"
-                if commit_stat != "NOT_COMMITTED":
-                    return False, f"Failing step {s_idx} must have commit_status NOT_COMMITTED: {commit_stat}"
-                if err_cat in (None, "", "NONE"):
-                    return False, f"Failing step {s_idx} missing error_category: {err_cat}"
-                if err_cat != res_data.get("error_category"):
-                    return False, f"Failing step {s_idx} error_category mismatch with root: obs={err_cat} vs root={res_data.get('error_category')}"
-                if len(step.get("entered_tuples", [])) != 0:
-                    return False, f"Failing step {s_idx} must have 0 entered tuples, got {len(step.get('entered_tuples', []))}"
-                if len(step.get("exited_tuples", [])) != 0:
-                    return False, f"Failing step {s_idx} must have 0 exited tuples, got {len(step.get('exited_tuples', []))}"
-            else:
-                if step_stat != "UNATTEMPTED":
-                    return False, f"Future step {s_idx} after failure must have status UNATTEMPTED: {step_stat}"
-                if commit_stat != "NOT_COMMITTED":
-                    return False, f"Future step {s_idx} after failure must have commit_status NOT_COMMITTED: {commit_stat}"
+            if not allow_recovery:
+                if s_idx < completed_steps:
+                    if step_stat != "SUCCESS":
+                        return False, f"Prior step {s_idx} before failure must have status SUCCESS: {step_stat}"
+                elif s_idx == completed_steps:
+                    if step_stat == "SUCCESS":
+                        return False, f"Failing step {s_idx} must not have status SUCCESS"
+                    if err_cat != root_err_cat:
+                        return False, f"Failing step {s_idx} error_category mismatch with root: obs={err_cat} vs root={root_err_cat}"
+                else:
+                    if step_stat != "UNATTEMPTED":
+                        return False, f"Future step {s_idx} after failure must have status UNATTEMPTED: {step_stat}"
+
+        # Step counters structural & semantic validation (R6-F01)
+        if "step_counters" in step:
+            sc = step["step_counters"]
+            if not isinstance(sc, dict):
+                return False, f"Step {s_idx} step_counters is not an object: {type(sc)}"
+            for k, val in sc.items():
+                if type(val) is not int or isinstance(val, bool) or val < 0 or val > 500000000000000:
+                    return False, f"Step {s_idx} step_counters field '{k}' invalid: {val} (type={type(val)})"
+            if "max_work" in sc:
+                if sc["max_work"] <= 0 or sc["max_work"] > 500000:
+                    return False, f"Step {s_idx} step_counters max_work out of range (1..500000): {sc['max_work']}"
+            if "work_units" in sc and "max_work" in sc:
+                if sc["work_units"] > sc["max_work"]:
+                    return False, f"Step {s_idx} step_counters work_units ({sc['work_units']}) exceeds max_work ({sc['max_work']})"
+            if step_stat in ("PREVALIDATION_FAILED", "UNATTEMPTED"):
+                for zero_f in ("work_units", "dfs_states", "candidate_evaluations", "candidate_extensions", "anchors_started", "raw_exact_results", "variants_started"):
+                    if sc.get(zero_f, 0) != 0:
+                        return False, f"Step {s_idx} with status '{step_stat}' must have {zero_f} == 0, got {sc.get(zero_f)}"
 
         if s_idx < len(workload_updates) and step_stat != "UNATTEMPTED":
             upd = workload_updates[s_idx]
@@ -1180,22 +1229,40 @@ def validate_native_output_schema(
         if obs_lambda != oracle_lambda:
             return False, f"computed_lambda mismatch with independent cut oracle: obs={obs_lambda} vs exp={oracle_lambda}"
 
-    # 5. Emission Accounting (P3-R3-F01)
-    if is_success:
-        cnt = res_data.get("counters")
+    # 5. Emission Accounting & Global Counters (P3-R3-F01, P3-R6-F01)
+    if "counters" in res_data:
+        cnt = res_data["counters"]
         if not isinstance(cnt, dict):
-            return False, "Missing 'counters' object on SUCCESS"
+            return False, "'counters' in native output is not an object"
         for ef in ["raw_emissions", "unique_emissions", "committed_emissions", "discarded_emissions"]:
+            if ef not in cnt:
+                return False, f"Root counters missing required emission field '{ef}'"
             val = cnt.get(ef)
-            if type(val) is not int or val < 0:
+            if type(val) is not int or isinstance(val, bool) or val < 0 or val > 500000000000000:
                 return False, f"Emission counter '{ef}' invalid: {val} (type={type(val)})"
-        if cnt["raw_emissions"] != cnt["unique_emissions"] + cnt["discarded_emissions"]:
-            return False, f"Emission invariant violated: raw ({cnt['raw_emissions']}) != unique ({cnt['unique_emissions']}) + discarded ({cnt['discarded_emissions']})"
-        total_committed_tuples = sum(len(s.get("entered_tuples", [])) + len(s.get("exited_tuples", [])) for s in steps)
+
+        for ck, cval in cnt.items():
+            if type(cval) is not int or isinstance(cval, bool) or cval < 0 or cval > 500000000000000:
+                return False, f"Root counter '{ck}' invalid: {cval} (type={type(cval)})"
+
+        if cnt["raw_emissions"] < cnt["unique_emissions"]:
+            return False, f"Emission invariant violated: raw ({cnt['raw_emissions']}) < unique ({cnt['unique_emissions']})"
+
+        if cnt["unique_emissions"] != cnt["committed_emissions"] + cnt["discarded_emissions"]:
+            return False, f"Emission invariant violated: unique ({cnt['unique_emissions']}) != committed ({cnt['committed_emissions']}) + discarded ({cnt['discarded_emissions']})"
+
+        total_committed_tuples = sum(
+            len(s.get("entered_tuples", [])) + len(s.get("exited_tuples", []))
+            for s in steps if s.get("commit_status") == "COMMITTED"
+        )
         if total_committed_tuples != cnt["committed_emissions"]:
             return False, f"Committed emissions mismatch: step sum={total_committed_tuples} vs counter={cnt['committed_emissions']}"
-        if cnt["discarded_emissions"] != 0:
-            return False, f"Canonical run must have 0 discarded emissions (zero duplicates), got: {cnt['discarded_emissions']}"
+
+        if is_success:
+            if cnt["discarded_emissions"] != 0:
+                return False, f"Canonical run must have 0 discarded emissions (zero duplicates), got: {cnt['discarded_emissions']}"
+    elif is_success:
+        return False, "Missing required 'counters' object on SUCCESS"
 
     # 6. Work Budget Precedence & Authority (P3-R3-F07)
     wb = res_data.get("work_budget")

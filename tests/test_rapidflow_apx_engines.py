@@ -1604,19 +1604,90 @@ class TestRapidFlowApxEngines(unittest.TestCase):
             record_mutation("Level C: Disk interception in stage execution fails hand stage", not stage_ok)
         finally: runner_mod.execute_contained_subprocess = orig_exec
 
+        # 74. Negative root status mutated to "BANANA" on disk rejected fail-closed (R6-F02)
+        def mut_74(d): d["status"] = "BANANA"; return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_74)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand22)
+            record_mutation("Level C: Root status BANANA on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 75. Negative step status mutated to "BANANA" on disk rejected fail-closed (R6-F02)
+        def mut_75(d): d["steps"][0]["status"] = "BANANA"; return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_75)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand22)
+            record_mutation("Level C: Step status BANANA on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 76. Negative committed_emissions mutated to 1 on failure on disk rejected fail-closed (R6-F01)
+        def mut_76(d): d["counters"]["committed_emissions"] = 1; return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_76)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand22)
+            record_mutation("Level C: committed_emissions=1 on failure on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 77. Negative raw_emissions mutated to True on disk rejected fail-closed (R6-F01)
+        def mut_77(d): d["counters"]["raw_emissions"] = True; return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_77)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand22)
+            record_mutation("Level C: raw_emissions=True on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 78. Negative raw_emissions mutated to -1 on disk rejected fail-closed (R6-F01)
+        def mut_78(d): d["counters"]["raw_emissions"] = -1; return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_78)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand22)
+            record_mutation("Level C: raw_emissions=-1 on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 79. Negative step work_units mutated to 2**62 on disk rejected fail-closed (R6-F01)
+        def mut_79(d): d["steps"][0]["step_counters"]["work_units"] = 2**62; return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_79)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand22)
+            record_mutation("Level C: work_units=2**62 on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 80. Negative step max_work mutated to -1 on disk rejected fail-closed (R6-F01)
+        def mut_80(d): d["steps"][0]["step_counters"]["max_work"] = -1; return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_80)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand22)
+            record_mutation("Level C: max_work=-1 on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 81. Negative step dfs_states mutated to True on disk rejected fail-closed (R6-F01)
+        def mut_81(d): d["steps"][0]["step_counters"]["dfs_states"] = True; return d
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_81)
+        try:
+            r, _, ok = run_workload_on_binary(self.binary_path, "m1", wl_hand22)
+            record_mutation("Level C: dfs_states=True on disk rejected", not r.get("schema_valid"))
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
+        # 82. Stage-level disk interception on negative case: mutating committed_emissions=1 fails hand stage (Level D, R6-F06)
+        runner_mod.execute_contained_subprocess = make_disk_intercepting_executor(mut_76)
+        try:
+            stage_results, stage_ok = run_hand_and_witness_cases(self.binary_path, engine_filter="m1", case_filter="CASE_HAND_22")
+            record_mutation("Level D: Negative case corruption on disk fails hand stage", not stage_ok)
+        finally: runner_mod.execute_contained_subprocess = orig_exec
+
         # CLI invocations
-        # 74. CLI: Runner invoked with unknown case ID rejected fail-closed (Level C)
+        # 83. CLI: Runner invoked with unknown case ID rejected fail-closed (Level C)
         runner_script = REPO_ROOT / "scripts" / "run_rapidflow_apx_engines.py"
         cmd_unknown = [sys.executable, str(runner_script), "--case", "NON_EXISTENT_CASE_999"]
         proc_unk = subprocess.run(cmd_unknown, capture_output=True, text=True, cwd=REPO_ROOT)
         record_mutation("Level C: Unknown case filter rejected with non-zero exit", proc_unk.returncode != 0)
 
-        # 75. CLI: Runner invoked with stage mismatch rejected fail-closed (Level C)
+        # 84. CLI: Runner invoked with stage mismatch rejected fail-closed (Level C)
         cmd_mismatch = [sys.executable, str(runner_script), "--stage", "stream", "--case", "CASE_HAND_01"]
         proc_mis = subprocess.run(cmd_mismatch, capture_output=True, text=True, cwd=REPO_ROOT)
         record_mutation("Level C: Case stage mismatch rejected with non-zero exit", proc_mis.returncode != 0)
 
-        # 76. CLI: Runner invoked with invalid engine option rejected fail-closed (Level C)
+        # 85. CLI: Runner invoked with invalid engine option rejected fail-closed (Level C)
         cmd_invalid_eng = [sys.executable, str(runner_script), "--engine", "invalid_engine_name"]
         proc_eng = subprocess.run(cmd_invalid_eng, capture_output=True, text=True, cwd=REPO_ROOT)
         record_mutation("Level C: Invalid engine option rejected with non-zero exit", proc_eng.returncode != 0)
@@ -1756,27 +1827,54 @@ class TestRapidFlowApxEngines(unittest.TestCase):
             self.assertEqual(steps[2]["commit_status"], "NOT_COMMITTED")
 
     def test_active_transaction_rollback_before_publish_staged_tuples(self):
-        """Verifies active transaction rollback occurring BEFORE publish, proving staged tuples are discarded (R5-F03 Test B).
-        Step 0: Valid update commits 4th edge.
-        Step 1: Update begins, mutates graph, stages candidate tuples in tuple sink, then fault injection (BEFORE_PUBLISH) fires.
-                Transaction manager aborts transaction, discards all staged tuples in sink (0 emitted), and restores graph state."""
+        """Verifies active transaction rollback occurring BEFORE publish, proving staged tuples are discarded (R6-F03).
+        Workload: 4-cycle Diamond witness:
+          Query: (0,1), (0,2), (1,3), (2,3), labels 0, k=0.
+          Initial: 3 edges (0,1), (0,2), (1,3).
+          Step 0: INSERT (1,2) -> commits, graph has 4 edges, 0 entered tuples.
+          Step 1: INSERT (2,3) completes C4 cycle -> hypothetical success yields 8 entered mappings.
+                  With fault: BEFORE_PUBLISH, all 8 candidate mappings are staged in tuple sink,
+                  then transaction manager aborts transaction, discards all 8 staged tuples,
+                  restores graph state to Step 0 state (4 edges), and commits 0 tuples!
+                  Tuple sink counters: raw_emissions >= 8, unique_emissions >= 8, committed_emissions == 0, discarded_emissions >= 8."""
         wl = {
             "case_id": "test_active_tx_rollback_before_publish",
             "query": {
                 "vertices": [{"id": i, "label": 0} for i in range(4)],
-                "edges": [{"u": 0, "v": 1, "label": 0}, {"u": 0, "v": 2, "label": 0}, {"u": 1, "v": 3, "label": 0}, {"u": 2, "v": 3, "label": 0}]
+                "edges": [
+                    {"u": 0, "v": 1, "label": 0},
+                    {"u": 0, "v": 2, "label": 0},
+                    {"u": 1, "v": 3, "label": 0},
+                    {"u": 2, "v": 3, "label": 0},
+                ]
             },
             "k": 0,
             "initial_graph": {
                 "vertices": [{"id": i, "label": 0} for i in range(4)],
-                "edges": [{"u": 0, "v": 1, "label": 0}, {"u": 0, "v": 2, "label": 0}, {"u": 1, "v": 3, "label": 0}]
+                "edges": [
+                    {"u": 0, "v": 1, "label": 0},
+                    {"u": 0, "v": 2, "label": 0},
+                    {"u": 1, "v": 3, "label": 0},
+                ]
             },
             "updates": [
-                {"op": "+", "u": 2, "v": 3, "label": 0},
-                {"op": "+", "u": 1, "v": 2, "label": 0, "fault": "BEFORE_PUBLISH"},
+                {"op": "+", "u": 1, "v": 2, "label": 0},
+                {"op": "+", "u": 2, "v": 3, "label": 0, "fault": "BEFORE_PUBLISH"},
                 {"op": "+", "u": 0, "v": 3, "label": 0}
             ]
         }
+        # First verify positive control on Step 1 (without fault) yields 8 entered tuples
+        wl_pos = copy.deepcopy(wl)
+        del wl_pos["updates"][1]["fault"]
+        wl_pos["updates"] = wl_pos["updates"][:2]
+        for eng in ["m1", "m2"]:
+            res_pos, _, ok_pos = run_workload_on_binary(self.binary_path, eng, wl_pos)
+            self.assertTrue(ok_pos, f"Positive witness must succeed on {eng}")
+            self.assertEqual(len(res_pos["steps"][1]["entered_tuples"]), 8, f"{eng} positive control must yield 8 entered tuples")
+            self.assertEqual(res_pos["counters"]["committed_emissions"], 8)
+            self.assertEqual(res_pos["counters"]["discarded_emissions"], 0)
+
+        # Now verify faulted run: staged tuples are discarded, graph rolled back
         for eng in ["m1", "m2"]:
             res, dur, _ = run_workload_on_binary(self.binary_path, eng, wl)
             self.assertEqual(res.get("status"), "FAIL")
@@ -1789,67 +1887,161 @@ class TestRapidFlowApxEngines(unittest.TestCase):
             # Step 0: Committed
             self.assertEqual(steps[0]["status"], "SUCCESS")
             self.assertEqual(steps[0]["commit_status"], "COMMITTED")
+            self.assertEqual(len(steps[0]["entered_tuples"]), 0)
+            self.assertEqual(steps[0]["graph_state"]["edges_count"], 4)
 
             # Step 1: Staged tuples discarded from sink on abort
             self.assertEqual(steps[1]["status"], "FAULT_INJECTED")
             self.assertEqual(steps[1]["commit_status"], "NOT_COMMITTED")
             self.assertEqual(len(steps[1]["entered_tuples"]), 0, "Staged tuples must be aborted, not published")
             self.assertEqual(len(steps[1]["exited_tuples"]), 0)
-            self.assertEqual(steps[1]["graph_state"]["edges_count"], 4)
+            self.assertEqual(steps[1]["graph_state"]["edges_count"], 4, "Graph must be restored to Step 0 state")
+
+            # Check emission counters in root: raw >= 8, unique >= 8, committed == 0, discarded >= 8
+            cnt = res.get("counters", {})
+            self.assertGreaterEqual(cnt.get("raw_emissions", 0), 8)
+            self.assertGreaterEqual(cnt.get("unique_emissions", 0), 8)
+            self.assertEqual(cnt.get("committed_emissions"), 0)
+            self.assertGreaterEqual(cnt.get("discarded_emissions", 0), 8)
+            self.assertEqual(cnt["unique_emissions"], cnt["committed_emissions"] + cnt["discarded_emissions"])
 
             # Step 2: Unattempted
             self.assertEqual(steps[2]["status"], "UNATTEMPTED")
 
     def test_active_transaction_recovery_subsequent_step(self):
-        """Verifies that after an aborted transaction, the underlying graph and engine structures remain consistent (R5-F03)."""
-        G_ref = DStarGraph()
-        for i in range(4):
-            G_ref.add_vertex(i, 0)
-        G_ref.add_edge(0, 1, 0)
-        G_ref.add_edge(0, 2, 0)
-        G_ref.add_edge(1, 3, 0)
-        G_ref.add_edge(2, 3, 0)  # state after Step 0
-
+        """Verifies full transaction lifecycle recovery on the SAME transaction manager and streaming engine instance (R6-F04):
+        Step 0 (Step A): Valid transaction executes and commits -> graph has 4 edges, 0 entered.
+        Step 1 (Step B): Active transaction mutates graph, stages candidates, then aborts (BEFORE_PUBLISH fault) ->
+                         rolls back graph, restores codec, discards staged tuples, commit_status NOT_COMMITTED.
+        Step 2 (Step C): Subsequent valid transaction executed on the SAME manager instance without reallocating engine ->
+                         successfully applies mutation, computes 8 entered tuples matching DStar Oracle, and commits!"""
         wl = {
-            "case_id": "test_active_tx_recovery",
+            "case_id": "test_active_tx_recovery_lifecycle",
             "query": {
                 "vertices": [{"id": i, "label": 0} for i in range(4)],
-                "edges": [{"u": 0, "v": 1, "label": 0}, {"u": 0, "v": 2, "label": 0}, {"u": 1, "v": 3, "label": 0}, {"u": 2, "v": 3, "label": 0}]
+                "edges": [
+                    {"u": 0, "v": 1, "label": 0},
+                    {"u": 0, "v": 2, "label": 0},
+                    {"u": 1, "v": 3, "label": 0},
+                    {"u": 2, "v": 3, "label": 0},
+                ]
             },
             "k": 0,
             "initial_graph": {
                 "vertices": [{"id": i, "label": 0} for i in range(4)],
-                "edges": [{"u": 0, "v": 1, "label": 0}, {"u": 0, "v": 2, "label": 0}, {"u": 1, "v": 3, "label": 0}]
+                "edges": [
+                    {"u": 0, "v": 1, "label": 0},
+                    {"u": 0, "v": 2, "label": 0},
+                    {"u": 1, "v": 3, "label": 0},
+                ]
             },
+            "continue_on_error": True,
             "updates": [
-                {"op": "+", "u": 2, "v": 3, "label": 0},
-                {"op": "+", "u": 1, "v": 2, "label": 0, "fault": "AFTER_MUTATION"}
+                {"op": "+", "u": 1, "v": 2, "label": 0},
+                {"op": "+", "u": 2, "v": 3, "label": 0, "fault": "BEFORE_PUBLISH"},
+                {"op": "+", "u": 2, "v": 3, "label": 0}
             ]
         }
-        res, _, _ = run_workload_on_binary(self.binary_path, "m1", wl)
-        step1_gs = res["steps"][1]["graph_state"]
-        g_ok, g_diag = validate_graph_state(step1_gs, G_ref, "recovery", "m1", 1)
-        self.assertTrue(g_ok, f"Graph state after rollback must match reference model: {g_diag}")
+        for eng in ["m1", "m2"]:
+            res, dur, _ = run_workload_on_binary(self.binary_path, eng, wl)
+            self.assertEqual(res.get("status"), "FAIL", "Overall status is FAIL because Step 1 had fault injection")
+            self.assertEqual(res.get("exit_code"), 6)
+            self.assertEqual(res.get("error_category"), "FAULT_INJECTED")
+
+            exec_info = res.get("execution", {})
+            self.assertEqual(exec_info.get("total_steps"), 3)
+            self.assertEqual(exec_info.get("attempted_steps"), 3)
+            self.assertEqual(exec_info.get("completed_steps"), 2)
+            self.assertEqual(exec_info.get("failed_steps"), 1)
+            self.assertEqual(exec_info.get("unattempted_steps"), 0)
+
+            steps = res.get("steps", [])
+            self.assertEqual(len(steps), 3)
+
+            # Step 0 (Step A): Successfully committed
+            self.assertEqual(steps[0]["status"], "SUCCESS")
+            self.assertEqual(steps[0]["commit_status"], "COMMITTED")
+            self.assertEqual(len(steps[0]["entered_tuples"]), 0)
+            self.assertEqual(steps[0]["graph_state"]["edges_count"], 4)
+
+            # Step 1 (Step B): Aborted, rolled back, 0 published
+            self.assertEqual(steps[1]["status"], "FAULT_INJECTED")
+            self.assertEqual(steps[1]["commit_status"], "NOT_COMMITTED")
+            self.assertEqual(len(steps[1]["entered_tuples"]), 0)
+            self.assertEqual(steps[1]["graph_state"]["edges_count"], 4)
+
+            # Step 2 (Step C): Successfully committed on the SAME engine instance!
+            self.assertEqual(steps[2]["status"], "SUCCESS")
+            self.assertEqual(steps[2]["commit_status"], "COMMITTED")
+            self.assertEqual(len(steps[2]["entered_tuples"]), 8)
+            self.assertEqual(steps[2]["graph_state"]["edges_count"], 5)
+
+            # Cumulative counters
+            cnt = res.get("counters", {})
+            self.assertGreaterEqual(cnt.get("raw_emissions", 0), 16)
+            self.assertGreaterEqual(cnt.get("unique_emissions", 0), 16)
+            self.assertEqual(cnt.get("committed_emissions"), 8)
+            self.assertGreaterEqual(cnt.get("discarded_emissions", 0), 8)
+            self.assertEqual(cnt["unique_emissions"], cnt["committed_emissions"] + cnt["discarded_emissions"])
 
     def test_postcommit_output_error_classification(self):
         """Verifies that output transport failures (e.g. unwritable output file path) return ExitCode 7 (IO_ERROR),
-        which is classified as an output serialization/transport error distinct from transaction rollback (R5-F03)."""
+        which is classified as an output serialization/transport error distinct from domain, prevalidation, or transaction abort errors (R6-F05).
+        Workload: Valid matching C4 Diamond witness that produces 8 entered tuples on normal execution."""
         wl = {
             "case_id": "test_postcommit_io_error",
-            "query": {"vertices": [{"id": 0, "label": 0}], "edges": []},
+            "query": {
+                "vertices": [{"id": i, "label": 0} for i in range(4)],
+                "edges": [
+                    {"u": 0, "v": 1, "label": 0},
+                    {"u": 0, "v": 2, "label": 0},
+                    {"u": 1, "v": 3, "label": 0},
+                    {"u": 2, "v": 3, "label": 0},
+                ]
+            },
             "k": 0,
-            "initial_graph": {"vertices": [{"id": 0, "label": 0}], "edges": []},
-            "updates": [{"op": "+", "u": 0, "v": 0, "label": 0}]
+            "initial_graph": {
+                "vertices": [{"id": i, "label": 0} for i in range(4)],
+                "edges": [
+                    {"u": 0, "v": 1, "label": 0},
+                    {"u": 0, "v": 2, "label": 0},
+                    {"u": 1, "v": 3, "label": 0},
+                ]
+            },
+            "updates": [
+                {"op": "+", "u": 2, "v": 3, "label": 0}
+            ]
         }
+        # First verify positive control on normal writable path succeeds with ExitCode 0 and 8 entered tuples
+        res_pos, _, ok_pos = run_workload_on_binary(self.binary_path, "m1", wl)
+        self.assertTrue(ok_pos, f"Workload must be a valid positive matching workload: {res_pos.get('error_message')}")
+        self.assertEqual(res_pos.get("exit_code"), 0)
+        self.assertEqual(len(res_pos["steps"][0]["entered_tuples"]), 8)
+
+        # Now run with unwritable destination (/dev/full or non-existent path)
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as wf:
             json.dump(wl, wf)
             wf.flush()
             wf_path = wf.name
 
         try:
+            # Test unwritable output path
             cmd = [str(self.binary_path), "--engine", "m1", "--workload", wf_path, "--output", "/nonexistent/invalid_dir/output.json"]
             proc = subprocess.run(cmd, capture_output=True, text=True, cwd=REPO_ROOT)
             self.assertEqual(proc.returncode, 7, f"Output transport failure must exit with code 7 (IO_ERROR), got {proc.returncode}")
+            self.assertIn("Output write failure", proc.stderr)
+            self.assertNotIn("DOMAIN_ERROR", proc.stderr)
+            self.assertNotIn("Pre-validation", proc.stderr)
+
+            # If /dev/full exists and is writable, also test /dev/full (ENOSPC simulation)
+            if os.path.exists("/dev/full"):
+                try:
+                    cmd_full = [str(self.binary_path), "--engine", "m1", "--workload", wf_path, "--output", "/dev/full"]
+                    proc_full = subprocess.run(cmd_full, capture_output=True, text=True, cwd=REPO_ROOT)
+                    self.assertEqual(proc_full.returncode, 7, f"/dev/full write failure must exit with code 7 (IO_ERROR), got {proc_full.returncode}")
+                    self.assertIn("Output write failure", proc_full.stderr)
+                except PermissionError:
+                    pass
         finally:
             if Path(wf_path).exists():
                 Path(wf_path).unlink()
