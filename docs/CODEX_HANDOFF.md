@@ -15,14 +15,14 @@
   - Implemented `ApxQueryPlan` (native $\lambda(Q)$ via Edmonds-Karp BFS augmenting path max-flow, fail-closed D-R validation $0 \le k < \lambda(Q)$, incident edge indexing).
   - Implemented `ApxM1EnumEngine` (exact $Q - D$ variant search, anchored seed mapping, strict $R(f) = D$ missing set filter).
   - Implemented `ApxM2EventEngine` (bare direct DFS branching on PRESENT/MISSING, deferred vertex commitments, incident edge resolution, leaf invariant guard, exposed `find_frontier_edge` seam, deterministic fault hooks).
-  - Implemented `ApxStreamingEngine` (ACID transaction execution, label interning, duplicate suppression, active-set tracking).
+  - Implemented `ApxStreamingEngine` (ACID transaction coordination, update pre-validation, query label relevance filtering, M1/M2 search kernel dispatch, and per-step counter tracking; tuple validation and duplicate emission detection are enforced fail-closed by `ApxTupleSink`, while active-set reconstruction is verified externally by the test runner against M0).
   - Standalone native harness `tests/native/rapidflow_apx_engines/build/rapidflow_apx_native` rebuilt cleanly.
   - Verification: 25 hand & adversarial cases (25/25 PASS); 840 correctness corpus cases (840/840 M1 & 840/840 M2 bit-for-bit with M0 Oracle, 8,002 truth events, zero duplicates); 56-stream matrix (672/672 M1 & 672/672 M2 step agreements, 672/672 active-set reconstructions match M0).
   - Mutation & Fail-Closed Suite: 106/106 adversarial mutations detected (100.0% detection rate) across Levels A–D.
   - Native Witness Suite (Group X): 6 dedicated invariant and fault isolation tests passing cleanly.
   - Repository regression: 551 tests in repository test suite PASS with 0 failures and 0 errors in ~130s.
-  - Decision R3 completed (`docs/research_decisions/D-R3-native-engines.md`) answering all 12 questions with verdict `ENGINES_VERIFIED_READY_FOR_P4_DESIGN (PENDING INDEPENDENT REVIEW / MERGE APPROVAL)`.
+  - Decision R3 completed (`docs/research_decisions/D-R3-native-engines.md`) answering all 12 questions with verdict `ENGINES_VERIFIED_READY_FOR_P4_DESIGN (PENDING INDEPENDENT MERGE REVIEW / APPROVAL)`.
   - Comprehensive closure audit completed in `docs/rapidflow_apx_p3_issue32_closure_audit.md`.
   - Upstream pinned `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` remains 100% pristine.
-  - Status: `READY_FOR_INDEPENDENT_FINAL_REVIEW`.
-- **Next action:** Independent final review and merge of Draft PR #33 into `QuangThang` for Issue #32 by user/maintainer. Phase P4 (approximate pruning $\delta'$ & NLF filters) design will begin only after explicit user approval.
+  - Status: `READY_FOR_INDEPENDENT_MERGE_REVIEW`.
+- **Next action:** Independent merge review and merge of Draft PR #33 into `QuangThang` for Issue #32 by user/maintainer. Phase P4 (approximate pruning $\delta'$ & NLF filters) design will begin only after explicit user approval.

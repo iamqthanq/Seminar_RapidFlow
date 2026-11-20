@@ -9,8 +9,8 @@
 **Integration Target:** `QuangThang` (Release branch `main` strictly protected)
 **Base Commit:** `88fbe200ff9217f4dccbad08bfa448d067d2ce4e` (contains accepted P2 HEAD `ebe2894752dc45e2aeb3109c260a34e2f87a9d06`)
 **Pinned Upstream RapidFlow:** `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` (Pristine: `true`)
-**Status:** COMPLETE — READY FOR INDEPENDENT FINAL REVIEW
-**Final Handoff Verdict:** `READY_FOR_INDEPENDENT_FINAL_REVIEW`
+**Status:** COMPLETE — READY FOR INDEPENDENT MERGE REVIEW
+**Final Handoff Verdict:** `READY_FOR_INDEPENDENT_MERGE_REVIEW`
 
 ---
 
@@ -125,6 +125,12 @@
    - Queries with $k \ge \lambda(Q)$ (Domain D-G) or disconnected queries are outside the theoretical guarantee of connected variant subgraphs and are rejected fail-closed.
 4. **Graph Dynamics**:
    - Fixed vertex universe; vertex insertion/deletion and vertex label mutations are not supported in Phase P3.
+5. **Neighbor Materialization Overhead**:
+   - `ApxAuthoritativeGraph::get_neighbors(u)` returns `std::vector<uint32_t>` by value (merging CSR base and mutable overlay, sorting and deduplicating), allocating a new vector on each invocation. Quantitative profiling and zero-copy view optimizations are deferred to post-P3 performance evaluation (`SOURCE-LEVEL HYPOTHESIS — NOT EXPERIMENTALLY VERIFIED IN P3`).
+6. **M1 Dynamic Variant Generation**:
+   - In `ApxM1EnumEngine::search_event()`, variant plans are generated dynamically per event search rather than pre-materialized during query plan initialization.
+7. **Unmeasured Latencies & Overheads**:
+   - Query preprocessing latency and execution counter instrumentation overhead were not measured via controlled on/off benchmarking in Phase P3 (`NOT MEASURED IN P3`). Quantitative measurement belongs to post-P3 evaluation.
 
 ---
 
@@ -139,6 +145,10 @@
 | **FC-05** | MAJOR | Supporting documentation out of sync. | **RESOLVED** | Synchronized `CODEX_HANDOFF.md`, `rapidflow_apx_research_plan.md`, `integration_map.md`, and validation report. |
 | **FC-06** | MAJOR | Logic SHA typo (`...154f8` vs real `...e00`). | **RESOLVED** | Audited git history and corrected to valid commit `2e60255b93368b12fb8cabbeeec8204782609e00`. |
 | **FC-07** | MAJOR | Test taxonomy and evidence classification refinement. | **RESOLVED** | Explicit Level A–D taxonomy and native witness categorization documented. |
+| **DOC-F01** | MAJOR | R3-C technical claims contrary to source; unmeasured performance numbers. | **RESOLVED** | Corrected duplicate handling (`DuplicateEmissionException` fail-closed, no silent deduplication), mid-DFS fault accounting (`raw=0, committed=0`) vs `BEFORE_PUBLISH` staged discard (`raw=8, unique=8, committed=0, discarded=8`), removed unsupported `<1%` and `<0.1ms` numbers, documented `get_neighbors()` returning vector by value, and documented M1 dynamic variant generation. |
+| **DOC-F02** | MAJOR | Erroneous architecture descriptions for `ApxStreamingEngine` and `ApxTupleSink`. | **RESOLVED** | Clarified `ApxStreamingEngine` coordinates transaction lifecycle and kernel dispatch without maintaining active match sets; `ApxTupleSink` throws on duplicates; verifier reconstructs active sets against M0. |
+| **DOC-F03** | MAJOR | Git provenance reconciliation; invalid SHA elimination. | **RESOLVED** | Audited Git history, eliminated invalid SHA `16d8d0354148b3c69c647b3be1de16f6b0f023d8` (typo), confirmed real reviewed HEAD `16d8d0379d5a3ed59c50dff63a10f4c1a2f98e87`, and verified logic commit `d83097b403cbcf767f01244d6b824dda43b75136`. |
+| **DOC-F04** | REQUIRED | Cross-document consistency across all acceptance documents. | **RESOLVED** | Reconciled all documentation files; verified 0 contradictions, 0 phantom SHAs, and 0 unmeasured performance claims. |
 
 **Audit Result:** Zero (0) open blocker, major, or minor findings remain.
 
@@ -154,5 +164,5 @@ The Phase P3 implementation and verification meet all requirements defined in Is
 
 **Final Recommendation:**
 ```
-READY_FOR_INDEPENDENT_FINAL_REVIEW
+READY_FOR_INDEPENDENT_MERGE_REVIEW
 ```

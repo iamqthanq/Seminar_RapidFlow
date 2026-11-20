@@ -6,8 +6,8 @@
 **Context:** Seminar RapidFlow / Continuous Subgraph Matching (CSM) — Direction D
 **Associated Issue:** Issue #32 (`D-INT-03 / P3`; previously Issue #28 `P0–P1`, Issue #30 `P2` merged)
 **Base Commit:** `88fbe200ff9217f4dccbad08bfa448d067d2ce4e` (contains accepted P2 HEAD `ebe2894752dc45e2aeb3109c260a34e2f87a9d06`)
-**Current Phase:** Phase P3: Native M1-enum and bare M2 integration (Completed & Verified; PR #33 Ready for Independent Review; Issue #32)
-**Next Gate:** Independent Final Review & Acceptance of Draft PR #33 (Issue #32)
+**Current Phase:** Phase P3: Native M1-enum and bare M2 integration (Completed & Verified; PR #33 Ready for Independent Merge Review; Issue #32)
+**Next Gate:** Independent Merge Review & Acceptance of Draft PR #33 (Issue #32)
 
 ---
 
@@ -69,7 +69,7 @@ The final research product must be a **demonstrably integrated C++ system** deri
 | - Native Bare M2-Event-k DFS (PRESENT/MISSING branching, deferred vertices)     |
 | - Bit-for-bit M0 verification across 840 corpus cases and stream matrices        |
 | - Gate Decision R3: Design review, corpus verification, and next-gate verdict   |
-|   (Verdict: ENGINES_VERIFIED_READY_FOR_P4_DESIGN, Pending Independent Review)  |
+|   (Verdict: ENGINES_VERIFIED_READY_FOR_P4_DESIGN, Pending Independent Merge Review)  |
 +---------------------------------------------------------------------------------+
                                        |
                                        v

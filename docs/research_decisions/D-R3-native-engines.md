@@ -6,8 +6,8 @@
 **Target Integration Branch:** `QuangThang`
 **Base Commit:** `88fbe200ff9217f4dccbad08bfa448d067d2ce4e` (contains accepted P2 HEAD `ebe2894752dc45e2aeb3109c260a34e2f87a9d06`)
 **Pinned Upstream RapidFlow:** `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` (Pristine: `true`)
-**Status:** VERIFIED (Phase P3 Remediation Complete — Ready for Independent Review)
-**Final Decision R3-C Verdict:** `ENGINES_VERIFIED_READY_FOR_P4_DESIGN (PENDING INDEPENDENT REVIEW / MERGE APPROVAL)`
+**Status:** VERIFIED (Phase P3 Remediation Complete — Ready for Independent Merge Review)
+**Final Decision R3-C Verdict:** `ENGINES_VERIFIED_READY_FOR_P4_DESIGN (PENDING INDEPENDENT MERGE REVIEW / APPROVAL)`
 
 ---
 
@@ -46,14 +46,17 @@ Prior to implementation, the research team re-examined the project contract, mas
 | `ApxAuthoritativeGraph` | **KEEP** | Hybrid CSR + `GlobalEdgeView` overlay provides authoritative graph ground truth and fast neighbor iteration without duplicating graph storage. | Reused directly in M1 and M2; passes all 840 corpus cases and 56 streams. |
 | `ApxTypedCodec` | **KEEP** | Provides 64-bit ID decoding, typed label interning, and ascending query canonical ordering. | Verified with negative and out-of-range IDs in `CASE_HAND_13` and `CASE_HAND_14`. |
 | `ApxTransactionManager` | **KEEP** | Enforces ACID step execution, reentrancy protection, and zero-allocation rollback on faults. | Validated under injected faults `AFTER_MISSING_COMMITMENT` and `AFTER_VERTEX_ASSIGNMENT`. |
-| `ApxTupleSink` | **KEEP** | Enforces canonical tuple staging, injectivity checking, and duplicate rejection. | Zero duplicate emissions across all 840 corpus cases and 56 stream configurations. |
+| `ApxTupleSink` | **KEEP** | Enforces canonical tuple staging, vertex injectivity checking, and fail-closed duplicate emission detection (`DuplicateEmissionException`). Discards staged tuples on transaction rollback. | Zero duplicate emissions across all 840 corpus cases and 56 stream configurations. Throws on duplicate in unit tests. |
 | `ApxQueryPlan` | **NEW** | Natively computes $\lambda(Q)$, query edge indexing, compatibility tables, and M1 variant plans. | 100% agreement with independent all-cuts oracle; Edmonds-Karp BFS max-flow sound. |
 | `ApxM1EnumEngine` | **NEW** | Natively implements M1-enum-Exact-$k$ baseline event enumeration. | Bit-for-bit agreement with M0 Oracle on 840 corpus cases and 56 streams. |
 | `ApxM2EventEngine` | **NEW** | Natively implements bare M2-Event-$k$ direct DFS with deferred vertex commitments. | Bit-for-bit agreement with M0 Oracle on 840 corpus cases and 56 streams. |
-| `ApxStreamingEngine` | **NEW** | Coordinates transaction execution, relevancy filtering, and publication. | Successfully drives 56 stateful dynamic streams with 100% active-set reconstruction. |
+| `ApxStreamingEngine` | **NEW** | Coordinates step execution, update pre-validation, query label relevance filtering, and ACID transaction lifecycle. (Active-set reconstruction is maintained externally by verifier against M0). | Successfully coordinates 56 stateful dynamic streams; bit-for-bit event agreement with M0 across 672 updates. |
 | `rapidflow_apx_native` CLI | **NEW** | Provides standalone execution harness with resource caps and fail-closed error handling. | Clean exit code mapping (0..7) and resource containment verified in Level C tests. |
 | M2 Frontier Invariant Hook | **CHANGE** | Factored `find_frontier_edge` into an exposed seam with explicit `InvariantViolationException` check to enable fail-closed verification under Domain D-R. | Verified via native witness `--test-empty-frontier` and Group X Python tests. |
 | M2 Fault Injection Hooks | **CHANGE** | Added deterministic test hooks `AFTER_MISSING_COMMITMENT` and `AFTER_VERTEX_ASSIGNMENT` to verify transactional abort isolation after approximate state mutation. | Verified via Group X tests with full recovery on the same engine instance. |
+| Neighbor Materialization Overhead | **DEFER** | `get_neighbors(u)` returns `std::vector<uint32_t>` by value (merging CSR base and mutable overlay, sorting and deduplicating). Optimization to zero-copy iterator/span views deferred to post-P3 performance evaluation. | Source-level analysis (`authoritative_graph.cpp:130-160`). Quantitative performance impact `SOURCE-LEVEL HYPOTHESIS — NOT EXPERIMENTALLY VERIFIED IN P3`. |
+| Query Preprocessing Latency | **DEFER** | Edmonds-Karp BFS max-flow on unit networks to compute $\lambda(Q)$. Quantitative latency benchmarking deferred to post-P3 evaluation. | Preprocessing correctness verified against all-cuts oracle; latency remains `NOT MEASURED IN P3`. |
+| Counter Instrumentation Overhead | **DEFER** | Execution counters record work units and emissions. Quantitative benchmarking with controlled instrumentation-on/off runs deferred to post-P3 evaluation. | Correctness verified via schema validators; overhead remains `NOT MEASURED IN P3`. |
 | Approximate NLF / $\delta'$ | **DEFER** | Pruning extensions deferred to Phase P4 to keep P3 focused strictly on correctness and engine contracts. | Clean architectural isolation; no premature heuristics in P3. |
 | Orbit Grouping ($B_{\text{iso}}$) | **DEFER** | Symmetry reduction and orbit factoring deferred to Phase P4/P5. | M1-enum retained as pure correctness baseline. |
 | Large NetFlow Benchmarks | **DEFER** | Scalability benchmarks deferred to Phase P5 pilot evaluation. | P3 focuses strictly on correctness corpus and stateful stream matrix. |
@@ -93,11 +96,11 @@ The canonical verification was executed across the complete test matrix. Below a
 
 #### R3-C-Q01: Do both native paths genuinely reuse the shared native RapidFlow foundation?
 **Answer: YES.**
-- Both `ApxM1EnumEngine` and `ApxM2EventEngine` execute through `ApxStreamingEngine`.
-- Both engines query the identical `ApxAuthoritativeGraph` instance, which wraps upstream RapidFlow's `Graph` CSR and `GlobalEdgeView` overlay without duplicating adjacency structures.
+- Both `ApxM1EnumEngine` and `ApxM2EventEngine` execute through `ApxStreamingEngine`. `ApxStreamingEngine` coordinates update pre-validation, query label relevance filtering, and ACID transaction lifecycles without maintaining active match sets or performing active-set recompute-and-diff.
+- Both engines query the identical `ApxAuthoritativeGraph` instance, which wraps upstream RapidFlow's `Graph` CSR and `GlobalEdgeView` overlay without duplicating adjacency structures. Both engines call `get_neighbors()` to obtain authoritative graph snapshots.
 - Both engines resolve external labels through the same `ApxTypedCodec` dictionary.
-- Both engines stage output tuples into the same `ApxTupleSink` instance and are managed under `ApxTransactionManager`.
-- Zero duplicated graph or storage infrastructure was introduced; reuse is verified by call-site inspection in `extensions/rapidflow_apx/src/m1_enum_engine.cpp` and `m2_event_engine.cpp`.
+- Both engines stage output tuples into the same `ApxTupleSink` instance and are managed under `ApxTransactionManager`. `ApxTupleSink` checks vertex injectivity, validates canonical ascending query ordering, stages tuples in `pending_tuples_`, and detects duplicate raw emissions via `DuplicateEmissionException`.
+- RapidFlow upstream components (`Graph` CSR, `GlobalEdgeView`) are reused directly; `SearchEngine` and `GlobalViewManager` were audited during Phase P1 but not reused at runtime. Zero duplicated graph or storage infrastructure was introduced; reuse is verified by call-site inspection in `extensions/rapidflow_apx/src/m1_enum_engine.cpp` and `m2_event_engine.cpp`.
 
 #### R3-C-Q02: Are event boundary and snapshot semantics strictly correct for $k=0$ and $k \ge 1$?
 **Answer: YES.**
@@ -117,7 +120,7 @@ The canonical verification was executed across the complete test matrix. Below a
   - In M1, for any valid embedding $f$ with missing set $R(f) = D^*$ ($|D^*| = k, e^* \notin D^*$), $f$ is an exact embedding of $Q - D^*$. Under Domain D-R ($k < \lambda(Q)$), $Q - D^*$ is connected, so anchored DFS enumerates $f$.
   - In M2, every valid embedding corresponds to a unique sequence of binary decisions (PRESENT/MISSING) along the query tree order. Since both branches are explored up to budget $k$, $f$ is enumerated.
 - **Uniqueness**:
-  - Canonical orientation and query edge indexing ensure each anchor pair $(e^*, \text{orientation})$ is explored independently. `ApxTupleSink` suppresses any cross-variant duplicate tuples before transaction staging.
+  - Canonical orientation and query edge indexing ensure each anchor pair $(e^*, \text{orientation})$ is explored independently with zero raw duplicates. `ApxTupleSink` detects raw duplicate emissions within the current batch and throws `DuplicateEmissionException` fail-closed. `ApxTupleSink` does NOT silently suppress or deduplicate tuples to make invalid outputs valid; uniqueness is guaranteed by algorithmic enumeration, while the sink serves as a defensive invariant barrier.
   - Empirical verification: Across 840 corpus cases and 56 streams, `raw_emissions == unique_emissions == committed_emissions` holds on every step.
 
 #### R3-C-Q04: How are deferred commitments handled across frontier cuts, and is the empty-frontier invariant sound?
@@ -137,13 +140,10 @@ The canonical verification was executed across the complete test matrix. Below a
 #### R3-C-Q06: How thoroughly have transaction, search, sink, and codec rollbacks been tested?
 **Answer: EXHAUSTIVELY.**
 - Verified through dedicated fault injection hooks (`M2FaultHook`):
-  - `AFTER_MISSING_COMMITMENT`: Injected immediately after an approximate branch commits a missing edge.
-  - `AFTER_VERTEX_ASSIGNMENT`: Injected immediately after candidate vertex binding in a present branch.
-- In both cases, `FaultInjectedException` is caught by `ApxTransactionManager`. The transaction cleanly aborts with `StepStatus::FAULT_INJECTED`:
-  - 8 staged candidate tuples are discarded (`committed = 0, discarded = 8`).
-  - Graph mutations are reverted bit-for-bit to pre-step state (2 edges).
-  - Codec checkpoints are restored.
-- Full recovery lifecycle on the SAME engine instance: Verified in `test_m2_recovery_lifecycle_after_missing_commitment_fault` across 3 sequential steps (Commit $\to$ Fault/Abort $\to$ Commit matching Oracle).
+  - `AFTER_MISSING_COMMITMENT`: Injected immediately after an approximate branch commits a missing edge during DFS. The exception is thrown deep inside DFS before search completes and before any candidate tuples are formed or staged in `ApxTupleSink`. The transaction cleanly aborts with `StepStatus::FAULT_INJECTED`: `raw_emissions = 0, unique_emissions = 0, committed_emissions = 0, discarded_emissions = 0, missing_branches = 1`. Graph mutations are reverted bit-for-bit to pre-step state (2 edges restored), and codec checkpoints are restored.
+  - `AFTER_VERTEX_ASSIGNMENT`: Injected immediately after candidate vertex binding in a present branch. The exception is thrown before any candidate tuples are staged: `raw_emissions = 0, committed_emissions = 0, discarded_emissions = 0, missing_branches = 0`. Graph mutations and codec rollback correctly.
+  - `BEFORE_PUBLISH Staged Tuple Rollback Witness`: Tested in `test_active_transaction_rollback_before_publish_staged_tuples` on the C4 Diamond witness where Step 1 completes a 4-cycle. Here, search completes normally and stages 8 valid candidate mappings into `ApxTupleSink`. An injected fault aborts the transaction before publish, triggering `ApxTupleSink::abort_active_step()`. Exactly 8 staged tuples are discarded: `raw_emissions = 8, unique_emissions = 8, committed_emissions = 0, discarded_emissions = 8`, and graph state is restored to Step 0 state (4 edges).
+  - Full recovery lifecycle on the SAME engine instance: Verified in `test_m2_recovery_lifecycle_after_missing_commitment_fault` across 3 sequential steps on the same `ApxStreamingEngine` and `ApxTransactionManager` instance without reinitialization (Step 0 Commit $\to$ Step 1 Fault/Abort $\to$ Step 2 Commit matching Oracle).
 
 #### R3-C-Q07: Does corpus and matrix coverage depend excessively on zero-event cases?
 **Answer: NO.**
@@ -158,14 +158,14 @@ The canonical verification was executed across the complete test matrix. Below a
 - Preemption is fail-closed: if `work_units >= max_work`, execution halts immediately with `WorkBudgetExceededException` (exit code 4).
 - In Round 8/Closure, Option A canonical contract was enforced: execution counters on UNATTEMPTED steps are strictly forbidden, and step counters are reset per transaction while preserving cumulative metrics.
 - Work-limit exhaustion on approximate paths verified in `test_work_limit_exhaustion_approximate_path` (`max_work=10`, 0 partial tuples committed, graph restored, honest work units=11).
-- Overhead of work counter increments is negligible ($< 1\%$ runtime overhead).
+- Overhead of work counter increments: Execution counters introduce instrumentation overhead. The exact overhead has not been independently quantified in Phase P3 using controlled instrumentation-on/off runs. Therefore, no numerical overhead bound or performance claim is asserted (`NOT MEASURED IN P3`). Controlled instrumentation benchmarking belongs to performance evaluation after P3.
 
 #### R3-C-Q09: What are the limitations of relation materialization, neighbor copies, staging, and preprocessing?
 **Answer:**
-- **Preprocessing**: `ApxQueryPlan` computes all-pairs Edmonds-Karp min-cut in $O(|V_Q|^3 |E_Q|)$ time. For small query graphs ($|V_Q| \le 16$), this overhead is $< 0.1\,\text{ms}$ and executed once at query load time.
-- **Neighbor Iteration**: Both engines query `ApxAuthoritativeGraph::neighbors(u)`, which returns `std::span<const uint32_t>` directly over CSR adjacency or overlay vectors with zero heap copies.
-- **Tuple Staging**: `ApxTupleSink` stages tuples in a local buffer during search. Buffer reallocation occurs only if the number of embeddings exceeds initial capacity (capacity is pre-reserved).
-- **Limitation**: M1 materializes all $\binom{|E_Q|}{k}$ variant plans during `ApxQueryPlan` initialization. For large $k$ or dense queries, variant enumeration combinatorial explosion occurs. This confirms that M1 is strictly a baseline, motivating M2 direct search.
+- **Preprocessing**: Bounded by Edmonds-Karp BFS max-flow on unit-capacity networks to compute $\lambda(Q)$, query edge indexing, and label compatibility tables. Phase P3 verifies functional correctness, not a measured preprocessing latency bound. The quantitative preprocessing latency remains `NOT MEASURED IN P3`.
+- **Neighbor Iteration**: `ApxAuthoritativeGraph::get_neighbors(uint32_t u)` returns `std::vector<uint32_t>` by value. To provide an authoritative snapshot, it iterates base graph CSR neighbors (filtering tombstones and overlay-modified edges), appends mutable overlay neighbors (`fwd_overlay_`), sorts the combined list via `std::sort`, and deduplicates with `std::unique`. This allocates and populates a new `std::vector<uint32_t>` on each call. This neighbor materialization introduces memory allocation and processing overhead, which is identified as a candidate for optimization in post-P3 phases (e.g. zero-copy iterator/span views). The exact performance impact remains `SOURCE-LEVEL HYPOTHESIS — NOT EXPERIMENTALLY VERIFIED IN P3`.
+- **Tuple Staging**: `ApxTupleSink` stages external tuples in `pending_tuples_` during search, checks injectivity, and throws `DuplicateEmissionException` on duplicate raw emissions within the batch.
+- **Variant Generation**: In `ApxM1EnumEngine::search_event()`, variant plans are generated dynamically on demand for the specific anchor query edge and orientation via `query_plan.generate_m1_variants(edge_idx, qa, qb)`. Thus, variant generation cost is incurred per update event rather than pre-materialized during query plan construction. Combinatorial variant explosion for queries with large $|E_Q|$ and $k$ motivates direct M2 event search.
 
 #### R3-C-Q10: Are there any exact filter shortcuts, count shortcuts, or Oracle dependencies in production code?
 **Answer: ABSOLUTELY ZERO.**
@@ -191,11 +191,12 @@ The canonical verification was executed across the complete test matrix. Below a
 - **Scope Adjustments**:
   - The plan is adjusted to clarify that $\lambda(Q)$ is computed via Edmonds-Karp BFS max-flow (retracting earlier mentions of Dinic's algorithm).
   - The 56-stream matrix specification is formally locked to 7 configurations $\times$ 8 seeds = 56 streams, 672 input updates, 1,344 engine-steps.
+  - Neighbor materialization and query preprocessing latency are formally recorded as `NOT MEASURED IN P3` / `DEFER to post-P3 evaluation`.
 - **Next Gate**:
   - Phase P3 is **FULLY COMPLETE** and verified across all contracts.
-  - Next gate is **INDEPENDENT FINAL REVIEW & APPROVAL** of Draft PR #33 by repository maintainer (`QuangThang`).
+  - Next gate is **INDEPENDENT MERGE REVIEW & APPROVAL** of Draft PR #33 by repository maintainer (`QuangThang`).
   - Upon user merge into `QuangThang`, the project proceeds to Phase P4 (Design of Approximate NLF & Dynamic Pruning).
-  - Verdict: `ENGINES_VERIFIED_READY_FOR_P4_DESIGN (PENDING INDEPENDENT REVIEW / MERGE APPROVAL)`.
+  - Verdict: `ENGINES_VERIFIED_READY_FOR_P4_DESIGN (PENDING INDEPENDENT MERGE REVIEW / APPROVAL)`.
 
 ---
 
@@ -227,12 +228,12 @@ The locked 56-stream dynamic matrix (`configs/rapidflow_apx_stream_56_lock.json`
 
 | Milestone / Parameter | Before P3 Closure (Round 8) | After P3 Final DoD Closure |
 | :--- | :--- | :--- |
-| **Phase P3 Status** | `FIX REQUIRED — NOT READY TO MERGE` | `READY_FOR_INDEPENDENT_FINAL_REVIEW` |
-| **Decision R3-C Status** | Partial answers; missing explicit 12-question taxonomy. | Complete; all 12 questions (R3-C-Q01..Q12) answered with mathematical & empirical evidence. |
+| **Phase P3 Status** | `FIX REQUIRED — NOT READY TO MERGE` | `READY_FOR_INDEPENDENT_MERGE_REVIEW` |
+| **Decision R3-C Status** | Partial answers; missing explicit 12-question taxonomy. | Complete; all 12 questions (R3-C-Q01..Q12) answered with source-verified evidence; unmeasured performance claims removed. |
 | **Academic Proofs** | Informal text description in design doc. | Formal Academic Proofs (Section 8.1–8.10) for Soundness, Completeness, Uniqueness, Event Boundary, DFS Invariant, and Empty-Frontier Cut Invariant. |
 | **Empty-Frontier Witness** | Theoretical invariant; no native test seam. | Implemented `find_frontier_edge` with fail-closed invariant check; native `--test-empty-frontier` witness passes positive & negative controls. |
-| **Fault Isolation Witness** | Rollback tested on generic cases. | Dedicated hooks `AFTER_MISSING_COMMITMENT` and `AFTER_VERTEX_ASSIGNMENT` verified with 3-step recovery lifecycle on SAME engine instance. |
-| **Logic Commit SHA** | Typo in report (`...154f8` vs real `...e00`). | Real Git SHA verified and audited: `2e60255b93368b12fb8cabbeeec8204782609e00`. |
+| **Fault Isolation Witness** | Rollback tested on generic cases. | Dedicated hooks `AFTER_MISSING_COMMITMENT` and `AFTER_VERTEX_ASSIGNMENT` verified (raw=0, committed=0); distinct from `BEFORE_PUBLISH` staged discard (raw=8, unique=8, committed=0, discarded=8); 3-step recovery lifecycle verified on SAME engine instance. |
+| **Commit Provenance** | Typo in report (`...154f8` vs real `...e00`); invalid SHA `16d8d035...` eliminated. | Audited real Git SHAs: Logic `d83097b403cbcf767f01244d6b824dda43b75136`, Reviewed Evidence `16d8d0379d5a3ed59c50dff63a10f4c1a2f98e87`. |
 | **Repository Test Count** | 545 passing tests (Round 8). | 551 passing tests (0 failures, 0 errors) including Group X native witness suite. |
 | **Traceability Audit** | Fragmented across reports. | Consolidated in `docs/rapidflow_apx_p3_issue32_closure_audit.md` (Sections A through I). |
 
@@ -241,12 +242,12 @@ The locked 56-stream dynamic matrix (`configs/rapidflow_apx_stream_56_lock.json`
 ## 7. Final Recommendation & Sign-Off
 
 The Research Implementation Engineer certifies that:
-1. All findings from Round 1 through Round 8 and the Final Definition of Done checklist have been fully remediated with zero regressions.
+1. All findings from Round 1 through Round 8, Final Definition of Done checklist, and reconciliation findings DOC-F01 through DOC-F04 have been fully remediated with zero regressions.
 2. The native C++ engines `ApxM1EnumEngine` and `ApxM2EventEngine` are sound, complete, unique, fault-isolated, and proven bit-for-bit identical to the independent Ground Truth Oracle.
 3. Upstream RapidFlow submodule `baselines/rapidflow/source` remains pristine at pinned commit `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1`.
 4. No speedup, scalability, or novelty claims are made. Phase P4 design will begin only after independent review and merge of Draft PR #33 into `QuangThang`.
 
 **Final Handoff Verdict:**
 ```
-READY_FOR_INDEPENDENT_FINAL_REVIEW
+READY_FOR_INDEPENDENT_MERGE_REVIEW
 ```
