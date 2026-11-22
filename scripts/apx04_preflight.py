@@ -765,6 +765,8 @@ class PreflightChecker:
                 self.errors.append(f"Pilot data graph '{pg_id}' parse failure ({rel_path}): {e}")
                 continue
 
+            component_errors_before = len(self.errors)
+
             expected_v = pg_info.get("vertices")
             if parsed["num_vertices"] != expected_v:
                 self.errors.append(
@@ -788,6 +790,9 @@ class PreflightChecker:
                 self.errors.append(
                     f"Pilot data graph '{pg_id}' edge labels mismatch: expected {expected_elabels}, found {parsed['edge_labels']}"
                 )
+
+            if len(self.errors) != component_errors_before:
+                continue
 
             verified_pilots[pg_id] = {
                 "name": pg_info.get("name", pg_id),
@@ -850,6 +855,8 @@ class PreflightChecker:
                 self.errors.append(f"Query {q_id} parse failure ({rel_path}): {e}")
                 continue
 
+            component_errors_before = len(self.errors)
+
             # Check vertex count
             if parsed["num_vertices"] != q_info.get("vertices"):
                 self.errors.append(
@@ -899,6 +906,9 @@ class PreflightChecker:
             # Check connectivity
             if not parsed["is_connected"]:
                 self.errors.append(f"Query {q_id} is disconnected; CSM queries must be connected.")
+
+            if len(self.errors) != component_errors_before:
+                continue
 
             verified_queries[q_id] = {
                 "path": rel_path,
@@ -1006,11 +1016,14 @@ class PreflightChecker:
                 verified_streams[s_id] = {
                     "path": rel_path,
                     "source_stream": src_rel_path,
+                    "metadata_verified": False,
                     "source_lineage_verified": False,
                     "sequential_updates_verified": False,
                     "error": f"Parse failure: {e}",
                 }
                 continue
+
+            stream_metadata_errors_before = len(self.errors)
 
             expected_len = s_info.get("prefix_length")
             if parsed["total_operations"] != expected_len:
@@ -1025,6 +1038,8 @@ class PreflightChecker:
                     self.errors.append(
                         f"Stream {s_id} contains out-of-domain edge label {el} (valid domain: {sorted(all_valid_elabels)})"
                     )
+
+            stream_metadata_ok = (len(self.errors) == stream_metadata_errors_before) and prefix_hash_ok
 
             # Cryptographic Lineage Verification
             content_lineage_ok = True
@@ -1130,6 +1145,7 @@ class PreflightChecker:
                 "total_operations": parsed["total_operations"],
                 "insertions": parsed["insertions"],
                 "deletions": parsed["deletions"],
+                "metadata_verified": stream_metadata_ok,
                 "source_lineage_verified": source_lineage_ok,
                 "sequential_updates_verified": False,
             }
@@ -1490,13 +1506,15 @@ class PreflightChecker:
                     def validate_component(comp_type: str, comp_id: str, comp_dict: Any) -> Tuple[Optional[str], Optional[str]]:
                         """Returns (sha256, error_reason) for a component dict."""
                         if not isinstance(comp_dict, dict):
-                            return None, f"component record missing or not a dict (got {type(comp_dict).__name__})"
+                            return None, f"component record missing or unverified (got {type(comp_dict).__name__})"
                         sha = comp_dict.get("sha256")
                         if not isinstance(sha, str):
                             return None, f"missing or non-string 'sha256' (got {type(sha).__name__})"
                         if not is_valid_sha256(sha):
                             return None, f"malformed 'sha256' '{sha}' (must be 64-character hex)"
                         if comp_type == "stream":
+                            if comp_dict.get("metadata_verified") is not True:
+                                return None, "stream metadata validation failed (metadata_verified=False or missing)"
                             if comp_dict.get("source_lineage_verified") is not True:
                                 return None, "stream source lineage verification failed (source_lineage_verified=False)"
                             if comp_dict.get("sequential_updates_verified") is not True:

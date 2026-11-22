@@ -5,7 +5,9 @@ tests/test_rf02_runner.py — Unit and Regression Tests for Differential Runner 
 
 import csv
 import json
+import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -178,10 +180,41 @@ class TestDifferentialRunner(unittest.TestCase):
         if not binary_path.exists():
             self.skipTest(f"Historical RapidFlow.out artifact not present at {binary_path} (SKIP portable unit test)")
         actual_sha = file_sha256(binary_path)
-        if actual_sha != EXPECTED_BINARY_SHA256:
-            self.skipTest(f"RapidFlow.out binary SHA-256 differs from historical artifact: got {actual_sha}, expected {EXPECTED_BINARY_SHA256}")
+        self.assertEqual(
+            actual_sha,
+            EXPECTED_BINARY_SHA256,
+            (
+                "Historical RapidFlow.out SHA-256 mismatch: "
+                f"expected {EXPECTED_BINARY_SHA256}, "
+                f"got {actual_sha}"
+            )
+        )
         ok, msg = verify_provenance(workspace_root)
         self.assertTrue(ok, msg)
+
+    def test_verify_provenance_workspace_fails_on_wrong_hash_binary(self):
+        """Verifies test_verify_provenance_workspace FAILS (not skips) when binary is present but has wrong SHA."""
+        with tempfile.TemporaryDirectory() as td:
+            tmp_root = Path(td)
+            shutil.copytree(Path(__file__).resolve().parent.parent / "scripts", tmp_root / "scripts")
+            shutil.copytree(Path(__file__).resolve().parent.parent / "tests", tmp_root / "tests")
+            shutil.copytree(Path(__file__).resolve().parent.parent / "configs", tmp_root / "configs")
+
+            # Create dummy binary with wrong SHA at the expected location
+            bin_dir = tmp_root / "baselines" / "rapidflow" / "source" / "build" / "streaming"
+            bin_dir.mkdir(parents=True, exist_ok=True)
+            dummy_bin = bin_dir / "RapidFlow.out"
+            dummy_bin.write_text("corrupted_dummy_binary_content")
+
+            cmd = [
+                sys.executable, "-m", "unittest", "-v",
+                "tests.test_rf02_runner.TestDifferentialRunner.test_verify_provenance_workspace"
+            ]
+            proc = subprocess.run(cmd, cwd=tmp_root, capture_output=True, text=True)
+            self.assertNotEqual(proc.returncode, 0, "Integration test must fail with non-zero exit code when binary has wrong SHA")
+            self.assertIn("FAIL: test_verify_provenance_workspace", proc.stderr)
+            self.assertIn("Historical RapidFlow.out SHA-256 mismatch", proc.stderr)
+            self.assertNotIn("skipped", proc.stderr.lower())
 
     def test_verify_provenance_rejects_missing_source(self):
         with tempfile.TemporaryDirectory() as td:

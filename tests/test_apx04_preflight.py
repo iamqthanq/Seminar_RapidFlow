@@ -20,7 +20,9 @@ Comprehensive test suite for APX-04 Gate A3-00 (Round 2 Adjudicated):
 
 from __future__ import annotations
 
+import copy
 import json
+import os
 import subprocess
 import tempfile
 import unittest
@@ -1743,6 +1745,258 @@ class TestRound5WorkloadIdentityFingerprint(unittest.TestCase):
             self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
             errors = out.get("errors", [])
             self.assertTrue(any("missing_query.graph" in e for e in errors))
+
+
+class TestRound3VerifiedComponentIntegrity(unittest.TestCase):
+    """Adversarial and regression tests for Round 3 C2-R3: Verified component integrity and fail-closed identity."""
+
+    def setUp(self):
+        self.repo_root = Path(__file__).resolve().parent.parent
+        self.manifest_path = self.repo_root / "configs" / "apx04_workload_manifest.json"
+        with open(self.manifest_path, "r", encoding="utf-8") as f:
+            self.canonical_data = json.load(f)
+
+    def _run_with_mutation(self, mutator):
+        data = copy.deepcopy(self.canonical_data)
+        mutator(data)
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tf:
+            json.dump(data, tf)
+            tmp_path = tf.name
+        try:
+            checker = PreflightChecker(manifest_path=Path(tmp_path), repo_root=self.repo_root)
+            passed = checker.run_all()
+            return passed, checker
+        finally:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
+    def test_c2_r3_01_pilot_graph_vertex_mismatch_rejected(self):
+        """C2-R3-01: Pilot graph vertex count mismatch rejects component from verified dict and denies identity."""
+        def mutate(d):
+            d["pilot_data_graphs"]["Pilot_A_Exact_Micrograph"]["vertices"] += 1
+
+        passed, checker = self._run_with_mutation(mutate)
+        self.assertFalse(passed)
+        self.assertTrue(any(
+            "Pilot_A_Exact_Micrograph" in e and "vertex count mismatch" in e for e in checker.errors
+        ), f"Missing original vertex count error in: {checker.errors}")
+        self.assertNotIn("Pilot_A_Exact_Micrograph", checker.audit_log.get("pilot_data_graphs_verified", {}))
+        self.assertTrue(any(
+            "[WORKLOAD_IDENTITY_MISMATCH]" in e and "pilot_safe_01_micro_exact" in e and "Pilot_A_Exact_Micrograph" in e and "graph" in e
+            for e in checker.errors
+        ), f"Missing WORKLOAD_IDENTITY_MISMATCH error in: {checker.errors}")
+
+    def test_c2_r3_02_pilot_graph_edge_mismatch_rejected(self):
+        """C2-R3-02: Pilot graph edge count mismatch rejects component from verified dict and denies identity."""
+        def mutate(d):
+            d["pilot_data_graphs"]["Pilot_A_Exact_Micrograph"]["edges"] += 1
+
+        passed, checker = self._run_with_mutation(mutate)
+        self.assertFalse(passed)
+        self.assertTrue(any(
+            "Pilot_A_Exact_Micrograph" in e and "edge count mismatch" in e for e in checker.errors
+        ))
+        self.assertNotIn("Pilot_A_Exact_Micrograph", checker.audit_log.get("pilot_data_graphs_verified", {}))
+        self.assertTrue(any(
+            "[WORKLOAD_IDENTITY_MISMATCH]" in e and "pilot_safe_01_micro_exact" in e and "Pilot_A_Exact_Micrograph" in e
+            for e in checker.errors
+        ))
+
+    def test_c2_r3_03_pilot_graph_label_mismatch_rejected(self):
+        """C2-R3-03: Pilot graph label metadata mismatch rejects component from verified dict and denies identity."""
+        def mutate(d):
+            d["pilot_data_graphs"]["Pilot_A_Exact_Micrograph"]["vertex_labels"] = [999]
+
+        passed, checker = self._run_with_mutation(mutate)
+        self.assertFalse(passed)
+        self.assertTrue(any(
+            "Pilot_A_Exact_Micrograph" in e and "vertex labels mismatch" in e for e in checker.errors
+        ))
+        self.assertNotIn("Pilot_A_Exact_Micrograph", checker.audit_log.get("pilot_data_graphs_verified", {}))
+        self.assertTrue(any(
+            "[WORKLOAD_IDENTITY_MISMATCH]" in e and "pilot_safe_01_micro_exact" in e and "Pilot_A_Exact_Micrograph" in e
+            for e in checker.errors
+        ))
+
+    def test_c2_r3_04_query_vertex_mismatch_rejected(self):
+        """C2-R3-04: Query vertex count mismatch rejects component from verified dict and denies identity."""
+        def mutate(d):
+            d["queries"]["Q_pilot_a_exact"]["vertices"] += 1
+
+        passed, checker = self._run_with_mutation(mutate)
+        self.assertFalse(passed)
+        self.assertTrue(any(
+            "Q_pilot_a_exact" in e and "vertex count mismatch" in e for e in checker.errors
+        ))
+        self.assertNotIn("Q_pilot_a_exact", checker.audit_log.get("queries_verified", {}))
+        self.assertTrue(any(
+            "[WORKLOAD_IDENTITY_MISMATCH]" in e and "pilot_safe_01_micro_exact" in e and "Q_pilot_a_exact" in e and "query" in e
+            for e in checker.errors
+        ))
+
+    def test_c2_r3_05_query_edge_mismatch_rejected(self):
+        """C2-R3-05: Query edge count mismatch rejects component from verified dict and denies identity."""
+        def mutate(d):
+            d["queries"]["Q_pilot_a_exact"]["edges"] += 1
+
+        passed, checker = self._run_with_mutation(mutate)
+        self.assertFalse(passed)
+        self.assertTrue(any(
+            "Q_pilot_a_exact" in e and "edge count mismatch" in e for e in checker.errors
+        ))
+        self.assertNotIn("Q_pilot_a_exact", checker.audit_log.get("queries_verified", {}))
+        self.assertTrue(any(
+            "[WORKLOAD_IDENTITY_MISMATCH]" in e and "pilot_safe_01_micro_exact" in e and "Q_pilot_a_exact" in e
+            for e in checker.errors
+        ))
+
+    def test_c2_r3_06_query_degree_sequence_mismatch_rejected(self):
+        """C2-R3-06: Query degree sequence mismatch rejects component from verified dict and denies identity."""
+        def mutate(d):
+            d["queries"]["Q_pilot_a_exact"]["degree_sequence"] = [9, 9, 9]
+
+        passed, checker = self._run_with_mutation(mutate)
+        self.assertFalse(passed)
+        self.assertTrue(any(
+            "Q_pilot_a_exact" in e and "degree sequence mismatch" in e for e in checker.errors
+        ))
+        self.assertNotIn("Q_pilot_a_exact", checker.audit_log.get("queries_verified", {}))
+        self.assertTrue(any(
+            "[WORKLOAD_IDENTITY_MISMATCH]" in e and "pilot_safe_01_micro_exact" in e and "Q_pilot_a_exact" in e
+            for e in checker.errors
+        ))
+
+    def test_c2_r3_07_stream_prefix_length_mismatch_rejected(self):
+        """C2-R3-07: Stream prefix_length mismatch marks metadata_verified False and denies identity."""
+        def mutate(d):
+            d["streams"]["stream_pilot_a_exact"]["prefix_length"] += 1
+
+        passed, checker = self._run_with_mutation(mutate)
+        self.assertFalse(passed)
+        self.assertTrue(any(
+            "stream_pilot_a_exact" in e and "operation count mismatch" in e for e in checker.errors
+        ))
+        s_rec = checker.audit_log.get("streams_verified", {}).get("stream_pilot_a_exact", {})
+        self.assertFalse(s_rec.get("metadata_verified"))
+        self.assertTrue(s_rec.get("source_lineage_verified"))
+        self.assertTrue(s_rec.get("sequential_updates_verified"))
+        self.assertTrue(any(
+            "[WORKLOAD_IDENTITY_MISMATCH]" in e and "pilot_safe_01_micro_exact" in e and "stream_pilot_a_exact" in e and "stream" in e
+            for e in checker.errors
+        ))
+
+    def test_c2_r3_10_spy_proves_identity_computation_bypassed_for_invalid_case(self):
+        """C2-R3-10: Spy test patching compute_workload_identity_sha256 proves invalid case is not computed."""
+        def mutate(d):
+            d["pilot_data_graphs"]["Pilot_A_Exact_Micrograph"]["vertices"] += 1
+
+        data = copy.deepcopy(self.canonical_data)
+        mutate(data)
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tf:
+            json.dump(data, tf)
+            tmp_path = tf.name
+
+        try:
+            called_cases = []
+            real_func = compute_workload_identity_sha256
+
+            def spy_compute(**kwargs):
+                called_cases.append(kwargs.get("case_id"))
+                return real_func(**kwargs)
+
+            with patch("scripts.apx04_preflight.compute_workload_identity_sha256", side_effect=spy_compute):
+                checker = PreflightChecker(manifest_path=Path(tmp_path), repo_root=self.repo_root)
+                passed = checker.run_all()
+
+            self.assertFalse(passed)
+            # pilot_safe_01_micro_exact MUST NOT have been computed
+            self.assertNotIn("pilot_safe_01_micro_exact", called_cases)
+            # Other 2 valid initial safe pilots MUST have been computed
+            self.assertIn("pilot_safe_02_micro_nearonly", called_cases)
+            self.assertIn("pilot_safe_03_tiny_netflow_induced", called_cases)
+        finally:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
+    def test_c2_r3_11_cli_dry_run_graph_mismatch_fails_structured(self):
+        """C2-R3-11: CLI --json --dry-run on graph metadata mismatch exits 1 with structured JSON and no traceback."""
+        with tempfile.TemporaryDirectory() as td:
+            tmp_m = Path(td) / "manifest.json"
+            data = copy.deepcopy(self.canonical_data)
+            data["pilot_data_graphs"]["Pilot_A_Exact_Micrograph"]["vertices"] += 1
+            with open(tmp_m, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+
+            import sys
+            cmd = [sys.executable, "scripts/apx04_preflight.py", "--manifest", str(tmp_m), "--json", "--dry-run"]
+            proc = subprocess.run(cmd, cwd=self.repo_root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertEqual(proc.returncode, 1)
+            self.assertEqual(proc.stderr.strip(), "")
+            out = json.loads(proc.stdout)
+            self.assertEqual(out.get("status"), "FAIL")
+            self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+            errors = out.get("errors", [])
+            self.assertTrue(any("Pilot_A_Exact_Micrograph" in e and "vertex count mismatch" in e for e in errors))
+            self.assertTrue(any("[WORKLOAD_IDENTITY_MISMATCH]" in e and "pilot_safe_01_micro_exact" in e for e in errors))
+
+    def test_c2_r3_12_cli_dry_run_query_mismatch_fails_structured(self):
+        """C2-R3-12: CLI --json --dry-run on query metadata mismatch exits 1 with structured JSON and no traceback."""
+        with tempfile.TemporaryDirectory() as td:
+            tmp_m = Path(td) / "manifest.json"
+            data = copy.deepcopy(self.canonical_data)
+            data["queries"]["Q_pilot_a_exact"]["vertices"] += 1
+            with open(tmp_m, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+
+            import sys
+            cmd = [sys.executable, "scripts/apx04_preflight.py", "--manifest", str(tmp_m), "--json", "--dry-run"]
+            proc = subprocess.run(cmd, cwd=self.repo_root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertEqual(proc.returncode, 1)
+            self.assertEqual(proc.stderr.strip(), "")
+            out = json.loads(proc.stdout)
+            self.assertEqual(out.get("status"), "FAIL")
+            self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+            errors = out.get("errors", [])
+            self.assertTrue(any("Q_pilot_a_exact" in e and "vertex count mismatch" in e for e in errors))
+            self.assertTrue(any("[WORKLOAD_IDENTITY_MISMATCH]" in e and "pilot_safe_01_micro_exact" in e for e in errors))
+
+    def test_c2_r3_13_cli_dry_run_stream_mismatch_fails_structured(self):
+        """C2-R3-13: CLI --json --dry-run on stream metadata mismatch exits 1 with structured JSON and no traceback."""
+        with tempfile.TemporaryDirectory() as td:
+            tmp_m = Path(td) / "manifest.json"
+            data = copy.deepcopy(self.canonical_data)
+            data["streams"]["stream_pilot_a_exact"]["prefix_length"] += 1
+            with open(tmp_m, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+
+            import sys
+            cmd = [sys.executable, "scripts/apx04_preflight.py", "--manifest", str(tmp_m), "--json", "--dry-run"]
+            proc = subprocess.run(cmd, cwd=self.repo_root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertEqual(proc.returncode, 1)
+            self.assertEqual(proc.stderr.strip(), "")
+            out = json.loads(proc.stdout)
+            self.assertEqual(out.get("status"), "FAIL")
+            self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+            errors = out.get("errors", [])
+            self.assertTrue(any("stream_pilot_a_exact" in e and "operation count mismatch" in e for e in errors))
+            self.assertTrue(any("[WORKLOAD_IDENTITY_MISMATCH]" in e and "pilot_safe_01_micro_exact" in e for e in errors))
+
+    def test_c2_r3_14_canonical_manifest_positive_control(self):
+        """C2-R3-14: Canonical manifest executes clean without mutation and fingerprints match exactly."""
+        checker = PreflightChecker(manifest_path=self.manifest_path, repo_root=self.repo_root)
+        passed = checker.run_all()
+        self.assertTrue(passed)
+        self.assertEqual(len(checker.errors), 0)
+        # Check all 3 initial safe pilot fingerprints
+        expected_fps = {
+            "pilot_safe_01_micro_exact": "731a44af7fdbdb3186b55c031ec21d61d2978dc9ad01707252a500e52c584452",
+            "pilot_safe_02_micro_nearonly": "16199eac947611352d5498d83b7ca6a2a7afc4d2c54b4aebfdd64b83535aa71a",
+            "pilot_safe_03_tiny_netflow_induced": "bae440580955f60fab78af3845f4726ccd405f1798befb26822aa09717aaf885",
+        }
+        for c in self.canonical_data.get("proposed_pilot_cases_a3_01", []):
+            cid = c.get("case_id")
+            if cid in expected_fps:
+                self.assertEqual(c.get("registered_identity_sha256"), expected_fps[cid])
 
 
 if __name__ == "__main__":
