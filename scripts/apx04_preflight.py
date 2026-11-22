@@ -709,7 +709,7 @@ class PreflightChecker:
         # Top-level scalar metadata validation
         if "schema_version" in manifest:
             sv = manifest["schema_version"]
-            if not isinstance(sv, (str, int, float)):
+            if not isinstance(sv, str):
                 self.errors.append(
                     f"[MANIFEST_SCHEMA_TYPE_ERROR] Manifest field 'schema_version' expected string, received {type(sv).__name__}"
                 )
@@ -781,11 +781,16 @@ class PreflightChecker:
                             f"[MANIFEST_SCHEMA_TYPE_ERROR] pilot_data_graphs.{pg_id} expected JSON object, received {recv}"
                         )
                     else:
-                        pg_name = pg_info.get("name")
-                        if pg_name is not None and not isinstance(pg_name, str):
+                        if "name" not in pg_info:
                             self.errors.append(
-                                f"[MANIFEST_SCHEMA_TYPE_ERROR] pilot_data_graphs.{pg_id}.name expected string, received {type(pg_name).__name__}"
+                                f"[MANIFEST_SCHEMA_ERROR] pilot_data_graphs.{pg_id}.name is a required field"
                             )
+                        else:
+                            pg_name = pg_info["name"]
+                            if not isinstance(pg_name, str):
+                                self.errors.append(
+                                    f"[MANIFEST_SCHEMA_TYPE_ERROR] pilot_data_graphs.{pg_id}.name expected string, received {type(pg_name).__name__}"
+                                )
                         pg_path = pg_info.get("path")
                         if pg_path is not None and not isinstance(pg_path, str):
                             self.errors.append(
@@ -910,6 +915,16 @@ class PreflightChecker:
                         self.errors.append(
                             f"[MANIFEST_SCHEMA_TYPE_ERROR] exclusions[{idx}] expected JSON object, received {recv}"
                         )
+                    else:
+                        for field_name in ("corpus_path", "reason"):
+                            if field_name not in excl:
+                                # Preserve existing missing-field handling in audit_exclusions().
+                                continue
+                            value = excl[field_name]
+                            if not isinstance(value, str):
+                                self.errors.append(
+                                    f"[MANIFEST_SCHEMA_TYPE_ERROR] exclusions[{idx}].{field_name} expected string, received {type(value).__name__}"
+                                )
 
         self.audit_log["manifest_metadata"] = {
             "schema_version": manifest.get("schema_version"),

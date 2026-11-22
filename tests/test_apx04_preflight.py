@@ -2647,6 +2647,455 @@ class TestRound5ManifestSchemaBoundary(unittest.TestCase):
             self.assertNotIn("pilot_data_graphs_verified", checker.audit_log)
 
 
+class TestRound6ResidualSchemaTypeFindings(unittest.TestCase):
+    """
+    Round 6 Residual Schema Validation Findings adversarial regression test suite (Issue #34).
+    Verifies that:
+    1. schema_version strictly requires string (rejects int, bool, float, None, list, dict).
+    2. exclusions[].corpus_path and exclusions[].reason strictly require string (rejects list, dict, int, bool, None).
+    3. pilot_data_graphs[*].name is required and strictly requires string (rejects missing, None, list, dict, int, bool).
+    4. Downstream audits are completely isolated on schema rejection.
+    5. Reused PreflightChecker instances properly cycle between valid, invalid, and valid manifests.
+    """
+
+    def setUp(self):
+        self.repo_root = Path(__file__).resolve().parent.parent
+        self.manifest_path = self.repo_root / "configs" / "apx04_workload_manifest.json"
+        with open(self.manifest_path, "r", encoding="utf-8") as f:
+            self.canonical_data = json.load(f)
+
+    def _run_cli_dry_run(self, manifest_data: Dict[str, Any]) -> Tuple[int, str, str, Dict[str, Any]]:
+        with tempfile.TemporaryDirectory() as td:
+            tmp_m = Path(td) / "manifest.json"
+            with open(tmp_m, "w", encoding="utf-8") as f:
+                json.dump(manifest_data, f)
+            cmd = [sys.executable, "scripts/apx04_preflight.py", "--manifest", str(tmp_m), "--json", "--dry-run"]
+            proc = subprocess.run(cmd, cwd=self.repo_root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            out_json = {}
+            if proc.stdout.strip():
+                try:
+                    out_json = json.loads(proc.stdout)
+                except Exception as e:
+                    self.fail(f"CLI stdout was not valid JSON: {e}\nstdout: {proc.stdout}\nstderr: {proc.stderr}")
+            return proc.returncode, proc.stdout, proc.stderr, out_json
+
+    # --- Finding R6-C1: schema_version Type Validation ---
+
+    def test_r6_c1_01_schema_version_int_rejected(self):
+        """R6-C1-01: schema_version=42 rejected with structured FAIL."""
+        data = copy.deepcopy(self.canonical_data)
+        data["schema_version"] = 42
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        self.assertGreater(out.get("error_count", 0), 0)
+        self.assertEqual(out.get("execution_readiness"), "SAFETY_BLOCKED")
+        self.assertIs(out.get("execution_authorization"), False)
+        self.assertTrue(any("[MANIFEST_SCHEMA_TYPE_ERROR]" in e and "schema_version" in e for e in out.get("errors", [])))
+
+    def test_r6_c1_02_schema_version_bool_rejected(self):
+        """R6-C1-02: schema_version=True (bool) rejected with structured FAIL."""
+        data = copy.deepcopy(self.canonical_data)
+        data["schema_version"] = True
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        self.assertGreater(out.get("error_count", 0), 0)
+        self.assertTrue(any("[MANIFEST_SCHEMA_TYPE_ERROR]" in e and "schema_version" in e for e in out.get("errors", [])))
+
+    def test_r6_c1_03_schema_version_float_rejected(self):
+        """R6-C1-03: schema_version=3.14 rejected with structured FAIL."""
+        data = copy.deepcopy(self.canonical_data)
+        data["schema_version"] = 3.14
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        self.assertGreater(out.get("error_count", 0), 0)
+        self.assertTrue(any("[MANIFEST_SCHEMA_TYPE_ERROR]" in e and "schema_version" in e for e in out.get("errors", [])))
+
+    def test_r6_c1_04_schema_version_none_rejected(self):
+        """R6-C1-04: schema_version=None rejected with structured FAIL."""
+        data = copy.deepcopy(self.canonical_data)
+        data["schema_version"] = None
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        self.assertTrue(any("[MANIFEST_SCHEMA_TYPE_ERROR]" in e and "schema_version" in e for e in out.get("errors", [])))
+
+    def test_r6_c1_05_schema_version_list_rejected(self):
+        """R6-C1-05: schema_version=[] rejected with structured FAIL."""
+        data = copy.deepcopy(self.canonical_data)
+        data["schema_version"] = []
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        self.assertTrue(any("[MANIFEST_SCHEMA_TYPE_ERROR]" in e and "schema_version" in e for e in out.get("errors", [])))
+
+    def test_r6_c1_06_schema_version_dict_rejected(self):
+        """R6-C1-06: schema_version={} rejected with structured FAIL."""
+        data = copy.deepcopy(self.canonical_data)
+        data["schema_version"] = {}
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        self.assertTrue(any("[MANIFEST_SCHEMA_TYPE_ERROR]" in e and "schema_version" in e for e in out.get("errors", [])))
+
+    def test_r6_c1_07_schema_version_canonical_string_passes(self):
+        """R6-C1-07: Canonical schema_version='1.2.0' passes validation."""
+        rc, stdout, stderr, out = self._run_cli_dry_run(self.canonical_data)
+        self.assertEqual(rc, 0)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "PASS")
+        self.assertEqual(len(out.get("errors", [])), 0)
+
+    def test_r6_c1_08_schema_version_legacy_string_passes(self):
+        """R6-C1-08: Legacy valid string version '1.1.0' passes type validation."""
+        data = copy.deepcopy(self.canonical_data)
+        data["schema_version"] = "1.1.0"
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 0)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "PASS")
+        self.assertEqual(len(out.get("errors", [])), 0)
+
+    # --- Finding R6-C2: exclusions Field Type Validation ---
+
+    def test_r6_c2_01_exclusion_reason_list_rejected(self):
+        """R6-C2-01: exclusions[0].reason=['bad'] rejected at schema boundary."""
+        data = copy.deepcopy(self.canonical_data)
+        data["exclusions"][0]["reason"] = ["bad"]
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("[MANIFEST_SCHEMA_TYPE_ERROR]" in e and "exclusions[0].reason" in e and "expected string" in e for e in errors))
+
+    def test_r6_c2_02_exclusion_corpus_path_list_rejected(self):
+        """R6-C2-02: exclusions[0].corpus_path=['bad'] rejected at schema boundary."""
+        data = copy.deepcopy(self.canonical_data)
+        data["exclusions"][0]["corpus_path"] = ["bad"]
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("[MANIFEST_SCHEMA_TYPE_ERROR]" in e and "exclusions[0].corpus_path" in e and "expected string" in e for e in errors))
+
+    def test_r6_c2_03_exclusion_reason_dict_rejected(self):
+        """R6-C2-03: exclusions[0].reason={'reason': 'bad'} rejected at schema boundary."""
+        data = copy.deepcopy(self.canonical_data)
+        data["exclusions"][0]["reason"] = {"reason": "bad"}
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("[MANIFEST_SCHEMA_TYPE_ERROR]" in e and "exclusions[0].reason" in e and "expected string" in e for e in errors))
+
+    def test_r6_c2_04_exclusion_corpus_path_dict_rejected(self):
+        """R6-C2-04: exclusions[0].corpus_path={'corpus_path': 'bad'} rejected at schema boundary."""
+        data = copy.deepcopy(self.canonical_data)
+        data["exclusions"][0]["corpus_path"] = {"corpus_path": "bad"}
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("[MANIFEST_SCHEMA_TYPE_ERROR]" in e and "exclusions[0].corpus_path" in e and "expected string" in e for e in errors))
+
+    def test_r6_c2_05_exclusion_reason_int_rejected(self):
+        """R6-C2-05: exclusions[0].reason=42 rejected at schema boundary."""
+        data = copy.deepcopy(self.canonical_data)
+        data["exclusions"][0]["reason"] = 42
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("[MANIFEST_SCHEMA_TYPE_ERROR]" in e and "exclusions[0].reason" in e for e in errors))
+
+    def test_r6_c2_06_exclusion_corpus_path_bool_rejected(self):
+        """R6-C2-06: exclusions[0].corpus_path=True rejected at schema boundary."""
+        data = copy.deepcopy(self.canonical_data)
+        data["exclusions"][0]["corpus_path"] = True
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("[MANIFEST_SCHEMA_TYPE_ERROR]" in e and "exclusions[0].corpus_path" in e for e in errors))
+
+    def test_r6_c2_07_exclusion_reason_none_rejected(self):
+        """R6-C2-07: exclusions[0].reason=None rejected at schema boundary."""
+        data = copy.deepcopy(self.canonical_data)
+        data["exclusions"][0]["reason"] = None
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("[MANIFEST_SCHEMA_TYPE_ERROR]" in e and "exclusions[0].reason" in e for e in errors))
+
+    def test_r6_c2_08_exclusion_corpus_path_none_rejected(self):
+        """R6-C2-08: exclusions[0].corpus_path=None rejected at schema boundary."""
+        data = copy.deepcopy(self.canonical_data)
+        data["exclusions"][0]["corpus_path"] = None
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("[MANIFEST_SCHEMA_TYPE_ERROR]" in e and "exclusions[0].corpus_path" in e for e in errors))
+
+    def test_r6_c2_09_exclusion_reason_empty_str_rejected_semantic(self):
+        """R6-C2-09: exclusions[0].reason='' rejected by semantic audit."""
+        data = copy.deepcopy(self.canonical_data)
+        data["exclusions"][0]["reason"] = ""
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("Malformed exclusion entry" in e for e in errors))
+
+    def test_r6_c2_10_exclusion_corpus_path_empty_str_rejected_semantic(self):
+        """R6-C2-10: exclusions[0].corpus_path='' rejected by semantic audit."""
+        data = copy.deepcopy(self.canonical_data)
+        data["exclusions"][0]["corpus_path"] = ""
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("Malformed exclusion entry" in e for e in errors))
+
+    def test_r6_c2_11_exclusion_reason_missing_rejected_semantic(self):
+        """R6-C2-11: Missing reason in exclusions[0] rejected by semantic audit."""
+        data = copy.deepcopy(self.canonical_data)
+        del data["exclusions"][0]["reason"]
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("Malformed exclusion entry" in e for e in errors))
+
+    def test_r6_c2_12_exclusion_corpus_path_missing_rejected_semantic(self):
+        """R6-C2-12: Missing corpus_path in exclusions[0] rejected by semantic audit."""
+        data = copy.deepcopy(self.canonical_data)
+        del data["exclusions"][0]["corpus_path"]
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("Malformed exclusion entry" in e for e in errors))
+
+    def test_r6_c2_13_canonical_exclusions_passes(self):
+        """R6-C2-13: Canonical exclusions pass cleanly."""
+        checker = PreflightChecker(manifest_path=self.manifest_path, repo_root=self.repo_root)
+        manifest = checker.audit_manifest_schema()
+        self.assertIsNotNone(manifest)
+        checker.audit_exclusions(manifest)
+        self.assertEqual(len(checker.errors), 0)
+
+    # --- Finding R6-C3: pilot_data_graphs[*].name Validation ---
+
+    def test_r6_c3_01_pilot_graph_name_none_rejected(self):
+        """R6-C3-01: pilot_data_graphs.Pilot_A.name=None rejected at schema boundary."""
+        data = copy.deepcopy(self.canonical_data)
+        data["pilot_data_graphs"]["Pilot_A_Exact_Micrograph"]["name"] = None
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("[MANIFEST_SCHEMA_TYPE_ERROR]" in e and "pilot_data_graphs.Pilot_A_Exact_Micrograph.name" in e for e in errors))
+
+    def test_r6_c3_02_pilot_graph_name_missing_rejected(self):
+        """R6-C3-02: pilot_data_graphs.Pilot_A.name missing rejected at schema boundary."""
+        data = copy.deepcopy(self.canonical_data)
+        del data["pilot_data_graphs"]["Pilot_A_Exact_Micrograph"]["name"]
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("[MANIFEST_SCHEMA_ERROR]" in e and "pilot_data_graphs.Pilot_A_Exact_Micrograph.name is a required field" in e for e in errors))
+
+    def test_r6_c3_03_pilot_graph_name_list_rejected(self):
+        """R6-C3-03: pilot_data_graphs.Pilot_A.name=[] rejected at schema boundary."""
+        data = copy.deepcopy(self.canonical_data)
+        data["pilot_data_graphs"]["Pilot_A_Exact_Micrograph"]["name"] = []
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("[MANIFEST_SCHEMA_TYPE_ERROR]" in e and "pilot_data_graphs.Pilot_A_Exact_Micrograph.name" in e for e in errors))
+
+    def test_r6_c3_04_pilot_graph_name_dict_rejected(self):
+        """R6-C3-04: pilot_data_graphs.Pilot_A.name={} rejected at schema boundary."""
+        data = copy.deepcopy(self.canonical_data)
+        data["pilot_data_graphs"]["Pilot_A_Exact_Micrograph"]["name"] = {}
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("[MANIFEST_SCHEMA_TYPE_ERROR]" in e and "pilot_data_graphs.Pilot_A_Exact_Micrograph.name" in e for e in errors))
+
+    def test_r6_c3_05_pilot_graph_name_int_rejected(self):
+        """R6-C3-05: pilot_data_graphs.Pilot_A.name=42 rejected at schema boundary."""
+        data = copy.deepcopy(self.canonical_data)
+        data["pilot_data_graphs"]["Pilot_A_Exact_Micrograph"]["name"] = 42
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("[MANIFEST_SCHEMA_TYPE_ERROR]" in e and "pilot_data_graphs.Pilot_A_Exact_Micrograph.name" in e for e in errors))
+
+    def test_r6_c3_06_pilot_graph_name_bool_rejected(self):
+        """R6-C3-06: pilot_data_graphs.Pilot_A.name=True rejected at schema boundary."""
+        data = copy.deepcopy(self.canonical_data)
+        data["pilot_data_graphs"]["Pilot_A_Exact_Micrograph"]["name"] = True
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("[MANIFEST_SCHEMA_TYPE_ERROR]" in e and "pilot_data_graphs.Pilot_A_Exact_Micrograph.name" in e for e in errors))
+
+    def test_r6_c3_07_pilot_graph_canonical_names_pass(self):
+        """R6-C3-07: Canonical pilot graph names pass validation cleanly."""
+        rc, stdout, stderr, out = self._run_cli_dry_run(self.canonical_data)
+        self.assertEqual(rc, 0)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "PASS")
+        self.assertEqual(len(out.get("errors", [])), 0)
+
+    def test_r6_c3_08_pilot_graph_b_and_c_name_validated(self):
+        """R6-C3-08: Required name validation functions on Pilot_B and Pilot_C records."""
+        for pg_target in ("Pilot_B_NearOnly_Micrograph", "Pilot_C_Tiny_NetFlow"):
+            # Null name
+            data_null = copy.deepcopy(self.canonical_data)
+            data_null["pilot_data_graphs"][pg_target]["name"] = None
+            rc, _, stderr, out = self._run_cli_dry_run(data_null)
+            self.assertEqual(rc, 1)
+            self.assertEqual(stderr.strip(), "")
+            self.assertTrue(any(f"pilot_data_graphs.{pg_target}.name" in e for e in out.get("errors", [])))
+
+            # Missing name
+            data_missing = copy.deepcopy(self.canonical_data)
+            del data_missing["pilot_data_graphs"][pg_target]["name"]
+            rc, _, stderr, out = self._run_cli_dry_run(data_missing)
+            self.assertEqual(rc, 1)
+            self.assertEqual(stderr.strip(), "")
+            self.assertTrue(any(f"pilot_data_graphs.{pg_target}.name is a required field" in e for e in out.get("errors", [])))
+
+    # --- Isolation & Lifecycle Tests ---
+
+    def test_r6_downstream_audit_isolation_three_findings(self):
+        """R6-17: Downstream audits are completely isolated on all three finding categories."""
+        isolation_cases = [
+            ("schema_version_int", lambda d: d.update({"schema_version": 42})),
+            ("exclusion_reason_list", lambda d: d["exclusions"][0].update({"reason": ["bad"]})),
+            ("pilot_graph_name_none", lambda d: d["pilot_data_graphs"]["Pilot_A_Exact_Micrograph"].update({"name": None})),
+        ]
+
+        for desc, mutate in isolation_cases:
+            data = copy.deepcopy(self.canonical_data)
+            mutate(data)
+
+            with tempfile.TemporaryDirectory() as td:
+                tmp_m = Path(td) / "manifest.json"
+                with open(tmp_m, "w", encoding="utf-8") as f:
+                    json.dump(data, f)
+
+                with patch.object(PreflightChecker, "audit_data_graph") as mock_adg, \
+                     patch.object(PreflightChecker, "audit_pilot_data_graphs") as mock_apdg, \
+                     patch.object(PreflightChecker, "audit_queries") as mock_aq, \
+                     patch.object(PreflightChecker, "audit_streams") as mock_as, \
+                     patch.object(PreflightChecker, "audit_pilot_cases") as mock_apc, \
+                     patch.object(PreflightChecker, "audit_exclusions") as mock_ae:
+
+                    checker = PreflightChecker(manifest_path=tmp_m, repo_root=self.repo_root)
+                    passed = checker.run_all()
+                    self.assertFalse(passed, f"Expected False for {desc}")
+                    self.assertEqual(checker.audit_log.get("status"), "FAIL", f"Expected FAIL for {desc}")
+                    self.assertEqual(mock_adg.call_count, 0, f"audit_data_graph called for {desc}")
+                    self.assertEqual(mock_apdg.call_count, 0, f"audit_pilot_data_graphs called for {desc}")
+                    self.assertEqual(mock_aq.call_count, 0, f"audit_queries called for {desc}")
+                    self.assertEqual(mock_as.call_count, 0, f"audit_streams called for {desc}")
+                    self.assertEqual(mock_apc.call_count, 0, f"audit_pilot_cases called for {desc}")
+                    self.assertEqual(mock_ae.call_count, 0, f"audit_exclusions called for {desc}")
+
+    def test_r6_reused_checker_state_lifecycle(self):
+        """R6-18: PreflightChecker instance properly purges state across canonical -> invalid -> canonical cycle."""
+        checker = PreflightChecker(manifest_path=self.manifest_path, repo_root=self.repo_root)
+
+        # Run 1: Canonical
+        passed1 = checker.run_all()
+        self.assertTrue(passed1)
+        self.assertEqual(checker.audit_log.get("status"), "PASS")
+        self.assertIn("pilot_data_graphs_verified", checker.audit_log)
+
+        # Run 2: Invalid (schema_version = 42)
+        with tempfile.TemporaryDirectory() as td:
+            tmp_m = Path(td) / "invalid_manifest.json"
+            data = copy.deepcopy(self.canonical_data)
+            data["schema_version"] = 42
+            with open(tmp_m, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+
+            checker.manifest_path = tmp_m
+            passed2 = checker.run_all()
+            self.assertFalse(passed2)
+            self.assertEqual(checker.audit_log.get("status"), "FAIL")
+            self.assertEqual(checker.audit_log.get("audit_verdict"), "AUDIT_FAIL")
+            self.assertNotIn("pilot_data_graphs_verified", checker.audit_log)
+            self.assertNotIn("queries_verified", checker.audit_log)
+            self.assertNotIn("streams_verified", checker.audit_log)
+
+        # Run 3: Recover Canonical
+        checker.manifest_path = self.manifest_path
+        passed3 = checker.run_all()
+        self.assertTrue(passed3)
+        self.assertEqual(checker.audit_log.get("status"), "PASS")
+        self.assertIn(checker.audit_log.get("audit_verdict"), ("AUDIT_PASS", "AUDIT_PASS_WITH_WARNINGS"))
+        self.assertEqual(len(checker.errors), 0)
+        self.assertIn("pilot_data_graphs_verified", checker.audit_log)
+
+
+
 
 if __name__ == "__main__":
     unittest.main()
