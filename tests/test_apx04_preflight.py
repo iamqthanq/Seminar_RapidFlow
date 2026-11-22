@@ -1597,6 +1597,51 @@ class TestRound5WorkloadIdentityFingerprint(unittest.TestCase):
             self.assertTrue(passed, f"Preflight failed on legitimate versioned registration: {checker.errors}")
             self.assertEqual(len(checker.errors), 0)
 
+    def test_component_missing_sha256_reports_structured_error_no_keyerror(self):
+        """Issue #34 Part C2: Component dict missing sha256 returns structured WORKLOAD_IDENTITY_MISMATCH without KeyError."""
+        checker = PreflightChecker(manifest_path=self.manifest_path, repo_root=self.repo_root)
+        with open(self.manifest_path, "r", encoding="utf-8") as f:
+            manifest = json.load(f)
+
+        # Inject audit log with component dicts missing 'sha256' key
+        checker.audit_log["pilot_data_graphs_verified"] = {
+            "Pilot_A_K3_Chordal": {"path": "dummy/path"} # no sha256
+        }
+        checker.audit_log["queries_verified"] = {
+            "Q_pilot_a_triangle": {"path": "dummy/query"} # no sha256
+        }
+        checker.audit_log["streams_verified"] = {
+            "stream_pilot_a_dense": {"path": "dummy/stream"} # no sha256
+        }
+
+        # Should execute audit_pilot_cases without raising KeyError
+        checker.audit_pilot_cases(manifest)
+        self.assertGreater(len(checker.errors), 0)
+        has_mismatch_error = any("WORKLOAD_IDENTITY_MISMATCH" in err for err in checker.errors)
+        self.assertTrue(has_mismatch_error, f"Expected WORKLOAD_IDENTITY_MISMATCH in errors: {checker.errors}")
+
+    def test_component_malformed_sha256_reports_structured_error(self):
+        """Issue #34 Part C2: Component dict with non-string or malformed sha256 returns structured error."""
+        checker = PreflightChecker(manifest_path=self.manifest_path, repo_root=self.repo_root)
+        with open(self.manifest_path, "r", encoding="utf-8") as f:
+            manifest = json.load(f)
+
+        # Inject audit log with invalid sha256 values
+        checker.audit_log["pilot_data_graphs_verified"] = {
+            "Pilot_A_K3_Chordal": {"sha256": 12345} # non-string
+        }
+        checker.audit_log["queries_verified"] = {
+            "Q_pilot_a_triangle": {"sha256": "not_a_64_char_hex"} # invalid length/format
+        }
+        checker.audit_log["streams_verified"] = {
+            "stream_pilot_a_dense": {"sha256": None} # None
+        }
+
+        checker.audit_pilot_cases(manifest)
+        self.assertGreater(len(checker.errors), 0)
+        has_mismatch_error = any("WORKLOAD_IDENTITY_MISMATCH" in err for err in checker.errors)
+        self.assertTrue(has_mismatch_error, f"Expected WORKLOAD_IDENTITY_MISMATCH in errors: {checker.errors}")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -215,10 +215,12 @@ static void combine_subsets(
     }
 }
 
-std::vector<M1VariantPlan> ApxQueryPlan::generate_m1_variants(
+void ApxQueryPlan::for_each_m1_variant(
     uint32_t anchor_idx,
     uint32_t qa,
-    uint32_t qb
+    uint32_t qb,
+    EngineCounters& counters,
+    const std::function<void(const M1VariantPlan&)>& callback
 ) const {
     std::vector<uint32_t> other_edges;
     other_edges.reserve(edges_.size() - 1);
@@ -228,14 +230,13 @@ std::vector<M1VariantPlan> ApxQueryPlan::generate_m1_variants(
         }
     }
 
-    std::vector<std::vector<uint32_t>> missing_subsets;
     std::vector<uint32_t> cur_subset;
-    combine_subsets(other_edges, k_, 0, cur_subset, missing_subsets);
+    cur_subset.reserve(k_);
 
-    std::vector<M1VariantPlan> plans;
-    plans.reserve(missing_subsets.size());
+    auto process_subset = [&](const std::vector<uint32_t>& D) {
+        // Charge budget BEFORE allocating and constructing variant plan
+        counters.charge_work(1);
 
-    for (const auto& D : missing_subsets) {
         M1VariantPlan plan;
         plan.anchor_edge_idx = anchor_idx;
         plan.anchor_qa = qa;
@@ -295,9 +296,40 @@ std::vector<M1VariantPlan> ApxQueryPlan::generate_m1_variants(
         }
 
         plan.search_order = std::move(order);
-        plans.push_back(std::move(plan));
-    }
+        counters.variants_started++;
+        callback(plan);
+    };
 
+    std::function<void(size_t, size_t)> recurse = [&](size_t start, size_t remaining_k) {
+        if (remaining_k == 0) {
+            process_subset(cur_subset);
+            return;
+        }
+        size_t available = other_edges.size() - start;
+        if (available < remaining_k) {
+            return;
+        }
+        for (size_t i = start; i <= other_edges.size() - remaining_k; ++i) {
+            cur_subset.push_back(other_edges[i]);
+            recurse(i + 1, remaining_k - 1);
+            cur_subset.pop_back();
+        }
+    };
+
+    recurse(0, k_);
+}
+
+std::vector<M1VariantPlan> ApxQueryPlan::generate_m1_variants(
+    uint32_t anchor_idx,
+    uint32_t qa,
+    uint32_t qb
+) const {
+    std::vector<M1VariantPlan> plans;
+    EngineCounters dummy_counters;
+    dummy_counters.max_work = std::numeric_limits<uint64_t>::max();
+    for_each_m1_variant(anchor_idx, qa, qb, dummy_counters, [&](const M1VariantPlan& plan) {
+        plans.push_back(plan);
+    });
     return plans;
 }
 

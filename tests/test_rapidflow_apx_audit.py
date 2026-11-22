@@ -499,12 +499,14 @@ class TestRapidFlowApxAudit(unittest.TestCase):
         self.assertEqual(s["overall_status"], "PASS")
 
     def test_29_provenance_failure_entrypoint_rejection(self):
-        """Test 29 (F04 Final): main() fails closed with PROVENANCE stage if Git query fails on repo or upstream."""
+        """Test 29 (F04 Final & Issue #34 Part A): main() fails closed with PROVENANCE stage on any Git provenance failure."""
         cases = [
             ("repo_commit_unknown", ("UNKNOWN_COMMIT", "CLEAN"), ("2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1", "CLEAN"), ["repository", "commit"]),
             ("repo_status_unknown", ("1a33f64a5e413ad87b38e7ae83b90e04f4d2b477", "UNKNOWN_ERROR"), ("2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1", "CLEAN"), ["repository", "status"]),
             ("upstream_commit_unknown", ("1a33f64a5e413ad87b38e7ae83b90e04f4d2b477", "CLEAN"), ("UNKNOWN_COMMIT", "CLEAN"), ["upstream", "commit"]),
             ("upstream_status_unknown", ("1a33f64a5e413ad87b38e7ae83b90e04f4d2b477", "CLEAN"), ("2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1", "UNKNOWN_ERROR"), ["upstream", "status"]),
+            ("upstream_commit_mismatch", ("1a33f64a5e413ad87b38e7ae83b90e04f4d2b477", "CLEAN"), ("d0b7e0141956705706271709d5100e2f43c32154", "CLEAN"), ["upstream", "mismatch"]),
+            ("upstream_status_dirty", ("1a33f64a5e413ad87b38e7ae83b90e04f4d2b477", "CLEAN"), ("2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1", "DIRTY"), ["upstream", "not pristine"]),
         ]
 
         from scripts.run_rapidflow_apx_audit import main
@@ -551,6 +553,65 @@ class TestRapidFlowApxAudit(unittest.TestCase):
                     # Ensure build and probe runners were NEVER called
                     mock_build.assert_not_called()
                     mock_probe.assert_not_called()
+
+    def test_29b_upstream_git_root_fallback_rejection(self):
+        """Test 29b (Issue #34 Part A): Reject when upstream dir falls back to parent repository."""
+        from scripts.run_rapidflow_apx_audit import main
+        with tempfile.TemporaryDirectory() as td:
+            td_path = Path(td)
+            out_path = td_path / "summary_root_fallback.json"
+
+            mock_build = unittest.mock.MagicMock()
+            mock_probe = unittest.mock.MagicMock()
+
+            with unittest.mock.patch("scripts.run_rapidflow_apx_audit.check_upstream_git_root", return_value=(False, "Directory falls back to parent repository")), \
+                 unittest.mock.patch("scripts.run_rapidflow_apx_audit.build_native_harness", mock_build), \
+                 unittest.mock.patch("scripts.run_rapidflow_apx_audit.run_probe_case", mock_probe), \
+                 unittest.mock.patch("sys.argv", ["run_rapidflow_apx_audit.py", "--output", str(out_path)]):
+
+                with self.assertRaises(SystemExit) as ctx:
+                    main()
+
+                self.assertEqual(ctx.exception.code, 1)
+
+            with open(out_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            self.assertEqual(data["failing_stage"], "PROVENANCE")
+            self.assertIn("root invalid", data.get("error", "").lower())
+            mock_build.assert_not_called()
+            mock_probe.assert_not_called()
+
+    def test_29c_prebuilt_binary_with_bad_provenance_rejected(self):
+        """Test 29c (Issue #34 Part A): Passing --binary with bad upstream provenance fails before binary use."""
+        from scripts.run_rapidflow_apx_audit import main
+        with tempfile.TemporaryDirectory() as td:
+            td_path = Path(td)
+            out_path = td_path / "summary_prebuilt_bad_prov.json"
+            fake_bin = td_path / "fake_binary"
+            fake_bin.write_text("#!/bin/sh\nexit 0\n")
+            fake_bin.chmod(0o755)
+
+            def mock_git_info(target_dir):
+                if "baselines" in str(target_dir):
+                    return ("d0b7e0141956705706271709d5100e2f43c32154", "CLEAN")
+                return ("1a33f64a5e413ad87b38e7ae83b90e04f4d2b477", "CLEAN")
+
+            mock_probe = unittest.mock.MagicMock()
+
+            with unittest.mock.patch("scripts.run_rapidflow_apx_audit.get_git_info", side_effect=mock_git_info), \
+                 unittest.mock.patch("scripts.run_rapidflow_apx_audit.run_probe_case", mock_probe), \
+                 unittest.mock.patch("sys.argv", ["run_rapidflow_apx_audit.py", "--binary", str(fake_bin), "--output", str(out_path)]):
+
+                with self.assertRaises(SystemExit) as ctx:
+                    main()
+
+                self.assertEqual(ctx.exception.code, 1)
+
+            with open(out_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            self.assertEqual(data["failing_stage"], "PROVENANCE")
+            self.assertEqual(data["binary_origin"], "PRE_BUILT_PROVIDED")
+            mock_probe.assert_not_called()
 
     def test_30_valid_provenance_entrypoint_passes_gate(self):
         """Test 30 (F04 Final): main() passes provenance gate when repo and upstream Git info are valid."""

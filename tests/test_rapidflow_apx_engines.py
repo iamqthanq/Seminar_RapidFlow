@@ -2730,6 +2730,172 @@ class TestRapidFlowApxEngines(unittest.TestCase):
         self.assertEqual(res["counters"]["work_units"], 11)
         self.assertEqual(res["work_budget"]["effective_limit"], 10)
 
+    def test_m1_lazy_variant_generation_k7_k5_preemption(self):
+        """Issue #34 Part B: K7, k=5 with --max-work 1 must halt at variant 1, not building all 15,504 plans."""
+        vertices = [{"id": i, "label": 0} for i in range(7)]
+        edges = []
+        for i in range(7):
+            for j in range(i + 1, 7):
+                edges.append({"u": i, "v": j, "label": 0})
+
+        workload = {
+            "case_id": "K7_K5_LAZY_BUDGET",
+            "query": {"k": 5, "vertices": vertices, "edges": edges},
+            "initial_graph": {"vertices": vertices, "edges": []},
+            "updates": [{"op": "+", "u": 0, "v": 1, "label": 0}]
+        }
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f_in, \
+             tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f_out:
+            json.dump(workload, f_in)
+            in_path = f_in.name
+            out_path = f_out.name
+
+        try:
+            cmd = [str(self.binary_path), "--workload", in_path, "--output", out_path, "--engine", "m1", "--max-work", "1"]
+            proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertEqual(proc.returncode, 4, "Expected exit code 4 (WORK_BUDGET_EXCEEDED)")
+
+            with open(out_path, "r", encoding="utf-8") as f:
+                res = json.load(f)
+
+            self.assertEqual(res.get("status"), "FAIL")
+            self.assertEqual(res.get("error_category"), "WORK_BUDGET_EXCEEDED")
+
+            step = res["steps"][0]
+            self.assertEqual(step["status"], "CALLBACK_ABORTED")
+            self.assertEqual(step["commit_status"], "NOT_COMMITTED")
+            self.assertEqual(len(step["entered_tuples"]), 0)
+            # Verify that lazy traversal halted at exactly 1 variant started, NOT 15,504!
+            self.assertEqual(step["step_counters"]["variants_started"], 1)
+            self.assertEqual(step["step_counters"]["work_units"], 2)
+        finally:
+            for p in [in_path, out_path]:
+                if os.path.exists(p):
+                    os.unlink(p)
+
+    def test_m1_exact_work_threshold_n_and_n_minus_1(self):
+        """Issue #34 Part B: Sharp threshold test on fixed fixture P3: N=10 succeeds, N-1=9 fails."""
+        workload = {
+            "case_id": "P3_THRESHOLD_TEST",
+            "query": {
+                "k": 0,
+                "vertices": [{"id": 0, "label": 0}, {"id": 1, "label": 0}, {"id": 2, "label": 0}],
+                "edges": [{"u": 0, "v": 1, "label": 0}, {"u": 1, "v": 2, "label": 0}]
+            },
+            "initial_graph": {
+                "vertices": [{"id": 0, "label": 0}, {"id": 1, "label": 0}, {"id": 2, "label": 0}],
+                "edges": [{"u": 0, "v": 1, "label": 0}]
+            },
+            "updates": [{"op": "+", "u": 1, "v": 2, "label": 0}]
+        }
+
+        # Run with max_work = 10 (exact N) -> must succeed
+        res_pass, _, _ = run_workload_on_binary(self.binary_path, "m1", workload, max_work=10)
+        self.assertEqual(res_pass.get("exit_code"), 0)
+        self.assertEqual(res_pass.get("status"), "SUCCESS")
+        self.assertEqual(res_pass["steps"][0]["commit_status"], "COMMITTED")
+        self.assertEqual(res_pass["steps"][0]["step_counters"]["work_units"], 10)
+
+        # Run with max_work = 9 (N - 1) -> must fail with WORK_BUDGET_EXCEEDED
+        res_fail, _, _ = run_workload_on_binary(self.binary_path, "m1", workload, max_work=9)
+        self.assertEqual(res_fail.get("exit_code"), 4)
+        self.assertEqual(res_fail.get("status"), "FAIL")
+        self.assertEqual(res_fail.get("error_category"), "WORK_BUDGET_EXCEEDED")
+        self.assertEqual(res_fail["steps"][0]["commit_status"], "NOT_COMMITTED")
+
+    def test_occurrence_witnesses_triangle_diamond_k2(self):
+        """Issue #34 Part D: Explicit occurrence witness validation across M1 and M2.
+
+        Witnesses:
+          1. Triangle k=0: INSERT gives 6 ENTERED, DELETE gives 6 EXITED.
+          2. Diamond chordal cycle k=1: 1 ENTERED, 0, 0, 1 EXITED.
+          3. K2 k=0: single-edge query gives exactly 2 mappings (both orientations).
+        """
+        # 1. Triangle k=0
+        tri_wl = {
+            "case_id": "WITNESS_TRIANGLE_K0",
+            "k": 0,
+            "query": {
+                "vertices": [{"id": 0, "label": 0}, {"id": 1, "label": 0}, {"id": 2, "label": 0}],
+                "edges": [{"u": 0, "v": 1, "label": 0}, {"u": 1, "v": 2, "label": 0}, {"u": 0, "v": 2, "label": 0}]
+            },
+            "initial_graph": {
+                "vertices": [{"id": 0, "label": 0}, {"id": 1, "label": 0}, {"id": 2, "label": 0}],
+                "edges": [{"u": 0, "v": 1, "label": 0}, {"u": 1, "v": 2, "label": 0}]
+            },
+            "updates": [
+                {"op": "+", "u": 0, "v": 2, "label": 0},
+                {"op": "-", "u": 0, "v": 2, "label": 0}
+            ]
+        }
+        for eng in ("m1", "m2"):
+            res, _, ok = run_workload_on_binary(self.binary_path, eng, tri_wl)
+            self.assertTrue(ok, f"Triangle k=0 failed on {eng}: {res.get('error_message')}")
+            steps = res.get("steps", [])
+            self.assertEqual(len(steps), 2)
+            self.assertEqual(len(steps[0]["entered_tuples"]), 6)
+            self.assertEqual(len(steps[0]["exited_tuples"]), 0)
+            self.assertEqual(len(steps[1]["entered_tuples"]), 0)
+            self.assertEqual(len(steps[1]["exited_tuples"]), 6)
+
+        # 2. Diamond chordal cycle k=1 (from witness_01_diamond_k1 fixture)
+        witness_fixture = REPO_ROOT / "tests" / "fixtures" / "dstar03" / "workloads" / "witness_01_diamond_k1.json"
+        with open(witness_fixture, "r", encoding="utf-8") as f:
+            d = json.load(f)
+        diamond_wl = {
+            "case_id": "WITNESS_DIAMOND_CHORDAL_CYCLE_K1",
+            "k": 1,
+            "query": {
+                "vertices": [{"id": int(v), "label": lbl} for v, lbl in d["query"]["vertices"].items()],
+                "edges": [{"u": u, "v": v, "label": lbl} for u, v, lbl in d["query"]["edges"]]
+            },
+            "initial_graph": {
+                "vertices": [{"id": int(v), "label": lbl} for v, lbl in d["initial_graph"]["vertices"].items()],
+                "edges": [{"u": u, "v": v, "label": lbl} for u, v, lbl in d["initial_graph"]["edges"]]
+            },
+            "updates": [
+                {"op": "+" if s["operation"] == "INSERT" else "-", "u": s["edge"][0], "v": s["edge"][1], "label": s["label"]}
+                for s in d["stream"]
+            ]
+        }
+        for eng in ("m1", "m2"):
+            res, _, ok = run_workload_on_binary(self.binary_path, eng, diamond_wl)
+            self.assertTrue(ok, f"Diamond chordal cycle failed on {eng}: {res.get('error_message')}")
+            steps = res.get("steps", [])
+            self.assertEqual(len(steps), 4)
+            self.assertEqual(steps[0]["entered_tuples"], [[0, 1, 2, 3]])
+            self.assertEqual(steps[0]["exited_tuples"], [])
+            self.assertEqual(steps[1]["entered_tuples"], [])
+            self.assertEqual(steps[1]["exited_tuples"], [])
+            self.assertEqual(steps[2]["entered_tuples"], [])
+            self.assertEqual(steps[2]["exited_tuples"], [])
+            self.assertEqual(steps[3]["entered_tuples"], [])
+            self.assertEqual(steps[3]["exited_tuples"], [[0, 1, 2, 3]])
+
+        # 3. K2 k=0
+        k2_wl = {
+            "case_id": "WITNESS_K2_K0",
+            "k": 0,
+            "query": {
+                "vertices": [{"id": 0, "label": 0}, {"id": 1, "label": 0}],
+                "edges": [{"u": 0, "v": 1, "label": 0}]
+            },
+            "initial_graph": {
+                "vertices": [{"id": 10, "label": 0}, {"id": 20, "label": 0}],
+                "edges": []
+            },
+            "updates": [
+                {"op": "+", "u": 10, "v": 20, "label": 0}
+            ]
+        }
+        for eng in ("m1", "m2"):
+            res, _, ok = run_workload_on_binary(self.binary_path, eng, k2_wl)
+            self.assertTrue(ok, f"K2 k=0 failed on {eng}: {res.get('error_message')}")
+            steps = res.get("steps", [])
+            self.assertEqual(len(steps), 1)
+            self.assertEqual(sorted(steps[0]["entered_tuples"]), [[10, 20], [20, 10]])
+            self.assertEqual(steps[0]["exited_tuples"], [])
+
 
 if __name__ == "__main__":
     unittest.main()

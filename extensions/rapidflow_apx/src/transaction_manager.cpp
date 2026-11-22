@@ -159,6 +159,8 @@ StepResult ApxTransactionManager::execute_update(
         return abort_and_rollback(StepStatus::CALLBACK_ABORTED, std::string("Duplicate raw emission detected in callback: ") + ex.what());
     } catch (const NonInjectiveMappingException& ex) {
         return abort_and_rollback(StepStatus::CALLBACK_ABORTED, std::string("Non-injective mapping detected in callback: ") + ex.what());
+    } catch (const WorkBudgetExceededException& ex) {
+        return abort_and_rollback(StepStatus::CALLBACK_ABORTED, std::string("Work budget exceeded in callback: ") + ex.what());
     } catch (const std::exception& ex) {
         return abort_and_rollback(StepStatus::CALLBACK_ABORTED, std::string("Callback exception: ") + ex.what());
     } catch (...) {

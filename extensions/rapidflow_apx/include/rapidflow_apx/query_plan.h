@@ -7,6 +7,7 @@
 #include <unordered_set>
 #include <tuple>
 #include <algorithm>
+#include <functional>
 #include "rapidflow_apx/typed_codec.h"
 #include "rapidflow_apx/engine_counters.h"
 
@@ -72,6 +73,16 @@ public:
 
     // M1 Variants for a specific anchor edge index
     std::vector<M1VariantPlan> generate_m1_variants(uint32_t anchor_idx, uint32_t qa, uint32_t qb) const;
+
+    // Lazy on-demand M1 variant traversal: charges budget before constructing each plan
+    // and streams one variant at a time to the callback.
+    void for_each_m1_variant(
+        uint32_t anchor_idx,
+        uint32_t qa,
+        uint32_t qb,
+        EngineCounters& counters,
+        const std::function<void(const M1VariantPlan&)>& callback
+    ) const;
 
     // Exact edge connectivity calculation
     static uint32_t compute_edge_connectivity(uint32_t num_vertices, const std::vector<QueryEdge>& edges);

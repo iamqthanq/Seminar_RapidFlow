@@ -47,12 +47,8 @@ uint64_t ApxM1EnumEngine::search_event(
 
             counters.anchors_started++;
 
-            // Generate M1 variants for Q - D with anchor (qa, qb)
-            auto variants = query_plan.generate_m1_variants(edge_idx, qa, qb);
-            for (const auto& variant : variants) {
-                counters.variants_started++;
-                counters.charge_work();
-
+            // Stream M1 variants for Q - D with anchor (qa, qb) lazily, charging work budget upfront
+            query_plan.for_each_m1_variant(edge_idx, qa, qb, counters, [&](const M1VariantPlan& variant) {
                 mapping[qa] = pa;
                 mapping[qb] = pb;
                 used_data[pa] = true;
@@ -73,7 +69,7 @@ uint64_t ApxM1EnumEngine::search_event(
                 used_data[pb] = false;
                 mapping[qa] = UNASSIGNED;
                 mapping[qb] = UNASSIGNED;
-            }
+            });
         }
     }
 

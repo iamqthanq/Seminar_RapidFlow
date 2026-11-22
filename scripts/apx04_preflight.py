@@ -1487,24 +1487,39 @@ class PreflightChecker:
                     v_query = self.audit_log.get("queries_verified", {}).get(qid)
                     v_stream = self.audit_log.get("streams_verified", {}).get(sid)
 
-                    if not v_graph or not v_query or not v_stream:
+                    def get_valid_component_sha(comp_dict: Any) -> Optional[str]:
+                        if not isinstance(comp_dict, dict):
+                            return None
+                        sha = comp_dict.get("sha256")
+                        if not isinstance(sha, str) or not is_valid_sha256(sha):
+                            return None
+                        return sha
+
+                    graph_sha = get_valid_component_sha(v_graph)
+                    query_sha = get_valid_component_sha(v_query)
+                    stream_sha = get_valid_component_sha(v_stream)
+
+                    if not graph_sha or not query_sha or not stream_sha:
+                        missing_or_invalid = []
+                        if not graph_sha:
+                            missing_or_invalid.append(f"graph '{gs}' (valid_sha={bool(graph_sha)})")
+                        if not query_sha:
+                            missing_or_invalid.append(f"query '{qid}' (valid_sha={bool(query_sha)})")
+                        if not stream_sha:
+                            missing_or_invalid.append(f"stream '{sid}' (valid_sha={bool(stream_sha)})")
                         self.errors.append(
                             f"[WORKLOAD_IDENTITY_MISMATCH] Case {cid} references component(s) that failed content verification "
-                            f"(graph={bool(v_graph)}, query={bool(v_query)}, stream={bool(v_stream)})"
+                            f"or missing valid SHA-256: {', '.join(missing_or_invalid)}"
                         )
                     else:
-                        verified_graph_sha = v_graph["sha256"]
-                        verified_query_sha = v_query["sha256"]
-                        verified_stream_sha = v_stream["sha256"]
-
                         actual_identity_sha = compute_workload_identity_sha256(
                             case_id=cid,
                             graph_id=gs,
-                            graph_sha256=verified_graph_sha,
+                            graph_sha256=graph_sha,
                             query_id=qid,
-                            query_sha256=verified_query_sha,
+                            query_sha256=query_sha,
                             stream_id=sid,
-                            stream_sha256=verified_stream_sha,
+                            stream_sha256=stream_sha,
                             eps_m=eps_m,
                             eps_x=eps_x,
                             mode=mode,
