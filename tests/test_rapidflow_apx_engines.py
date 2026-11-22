@@ -2732,7 +2732,7 @@ class TestRapidFlowApxEngines(unittest.TestCase):
 
     def test_m1_lazy_variant_generation_k7_k5_preemption(self):
         """Issue #34 Part B: K7, k=5 with --max-work 1 must halt at variant 1, not building all 15,504 plans."""
-        vertices = [{"id": i, "label": 0} for i in range(7)]
+        query_vertices = [{"id": 0, "label": 10}, {"id": 1, "label": 20}] + [{"id": i, "label": 0} for i in range(2, 7)]
         edges = []
         for i in range(7):
             for j in range(i + 1, 7):
@@ -2740,8 +2740,8 @@ class TestRapidFlowApxEngines(unittest.TestCase):
 
         workload = {
             "case_id": "K7_K5_LAZY_BUDGET",
-            "query": {"k": 5, "vertices": vertices, "edges": edges},
-            "initial_graph": {"vertices": vertices, "edges": []},
+            "query": {"k": 5, "vertices": query_vertices, "edges": edges},
+            "initial_graph": {"vertices": query_vertices, "edges": []},
             "updates": [{"op": "+", "u": 0, "v": 1, "label": 0}]
         }
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f_in, \
@@ -2751,30 +2751,46 @@ class TestRapidFlowApxEngines(unittest.TestCase):
             out_path = f_out.name
 
         try:
-            cmd = [str(self.binary_path), "--workload", in_path, "--output", out_path, "--engine", "m1", "--max-work", "1"]
-            proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            self.assertEqual(proc.returncode, 4, "Expected exit code 4 (WORK_BUDGET_EXCEEDED)")
+            # 1. max-work 1: preemption occurs during combination traversal BEFORE constructing plan 1 (variants_started == 0)
+            cmd1 = [str(self.binary_path), "--workload", in_path, "--output", out_path, "--engine", "m1", "--max-work", "1"]
+            proc1 = subprocess.run(cmd1, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertEqual(proc1.returncode, 4, "Expected exit code 4 (WORK_BUDGET_EXCEEDED)")
 
             with open(out_path, "r", encoding="utf-8") as f:
-                res = json.load(f)
+                res1 = json.load(f)
 
-            self.assertEqual(res.get("status"), "FAIL")
-            self.assertEqual(res.get("error_category"), "WORK_BUDGET_EXCEEDED")
+            self.assertEqual(res1.get("status"), "FAIL")
+            self.assertEqual(res1.get("error_category"), "WORK_BUDGET_EXCEEDED")
+            step1 = res1["steps"][0]
+            self.assertEqual(step1["status"], "CALLBACK_ABORTED")
+            self.assertEqual(step1["commit_status"], "NOT_COMMITTED")
+            self.assertEqual(len(step1["entered_tuples"]), 0)
+            self.assertEqual(step1["step_counters"]["variants_started"], 0)
+            self.assertEqual(step1["step_counters"]["work_units"], 2)
 
-            step = res["steps"][0]
-            self.assertEqual(step["status"], "CALLBACK_ABORTED")
-            self.assertEqual(step["commit_status"], "NOT_COMMITTED")
-            self.assertEqual(len(step["entered_tuples"]), 0)
-            # Verify that lazy traversal halted at exactly 1 variant started, NOT 15,504!
-            self.assertEqual(step["step_counters"]["variants_started"], 1)
-            self.assertEqual(step["step_counters"]["work_units"], 2)
+            # 2. max-work 2: preemption occurs after constructing plan 1 and BEFORE plan 2 (variants_started == 1)
+            cmd2 = [str(self.binary_path), "--workload", in_path, "--output", out_path, "--engine", "m1", "--max-work", "2"]
+            proc2 = subprocess.run(cmd2, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertEqual(proc2.returncode, 4, "Expected exit code 4 (WORK_BUDGET_EXCEEDED)")
+
+            with open(out_path, "r", encoding="utf-8") as f:
+                res2 = json.load(f)
+
+            self.assertEqual(res2.get("status"), "FAIL")
+            self.assertEqual(res2.get("error_category"), "WORK_BUDGET_EXCEEDED")
+            step2 = res2["steps"][0]
+            self.assertEqual(step2["status"], "CALLBACK_ABORTED")
+            self.assertEqual(step2["commit_status"], "NOT_COMMITTED")
+            self.assertEqual(len(step2["entered_tuples"]), 0)
+            self.assertEqual(step2["step_counters"]["variants_started"], 1)
+            self.assertEqual(step2["step_counters"]["work_units"], 3)
         finally:
             for p in [in_path, out_path]:
                 if os.path.exists(p):
                     os.unlink(p)
 
     def test_m1_exact_work_threshold_n_and_n_minus_1(self):
-        """Issue #34 Part B: Sharp threshold test on fixed fixture P3: N=10 succeeds, N-1=9 fails."""
+        """Issue #34 Part B: Sharp threshold test on fixed fixture P3: N=14 succeeds, N-1=13 fails."""
         workload = {
             "case_id": "P3_THRESHOLD_TEST",
             "query": {
@@ -2789,19 +2805,122 @@ class TestRapidFlowApxEngines(unittest.TestCase):
             "updates": [{"op": "+", "u": 1, "v": 2, "label": 0}]
         }
 
-        # Run with max_work = 10 (exact N) -> must succeed
-        res_pass, _, _ = run_workload_on_binary(self.binary_path, "m1", workload, max_work=10)
+        # Run with max_work = 14 (exact N) -> must succeed
+        res_pass, _, _ = run_workload_on_binary(self.binary_path, "m1", workload, max_work=14)
         self.assertEqual(res_pass.get("exit_code"), 0)
         self.assertEqual(res_pass.get("status"), "SUCCESS")
         self.assertEqual(res_pass["steps"][0]["commit_status"], "COMMITTED")
-        self.assertEqual(res_pass["steps"][0]["step_counters"]["work_units"], 10)
+        self.assertEqual(res_pass["steps"][0]["step_counters"]["work_units"], 14)
 
-        # Run with max_work = 9 (N - 1) -> must fail with WORK_BUDGET_EXCEEDED
-        res_fail, _, _ = run_workload_on_binary(self.binary_path, "m1", workload, max_work=9)
+        # Run with max_work = 13 (N - 1) -> must fail with WORK_BUDGET_EXCEEDED
+        res_fail, _, _ = run_workload_on_binary(self.binary_path, "m1", workload, max_work=13)
         self.assertEqual(res_fail.get("exit_code"), 4)
         self.assertEqual(res_fail.get("status"), "FAIL")
         self.assertEqual(res_fail.get("error_category"), "WORK_BUDGET_EXCEEDED")
         self.assertEqual(res_fail["steps"][0]["commit_status"], "NOT_COMMITTED")
+
+    def test_m1_staged_tuples_rollback_continue_on_error_insert_and_delete(self):
+        """Issue #34 Part B: Rollback of staged emissions on budget exhaustion with --continue-on-error.
+
+        Evaluates reviewer fixture for both INSERT and DELETE directions:
+        - Query: Triangle (homolabeled).
+        - Graph part 1: two triangles sharing edge (0,1) -> (0,1,2) and (0,1,3).
+        - Graph part 2: triangle (4,5,6) completed in Step 0 (commits 6 tuples).
+        - Step 1: inserts/deletes (0,1) with max_work N-1=29, exhausting budget after staging raw tuples.
+        - Step 2: inserts (2,7) with string label "0" (recovery under --continue-on-error).
+        """
+        for op in ("+", "-"):
+            is_insert = (op == "+")
+            init_edges = [
+                {"u": 0, "v": 2, "label": 0}, {"u": 1, "v": 2, "label": 0},
+                {"u": 0, "v": 3, "label": 0}, {"u": 1, "v": 3, "label": 0},
+                {"u": 4, "v": 5, "label": 0}, {"u": 5, "v": 6, "label": 0}
+            ]
+            if not is_insert:
+                init_edges.insert(0, {"u": 0, "v": 1, "label": 0})
+
+            workload = {
+                "case_id": f"TEST_ROLLBACK_{'INSERT' if is_insert else 'DELETE'}",
+                "k": 0,
+                "query": {
+                    "vertices": [{"id": 0, "label": 0}, {"id": 1, "label": 0}, {"id": 2, "label": 0}],
+                    "edges": [{"u": 0, "v": 1, "label": 0}, {"u": 1, "v": 2, "label": 0}, {"u": 0, "v": 2, "label": 0}]
+                },
+                "initial_graph": {
+                    "vertices": [{"id": v, "label": 0} for v in range(8)],
+                    "edges": init_edges
+                },
+                "updates": [
+                    {"op": "+", "u": 4, "v": 6, "label": 0},
+                    {"op": op, "u": 0, "v": 1, "label": 0},
+                    {"op": "+", "u": 2, "v": 7, "label": "0"}
+                ]
+            }
+
+            # Baseline skipping Step 1
+            wl_baseline = copy.deepcopy(workload)
+            wl_baseline["updates"] = [
+                {"op": "+", "u": 4, "v": 6, "label": 0},
+                {"op": "+", "u": 2, "v": 7, "label": "0"}
+            ]
+
+            with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f_in, \
+                 tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f_out, \
+                 tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f_b_in, \
+                 tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f_b_out:
+                json.dump(workload, f_in)
+                json.dump(wl_baseline, f_b_in)
+                in_path, out_path = f_in.name, f_out.name
+                b_in_path, b_out_path = f_b_in.name, f_b_out.name
+
+            try:
+                # Run with N-1 = 29 (budget exhausted after staging 11 emissions)
+                cmd = [str(self.binary_path), "--workload", in_path, "--output", out_path, "--engine", "m1", "--max-work", "29", "--continue-on-error"]
+                proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                self.assertEqual(proc.returncode, 4, f"Overall exit code must be 4 on budget error ({op})")
+
+                # Run baseline
+                cmd_b = [str(self.binary_path), "--workload", b_in_path, "--output", b_out_path, "--engine", "m1", "--max-work", "1000"]
+                subprocess.run(cmd_b, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+                with open(out_path, "r", encoding="utf-8") as f: res = json.load(f)
+                with open(b_out_path, "r", encoding="utf-8") as f: res_b = json.load(f)
+
+                s0 = res["steps"][0]
+                s1 = res["steps"][1]
+                s2 = res["steps"][2]
+                s_b1 = res_b["steps"][1]
+
+                # Step 0: completed triangle (4,5,6) committed 6 tuples
+                self.assertEqual(s0["status"], "SUCCESS")
+                self.assertEqual(s0["commit_status"], "COMMITTED")
+                self.assertEqual(len(s0["entered_tuples"]), 6)
+
+                # Step 1: aborted on budget after staging tuples
+                self.assertEqual(s1["status"], "CALLBACK_ABORTED")
+                self.assertEqual(s1["error_category"], "WORK_BUDGET_EXCEEDED")
+                self.assertEqual(s1["commit_status"], "NOT_COMMITTED")
+                self.assertEqual(s1["entered_tuples"], [])
+                self.assertEqual(s1["exited_tuples"], [])
+
+                sc1 = s1["step_counters"]
+                self.assertGreater(sc1["raw_emissions"], 0, "Must have staged emissions before budget exhaustion")
+                self.assertEqual(sc1["discarded_emissions"], sc1["raw_emissions"], "All staged emissions must be discarded on rollback")
+                self.assertEqual(sc1["committed_emissions"], 0, "Committed emissions must be zero on aborted step")
+
+                # Graph and codec state before and after step 1 on the same instance
+                self.assertEqual(s1["graph_state"], s0["graph_state"], "Graph state after abort must match pre-step state")
+                self.assertEqual(s1["codec_state"], s0["codec_state"], "Codec state after abort must match pre-step state")
+
+                # Step 2: recovery step executed under --continue-on-error
+                self.assertEqual(s2["status"], "SUCCESS")
+                self.assertEqual(s2["commit_status"], "COMMITTED")
+                self.assertEqual(s2["graph_state"], s_b1["graph_state"], "Recovered graph state must match baseline run skipping step 1")
+                self.assertEqual(s2["codec_state"], s_b1["codec_state"], "Recovered codec state must match baseline run skipping step 1")
+            finally:
+                for p in [in_path, out_path, b_in_path, b_out_path]:
+                    if os.path.exists(p):
+                        os.unlink(p)
 
     def test_occurrence_witnesses_triangle_diamond_k2(self):
         """Issue #34 Part D: Explicit occurrence witness validation across M1 and M2.
@@ -2811,7 +2930,10 @@ class TestRapidFlowApxEngines(unittest.TestCase):
           2. Diamond chordal cycle k=1: 1 ENTERED, 0, 0, 1 EXITED.
           3. K2 k=0: single-edge query gives exactly 2 mappings (both orientations).
         """
-        # 1. Triangle k=0
+        # 1. Triangle k=0: all 6 permutations of (0, 1, 2)
+        expected_tri_tuples = sorted([
+            [0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]
+        ])
         tri_wl = {
             "case_id": "WITNESS_TRIANGLE_K0",
             "k": 0,
@@ -2833,10 +2955,18 @@ class TestRapidFlowApxEngines(unittest.TestCase):
             self.assertTrue(ok, f"Triangle k=0 failed on {eng}: {res.get('error_message')}")
             steps = res.get("steps", [])
             self.assertEqual(len(steps), 2)
-            self.assertEqual(len(steps[0]["entered_tuples"]), 6)
+
+            # Step 0: INSERT -> exactly 6 ENTERED matching all permutations, 0 EXITED
+            s0_entered = sorted(steps[0]["entered_tuples"])
+            self.assertEqual(s0_entered, expected_tri_tuples)
+            self.assertEqual(len(steps[0]["entered_tuples"]), len(set(tuple(t) for t in steps[0]["entered_tuples"])), "Zero duplicates allowed")
             self.assertEqual(len(steps[0]["exited_tuples"]), 0)
+
+            # Step 1: DELETE -> 0 ENTERED, exactly 6 EXITED matching all permutations
             self.assertEqual(len(steps[1]["entered_tuples"]), 0)
-            self.assertEqual(len(steps[1]["exited_tuples"]), 6)
+            s1_exited = sorted(steps[1]["exited_tuples"])
+            self.assertEqual(s1_exited, expected_tri_tuples)
+            self.assertEqual(len(steps[1]["exited_tuples"]), len(set(tuple(t) for t in steps[1]["exited_tuples"])), "Zero duplicates allowed")
 
         # 2. Diamond chordal cycle k=1 (from witness_01_diamond_k1 fixture)
         witness_fixture = REPO_ROOT / "tests" / "fixtures" / "dstar03" / "workloads" / "witness_01_diamond_k1.json"
@@ -2863,16 +2993,20 @@ class TestRapidFlowApxEngines(unittest.TestCase):
             self.assertTrue(ok, f"Diamond chordal cycle failed on {eng}: {res.get('error_message')}")
             steps = res.get("steps", [])
             self.assertEqual(len(steps), 4)
+            # Step 0: 1 ENTERED, 0 EXITED
             self.assertEqual(steps[0]["entered_tuples"], [[0, 1, 2, 3]])
             self.assertEqual(steps[0]["exited_tuples"], [])
+            # Steps 1-2: Spectator updates -> delta strictly empty
             self.assertEqual(steps[1]["entered_tuples"], [])
             self.assertEqual(steps[1]["exited_tuples"], [])
             self.assertEqual(steps[2]["entered_tuples"], [])
             self.assertEqual(steps[2]["exited_tuples"], [])
+            # Step 3: 0 ENTERED, 1 EXITED
             self.assertEqual(steps[3]["entered_tuples"], [])
             self.assertEqual(steps[3]["exited_tuples"], [[0, 1, 2, 3]])
 
-        # 3. K2 k=0
+        # 3. K2 k=0 (homolabeled: 2 vertex permutations)
+        expected_k2_tuples = sorted([[10, 20], [20, 10]])
         k2_wl = {
             "case_id": "WITNESS_K2_K0",
             "k": 0,
@@ -2885,16 +3019,23 @@ class TestRapidFlowApxEngines(unittest.TestCase):
                 "edges": []
             },
             "updates": [
-                {"op": "+", "u": 10, "v": 20, "label": 0}
+                {"op": "+", "u": 10, "v": 20, "label": 0},
+                {"op": "-", "u": 10, "v": 20, "label": 0}
             ]
         }
         for eng in ("m1", "m2"):
             res, _, ok = run_workload_on_binary(self.binary_path, eng, k2_wl)
             self.assertTrue(ok, f"K2 k=0 failed on {eng}: {res.get('error_message')}")
             steps = res.get("steps", [])
-            self.assertEqual(len(steps), 1)
-            self.assertEqual(sorted(steps[0]["entered_tuples"]), [[10, 20], [20, 10]])
+            self.assertEqual(len(steps), 2)
+            # Step 0: INSERT -> 2 ENTERED (both orientations), 0 EXITED
+            self.assertEqual(sorted(steps[0]["entered_tuples"]), expected_k2_tuples)
+            self.assertEqual(len(steps[0]["entered_tuples"]), len(set(tuple(t) for t in steps[0]["entered_tuples"])), "Zero duplicates allowed")
             self.assertEqual(steps[0]["exited_tuples"], [])
+            # Step 1: DELETE -> 0 ENTERED, 2 EXITED (both orientations)
+            self.assertEqual(steps[1]["entered_tuples"], [])
+            self.assertEqual(sorted(steps[1]["exited_tuples"]), expected_k2_tuples)
+            self.assertEqual(len(steps[1]["exited_tuples"]), len(set(tuple(t) for t in steps[1]["exited_tuples"])), "Zero duplicates allowed")
 
 
 if __name__ == "__main__":

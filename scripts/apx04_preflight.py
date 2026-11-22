@@ -1476,7 +1476,7 @@ class PreflightChecker:
                         f"[WORKLOAD_IDENTITY_INVALID] Case {cid} has malformed registered_identity_sha256 '{reg_id_sha}' (must be 64-character hex string)"
                     )
                 else:
-                    # Retrieve verified component SHA-256 hashes from actual content verification
+                    # Retrieve verified component records from actual content verification
                     if gs in pilot_graphs_info:
                         v_graph = self.audit_log.get("pilot_data_graphs_verified", {}).get(gs)
                     elif gs == expected_graph:
@@ -1487,29 +1487,39 @@ class PreflightChecker:
                     v_query = self.audit_log.get("queries_verified", {}).get(qid)
                     v_stream = self.audit_log.get("streams_verified", {}).get(sid)
 
-                    def get_valid_component_sha(comp_dict: Any) -> Optional[str]:
+                    def validate_component(comp_type: str, comp_id: str, comp_dict: Any) -> Tuple[Optional[str], Optional[str]]:
+                        """Returns (sha256, error_reason) for a component dict."""
                         if not isinstance(comp_dict, dict):
-                            return None
+                            return None, f"component record missing or not a dict (got {type(comp_dict).__name__})"
                         sha = comp_dict.get("sha256")
-                        if not isinstance(sha, str) or not is_valid_sha256(sha):
-                            return None
-                        return sha
+                        if not isinstance(sha, str):
+                            return None, f"missing or non-string 'sha256' (got {type(sha).__name__})"
+                        if not is_valid_sha256(sha):
+                            return None, f"malformed 'sha256' '{sha}' (must be 64-character hex)"
+                        if comp_type == "stream":
+                            if comp_dict.get("source_lineage_verified") is not True:
+                                return None, "stream source lineage verification failed (source_lineage_verified=False)"
+                            if comp_dict.get("sequential_updates_verified") is not True:
+                                return None, "stream sequential updates verification failed (sequential_updates_verified=False)"
+                        elif comp_type == "query":
+                            if comp_dict.get("is_connected") is not True:
+                                return None, "query graph is disconnected (is_connected=False)"
+                        return sha, None
 
-                    graph_sha = get_valid_component_sha(v_graph)
-                    query_sha = get_valid_component_sha(v_query)
-                    stream_sha = get_valid_component_sha(v_stream)
+                    graph_sha, graph_err = validate_component("graph", gs, v_graph)
+                    query_sha, query_err = validate_component("query", qid, v_query)
+                    stream_sha, stream_err = validate_component("stream", sid, v_stream)
 
                     if not graph_sha or not query_sha or not stream_sha:
-                        missing_or_invalid = []
+                        failures = []
                         if not graph_sha:
-                            missing_or_invalid.append(f"graph '{gs}' (valid_sha={bool(graph_sha)})")
+                            failures.append(f"graph '{gs}': {graph_err}")
                         if not query_sha:
-                            missing_or_invalid.append(f"query '{qid}' (valid_sha={bool(query_sha)})")
+                            failures.append(f"query '{qid}': {query_err}")
                         if not stream_sha:
-                            missing_or_invalid.append(f"stream '{sid}' (valid_sha={bool(stream_sha)})")
+                            failures.append(f"stream '{sid}': {stream_err}")
                         self.errors.append(
-                            f"[WORKLOAD_IDENTITY_MISMATCH] Case {cid} references component(s) that failed content verification "
-                            f"or missing valid SHA-256: {', '.join(missing_or_invalid)}"
+                            f"[WORKLOAD_IDENTITY_MISMATCH] Case {cid} references invalid or unverified component(s): {'; '.join(failures)}"
                         )
                     else:
                         actual_identity_sha = compute_workload_identity_sha256(

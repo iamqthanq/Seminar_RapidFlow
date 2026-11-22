@@ -197,24 +197,6 @@ void ApxQueryPlan::build(
     }
 }
 
-static void combine_subsets(
-    const std::vector<uint32_t>& items,
-    size_t k,
-    size_t start,
-    std::vector<uint32_t>& current,
-    std::vector<std::vector<uint32_t>>& result
-) {
-    if (current.size() == k) {
-        result.push_back(current);
-        return;
-    }
-    for (size_t i = start; i < items.size(); ++i) {
-        current.push_back(items[i]);
-        combine_subsets(items, k, i + 1, current, result);
-        current.pop_back();
-    }
-}
-
 void ApxQueryPlan::for_each_m1_variant(
     uint32_t anchor_idx,
     uint32_t qa,
@@ -222,6 +204,9 @@ void ApxQueryPlan::for_each_m1_variant(
     EngineCounters& counters,
     const std::function<void(const M1VariantPlan&)>& callback
 ) const {
+    // 1. Upfront charge for variant enumeration setup on this anchor edge
+    counters.charge_work(1);
+
     std::vector<uint32_t> other_edges;
     other_edges.reserve(edges_.size() - 1);
     for (size_t i = 0; i < edges_.size(); ++i) {
@@ -234,7 +219,7 @@ void ApxQueryPlan::for_each_m1_variant(
     cur_subset.reserve(k_);
 
     auto process_subset = [&](const std::vector<uint32_t>& D) {
-        // Charge budget BEFORE allocating and constructing variant plan
+        // 2. Charge budget for constructing and materializing variant plan Q - D
         counters.charge_work(1);
 
         M1VariantPlan plan;
@@ -310,6 +295,8 @@ void ApxQueryPlan::for_each_m1_variant(
             return;
         }
         for (size_t i = start; i <= other_edges.size() - remaining_k; ++i) {
+            // Charge budget for exploring combination branch
+            counters.charge_work(1);
             cur_subset.push_back(other_edges[i]);
             recurse(i + 1, remaining_k - 1);
             cur_subset.pop_back();
@@ -317,20 +304,6 @@ void ApxQueryPlan::for_each_m1_variant(
     };
 
     recurse(0, k_);
-}
-
-std::vector<M1VariantPlan> ApxQueryPlan::generate_m1_variants(
-    uint32_t anchor_idx,
-    uint32_t qa,
-    uint32_t qb
-) const {
-    std::vector<M1VariantPlan> plans;
-    EngineCounters dummy_counters;
-    dummy_counters.max_work = std::numeric_limits<uint64_t>::max();
-    for_each_m1_variant(anchor_idx, qa, qb, dummy_counters, [&](const M1VariantPlan& plan) {
-        plans.push_back(plan);
-    });
-    return plans;
 }
 
 } // namespace rapidflow_apx

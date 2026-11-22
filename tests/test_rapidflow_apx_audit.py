@@ -613,6 +613,26 @@ class TestRapidFlowApxAudit(unittest.TestCase):
             self.assertEqual(data["binary_origin"], "PRE_BUILT_PROVIDED")
             mock_probe.assert_not_called()
 
+    def test_29d_upstream_git_root_real_parent_fallback(self):
+        """Test 29d (Issue #34 Part A): Real git init in temporary tree demonstrates check_upstream_git_root catches parent fallback without mocking."""
+        from scripts.run_rapidflow_apx_audit import check_upstream_git_root
+        with tempfile.TemporaryDirectory() as td:
+            td_path = Path(td)
+            # Create a real parent git repository
+            parent_repo = td_path / "mock_parent_repo"
+            parent_repo.mkdir()
+            subprocess.run(["git", "init"], cwd=parent_repo, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+
+            # Create a subdirectory pretending to be upstream submodule without .git
+            fake_upstream = parent_repo / "baselines" / "rapidflow" / "source"
+            fake_upstream.mkdir(parents=True)
+
+            # Call real check_upstream_git_root on fake_upstream (NO MOCK)
+            is_valid_root, err_msg = check_upstream_git_root(fake_upstream)
+            self.assertFalse(is_valid_root, "Must detect that directory is not its own Git root")
+            self.assertIn("falls back to parent repository", err_msg)
+            self.assertIn(str(parent_repo.resolve()), err_msg)
+
     def test_30_valid_provenance_entrypoint_passes_gate(self):
         """Test 30 (F04 Final): main() passes provenance gate when repo and upstream Git info are valid."""
         with tempfile.TemporaryDirectory() as td:

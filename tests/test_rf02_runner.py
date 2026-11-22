@@ -250,7 +250,23 @@ class TestRunnerFailurePreservation(unittest.TestCase):
         )
         self.prov_patcher.start()
 
+        # Isolate RapidFlow.out hash check so synthetic failure preservation tests do not
+        # fail with FileNotFoundError if the historical compiled binary is absent from disk.
+        real_file_sha256 = file_sha256
+        def synthetic_file_sha256(path):
+            p = Path(path)
+            if p.name == "RapidFlow.out":
+                return EXPECTED_BINARY_SHA256
+            return real_file_sha256(path)
+
+        self.sha_patcher = patch(
+            "scripts.rf02_differential_runner.file_sha256",
+            side_effect=synthetic_file_sha256
+        )
+        self.sha_patcher.start()
+
     def tearDown(self):
+        self.sha_patcher.stop()
         self.prov_patcher.stop()
         self.temp_dir.cleanup()
 

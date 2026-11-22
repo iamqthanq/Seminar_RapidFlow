@@ -21,6 +21,7 @@ Comprehensive test suite for APX-04 Gate A3-00 (Round 2 Adjudicated):
 from __future__ import annotations
 
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -1600,47 +1601,148 @@ class TestRound5WorkloadIdentityFingerprint(unittest.TestCase):
     def test_component_missing_sha256_reports_structured_error_no_keyerror(self):
         """Issue #34 Part C2: Component dict missing sha256 returns structured WORKLOAD_IDENTITY_MISMATCH without KeyError."""
         checker = PreflightChecker(manifest_path=self.manifest_path, repo_root=self.repo_root)
+        self.assertTrue(checker.run_all(), f"Clean setup must pass preflight: {checker.errors}")
+
         with open(self.manifest_path, "r", encoding="utf-8") as f:
             manifest = json.load(f)
 
-        # Inject audit log with component dicts missing 'sha256' key
-        checker.audit_log["pilot_data_graphs_verified"] = {
-            "Pilot_A_K3_Chordal": {"path": "dummy/path"} # no sha256
-        }
-        checker.audit_log["queries_verified"] = {
-            "Q_pilot_a_triangle": {"path": "dummy/query"} # no sha256
-        }
-        checker.audit_log["streams_verified"] = {
-            "stream_pilot_a_dense": {"path": "dummy/stream"} # no sha256
-        }
-
-        # Should execute audit_pilot_cases without raising KeyError
+        # 1. Corrupt graph record of genuine Pilot A
+        checker.errors.clear()
+        checker.audit_log["pilot_data_graphs_verified"]["Pilot_A_Exact_Micrograph"].pop("sha256", None)
         checker.audit_pilot_cases(manifest)
-        self.assertGreater(len(checker.errors), 0)
-        has_mismatch_error = any("WORKLOAD_IDENTITY_MISMATCH" in err for err in checker.errors)
-        self.assertTrue(has_mismatch_error, f"Expected WORKLOAD_IDENTITY_MISMATCH in errors: {checker.errors}")
+        self.assertTrue(any(
+            "[WORKLOAD_IDENTITY_MISMATCH]" in e and "pilot_safe_01_micro_exact" in e and "Pilot_A_Exact_Micrograph" in e and "graph" in e
+            for e in checker.errors
+        ), f"Expected graph missing sha256 error, got: {checker.errors}")
 
-    def test_component_malformed_sha256_reports_structured_error(self):
+        # 2. Corrupt query record of genuine Pilot A
+        checker.run_all() # reset
+        checker.errors.clear()
+        checker.audit_log["queries_verified"]["Q_pilot_a_exact"].pop("sha256", None)
+        checker.audit_pilot_cases(manifest)
+        self.assertTrue(any(
+            "[WORKLOAD_IDENTITY_MISMATCH]" in e and "pilot_safe_01_micro_exact" in e and "Q_pilot_a_exact" in e and "query" in e
+            for e in checker.errors
+        ), f"Expected query missing sha256 error, got: {checker.errors}")
+
+        # 3. Corrupt stream record of genuine Pilot A
+        checker.run_all() # reset
+        checker.errors.clear()
+        checker.audit_log["streams_verified"]["stream_pilot_a_exact"].pop("sha256", None)
+        checker.audit_pilot_cases(manifest)
+        self.assertTrue(any(
+            "[WORKLOAD_IDENTITY_MISMATCH]" in e and "pilot_safe_01_micro_exact" in e and "stream_pilot_a_exact" in e and "stream" in e
+            for e in checker.errors
+        ), f"Expected stream missing sha256 error, got: {checker.errors}")
+
+    def test_component_malformed_or_wrong_type_sha256_reports_structured_error(self):
         """Issue #34 Part C2: Component dict with non-string or malformed sha256 returns structured error."""
         checker = PreflightChecker(manifest_path=self.manifest_path, repo_root=self.repo_root)
+        self.assertTrue(checker.run_all())
+
         with open(self.manifest_path, "r", encoding="utf-8") as f:
             manifest = json.load(f)
 
-        # Inject audit log with invalid sha256 values
-        checker.audit_log["pilot_data_graphs_verified"] = {
-            "Pilot_A_K3_Chordal": {"sha256": 12345} # non-string
-        }
-        checker.audit_log["queries_verified"] = {
-            "Q_pilot_a_triangle": {"sha256": "not_a_64_char_hex"} # invalid length/format
-        }
-        checker.audit_log["streams_verified"] = {
-            "stream_pilot_a_dense": {"sha256": None} # None
-        }
-
+        # 1. Non-string integer for graph sha256
+        checker.errors.clear()
+        checker.audit_log["pilot_data_graphs_verified"]["Pilot_A_Exact_Micrograph"]["sha256"] = 12345
         checker.audit_pilot_cases(manifest)
-        self.assertGreater(len(checker.errors), 0)
-        has_mismatch_error = any("WORKLOAD_IDENTITY_MISMATCH" in err for err in checker.errors)
-        self.assertTrue(has_mismatch_error, f"Expected WORKLOAD_IDENTITY_MISMATCH in errors: {checker.errors}")
+        self.assertTrue(any(
+            "[WORKLOAD_IDENTITY_MISMATCH]" in e and "pilot_safe_01_micro_exact" in e and "Pilot_A_Exact_Micrograph" in e and "non-string" in e
+            for e in checker.errors
+        ), f"Expected non-string graph error, got: {checker.errors}")
+
+        # 2. Malformed non-hex string for query sha256
+        checker.run_all()
+        checker.errors.clear()
+        checker.audit_log["queries_verified"]["Q_pilot_a_exact"]["sha256"] = "invalid_short_hash"
+        checker.audit_pilot_cases(manifest)
+        self.assertTrue(any(
+            "[WORKLOAD_IDENTITY_MISMATCH]" in e and "pilot_safe_01_micro_exact" in e and "Q_pilot_a_exact" in e and "malformed" in e
+            for e in checker.errors
+        ), f"Expected malformed query error, got: {checker.errors}")
+
+    def test_component_verification_failure_rejects_identity_generation(self):
+        """Issue #34 Part C2: Valid SHA format is rejected if verification flags (lineage, sequential, connectivity) failed."""
+        checker = PreflightChecker(manifest_path=self.manifest_path, repo_root=self.repo_root)
+        self.assertTrue(checker.run_all())
+
+        with open(self.manifest_path, "r", encoding="utf-8") as f:
+            manifest = json.load(f)
+
+        # 1. Stream source lineage verification failed
+        checker.errors.clear()
+        checker.audit_log["streams_verified"]["stream_pilot_a_exact"]["source_lineage_verified"] = False
+        checker.audit_pilot_cases(manifest)
+        self.assertTrue(any(
+            "[WORKLOAD_IDENTITY_MISMATCH]" in e and "stream_pilot_a_exact" in e and "source lineage verification failed" in e
+            for e in checker.errors
+        ), f"Expected stream lineage failure rejection, got: {checker.errors}")
+
+        # 2. Stream sequential updates verification failed
+        checker.run_all()
+        checker.errors.clear()
+        checker.audit_log["streams_verified"]["stream_pilot_a_exact"]["sequential_updates_verified"] = False
+        checker.audit_pilot_cases(manifest)
+        self.assertTrue(any(
+            "[WORKLOAD_IDENTITY_MISMATCH]" in e and "stream_pilot_a_exact" in e and "sequential updates verification failed" in e
+            for e in checker.errors
+        ), f"Expected stream sequential failure rejection, got: {checker.errors}")
+
+        # 3. Query disconnected
+        checker.run_all()
+        checker.errors.clear()
+        checker.audit_log["queries_verified"]["Q_pilot_a_exact"]["is_connected"] = False
+        checker.audit_pilot_cases(manifest)
+        self.assertTrue(any(
+            "[WORKLOAD_IDENTITY_MISMATCH]" in e and "Q_pilot_a_exact" in e and "disconnected" in e
+            for e in checker.errors
+        ), f"Expected disconnected query rejection, got: {checker.errors}")
+
+    def test_cli_dry_run_unknown_target_graph_fails_structured(self):
+        """Issue #34 Part C2: CLI --json --dry-run on unknown target graph exits 1 with structured error and no traceback."""
+        with tempfile.TemporaryDirectory() as td:
+            tmp_m = Path(td) / "manifest.json"
+            with open(self.manifest_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            data["streams"]["stream_pilot_a_exact"]["target_graph"] = "NonExistent_Graph_ID"
+            with open(tmp_m, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+
+            import sys
+            cmd = [sys.executable, "scripts/apx04_preflight.py", "--manifest", str(tmp_m), "--json", "--dry-run"]
+            proc = subprocess.run(cmd, cwd=self.repo_root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertEqual(proc.returncode, 1, "CLI must exit with code 1")
+            self.assertEqual(proc.stderr.strip(), "", "No traceback allowed on stderr")
+
+            out = json.loads(proc.stdout)
+            self.assertEqual(out.get("status"), "FAIL")
+            self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+            errors = out.get("errors", [])
+            self.assertTrue(any("stream_pilot_a_exact" in e and "NonExistent_Graph_ID" in e for e in errors))
+            self.assertTrue(any("[WORKLOAD_IDENTITY_MISMATCH]" in e and "pilot_safe_01_micro_exact" in e for e in errors))
+
+    def test_cli_dry_run_missing_asset_fails_structured(self):
+        """Issue #34 Part C2: CLI --json --dry-run on missing asset file exits 1 with structured error and no traceback."""
+        with tempfile.TemporaryDirectory() as td:
+            tmp_m = Path(td) / "manifest.json"
+            with open(self.manifest_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            data["queries"]["Q_pilot_a_exact"]["path"] = "data/nonexistent/missing_query.graph"
+            with open(tmp_m, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+
+            import sys
+            cmd = [sys.executable, "scripts/apx04_preflight.py", "--manifest", str(tmp_m), "--json", "--dry-run"]
+            proc = subprocess.run(cmd, cwd=self.repo_root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertEqual(proc.returncode, 1, "CLI must exit with code 1")
+            self.assertEqual(proc.stderr.strip(), "", "No traceback allowed on stderr")
+
+            out = json.loads(proc.stdout)
+            self.assertEqual(out.get("status"), "FAIL")
+            self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+            errors = out.get("errors", [])
+            self.assertTrue(any("missing_query.graph" in e for e in errors))
 
 
 if __name__ == "__main__":
