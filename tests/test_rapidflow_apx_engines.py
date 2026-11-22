@@ -2740,7 +2740,8 @@ class TestRapidFlowApxEngines(unittest.TestCase):
 
         workload = {
             "case_id": "K7_K5_LAZY_BUDGET",
-            "query": {"k": 5, "vertices": query_vertices, "edges": edges},
+            "k": 5,
+            "query": {"vertices": query_vertices, "edges": edges},
             "initial_graph": {"vertices": query_vertices, "edges": []},
             "updates": [{"op": "+", "u": 0, "v": 1, "label": 0}]
         }
@@ -2768,8 +2769,8 @@ class TestRapidFlowApxEngines(unittest.TestCase):
             self.assertEqual(step1["step_counters"]["variants_started"], 0)
             self.assertEqual(step1["step_counters"]["work_units"], 2)
 
-            # 2. max-work 2: preemption occurs after constructing plan 1 and BEFORE plan 2 (variants_started == 1)
-            cmd2 = [str(self.binary_path), "--workload", in_path, "--output", out_path, "--engine", "m1", "--max-work", "2"]
+            # 2. max-work 7: preemption occurs after constructing plan 1 and BEFORE plan 2 (variants_started == 1)
+            cmd2 = [str(self.binary_path), "--workload", in_path, "--output", out_path, "--engine", "m1", "--max-work", "7"]
             proc2 = subprocess.run(cmd2, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             self.assertEqual(proc2.returncode, 4, "Expected exit code 4 (WORK_BUDGET_EXCEEDED)")
 
@@ -2783,14 +2784,14 @@ class TestRapidFlowApxEngines(unittest.TestCase):
             self.assertEqual(step2["commit_status"], "NOT_COMMITTED")
             self.assertEqual(len(step2["entered_tuples"]), 0)
             self.assertEqual(step2["step_counters"]["variants_started"], 1)
-            self.assertEqual(step2["step_counters"]["work_units"], 3)
+            self.assertEqual(step2["step_counters"]["work_units"], 8)
         finally:
             for p in [in_path, out_path]:
                 if os.path.exists(p):
                     os.unlink(p)
 
     def test_m1_exact_work_threshold_n_and_n_minus_1(self):
-        """Issue #34 Part B: Sharp threshold test on fixed fixture P3: N=14 succeeds, N-1=13 fails."""
+        """Issue #34 Part B: Sharp threshold test on fixed fixture P3: N=10 succeeds, N-1=9 fails."""
         workload = {
             "case_id": "P3_THRESHOLD_TEST",
             "query": {
@@ -2805,15 +2806,15 @@ class TestRapidFlowApxEngines(unittest.TestCase):
             "updates": [{"op": "+", "u": 1, "v": 2, "label": 0}]
         }
 
-        # Run with max_work = 14 (exact N) -> must succeed
-        res_pass, _, _ = run_workload_on_binary(self.binary_path, "m1", workload, max_work=14)
+        # Run with max_work = 10 (exact N) -> must succeed
+        res_pass, _, _ = run_workload_on_binary(self.binary_path, "m1", workload, max_work=10)
         self.assertEqual(res_pass.get("exit_code"), 0)
         self.assertEqual(res_pass.get("status"), "SUCCESS")
         self.assertEqual(res_pass["steps"][0]["commit_status"], "COMMITTED")
-        self.assertEqual(res_pass["steps"][0]["step_counters"]["work_units"], 14)
+        self.assertEqual(res_pass["steps"][0]["step_counters"]["work_units"], 10)
 
-        # Run with max_work = 13 (N - 1) -> must fail with WORK_BUDGET_EXCEEDED
-        res_fail, _, _ = run_workload_on_binary(self.binary_path, "m1", workload, max_work=13)
+        # Run with max_work = 9 (N - 1) -> must fail with WORK_BUDGET_EXCEEDED
+        res_fail, _, _ = run_workload_on_binary(self.binary_path, "m1", workload, max_work=9)
         self.assertEqual(res_fail.get("exit_code"), 4)
         self.assertEqual(res_fail.get("status"), "FAIL")
         self.assertEqual(res_fail.get("error_category"), "WORK_BUDGET_EXCEEDED")
@@ -2826,7 +2827,7 @@ class TestRapidFlowApxEngines(unittest.TestCase):
         - Query: Triangle (homolabeled).
         - Graph part 1: two triangles sharing edge (0,1) -> (0,1,2) and (0,1,3).
         - Graph part 2: triangle (4,5,6) completed in Step 0 (commits 6 tuples).
-        - Step 1: inserts/deletes (0,1) with max_work N-1=29, exhausting budget after staging raw tuples.
+        - Step 1: inserts/deletes (0,1) with max_work N-1=23, exhausting budget after staging raw tuples.
         - Step 2: inserts (2,7) with string label "0" (recovery under --continue-on-error).
         """
         for op in ("+", "-"):
@@ -2874,8 +2875,8 @@ class TestRapidFlowApxEngines(unittest.TestCase):
                 b_in_path, b_out_path = f_b_in.name, f_b_out.name
 
             try:
-                # Run with N-1 = 29 (budget exhausted after staging 11 emissions)
-                cmd = [str(self.binary_path), "--workload", in_path, "--output", out_path, "--engine", "m1", "--max-work", "29", "--continue-on-error"]
+                # Run with N-1 = 23 (budget exhausted after staging 11 emissions)
+                cmd = [str(self.binary_path), "--workload", in_path, "--output", out_path, "--engine", "m1", "--max-work", "23", "--continue-on-error"]
                 proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                 self.assertEqual(proc.returncode, 4, f"Overall exit code must be 4 on budget error ({op})")
 

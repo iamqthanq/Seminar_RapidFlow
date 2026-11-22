@@ -204,8 +204,10 @@ void ApxQueryPlan::for_each_m1_variant(
     EngineCounters& counters,
     const std::function<void(const M1VariantPlan&)>& callback
 ) const {
-    // 1. Upfront charge for variant enumeration setup on this anchor edge
-    counters.charge_work(1);
+    // 1. Upfront charge for combinatorial variant enumeration setup on this anchor edge (k > 0)
+    if (k_ > 0) {
+        counters.charge_work(1);
+    }
 
     std::vector<uint32_t> other_edges;
     other_edges.reserve(edges_.size() - 1);
