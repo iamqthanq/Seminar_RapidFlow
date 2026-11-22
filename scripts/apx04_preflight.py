@@ -44,6 +44,41 @@ def is_strict_int(val: Any) -> bool:
     return type(val) is int and not isinstance(val, bool)
 
 
+def is_strict_int_list(val: Any) -> bool:
+    """Checks that a value is a list of strict integers (not booleans, strings, or None)."""
+    if not isinstance(val, list):
+        return False
+    return all(is_strict_int(x) for x in val)
+
+
+def validate_strict_int_field(val: Any, field_name: str, context: str, min_val: Optional[int] = 0) -> Tuple[bool, Optional[str]]:
+    """
+    Validates that a field is a strict integer (not bool, str, None, etc.) and optionally >= min_val.
+    Returns (is_valid, error_message).
+    """
+    if not is_strict_int(val):
+        recv_type = "string" if isinstance(val, str) else type(val).__name__
+        return False, f"{context} field '{field_name}' has invalid type: expected integer, received {recv_type} ({val!r})"
+    if min_val is not None and val < min_val:
+        return False, f"{context} field '{field_name}' value {val} is below minimum allowed {min_val}"
+    return True, None
+
+
+def validate_strict_int_list_field(val: Any, field_name: str, context: str) -> Tuple[bool, Optional[str]]:
+    """
+    Validates that a field is a list of strict integers.
+    Returns (is_valid, error_message).
+    """
+    if not isinstance(val, list):
+        recv_type = "string" if isinstance(val, str) else type(val).__name__
+        return False, f"{context} field '{field_name}' has invalid type: expected list of integers, received {recv_type} ({val!r})"
+    for elem in val:
+        if not is_strict_int(elem):
+            elem_type = "string" if isinstance(elem, str) else type(elem).__name__
+            return False, f"{context} field '{field_name}' has invalid element type: expected list of integers, contains non-integer element {elem!r} ({elem_type})"
+    return True, None
+
+
 def is_valid_sha256(val: Any) -> bool:
     """Checks whether a value is a valid 64-character lowercase/uppercase hex SHA-256 string."""
     return isinstance(val, str) and len(val) == 64 and all(c in "0123456789abcdefABCDEF" for c in val)
@@ -708,11 +743,15 @@ class PreflightChecker:
             self.errors.append(f"[DISK_RESOURCE_ERROR] {msg}")
 
     def audit_data_graph(self, manifest: Dict[str, Any]) -> None:
-        """Verifies initial data graph path and cryptographic SHA-256."""
+        """Verifies initial data graph path, cryptographic SHA-256, and metadata types."""
         dg_info = manifest.get("data_graph", {})
+        if not isinstance(dg_info, dict):
+            self.errors.append("Manifest 'data_graph' must be a dictionary.")
+            return
+
         rel_path = dg_info.get("path")
-        if not rel_path:
-            self.errors.append("data_graph missing 'path'")
+        if not rel_path or not isinstance(rel_path, str):
+            self.errors.append("data_graph missing or invalid 'path'")
             return
 
         full_path = self.repo_root / rel_path
@@ -720,13 +759,33 @@ class PreflightChecker:
             self.errors.append(f"Initial data graph file not found: {rel_path}")
             return
 
+        context_str = "Initial data graph 'data_graph'"
+        dg_errors_before = len(self.errors)
+
+        if "vertices" in dg_info:
+            v_ok, v_err = validate_strict_int_field(dg_info.get("vertices"), "vertices", context_str, min_val=0)
+            if not v_ok:
+                self.errors.append(f"[DATA_GRAPH_TYPE_ERROR] {v_err}")
+        if "edges" in dg_info:
+            e_ok, e_err = validate_strict_int_field(dg_info.get("edges"), "edges", context_str, min_val=0)
+            if not e_ok:
+                self.errors.append(f"[DATA_GRAPH_TYPE_ERROR] {e_err}")
+        if "vertex_labels" in dg_info:
+            vl_ok, vl_err = validate_strict_int_list_field(dg_info.get("vertex_labels"), "vertex_labels", context_str)
+            if not vl_ok:
+                self.errors.append(f"[DATA_GRAPH_TYPE_ERROR] {vl_err}")
+        if "edge_labels" in dg_info:
+            el_ok, el_err = validate_strict_int_list_field(dg_info.get("edge_labels"), "edge_labels", context_str)
+            if not el_ok:
+                self.errors.append(f"[DATA_GRAPH_TYPE_ERROR] {el_err}")
+
         expected_hash = dg_info.get("sha256")
         actual_hash = compute_sha256(full_path)
         if actual_hash != expected_hash:
             self.errors.append(
                 f"Data graph SHA-256 mismatch for {rel_path}: expected {expected_hash}, got {actual_hash}"
             )
-        else:
+        elif len(self.errors) == dg_errors_before:
             self.audit_log["data_graph_verified"] = {
                 "name": dg_info.get("name"),
                 "path": rel_path,
@@ -737,11 +796,19 @@ class PreflightChecker:
     def audit_pilot_data_graphs(self, manifest: Dict[str, Any]) -> None:
         """Verifies pilot data graphs declared in manifest: existence, SHA-256, and metadata."""
         pilot_graphs = manifest.get("pilot_data_graphs", {})
+        if not isinstance(pilot_graphs, dict):
+            self.errors.append("Manifest 'pilot_data_graphs' must be a dictionary.")
+            return
+
         verified_pilots: Dict[str, Any] = {}
         for pg_id, pg_info in pilot_graphs.items():
+            if not isinstance(pg_info, dict):
+                self.errors.append(f"Pilot data graph '{pg_id}' specification must be a dictionary.")
+                continue
+
             rel_path = pg_info.get("path")
-            if not rel_path:
-                self.errors.append(f"Pilot data graph '{pg_id}' missing 'path'")
+            if not rel_path or not isinstance(rel_path, str):
+                self.errors.append(f"Pilot data graph '{pg_id}' missing or invalid 'path'")
                 continue
 
             full_path = self.repo_root / rel_path
@@ -766,30 +833,48 @@ class PreflightChecker:
                 continue
 
             component_errors_before = len(self.errors)
+            context_str = f"Pilot data graph '{pg_id}'"
 
+            # Strict metadata type and value validation
             expected_v = pg_info.get("vertices")
-            if parsed["num_vertices"] != expected_v:
+            v_ok, v_err = validate_strict_int_field(expected_v, "vertices", context_str, min_val=0)
+            if not v_ok:
+                self.errors.append(f"[PILOT_DATA_GRAPH_TYPE_ERROR] {v_err}")
+            elif parsed["num_vertices"] != expected_v:
                 self.errors.append(
                     f"Pilot data graph '{pg_id}' vertex count mismatch: expected {expected_v}, found {parsed['num_vertices']}"
                 )
 
             expected_e = pg_info.get("edges")
-            if parsed["num_edges"] != expected_e:
+            e_ok, e_err = validate_strict_int_field(expected_e, "edges", context_str, min_val=0)
+            if not e_ok:
+                self.errors.append(f"[PILOT_DATA_GRAPH_TYPE_ERROR] {e_err}")
+            elif parsed["num_edges"] != expected_e:
                 self.errors.append(
                     f"Pilot data graph '{pg_id}' edge count mismatch: expected {expected_e}, found {parsed['num_edges']}"
                 )
 
-            expected_vlabels = sorted(pg_info.get("vertex_labels", []))
-            if parsed["vertex_labels"] != expected_vlabels:
-                self.errors.append(
-                    f"Pilot data graph '{pg_id}' vertex labels mismatch: expected {expected_vlabels}, found {parsed['vertex_labels']}"
-                )
+            raw_vlabels = pg_info.get("vertex_labels")
+            vl_ok, vl_err = validate_strict_int_list_field(raw_vlabels, "vertex_labels", context_str)
+            if not vl_ok:
+                self.errors.append(f"[PILOT_DATA_GRAPH_TYPE_ERROR] {vl_err}")
+            else:
+                expected_vlabels = sorted(raw_vlabels)
+                if parsed["vertex_labels"] != expected_vlabels:
+                    self.errors.append(
+                        f"Pilot data graph '{pg_id}' vertex labels mismatch: expected {expected_vlabels}, found {parsed['vertex_labels']}"
+                    )
 
-            expected_elabels = sorted(pg_info.get("edge_labels", []))
-            if parsed["edge_labels"] != expected_elabels:
-                self.errors.append(
-                    f"Pilot data graph '{pg_id}' edge labels mismatch: expected {expected_elabels}, found {parsed['edge_labels']}"
-                )
+            raw_elabels = pg_info.get("edge_labels")
+            el_ok, el_err = validate_strict_int_list_field(raw_elabels, "edge_labels", context_str)
+            if not el_ok:
+                self.errors.append(f"[PILOT_DATA_GRAPH_TYPE_ERROR] {el_err}")
+            else:
+                expected_elabels = sorted(raw_elabels)
+                if parsed["edge_labels"] != expected_elabels:
+                    self.errors.append(
+                        f"Pilot data graph '{pg_id}' edge labels mismatch: expected {expected_elabels}, found {parsed['edge_labels']}"
+                    )
 
             if len(self.errors) != component_errors_before:
                 continue
@@ -809,29 +894,40 @@ class PreflightChecker:
     def audit_queries(self, manifest: Dict[str, Any]) -> None:
         """Verifies all manifest queries: SHA-256, syntax, degree sequence, connectivity, and label domain."""
         queries_dict = manifest.get("queries", {})
-        if not queries_dict:
-            self.errors.append("Manifest contains no queries.")
+        if not isinstance(queries_dict, dict) or not queries_dict:
+            self.errors.append("Manifest contains no queries or 'queries' is not a dictionary.")
             return
 
         # Valid label universe of primary NetFlow data graph
-        netflow_vlabels = set(manifest.get("data_graph", {}).get("vertex_labels", [0]))
-        netflow_elabels = set(manifest.get("data_graph", {}).get("edge_labels", list(range(8))))
+        dg_vlabels = manifest.get("data_graph", {}).get("vertex_labels")
+        netflow_vlabels = set(dg_vlabels) if is_strict_int_list(dg_vlabels) else {0}
+        dg_elabels = manifest.get("data_graph", {}).get("edge_labels")
+        netflow_elabels = set(dg_elabels) if is_strict_int_list(dg_elabels) else set(range(8))
 
-        # Pilot graph label universes
+        # Pilot graph label universes (safe iteration)
         pilot_elabels: Set[int] = set()
         pilot_vlabels: Set[int] = set()
         for pg_info in manifest.get("pilot_data_graphs", {}).values():
-            pilot_vlabels.update(pg_info.get("vertex_labels", [0]))
-            pilot_elabels.update(pg_info.get("edge_labels", []))
+            if isinstance(pg_info, dict):
+                p_vl = pg_info.get("vertex_labels")
+                if is_strict_int_list(p_vl):
+                    pilot_vlabels.update(p_vl)
+                p_el = pg_info.get("edge_labels")
+                if is_strict_int_list(p_el):
+                    pilot_elabels.update(p_el)
 
         all_valid_vlabels = netflow_vlabels | pilot_vlabels
         all_valid_elabels = netflow_elabels | pilot_elabels
 
         verified_queries: Dict[str, Any] = {}
         for q_id, q_info in queries_dict.items():
+            if not isinstance(q_info, dict):
+                self.errors.append(f"Query '{q_id}' specification must be a dictionary.")
+                continue
+
             rel_path = q_info.get("path")
-            if not rel_path:
-                self.errors.append(f"Query {q_id} missing 'path'")
+            if not rel_path or not isinstance(rel_path, str):
+                self.errors.append(f"Query {q_id} missing or invalid 'path'")
                 continue
 
             full_path = self.repo_root / rel_path
@@ -856,28 +952,49 @@ class PreflightChecker:
                 continue
 
             component_errors_before = len(self.errors)
+            context_str = f"query '{q_id}'"
 
-            # Check vertex count
-            if parsed["num_vertices"] != q_info.get("vertices"):
+            # Strict metadata type and value validation
+            expected_v = q_info.get("vertices")
+            v_ok, v_err = validate_strict_int_field(expected_v, "vertices", context_str, min_val=1)
+            if not v_ok:
+                self.errors.append(f"[QUERY_TYPE_ERROR] {v_err}")
+            elif parsed["num_vertices"] != expected_v:
                 self.errors.append(
-                    f"Query {q_id} vertex count mismatch: expected {q_info.get('vertices')}, found {parsed['num_vertices']}"
+                    f"Query {q_id} vertex count mismatch: expected {expected_v}, found {parsed['num_vertices']}"
                 )
 
-            # Check edge count
-            if parsed["num_edges"] != q_info.get("edges"):
+            expected_e = q_info.get("edges")
+            e_ok, e_err = validate_strict_int_field(expected_e, "edges", context_str, min_val=0)
+            if not e_ok:
+                self.errors.append(f"[QUERY_TYPE_ERROR] {e_err}")
+            elif parsed["num_edges"] != expected_e:
                 self.errors.append(
-                    f"Query {q_id} edge count mismatch: expected {q_info.get('edges')}, found {parsed['num_edges']}"
+                    f"Query {q_id} edge count mismatch: expected {expected_e}, found {parsed['num_edges']}"
                 )
 
             # Check labels match declaration
-            if parsed["vertex_labels"] != sorted(q_info.get("vertex_labels", [])):
-                self.errors.append(
-                    f"Query {q_id} vertex labels mismatch: expected {q_info.get('vertex_labels')}, found {parsed['vertex_labels']}"
-                )
-            if parsed["edge_labels"] != sorted(q_info.get("edge_labels", [])):
-                self.errors.append(
-                    f"Query {q_id} edge labels mismatch: expected {q_info.get('edge_labels')}, found {parsed['edge_labels']}"
-                )
+            raw_vlabels = q_info.get("vertex_labels")
+            vl_ok, vl_err = validate_strict_int_list_field(raw_vlabels, "vertex_labels", context_str)
+            if not vl_ok:
+                self.errors.append(f"[QUERY_TYPE_ERROR] {vl_err}")
+            else:
+                expected_vlabels = sorted(raw_vlabels)
+                if parsed["vertex_labels"] != expected_vlabels:
+                    self.errors.append(
+                        f"Query {q_id} vertex labels mismatch: expected {expected_vlabels}, found {parsed['vertex_labels']}"
+                    )
+
+            raw_elabels = q_info.get("edge_labels")
+            el_ok, el_err = validate_strict_int_list_field(raw_elabels, "edge_labels", context_str)
+            if not el_ok:
+                self.errors.append(f"[QUERY_TYPE_ERROR] {el_err}")
+            else:
+                expected_elabels = sorted(raw_elabels)
+                if parsed["edge_labels"] != expected_elabels:
+                    self.errors.append(
+                        f"Query {q_id} edge labels mismatch: expected {expected_elabels}, found {parsed['edge_labels']}"
+                    )
 
             # Label Domain Validation: Labels_V(Q) <= Labels_V(G), Labels_E(Q) <= Labels_E(G)
             category = q_info.get("category", "")
@@ -898,9 +1015,13 @@ class PreflightChecker:
 
             # Check degree sequence
             if "degree_sequence" in q_info:
-                if parsed["degree_sequence"] != q_info["degree_sequence"]:
+                raw_degseq = q_info["degree_sequence"]
+                ds_ok, ds_err = validate_strict_int_list_field(raw_degseq, "degree_sequence", context_str)
+                if not ds_ok:
+                    self.errors.append(f"[QUERY_TYPE_ERROR] {ds_err}")
+                elif parsed["degree_sequence"] != raw_degseq:
                     self.errors.append(
-                        f"Query {q_id} degree sequence mismatch: expected {q_info['degree_sequence']}, found {parsed['degree_sequence']}"
+                        f"Query {q_id} degree sequence mismatch: expected {raw_degseq}, found {parsed['degree_sequence']}"
                     )
 
             # Check connectivity
@@ -927,15 +1048,19 @@ class PreflightChecker:
         Separates source_lineage_verified from sequential_updates_verified flags.
         """
         streams_dict = manifest.get("streams", {})
-        if not streams_dict:
-            self.errors.append("Manifest contains no stream prefixes.")
+        if not isinstance(streams_dict, dict) or not streams_dict:
+            self.errors.append("Manifest contains no stream prefixes or 'streams' is not a dictionary.")
             return
 
-        # Label universes
-        netflow_elabels = set(manifest.get("data_graph", {}).get("edge_labels", list(range(8))))
+        # Label universes (safe iteration)
+        dg_elabels = manifest.get("data_graph", {}).get("edge_labels")
+        netflow_elabels = set(dg_elabels) if is_strict_int_list(dg_elabels) else set(range(8))
         all_valid_elabels = set(netflow_elabels)
         for pg_info in manifest.get("pilot_data_graphs", {}).values():
-            all_valid_elabels.update(pg_info.get("edge_labels", []))
+            if isinstance(pg_info, dict):
+                p_el = pg_info.get("edge_labels")
+                if is_strict_int_list(p_el):
+                    all_valid_elabels.update(p_el)
 
         data_graph_rel = manifest.get("data_graph", {}).get("path")
         data_graph_path = self.repo_root / data_graph_rel if data_graph_rel else None
@@ -951,9 +1076,13 @@ class PreflightChecker:
         pilot_graphs_info = manifest.get("pilot_data_graphs", {})
 
         for s_id, s_info in streams_dict.items():
+            if not isinstance(s_info, dict):
+                self.errors.append(f"Stream '{s_id}' specification must be a dictionary.")
+                continue
+
             rel_path = s_info.get("path")
-            if not rel_path:
-                self.errors.append(f"Stream {s_id} missing 'path'")
+            if not rel_path or not isinstance(rel_path, str):
+                self.errors.append(f"Stream {s_id} missing or invalid 'path'")
                 continue
 
             full_path = self.repo_root / rel_path
@@ -978,7 +1107,7 @@ class PreflightChecker:
 
             # Source stream existence and SHA-256 lineage verification
             src_rel_path = s_info.get("source_stream")
-            if not src_rel_path:
+            if not src_rel_path or not isinstance(src_rel_path, str):
                 self.errors.append(f"Stream {s_id} missing declared 'source_stream'")
                 verified_streams[s_id] = {
                     "path": rel_path,
@@ -1023,10 +1152,14 @@ class PreflightChecker:
                 }
                 continue
 
+            context_str = f"Stream '{s_id}'"
             stream_metadata_errors_before = len(self.errors)
 
             expected_len = s_info.get("prefix_length")
-            if parsed["total_operations"] != expected_len:
+            pref_ok, pref_err = validate_strict_int_field(expected_len, "prefix_length", context_str, min_val=0)
+            if not pref_ok:
+                self.errors.append(f"[STREAM_TYPE_ERROR] {pref_err}")
+            elif parsed["total_operations"] != expected_len:
                 self.errors.append(
                     f"Stream {s_id} operation count mismatch: expected {expected_len}, found {parsed['total_operations']}"
                 )
@@ -1052,8 +1185,12 @@ class PreflightChecker:
 
                     if is_projected:
                         # Projected stream: verify operations match declared source operation positions (1-indexed)
-                        declared_positions = s_info.get("source_operation_positions", [])
-                        if len(declared_positions) != len(prefix_lines):
+                        declared_positions = s_info.get("source_operation_positions")
+                        pos_ok, pos_err = validate_strict_int_list_field(declared_positions, "source_operation_positions", context_str)
+                        if not pos_ok:
+                            self.errors.append(f"[STREAM_TYPE_ERROR] {pos_err}")
+                            content_lineage_ok = False
+                        elif len(declared_positions) != len(prefix_lines):
                             self.errors.append(
                                 f"Stream {s_id} projection error: declared positions count ({len(declared_positions)}) "
                                 f"!= operation count ({len(prefix_lines)})"
@@ -1118,9 +1255,11 @@ class PreflightChecker:
                     }
                     continue
                 elif target_pilot_id in pilot_graphs_info:
-                    pg_rel = pilot_graphs_info[target_pilot_id]["path"]
+                    pg_rel = pilot_graphs_info[target_pilot_id].get("path", "")
                     pg_path = self.repo_root / pg_rel
-                    pilot_stream_ops[s_id] = (pg_path, pilot_graphs_info[target_pilot_id].get("vertices", 0), parsed["operations"])
+                    raw_v = pilot_graphs_info[target_pilot_id].get("vertices", 0)
+                    safe_v = raw_v if is_strict_int(raw_v) else 0
+                    pilot_stream_ops[s_id] = (pg_path, safe_v, parsed["operations"])
                 else:
                     # Explicitly targets primary NetFlow data graph
                     netflow_stream_ops[s_id] = parsed["operations"]
@@ -1317,14 +1456,14 @@ class PreflightChecker:
         valid enums, near-only semantics (eps_m >= 1), and safe initial pilot limits.
         """
         cases = manifest.get("proposed_pilot_cases_a3_01", [])
-        if not cases:
-            self.errors.append("Manifest contains no proposed pilot cases.")
+        if not isinstance(cases, list) or not cases:
+            self.errors.append("Manifest contains no proposed pilot cases or 'proposed_pilot_cases_a3_01' is not a list.")
             return
 
         known_queries = manifest.get("queries", {})
-        known_streams = set(manifest.get("streams", {}).keys())
+        known_streams = set(manifest.get("streams", {}).keys()) if isinstance(manifest.get("streams"), dict) else set()
         expected_graph = manifest.get("data_graph", {}).get("name")
-        pilot_graphs_info = manifest.get("pilot_data_graphs", {})
+        pilot_graphs_info = manifest.get("pilot_data_graphs", {}) if isinstance(manifest.get("pilot_data_graphs"), dict) else {}
         pilot_graphs = set(pilot_graphs_info.keys())
         valid_graph_sources = {expected_graph} | pilot_graphs
 
@@ -1347,6 +1486,10 @@ class PreflightChecker:
         initial_safe_pilot_count = 0
 
         for c in cases:
+            if not isinstance(c, dict):
+                self.errors.append("Pilot case specification must be a dictionary.")
+                continue
+
             cid = c.get("case_id")
             if not cid:
                 self.errors.append("Pilot case missing 'case_id'")
@@ -1393,32 +1536,41 @@ class PreflightChecker:
             # Query binding: Check vertex/edge labels and vertex count against target graph (FIX R4-01)
             if qid in known_queries and gs in valid_graph_sources:
                 if gs in pilot_graphs_info:
-                    target_vlabels = set(pilot_graphs_info[gs].get("vertex_labels", []))
-                    target_elabels = set(pilot_graphs_info[gs].get("edge_labels", []))
-                    target_vcount = pilot_graphs_info[gs].get("vertices", 0)
+                    raw_target_vl = pilot_graphs_info[gs].get("vertex_labels")
+                    raw_target_el = pilot_graphs_info[gs].get("edge_labels")
+                    target_vcount = pilot_graphs_info[gs].get("vertices")
                 else:
-                    target_vlabels = set(manifest.get("data_graph", {}).get("vertex_labels", [0]))
-                    target_elabels = set(manifest.get("data_graph", {}).get("edge_labels", list(range(8))))
-                    target_vcount = manifest.get("data_graph", {}).get("vertices", 0)
+                    raw_target_vl = manifest.get("data_graph", {}).get("vertex_labels")
+                    raw_target_el = manifest.get("data_graph", {}).get("edge_labels")
+                    target_vcount = manifest.get("data_graph", {}).get("vertices")
 
-                q_vlabels = set(known_queries[qid].get("vertex_labels", []))
-                q_elabels = set(known_queries[qid].get("edge_labels", []))
-                q_vcount = known_queries[qid].get("vertices", 0)
+                raw_q_vl = known_queries[qid].get("vertex_labels")
+                raw_q_el = known_queries[qid].get("edge_labels")
+                q_vcount = known_queries[qid].get("vertices")
 
-                if not q_vlabels.issubset(target_vlabels):
-                    diff_vl = sorted(q_vlabels - target_vlabels)
-                    self.errors.append(
-                        f"Case {cid} query {qid} vertex labels {diff_vl} not contained in target graph {gs} vertex labels {sorted(target_vlabels)}"
-                    )
-                if not q_elabels.issubset(target_elabels):
-                    diff_el = sorted(q_elabels - target_elabels)
-                    self.errors.append(
-                        f"Case {cid} query {qid} edge labels {diff_el} not contained in target graph {gs} edge labels {sorted(target_elabels)}"
-                    )
-                if q_vcount > target_vcount:
-                    self.errors.append(
-                        f"Case {cid} query {qid} has more vertices ({q_vcount}) than target graph {gs} ({target_vcount})"
-                    )
+                if is_strict_int_list(raw_target_vl) and is_strict_int_list(raw_q_vl):
+                    target_vlabels = set(raw_target_vl)
+                    q_vlabels = set(raw_q_vl)
+                    if not q_vlabels.issubset(target_vlabels):
+                        diff_vl = sorted(q_vlabels - target_vlabels)
+                        self.errors.append(
+                            f"Case {cid} query {qid} vertex labels {diff_vl} not contained in target graph {gs} vertex labels {sorted(target_vlabels)}"
+                        )
+
+                if is_strict_int_list(raw_target_el) and is_strict_int_list(raw_q_el):
+                    target_elabels = set(raw_target_el)
+                    q_elabels = set(raw_q_el)
+                    if not q_elabels.issubset(target_elabels):
+                        diff_el = sorted(q_elabels - target_elabels)
+                        self.errors.append(
+                            f"Case {cid} query {qid} edge labels {diff_el} not contained in target graph {gs} edge labels {sorted(target_elabels)}"
+                        )
+
+                if is_strict_int(target_vcount) and is_strict_int(q_vcount):
+                    if q_vcount > target_vcount:
+                        self.errors.append(
+                            f"Case {cid} query {qid} has more vertices ({q_vcount}) than target graph {gs} ({target_vcount})"
+                        )
 
             # Strict threshold type and range validation
             eps_m = c.get("eps_m")
@@ -1431,12 +1583,17 @@ class PreflightChecker:
 
             # Main benchmark threshold restriction: reject eps_m >= 2 on queries with < 6 edges
             if qid in known_queries and is_strict_int(eps_m) and eps_m >= 2:
-                q_edges = known_queries[qid].get("edges", 0)
-                if q_edges < 6:
+                q_edges = known_queries[qid].get("edges")
+                if is_strict_int(q_edges) and q_edges < 6:
                     self.errors.append(
                         f"Case {cid} violates main benchmark threshold constraint: eps_m={eps_m} "
                         f"on query with {q_edges} edges (< 6 edges requires eps_m <= 1)"
                     )
+
+            # Random seed validation if present
+            r_seed = c.get("random_seed")
+            if r_seed is not None and not is_strict_int(r_seed):
+                self.errors.append(f"Case {cid} has invalid random_seed: {r_seed} (must be integer)")
 
             # Mode
             mode = c.get("mode")

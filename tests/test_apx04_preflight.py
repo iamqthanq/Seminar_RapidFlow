@@ -24,6 +24,7 @@ import copy
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -1997,6 +1998,234 @@ class TestRound3VerifiedComponentIntegrity(unittest.TestCase):
             cid = c.get("case_id")
             if cid in expected_fps:
                 self.assertEqual(c.get("registered_identity_sha256"), expected_fps[cid])
+
+
+class TestRound4StrictMetadataTypeValidation(unittest.TestCase):
+    """
+    Round 4 Strict Metadata Type Validation adversarial regression test suite (Issue #34).
+    Verifies that malformed metadata types in workload manifest:
+    1. Are rejected fail-closed without uncaught exceptions or tracebacks.
+    2. Exit with returncode 1, status 'FAIL', and audit_verdict 'AUDIT_FAIL'.
+    3. Output valid structured JSON on stdout and empty stderr.
+    4. Contain component ID, field name, and clear type error explanation.
+    5. Exclude malformed components from verified dictionaries.
+    6. Generate [WORKLOAD_IDENTITY_MISMATCH] for referencing pilot cases.
+    7. Bypass compute_workload_identity_sha256 computation.
+    """
+
+    def setUp(self):
+        self.repo_root = Path(__file__).resolve().parent.parent
+        self.manifest_path = self.repo_root / "configs" / "apx04_workload_manifest.json"
+        with open(self.manifest_path, "r", encoding="utf-8") as f:
+            self.canonical_data = json.load(f)
+
+    def _run_cli_dry_run(self, manifest_data: Dict[str, Any]) -> Tuple[int, str, str, Dict[str, Any]]:
+        with tempfile.TemporaryDirectory() as td:
+            tmp_m = Path(td) / "manifest.json"
+            with open(tmp_m, "w", encoding="utf-8") as f:
+                json.dump(manifest_data, f)
+            cmd = [sys.executable, "scripts/apx04_preflight.py", "--manifest", str(tmp_m), "--json", "--dry-run"]
+            proc = subprocess.run(cmd, cwd=self.repo_root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            out_json = {}
+            if proc.stdout.strip():
+                try:
+                    out_json = json.loads(proc.stdout)
+                except Exception as e:
+                    self.fail(f"CLI stdout was not valid JSON: {e}\nstdout: {proc.stdout}\nstderr: {proc.stderr}")
+            return proc.returncode, proc.stdout, proc.stderr, out_json
+
+    def test_r4_01_pilot_graph_vertex_labels_int_rejected(self):
+        """R4-01: Pilot graph vertex_labels=42 rejected with structured FAIL, empty stderr, identity mismatch."""
+        data = copy.deepcopy(self.canonical_data)
+        data["pilot_data_graphs"]["Pilot_A_Exact_Micrograph"]["vertex_labels"] = 42
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("Pilot_A_Exact_Micrograph" in e and "vertex_labels" in e and "invalid type" in e for e in errors))
+        self.assertTrue(any("[WORKLOAD_IDENTITY_MISMATCH]" in e and "pilot_safe_01_micro_exact" in e and "Pilot_A_Exact_Micrograph" in e for e in errors))
+
+    def test_r4_02_query_vertex_labels_int_rejected(self):
+        """R4-02: Query vertex_labels=42 rejected with structured FAIL, empty stderr, identity mismatch."""
+        data = copy.deepcopy(self.canonical_data)
+        data["queries"]["Q_pilot_a_exact"]["vertex_labels"] = 42
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("Q_pilot_a_exact" in e and "vertex_labels" in e and "invalid type" in e for e in errors))
+        self.assertTrue(any("[WORKLOAD_IDENTITY_MISMATCH]" in e and "pilot_safe_01_micro_exact" in e and "Q_pilot_a_exact" in e for e in errors))
+
+    def test_r4_03_pilot_graph_vertices_str_rejected(self):
+        """R4-03: Pilot graph vertices='six' rejected with structured FAIL, empty stderr, identity mismatch."""
+        data = copy.deepcopy(self.canonical_data)
+        data["pilot_data_graphs"]["Pilot_A_Exact_Micrograph"]["vertices"] = "six"
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("Pilot_A_Exact_Micrograph" in e and "vertices" in e and "expected integer" in e and "received string" in e for e in errors))
+        self.assertTrue(any("[WORKLOAD_IDENTITY_MISMATCH]" in e and "pilot_safe_01_micro_exact" in e and "Pilot_A_Exact_Micrograph" in e for e in errors))
+
+    def test_r4_04_pilot_graph_edge_labels_none_rejected(self):
+        """R4-04: Pilot graph edge_labels=None rejected with structured FAIL and empty stderr."""
+        data = copy.deepcopy(self.canonical_data)
+        data["pilot_data_graphs"]["Pilot_A_Exact_Micrograph"]["edge_labels"] = None
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("Pilot_A_Exact_Micrograph" in e and "edge_labels" in e and "invalid type" in e for e in errors))
+        self.assertTrue(any("[WORKLOAD_IDENTITY_MISMATCH]" in e and "pilot_safe_01_micro_exact" in e for e in errors))
+
+    def test_r4_05_query_edge_labels_none_rejected(self):
+        """R4-05: Query edge_labels=None rejected with structured FAIL and empty stderr."""
+        data = copy.deepcopy(self.canonical_data)
+        data["queries"]["Q_pilot_a_exact"]["edge_labels"] = None
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("Q_pilot_a_exact" in e and "edge_labels" in e and "invalid type" in e for e in errors))
+        self.assertTrue(any("[WORKLOAD_IDENTITY_MISMATCH]" in e and "pilot_safe_01_micro_exact" in e for e in errors))
+
+    def test_r4_06_query_vertices_bool_rejected(self):
+        """R4-06: Query vertices=True (bool) rejected under strict int check."""
+        data = copy.deepcopy(self.canonical_data)
+        data["queries"]["Q_pilot_a_exact"]["vertices"] = True
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("Q_pilot_a_exact" in e and "vertices" in e and ("invalid type" in e or "expected integer" in e) for e in errors))
+        self.assertTrue(any("[WORKLOAD_IDENTITY_MISMATCH]" in e and "pilot_safe_01_micro_exact" in e for e in errors))
+
+    def test_r4_07_pilot_graph_edges_str_rejected(self):
+        """R4-07: Pilot graph edges='three' rejected with structured FAIL."""
+        data = copy.deepcopy(self.canonical_data)
+        data["pilot_data_graphs"]["Pilot_A_Exact_Micrograph"]["edges"] = "three"
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("Pilot_A_Exact_Micrograph" in e and "edges" in e and "expected integer" in e and "received string" in e for e in errors))
+        self.assertTrue(any("[WORKLOAD_IDENTITY_MISMATCH]" in e and "pilot_safe_01_micro_exact" in e for e in errors))
+
+    def test_r4_08_query_vertex_labels_mixed_elements_rejected(self):
+        """R4-08: Query vertex_labels=[0, 'x'] rejected with element type error."""
+        data = copy.deepcopy(self.canonical_data)
+        data["queries"]["Q_pilot_a_exact"]["vertex_labels"] = [0, "x"]
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("Q_pilot_a_exact" in e and "vertex_labels" in e and "invalid element type" in e for e in errors))
+        self.assertTrue(any("[WORKLOAD_IDENTITY_MISMATCH]" in e and "pilot_safe_01_micro_exact" in e for e in errors))
+
+    def test_r4_09_query_invalid_degree_sequence_type_rejected(self):
+        """R4-09: Query invalid degree_sequence='four' rejected with structured FAIL."""
+        data = copy.deepcopy(self.canonical_data)
+        data["queries"]["Q_pilot_a_exact"]["degree_sequence"] = "four"
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("Q_pilot_a_exact" in e and "degree_sequence" in e and "invalid type" in e for e in errors))
+        self.assertTrue(any("[WORKLOAD_IDENTITY_MISMATCH]" in e and "pilot_safe_01_micro_exact" in e for e in errors))
+
+    def test_r4_10_stream_prefix_length_str_rejected(self):
+        """R4-10: Stream prefix_length='three' rejected with structured FAIL."""
+        data = copy.deepcopy(self.canonical_data)
+        data["streams"]["stream_pilot_a_exact"]["prefix_length"] = "three"
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("stream_pilot_a_exact" in e and "prefix_length" in e and "expected integer" in e and "received string" in e for e in errors))
+        self.assertTrue(any("[WORKLOAD_IDENTITY_MISMATCH]" in e and "pilot_safe_01_micro_exact" in e for e in errors))
+
+    def test_r4_11_stream_prefix_length_bool_rejected(self):
+        """R4-11: Stream prefix_length=True (bool) rejected under strict int check."""
+        data = copy.deepcopy(self.canonical_data)
+        data["streams"]["stream_pilot_a_exact"]["prefix_length"] = True
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("stream_pilot_a_exact" in e and "prefix_length" in e and "invalid type" in e for e in errors))
+        self.assertTrue(any("[WORKLOAD_IDENTITY_MISMATCH]" in e and "pilot_safe_01_micro_exact" in e for e in errors))
+
+    def test_r4_12_canonical_manifest_clean_pass(self):
+        """R4-12: Unmutated canonical manifest executes with exit 0 and zero errors."""
+        rc, stdout, stderr, out = self._run_cli_dry_run(self.canonical_data)
+        self.assertEqual(rc, 0)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "PASS")
+        self.assertEqual(len(out.get("errors", [])), 0)
+
+    def test_r4_13_canonical_pilot_fingerprints_match(self):
+        """R4-13: Canonical pilot fingerprints match registered values 100%."""
+        expected_fps = {
+            "pilot_safe_01_micro_exact": "731a44af7fdbdb3186b55c031ec21d61d2978dc9ad01707252a500e52c584452",
+            "pilot_safe_02_micro_nearonly": "16199eac947611352d5498d83b7ca6a2a7afc4d2c54b4aebfdd64b83535aa71a",
+            "pilot_safe_03_tiny_netflow_induced": "bae440580955f60fab78af3845f4726ccd405f1798befb26822aa09717aaf885",
+        }
+        for c in self.canonical_data.get("proposed_pilot_cases_a3_01", []):
+            cid = c.get("case_id")
+            if cid in expected_fps:
+                self.assertEqual(c.get("registered_identity_sha256"), expected_fps[cid])
+
+    def test_r4_14_spy_fingerprint_not_called_for_invalid_component(self):
+        """R4-14: Spy verifies compute_workload_identity_sha256 is NOT invoked for case referencing invalid component."""
+        data = copy.deepcopy(self.canonical_data)
+        data["pilot_data_graphs"]["Pilot_A_Exact_Micrograph"]["vertex_labels"] = 42
+
+        with tempfile.TemporaryDirectory() as td:
+            tmp_m = Path(td) / "manifest.json"
+            with open(tmp_m, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+
+            from unittest.mock import patch
+            import scripts.apx04_preflight as ap_module
+
+            original_fn = ap_module.compute_workload_identity_sha256
+            called_cases = []
+
+            def spy_compute(*args, **kwargs):
+                case_id = kwargs.get("case_id") or (args[0] if args else "UNKNOWN")
+                called_cases.append(case_id)
+                return original_fn(*args, **kwargs)
+
+            with patch("scripts.apx04_preflight.compute_workload_identity_sha256", side_effect=spy_compute):
+                checker = PreflightChecker(manifest_path=tmp_m, repo_root=self.repo_root)
+                passed = checker.run_all()
+                self.assertFalse(passed)
+                self.assertNotIn("pilot_safe_01_micro_exact", called_cases)
+                # The other two safe pilots should have been computed
+                self.assertIn("pilot_safe_02_micro_nearonly", called_cases)
+                self.assertIn("pilot_safe_03_tiny_netflow_induced", called_cases)
 
 
 if __name__ == "__main__":
