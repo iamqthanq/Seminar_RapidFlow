@@ -622,24 +622,8 @@ class PreflightChecker:
         self.warnings: List[str] = []
         self.audit_log: Dict[str, Any] = {}
 
-    def run_all(self) -> bool:
-        """Executes all preflight audits. Returns True if all pass, False if any error."""
-        self.errors.clear()
-        self.warnings.clear()
-
-        manifest = self.audit_manifest_schema()
-        if manifest is None:
-            return False
-
-        self.audit_system_resources()
-        self.audit_data_graph(manifest)
-        self.audit_pilot_data_graphs(manifest)
-        self.audit_queries(manifest)
-        self.audit_streams(manifest)
-        self.audit_pilot_cases(manifest)
-        self.audit_exclusions(manifest)
-
-        # Audit verdict logic: PASS (clean), PASS_WITH_WARNINGS, or FAIL
+    def _finalize_audit_report(self) -> None:
+        """Finalizes audit verdict, status, and summary metrics in self.audit_log."""
         if self.errors:
             audit_verdict = "AUDIT_FAIL"
             status = "FAIL"
@@ -660,21 +644,53 @@ class PreflightChecker:
         self.audit_log["errors"] = list(self.errors)
         self.audit_log["warnings"] = list(self.warnings)
 
+    def run_all(self) -> bool:
+        """Executes all preflight audits. Returns True if all pass, False if any error."""
+        self.errors.clear()
+        self.warnings.clear()
+        self.audit_log.clear()
+
+        manifest = self.audit_manifest_schema()
+        if manifest is None:
+            self._finalize_audit_report()
+            return False
+
+        self.audit_system_resources()
+        self.audit_data_graph(manifest)
+        self.audit_pilot_data_graphs(manifest)
+        self.audit_queries(manifest)
+        self.audit_streams(manifest)
+        self.audit_pilot_cases(manifest)
+        self.audit_exclusions(manifest)
+
+        self._finalize_audit_report()
         return len(self.errors) == 0
 
     def audit_manifest_schema(self) -> Optional[Dict[str, Any]]:
-        """Validates workload manifest structure, draft state, and safety lock."""
+        """
+        Validates workload manifest structure, root schema, component containers,
+        records, and identifier types at the centralized schema boundary.
+        Returns manifest dict if structurally valid, None if any structural schema error.
+        """
         if not self.manifest_path.exists():
-            self.errors.append(f"Manifest file not found: {self.manifest_path}")
+            self.errors.append(f"[MANIFEST_SCHEMA_ERROR] Manifest file not found: {self.manifest_path}")
             return None
 
         try:
             with open(self.manifest_path, "r", encoding="utf-8") as f:
                 manifest = json.load(f)
         except Exception as e:
-            self.errors.append(f"Failed to parse manifest JSON: {e}")
+            self.errors.append(f"[MANIFEST_SCHEMA_ERROR] Failed to parse manifest JSON: {e}")
             return None
 
+        if not isinstance(manifest, dict):
+            recv_type = "null" if manifest is None else type(manifest).__name__
+            self.errors.append(
+                f"[MANIFEST_SCHEMA_TYPE_ERROR] Manifest root must be a JSON object, received {recv_type}"
+            )
+            return None
+
+        # Required root keys verification
         required_keys = [
             "schema_version",
             "document_type",
@@ -688,20 +704,212 @@ class PreflightChecker:
         ]
         for key in required_keys:
             if key not in manifest:
-                self.errors.append(f"Manifest missing required root key: '{key}'")
+                self.errors.append(f"[MANIFEST_SCHEMA_ERROR] Manifest missing required root key: '{key}'")
 
-        if manifest.get("document_type") != "apx04_workload_manifest":
-            self.errors.append(f"Invalid document_type: {manifest.get('document_type')}")
+        # Top-level scalar metadata validation
+        if "schema_version" in manifest:
+            sv = manifest["schema_version"]
+            if not isinstance(sv, (str, int, float)):
+                self.errors.append(
+                    f"[MANIFEST_SCHEMA_TYPE_ERROR] Manifest field 'schema_version' expected string, received {type(sv).__name__}"
+                )
 
-        if manifest.get("status") != "DRAFT_PENDING_USER_APPROVAL":
-            self.errors.append(
-                f"Manifest status must be 'DRAFT_PENDING_USER_APPROVAL', found: {manifest.get('status')}"
-            )
+        if "document_type" in manifest:
+            dt = manifest["document_type"]
+            if not isinstance(dt, str):
+                self.errors.append(
+                    f"[MANIFEST_SCHEMA_TYPE_ERROR] Manifest field 'document_type' expected string, received {type(dt).__name__}"
+                )
+            elif dt != "apx04_workload_manifest":
+                self.errors.append(f"Invalid document_type: {dt}")
 
-        if manifest.get("execution_authorization") is not False:
-            self.errors.append(
-                f"Safety violation: execution_authorization must be false in Gate A3-00 (found {manifest.get('execution_authorization')})"
-            )
+        if "status" in manifest:
+            st = manifest["status"]
+            if not isinstance(st, str):
+                self.errors.append(
+                    f"[MANIFEST_SCHEMA_TYPE_ERROR] Manifest field 'status' expected string, received {type(st).__name__}"
+                )
+            elif st != "DRAFT_PENDING_USER_APPROVAL":
+                self.errors.append(
+                    f"Manifest status must be 'DRAFT_PENDING_USER_APPROVAL', found: {st}"
+                )
+
+        if "execution_authorization" in manifest:
+            ea = manifest["execution_authorization"]
+            if ea is not False:
+                self.errors.append(
+                    f"Safety violation: execution_authorization must be false in Gate A3-00 (found {ea})"
+                )
+
+        # 1. data_graph container & record validation
+        if "data_graph" in manifest:
+            dg = manifest["data_graph"]
+            if not isinstance(dg, dict):
+                recv = "null" if dg is None else type(dg).__name__
+                self.errors.append(
+                    f"[MANIFEST_SCHEMA_TYPE_ERROR] Manifest field 'data_graph' expected JSON object, received {recv}"
+                )
+            else:
+                dg_name = dg.get("name")
+                if dg_name is not None and not isinstance(dg_name, str):
+                    self.errors.append(
+                        f"[MANIFEST_SCHEMA_TYPE_ERROR] data_graph.name expected string, received {type(dg_name).__name__}"
+                    )
+                dg_path = dg.get("path")
+                if dg_path is not None and not isinstance(dg_path, str):
+                    self.errors.append(
+                        f"[MANIFEST_SCHEMA_TYPE_ERROR] data_graph.path expected string, received {type(dg_path).__name__}"
+                    )
+
+        # 2. pilot_data_graphs container & records validation (optional root container)
+        if "pilot_data_graphs" in manifest:
+            pgs = manifest["pilot_data_graphs"]
+            if not isinstance(pgs, dict):
+                recv = "null" if pgs is None else type(pgs).__name__
+                self.errors.append(
+                    f"[MANIFEST_SCHEMA_TYPE_ERROR] Manifest field 'pilot_data_graphs' expected JSON object, received {recv}"
+                )
+            else:
+                for pg_id, pg_info in pgs.items():
+                    if not isinstance(pg_id, str):
+                        self.errors.append(
+                            f"[MANIFEST_SCHEMA_TYPE_ERROR] pilot_data_graphs key expected string, received {type(pg_id).__name__}"
+                        )
+                    if not isinstance(pg_info, dict):
+                        recv = "null" if pg_info is None else type(pg_info).__name__
+                        self.errors.append(
+                            f"[MANIFEST_SCHEMA_TYPE_ERROR] pilot_data_graphs.{pg_id} expected JSON object, received {recv}"
+                        )
+                    else:
+                        pg_name = pg_info.get("name")
+                        if pg_name is not None and not isinstance(pg_name, str):
+                            self.errors.append(
+                                f"[MANIFEST_SCHEMA_TYPE_ERROR] pilot_data_graphs.{pg_id}.name expected string, received {type(pg_name).__name__}"
+                            )
+                        pg_path = pg_info.get("path")
+                        if pg_path is not None and not isinstance(pg_path, str):
+                            self.errors.append(
+                                f"[MANIFEST_SCHEMA_TYPE_ERROR] pilot_data_graphs.{pg_id}.path expected string, received {type(pg_path).__name__}"
+                            )
+
+        # 3. queries container & records validation
+        if "queries" in manifest:
+            qs = manifest["queries"]
+            if not isinstance(qs, dict):
+                recv = "null" if qs is None else type(qs).__name__
+                self.errors.append(
+                    f"[MANIFEST_SCHEMA_TYPE_ERROR] Manifest field 'queries' expected JSON object, received {recv}"
+                )
+            else:
+                for q_id, q_info in qs.items():
+                    if not isinstance(q_id, str):
+                        self.errors.append(
+                            f"[MANIFEST_SCHEMA_TYPE_ERROR] queries key expected string, received {type(q_id).__name__}"
+                        )
+                    if not isinstance(q_info, dict):
+                        recv = "null" if q_info is None else type(q_info).__name__
+                        self.errors.append(
+                            f"[MANIFEST_SCHEMA_TYPE_ERROR] queries.{q_id} expected JSON object, received {recv}"
+                        )
+                    else:
+                        q_cat = q_info.get("category")
+                        if q_cat is not None and not isinstance(q_cat, str):
+                            self.errors.append(
+                                f"[MANIFEST_SCHEMA_TYPE_ERROR] queries.{q_id}.category expected string, received {type(q_cat).__name__}"
+                            )
+                        q_path = q_info.get("path")
+                        if q_path is not None and not isinstance(q_path, str):
+                            self.errors.append(
+                                f"[MANIFEST_SCHEMA_TYPE_ERROR] queries.{q_id}.path expected string, received {type(q_path).__name__}"
+                            )
+
+        # 4. streams container & records validation
+        if "streams" in manifest:
+            sts = manifest["streams"]
+            if not isinstance(sts, dict):
+                recv = "null" if sts is None else type(sts).__name__
+                self.errors.append(
+                    f"[MANIFEST_SCHEMA_TYPE_ERROR] Manifest field 'streams' expected JSON object, received {recv}"
+                )
+            else:
+                for s_id, s_info in sts.items():
+                    if not isinstance(s_id, str):
+                        self.errors.append(
+                            f"[MANIFEST_SCHEMA_TYPE_ERROR] streams key expected string, received {type(s_id).__name__}"
+                        )
+                    if not isinstance(s_info, dict):
+                        recv = "null" if s_info is None else type(s_info).__name__
+                        self.errors.append(
+                            f"[MANIFEST_SCHEMA_TYPE_ERROR] streams.{s_id} expected JSON object, received {recv}"
+                        )
+                    else:
+                        tgt = s_info.get("target_graph")
+                        if tgt is not None and not isinstance(tgt, str):
+                            self.errors.append(
+                                f"[MANIFEST_SCHEMA_TYPE_ERROR] streams.{s_id}.target_graph expected string or null, received {type(tgt).__name__}"
+                            )
+                        s_path = s_info.get("path")
+                        if s_path is not None and not isinstance(s_path, str):
+                            self.errors.append(
+                                f"[MANIFEST_SCHEMA_TYPE_ERROR] streams.{s_id}.path expected string, received {type(s_path).__name__}"
+                            )
+                        src_s = s_info.get("source_stream")
+                        if src_s is not None and not isinstance(src_s, str):
+                            self.errors.append(
+                                f"[MANIFEST_SCHEMA_TYPE_ERROR] streams.{s_id}.source_stream expected string, received {type(src_s).__name__}"
+                            )
+
+        # 5. proposed_pilot_cases_a3_01 container & case records validation
+        if "proposed_pilot_cases_a3_01" in manifest:
+            cases = manifest["proposed_pilot_cases_a3_01"]
+            if not isinstance(cases, list):
+                recv = "null" if cases is None else type(cases).__name__
+                self.errors.append(
+                    f"[MANIFEST_SCHEMA_TYPE_ERROR] Manifest field 'proposed_pilot_cases_a3_01' expected list, received {recv}"
+                )
+            else:
+                string_fields = [
+                    "case_id",
+                    "query_id",
+                    "stream_id",
+                    "graph_source",
+                    "mode",
+                    "query_source",
+                    "workload_category",
+                    "semantic_class",
+                    "pilot_stage",
+                    "approval_state",
+                    "execution_status",
+                ]
+                for idx, case in enumerate(cases):
+                    if not isinstance(case, dict):
+                        recv = "null" if case is None else type(case).__name__
+                        self.errors.append(
+                            f"[MANIFEST_SCHEMA_TYPE_ERROR] proposed_pilot_cases_a3_01[{idx}] expected JSON object, received {recv}"
+                        )
+                    else:
+                        for sf in string_fields:
+                            val = case.get(sf)
+                            if val is not None and not isinstance(val, str):
+                                self.errors.append(
+                                    f"[MANIFEST_SCHEMA_TYPE_ERROR] proposed_pilot_cases_a3_01[{idx}].{sf} expected string, received {type(val).__name__}"
+                                )
+
+        # 6. exclusions container & records validation
+        if "exclusions" in manifest:
+            excls = manifest["exclusions"]
+            if not isinstance(excls, list):
+                recv = "null" if excls is None else type(excls).__name__
+                self.errors.append(
+                    f"[MANIFEST_SCHEMA_TYPE_ERROR] Manifest field 'exclusions' expected list, received {recv}"
+                )
+            else:
+                for idx, excl in enumerate(excls):
+                    if not isinstance(excl, dict):
+                        recv = "null" if excl is None else type(excl).__name__
+                        self.errors.append(
+                            f"[MANIFEST_SCHEMA_TYPE_ERROR] exclusions[{idx}] expected JSON object, received {recv}"
+                        )
 
         self.audit_log["manifest_metadata"] = {
             "schema_version": manifest.get("schema_version"),
@@ -709,6 +917,11 @@ class PreflightChecker:
             "execution_authorization": manifest.get("execution_authorization"),
             "issue": manifest.get("issue"),
         }
+
+        # If any schema error occurred, stop before downstream audits!
+        if self.errors:
+            return None
+
         return manifest
 
     def audit_system_resources(self) -> None:
