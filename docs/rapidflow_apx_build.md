@@ -135,6 +135,8 @@ RapidFlow-APX establishes a clean architectural separation across three distinct
 ### 4.2. Upstream Single-Edge Query Crash ($K_2$) and RapidFlow-APX Mitigation
 Upstream RapidFlow contains an architectural limitation on single-edge queries ($K_2$, $|V_Q| = 2, |E_Q| = 1$):
 - **Reproducible Upstream Failure (Return Code -11 / SIGSEGV)**:
+  - Upstream Commit: `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` (pristine upstream pin)
+  - Binary SHA-256: `abdd26847885c0df24198641a5e630a89fe686e115372d8cf685273fe1d02cd6` (`baselines/rapidflow/source/build/streaming/RapidFlow.out`)
   - Query fixture (`q.graph`):
     ```
     v 0 0
