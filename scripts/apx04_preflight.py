@@ -750,16 +750,26 @@ class PreflightChecker:
                     f"[MANIFEST_SCHEMA_TYPE_ERROR] Manifest field 'data_graph' expected JSON object, received {recv}"
                 )
             else:
-                dg_name = dg.get("name")
-                if dg_name is not None and not isinstance(dg_name, str):
+                if "name" not in dg:
                     self.errors.append(
-                        f"[MANIFEST_SCHEMA_TYPE_ERROR] data_graph.name expected string, received {type(dg_name).__name__}"
+                        f"[MANIFEST_SCHEMA_ERROR] data_graph.name is a required field"
                     )
-                dg_path = dg.get("path")
-                if dg_path is not None and not isinstance(dg_path, str):
+                else:
+                    dg_name = dg["name"]
+                    if not isinstance(dg_name, str):
+                        self.errors.append(
+                            f"[MANIFEST_SCHEMA_TYPE_ERROR] data_graph.name expected string, received {type(dg_name).__name__}"
+                        )
+                if "path" not in dg:
                     self.errors.append(
-                        f"[MANIFEST_SCHEMA_TYPE_ERROR] data_graph.path expected string, received {type(dg_path).__name__}"
+                        f"[MANIFEST_SCHEMA_ERROR] data_graph.path is a required field"
                     )
+                else:
+                    dg_path = dg["path"]
+                    if not isinstance(dg_path, str):
+                        self.errors.append(
+                            f"[MANIFEST_SCHEMA_TYPE_ERROR] data_graph.path expected string, received {type(dg_path).__name__}"
+                        )
 
         # 2. pilot_data_graphs container & records validation (optional root container)
         if "pilot_data_graphs" in manifest:
@@ -791,11 +801,16 @@ class PreflightChecker:
                                 self.errors.append(
                                     f"[MANIFEST_SCHEMA_TYPE_ERROR] pilot_data_graphs.{pg_id}.name expected string, received {type(pg_name).__name__}"
                                 )
-                        pg_path = pg_info.get("path")
-                        if pg_path is not None and not isinstance(pg_path, str):
+                        if "path" not in pg_info:
                             self.errors.append(
-                                f"[MANIFEST_SCHEMA_TYPE_ERROR] pilot_data_graphs.{pg_id}.path expected string, received {type(pg_path).__name__}"
+                                f"[MANIFEST_SCHEMA_ERROR] pilot_data_graphs.{pg_id}.path is a required field"
                             )
+                        else:
+                            pg_path = pg_info["path"]
+                            if not isinstance(pg_path, str):
+                                self.errors.append(
+                                    f"[MANIFEST_SCHEMA_TYPE_ERROR] pilot_data_graphs.{pg_id}.path expected string, received {type(pg_path).__name__}"
+                                )
 
         # 3. queries container & records validation
         if "queries" in manifest:
@@ -817,16 +832,26 @@ class PreflightChecker:
                             f"[MANIFEST_SCHEMA_TYPE_ERROR] queries.{q_id} expected JSON object, received {recv}"
                         )
                     else:
-                        q_cat = q_info.get("category")
-                        if q_cat is not None and not isinstance(q_cat, str):
+                        if "category" not in q_info:
                             self.errors.append(
-                                f"[MANIFEST_SCHEMA_TYPE_ERROR] queries.{q_id}.category expected string, received {type(q_cat).__name__}"
+                                f"[MANIFEST_SCHEMA_ERROR] queries.{q_id}.category is a required field"
                             )
-                        q_path = q_info.get("path")
-                        if q_path is not None and not isinstance(q_path, str):
+                        else:
+                            q_cat = q_info["category"]
+                            if not isinstance(q_cat, str):
+                                self.errors.append(
+                                    f"[MANIFEST_SCHEMA_TYPE_ERROR] queries.{q_id}.category expected string, received {type(q_cat).__name__}"
+                                )
+                        if "path" not in q_info:
                             self.errors.append(
-                                f"[MANIFEST_SCHEMA_TYPE_ERROR] queries.{q_id}.path expected string, received {type(q_path).__name__}"
+                                f"[MANIFEST_SCHEMA_ERROR] queries.{q_id}.path is a required field"
                             )
+                        else:
+                            q_path = q_info["path"]
+                            if not isinstance(q_path, str):
+                                self.errors.append(
+                                    f"[MANIFEST_SCHEMA_TYPE_ERROR] queries.{q_id}.path expected string, received {type(q_path).__name__}"
+                                )
 
         # 4. streams container & records validation
         if "streams" in manifest:
@@ -853,16 +878,26 @@ class PreflightChecker:
                             self.errors.append(
                                 f"[MANIFEST_SCHEMA_TYPE_ERROR] streams.{s_id}.target_graph expected string or null, received {type(tgt).__name__}"
                             )
-                        s_path = s_info.get("path")
-                        if s_path is not None and not isinstance(s_path, str):
+                        if "path" not in s_info:
                             self.errors.append(
-                                f"[MANIFEST_SCHEMA_TYPE_ERROR] streams.{s_id}.path expected string, received {type(s_path).__name__}"
+                                f"[MANIFEST_SCHEMA_ERROR] streams.{s_id}.path is a required field"
                             )
-                        src_s = s_info.get("source_stream")
-                        if src_s is not None and not isinstance(src_s, str):
+                        else:
+                            s_path = s_info["path"]
+                            if not isinstance(s_path, str):
+                                self.errors.append(
+                                    f"[MANIFEST_SCHEMA_TYPE_ERROR] streams.{s_id}.path expected string, received {type(s_path).__name__}"
+                                )
+                        if "source_stream" not in s_info:
                             self.errors.append(
-                                f"[MANIFEST_SCHEMA_TYPE_ERROR] streams.{s_id}.source_stream expected string, received {type(src_s).__name__}"
+                                f"[MANIFEST_SCHEMA_ERROR] streams.{s_id}.source_stream is a required field"
                             )
+                        else:
+                            src_s = s_info["source_stream"]
+                            if not isinstance(src_s, str):
+                                self.errors.append(
+                                    f"[MANIFEST_SCHEMA_TYPE_ERROR] streams.{s_id}.source_stream expected string, received {type(src_s).__name__}"
+                                )
 
         # 5. proposed_pilot_cases_a3_01 container & case records validation
         if "proposed_pilot_cases_a3_01" in manifest:
@@ -1291,7 +1326,7 @@ class PreflightChecker:
                     all_valid_elabels.update(p_el)
 
         data_graph_rel = manifest.get("data_graph", {}).get("path")
-        data_graph_path = self.repo_root / data_graph_rel if data_graph_rel else None
+        data_graph_path = self.repo_root / data_graph_rel if (data_graph_rel and isinstance(data_graph_rel, str)) else None
 
         verified_streams: Dict[str, Any] = {}
         netflow_stream_ops: Dict[str, List[Dict[str, Any]]] = {}
@@ -1463,7 +1498,11 @@ class PreflightChecker:
             source_lineage_ok = prefix_hash_ok and source_hash_ok and content_lineage_ok
 
             # Categorize stream target graph for sequential update replay (FIX R4-04: fail-closed validation)
-            valid_target_graphs = {manifest.get("data_graph", {}).get("name")} | set(pilot_graphs_info.keys())
+            valid_target_graphs = {
+                name
+                for name in ({manifest.get("data_graph", {}).get("name")} | set(pilot_graphs_info.keys()))
+                if isinstance(name, str)
+            }
             target_pilot_id = s_info.get("target_graph")
             if target_pilot_id is not None:
                 if target_pilot_id not in valid_target_graphs:
@@ -1483,9 +1522,16 @@ class PreflightChecker:
                     }
                     continue
                 elif target_pilot_id in pilot_graphs_info:
-                    pg_rel = pilot_graphs_info[target_pilot_id].get("path", "")
+                    pg_entry = pilot_graphs_info[target_pilot_id]
+                    if not isinstance(pg_entry, dict):
+                        self.errors.append(f"Target pilot graph '{target_pilot_id}' specification must be a dictionary")
+                        continue
+                    pg_rel = pg_entry.get("path")
+                    if not pg_rel or not isinstance(pg_rel, str):
+                        self.errors.append(f"Target pilot graph '{target_pilot_id}' missing or invalid 'path'")
+                        continue
                     pg_path = self.repo_root / pg_rel
-                    raw_v = pilot_graphs_info[target_pilot_id].get("vertices", 0)
+                    raw_v = pg_entry.get("vertices", 0)
                     safe_v = raw_v if is_strict_int(raw_v) else 0
                     pilot_stream_ops[s_id] = (pg_path, safe_v, parsed["operations"])
                 else:

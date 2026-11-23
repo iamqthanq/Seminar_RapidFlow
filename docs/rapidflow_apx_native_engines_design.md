@@ -126,7 +126,7 @@ where $u_1 < u_2 < \dots < u_n$ are the original signed 64-bit query vertex IDs 
   - Builds indexed query edge lists $E_Q = [(qa_0, qb_0), \dots, (qa_{m-1}, qb_{m-1})]$ with internal dense indices.
   - Builds fast label-to-edges lookup: maps each edge label ID to compatible query edge indices.
   - Precomputes incident edge tables for every query vertex.
-  - For M1: precomputes variant subsets $D \subset E_Q \setminus \{q\}$ with $|D| = k$ and their deterministic connected search orders.
+  - For M1: lazily enumerates all $\binom{m-1}{k}$ variant subsets $D \subset E_Q \setminus \{q\}$ on demand via `ApxQueryPlan::for_each_m1_variant()` and builds deterministic connected search orders under upfront work-budget containment.
 
 ### 4.2. `ApxM1EnumEngine` (Native M1-enum-Exact-$k$)
 - **Algorithm Flow**:

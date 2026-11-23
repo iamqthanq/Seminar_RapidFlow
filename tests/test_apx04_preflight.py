@@ -3095,6 +3095,321 @@ class TestRound6ResidualSchemaTypeFindings(unittest.TestCase):
         self.assertIn("pilot_data_graphs_verified", checker.audit_log)
 
 
+class TestRound7ConfirmedFindings(unittest.TestCase):
+    """
+    Round 7 Confirmed Findings adversarial regression test suite (Issue #34):
+    G34-F01: pilot_data_graphs[*].path null/missing type enforcement & defensive stream path handling.
+    G34-F02: data_graph.name null/missing type enforcement & defensive target_graph set sorting.
+    Neighboring fields: data_graph.path, queries.category, queries.path, streams.path, streams.source_stream.
+    Downstream audit isolation on schema failure.
+    """
+
+    def setUp(self):
+        self.repo_root = Path(__file__).resolve().parent.parent
+        self.manifest_path = self.repo_root / "configs" / "apx04_workload_manifest.json"
+        with open(self.manifest_path, "r", encoding="utf-8") as f:
+            self.canonical_data = json.load(f)
+
+    def _run_cli_dry_run(self, manifest_data: Dict[str, Any]) -> Tuple[int, str, str, Dict[str, Any]]:
+        with tempfile.TemporaryDirectory() as td:
+            tmp_m = Path(td) / "manifest.json"
+            with open(tmp_m, "w", encoding="utf-8") as f:
+                json.dump(manifest_data, f)
+            cmd = [sys.executable, "scripts/apx04_preflight.py", "--manifest", str(tmp_m), "--json", "--dry-run"]
+            proc = subprocess.run(cmd, cwd=self.repo_root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            out_json = {}
+            if proc.stdout.strip():
+                try:
+                    out_json = json.loads(proc.stdout)
+                except Exception as e:
+                    self.fail(f"CLI stdout was not valid JSON: {e}\nstdout: {proc.stdout}\nstderr: {proc.stderr}")
+            return proc.returncode, proc.stdout, proc.stderr, out_json
+
+    # --- G34-F01 Tests: pilot_data_graphs[*].path ---
+
+    def test_r7_f01_pilot_graph_path_none_rejected(self):
+        """G34-F01: pilot_data_graphs.Pilot_A.path=None rejected at schema boundary without traceback."""
+        data = copy.deepcopy(self.canonical_data)
+        data["pilot_data_graphs"]["Pilot_A_Exact_Micrograph"]["path"] = None
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        self.assertEqual(out.get("execution_readiness"), "SAFETY_BLOCKED")
+        self.assertIs(out.get("execution_authorization"), False)
+        errors = out.get("errors", [])
+        self.assertTrue(any("[MANIFEST_SCHEMA_TYPE_ERROR]" in e and "pilot_data_graphs.Pilot_A_Exact_Micrograph.path" in e for e in errors))
+
+    def test_r7_f01_pilot_graph_path_missing_rejected(self):
+        """G34-F01: Missing pilot_data_graphs.Pilot_A.path rejected as required field."""
+        data = copy.deepcopy(self.canonical_data)
+        del data["pilot_data_graphs"]["Pilot_A_Exact_Micrograph"]["path"]
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("[MANIFEST_SCHEMA_ERROR]" in e and "pilot_data_graphs.Pilot_A_Exact_Micrograph.path is a required field" in e for e in errors))
+
+    def test_r7_f01_pilot_graph_path_int_rejected(self):
+        """G34-F01: pilot_data_graphs.Pilot_A.path=42 rejected as wrong type."""
+        data = copy.deepcopy(self.canonical_data)
+        data["pilot_data_graphs"]["Pilot_A_Exact_Micrograph"]["path"] = 42
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("[MANIFEST_SCHEMA_TYPE_ERROR]" in e and "pilot_data_graphs.Pilot_A_Exact_Micrograph.path" in e for e in errors))
+
+    def test_r7_f01_pilot_graph_path_list_rejected(self):
+        """G34-F01: pilot_data_graphs.Pilot_A.path=[] rejected as wrong type."""
+        data = copy.deepcopy(self.canonical_data)
+        data["pilot_data_graphs"]["Pilot_A_Exact_Micrograph"]["path"] = []
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("[MANIFEST_SCHEMA_TYPE_ERROR]" in e and "pilot_data_graphs.Pilot_A_Exact_Micrograph.path" in e for e in errors))
+
+    def test_r7_f01_pilot_graph_b_and_c_path_validated(self):
+        """G34-F01: Required path validation applies to Pilot_B and Pilot_C."""
+        for pg_target in ("Pilot_B_NearOnly_Micrograph", "Pilot_C_Tiny_NetFlow"):
+            # Null path
+            d_null = copy.deepcopy(self.canonical_data)
+            d_null["pilot_data_graphs"][pg_target]["path"] = None
+            rc, _, stderr, out = self._run_cli_dry_run(d_null)
+            self.assertEqual(rc, 1)
+            self.assertEqual(stderr.strip(), "")
+            self.assertTrue(any(f"pilot_data_graphs.{pg_target}.path" in e for e in out.get("errors", [])))
+
+            # Missing path
+            d_missing = copy.deepcopy(self.canonical_data)
+            del d_missing["pilot_data_graphs"][pg_target]["path"]
+            rc, _, stderr, out = self._run_cli_dry_run(d_missing)
+            self.assertEqual(rc, 1)
+            self.assertEqual(stderr.strip(), "")
+            self.assertTrue(any(f"pilot_data_graphs.{pg_target}.path is a required field" in e for e in out.get("errors", [])))
+
+    def test_r7_f01_defensive_stream_path_join_on_invalid_pilot_graph(self):
+        """G34-F01: Direct invocation of audit_streams with path=None does not raise TypeError."""
+        checker = PreflightChecker(manifest_path=self.manifest_path, repo_root=self.repo_root)
+        data = copy.deepcopy(self.canonical_data)
+        data["pilot_data_graphs"]["Pilot_A_Exact_Micrograph"]["path"] = None
+        # Must not raise TypeError
+        checker.audit_streams(data)
+        self.assertTrue(any("missing or invalid 'path'" in e for e in checker.errors))
+
+    # --- G34-F02 Tests: data_graph.name ---
+
+    def test_r7_f02_data_graph_name_none_rejected(self):
+        """G34-F02: data_graph.name=None rejected at schema boundary without traceback."""
+        data = copy.deepcopy(self.canonical_data)
+        data["data_graph"]["name"] = None
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("[MANIFEST_SCHEMA_TYPE_ERROR]" in e and "data_graph.name" in e for e in errors))
+
+    def test_r7_f02_data_graph_name_missing_rejected(self):
+        """G34-F02: Missing data_graph.name rejected as required field."""
+        data = copy.deepcopy(self.canonical_data)
+        del data["data_graph"]["name"]
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("[MANIFEST_SCHEMA_ERROR]" in e and "data_graph.name is a required field" in e for e in errors))
+
+    def test_r7_f02_data_graph_name_list_rejected(self):
+        """G34-F02: data_graph.name=[] rejected as wrong type."""
+        data = copy.deepcopy(self.canonical_data)
+        data["data_graph"]["name"] = []
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("[MANIFEST_SCHEMA_TYPE_ERROR]" in e and "data_graph.name" in e for e in errors))
+
+    def test_r7_f02_data_graph_name_int_rejected(self):
+        """G34-F02: data_graph.name=42 rejected as wrong type."""
+        data = copy.deepcopy(self.canonical_data)
+        data["data_graph"]["name"] = 42
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("[MANIFEST_SCHEMA_TYPE_ERROR]" in e and "data_graph.name" in e for e in errors))
+
+    def test_r7_f02_gemini_combined_mutation_rejected(self):
+        """G34-F02: Combined data_graph.name=None + unknown target_graph rejected without TypeError crash."""
+        data = copy.deepcopy(self.canonical_data)
+        data["data_graph"]["name"] = None
+        data["streams"]["stream_pilot_a_exact"]["target_graph"] = "UnknownGraph"
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertEqual(out.get("audit_verdict"), "AUDIT_FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("[MANIFEST_SCHEMA_TYPE_ERROR]" in e and "data_graph.name" in e for e in errors))
+
+    def test_r7_f02_unknown_target_graph_valid_schema_works(self):
+        """G34-F02: Stream unknown target_graph on valid schema correctly reports unknown target error with sorted list."""
+        data = copy.deepcopy(self.canonical_data)
+        data["streams"]["stream_pilot_a_exact"]["target_graph"] = "UnknownGraph"
+        rc, stdout, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertEqual(out.get("status"), "FAIL")
+        errors = out.get("errors", [])
+        self.assertTrue(any("Stream stream_pilot_a_exact references unknown target_graph: 'UnknownGraph'" in e for e in errors))
+
+    def test_r7_f02_defensive_stream_target_graph_sorting_with_none(self):
+        """G34-F02: Direct invocation of audit_streams with data_graph.name=None does not raise TypeError in sorting."""
+        checker = PreflightChecker(manifest_path=self.manifest_path, repo_root=self.repo_root)
+        data = copy.deepcopy(self.canonical_data)
+        data["data_graph"]["name"] = None
+        data["streams"]["stream_pilot_a_exact"]["target_graph"] = "UnknownGraph"
+        # Must not raise TypeError: '<' not supported between instances of 'str' and 'NoneType'
+        checker.audit_streams(data)
+        self.assertTrue(any("references unknown target_graph" in e for e in checker.errors))
+
+    # --- Neighboring Required Field Tests ---
+
+    def test_r7_neighbor_data_graph_path_none_rejected(self):
+        """Neighbor: data_graph.path=None rejected at schema boundary."""
+        data = copy.deepcopy(self.canonical_data)
+        data["data_graph"]["path"] = None
+        rc, _, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertTrue(any("[MANIFEST_SCHEMA_TYPE_ERROR]" in e and "data_graph.path" in e for e in out.get("errors", [])))
+
+    def test_r7_neighbor_data_graph_path_missing_rejected(self):
+        """Neighbor: Missing data_graph.path rejected as required field."""
+        data = copy.deepcopy(self.canonical_data)
+        del data["data_graph"]["path"]
+        rc, _, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertTrue(any("[MANIFEST_SCHEMA_ERROR]" in e and "data_graph.path is a required field" in e for e in out.get("errors", [])))
+
+    def test_r7_neighbor_query_category_none_rejected(self):
+        """Neighbor: queries[...].category=None rejected at schema boundary."""
+        data = copy.deepcopy(self.canonical_data)
+        data["queries"]["Q_pilot_a_exact"]["category"] = None
+        rc, _, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertTrue(any("[MANIFEST_SCHEMA_TYPE_ERROR]" in e and "queries.Q_pilot_a_exact.category" in e for e in out.get("errors", [])))
+
+    def test_r7_neighbor_query_category_missing_rejected(self):
+        """Neighbor: Missing queries[...].category rejected as required field."""
+        data = copy.deepcopy(self.canonical_data)
+        del data["queries"]["Q_pilot_a_exact"]["category"]
+        rc, _, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertTrue(any("[MANIFEST_SCHEMA_ERROR]" in e and "queries.Q_pilot_a_exact.category is a required field" in e for e in out.get("errors", [])))
+
+    def test_r7_neighbor_query_path_none_rejected(self):
+        """Neighbor: queries[...].path=None rejected at schema boundary."""
+        data = copy.deepcopy(self.canonical_data)
+        data["queries"]["Q_pilot_a_exact"]["path"] = None
+        rc, _, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertTrue(any("[MANIFEST_SCHEMA_TYPE_ERROR]" in e and "queries.Q_pilot_a_exact.path" in e for e in out.get("errors", [])))
+
+    def test_r7_neighbor_query_path_missing_rejected(self):
+        """Neighbor: Missing queries[...].path rejected as required field."""
+        data = copy.deepcopy(self.canonical_data)
+        del data["queries"]["Q_pilot_a_exact"]["path"]
+        rc, _, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertTrue(any("[MANIFEST_SCHEMA_ERROR]" in e and "queries.Q_pilot_a_exact.path is a required field" in e for e in out.get("errors", [])))
+
+    def test_r7_neighbor_stream_path_none_rejected(self):
+        """Neighbor: streams[...].path=None rejected at schema boundary."""
+        data = copy.deepcopy(self.canonical_data)
+        data["streams"]["stream_pilot_a_exact"]["path"] = None
+        rc, _, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertTrue(any("[MANIFEST_SCHEMA_TYPE_ERROR]" in e and "streams.stream_pilot_a_exact.path" in e for e in out.get("errors", [])))
+
+    def test_r7_neighbor_stream_path_missing_rejected(self):
+        """Neighbor: Missing streams[...].path rejected as required field."""
+        data = copy.deepcopy(self.canonical_data)
+        del data["streams"]["stream_pilot_a_exact"]["path"]
+        rc, _, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertTrue(any("[MANIFEST_SCHEMA_ERROR]" in e and "streams.stream_pilot_a_exact.path is a required field" in e for e in out.get("errors", [])))
+
+    def test_r7_neighbor_stream_source_stream_none_rejected(self):
+        """Neighbor: streams[...].source_stream=None rejected at schema boundary."""
+        data = copy.deepcopy(self.canonical_data)
+        data["streams"]["stream_pilot_a_exact"]["source_stream"] = None
+        rc, _, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertTrue(any("[MANIFEST_SCHEMA_TYPE_ERROR]" in e and "streams.stream_pilot_a_exact.source_stream" in e for e in out.get("errors", [])))
+
+    def test_r7_neighbor_stream_source_stream_missing_rejected(self):
+        """Neighbor: Missing streams[...].source_stream rejected as required field."""
+        data = copy.deepcopy(self.canonical_data)
+        del data["streams"]["stream_pilot_a_exact"]["source_stream"]
+        rc, _, stderr, out = self._run_cli_dry_run(data)
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.strip(), "")
+        self.assertTrue(any("[MANIFEST_SCHEMA_ERROR]" in e and "streams.stream_pilot_a_exact.source_stream is a required field" in e for e in out.get("errors", [])))
+
+    # --- Downstream Audit Isolation ---
+
+    def test_r7_downstream_audit_isolation_f01_f02(self):
+        """Downstream audits are completely isolated on G34-F01 and G34-F02 mutations."""
+        cases = [
+            ("f01_pilot_path_none", lambda d: d["pilot_data_graphs"]["Pilot_A_Exact_Micrograph"].update({"path": None})),
+            ("f02_data_graph_name_none", lambda d: d["data_graph"].update({"name": None})),
+            ("neighbor_data_graph_path_none", lambda d: d["data_graph"].update({"path": None})),
+        ]
+        for desc, mutate in cases:
+            data = copy.deepcopy(self.canonical_data)
+            mutate(data)
+            with tempfile.TemporaryDirectory() as td:
+                tmp_m = Path(td) / "manifest.json"
+                with open(tmp_m, "w", encoding="utf-8") as f:
+                    json.dump(data, f)
+                with patch.object(PreflightChecker, "audit_data_graph") as mock_adg, \
+                     patch.object(PreflightChecker, "audit_pilot_data_graphs") as mock_apdg, \
+                     patch.object(PreflightChecker, "audit_queries") as mock_aq, \
+                     patch.object(PreflightChecker, "audit_streams") as mock_as, \
+                     patch.object(PreflightChecker, "audit_pilot_cases") as mock_apc, \
+                     patch.object(PreflightChecker, "audit_exclusions") as mock_ae:
+                    checker = PreflightChecker(manifest_path=tmp_m, repo_root=self.repo_root)
+                    passed = checker.run_all()
+                    self.assertFalse(passed, f"Expected False for {desc}")
+                    self.assertEqual(mock_adg.call_count, 0, f"audit_data_graph called for {desc}")
+                    self.assertEqual(mock_apdg.call_count, 0, f"audit_pilot_data_graphs called for {desc}")
+                    self.assertEqual(mock_aq.call_count, 0, f"audit_queries called for {desc}")
+                    self.assertEqual(mock_as.call_count, 0, f"audit_streams called for {desc}")
+                    self.assertEqual(mock_apc.call_count, 0, f"audit_pilot_cases called for {desc}")
+                    self.assertEqual(mock_ae.call_count, 0, f"audit_exclusions called for {desc}")
+
+
 
 
 if __name__ == "__main__":

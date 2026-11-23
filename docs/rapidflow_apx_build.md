@@ -114,9 +114,9 @@ RapidFlow-APX establishes a clean architectural separation across three distinct
    - Output mode is strictly scalar count-only. It does NOT instantiate, track, or stream explicit embedding tuples $(f(u_1), \dots, f(u_n))$.
 
 2. **Native RapidFlow-APX Event Core (`extensions/rapidflow_apx/`)**:
-   - Implemented via `ApxStreamingEngine::execute_step()`, orchestrating `ApxM1EnumEngine` or `ApxBareM2Engine` within `ApxTransactionManager`.
+   - Implemented via `ApxStreamingEngine::execute_step()`, orchestrating `ApxM1EnumEngine` or `ApxM2EventEngine` within `ApxTransactionManager`.
    - Generates incremental ordered tuple deltas per streaming update (`UpdateOperation`), tracking embeddings through `ApxTupleSink`.
-   - Step execution returns a structured `StreamStepResult` holding `entered_tuples`, `exited_tuples`, `commit_status` (`COMMITTED` or `NOT_COMMITTED`), and isolated per-step performance metrics in `StepCounters` (`EngineCounters`).
+   - Step execution returns a structured `StreamStepResult` holding `entered_tuples`, `exited_tuples`, the internal execution state `status` (C++ `StepStatus` enum: `SUCCESS`, `ERROR`, etc.), and isolated per-step performance metrics in `EngineCounters`. In the CLI JSON output report (`steps[]`), `commit_status` indicates transactional persistence (`COMMITTED` if `status == StepStatus::SUCCESS`, else `NOT_COMMITTED`), distinct from `status`.
    - Strong exception containment and transactional rollback guarantee that aborted steps discard staged pending tuples (`discarded_emissions += pending_tuples.size()`) and restore graph/codec state to pre-step checkpoints without data contamination.
 
 3. **Operational CLI Test Harness (`tests/native/rapidflow_apx_engines/src/main.cpp`)**:
