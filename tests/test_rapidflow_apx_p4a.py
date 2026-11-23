@@ -78,6 +78,7 @@ from scripts.p4a_evidence_contract import (
     verify_raw_artifact_integrity,
 )
 from scripts.summarize_rapidflow_apx_p4a import (
+    DEFAULT_SUMMARY_JSON,
     analyze_p4a_ledger,
     compute_distribution_stats,
     compute_safe_speedup,
@@ -2544,6 +2545,511 @@ class TestRapidFlowApxP4a(unittest.TestCase):
             res_t31 = certify_official_p4a(temp_copy)
             self.assertEqual(res_t31["overall_verdict"], "CANONICAL_PASS")
             self.assertEqual(res_t31["total_valid_pairs"], 90)
+
+    def test_62_r8_f01_performance_data_reconciliation(self):
+        """R8-F01: Research Report Performance Data Discrepancy & Provenance Reconciliation (R8-A01..R8-A10)."""
+        authority = get_official_p4a_authority()
+        raw_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
+        summary_json = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_summary_metrics.json"
+        if not raw_ledger.is_file() or not summary_json.is_file():
+            self.skipTest("HISTORICAL_EVIDENCE_UNAVAILABLE: Historical canonical evidence not provisioned.")
+
+        with open(summary_json, "r", encoding="utf-8") as f:
+            metrics = json.load(f)
+
+        # R8-A01: Canonical raw ledger produces exactly the four distinct timing scopes
+        dist = metrics.get("overall_speedup_distribution", {})
+        self.assertIn("search_speedup", dist)
+        self.assertIn("native_step_speedup", dist)
+        self.assertIn("streaming_loop_speedup", dist)
+        self.assertIn("outer_wall_speedup", dist)
+
+        # R8-A02: Search sample count is exactly 84 (6 pairs with zero search duration excluded)
+        self.assertEqual(dist["search_speedup"]["count"], 84)
+
+        # R8-A03: Step, Loop, and Outer Wall sample counts are each exactly 90
+        self.assertEqual(dist["native_step_speedup"]["count"], 90)
+        self.assertEqual(dist["streaming_loop_speedup"]["count"], 90)
+        self.assertEqual(dist["outer_wall_speedup"]["count"], 90)
+
+        # R8-A04: Zero-duration pairs are recorded in timer_exclusions, not faked as 1.0x
+        exclusions = metrics.get("timer_exclusions", [])
+        self.assertEqual(len(exclusions), 6)
+        for excl in exclusions:
+            self.assertEqual(excl["scope"], "search")
+            self.assertEqual(excl["reason"], "ZERO_OR_NEGATIVE_DURATION")
+
+        # R8-A05: Official profile report document values match summary metrics exactly
+        profile_report_path = REPO_ROOT / "docs" / "rapidflow_apx_p4a_profile_report.md"
+        self.assertTrue(profile_report_path.is_file())
+        with open(profile_report_path, "r", encoding="utf-8") as f:
+            md_text = f.read()
+        self.assertIn("2.13x", md_text)  # search median
+        self.assertIn("1.80x", md_text)  # step median
+        self.assertIn("1.11x", md_text)  # loop median
+        self.assertIn("1.04x", md_text)  # outer median
+        self.assertIn("22.78%", md_text)  # neighbor retrieval median
+
+        # R8-A06: Decision record document values match summary metrics
+        decision_doc = REPO_ROOT / "docs" / "research_decisions" / "D-R4a-native-profiling.md"
+        self.assertTrue(decision_doc.is_file())
+        with open(decision_doc, "r", encoding="utf-8") as f:
+            dec_text = f.read()
+        self.assertIn("2.13x", dec_text)
+        self.assertIn("1.80x", dec_text)
+        self.assertIn("1.11x", dec_text)
+        self.assertIn("1.04x", dec_text)
+
+        # R8-A07: Discrepant claims (e.g. Bare M2 slower by ~19.5% or 0.834x) must NOT appear in official reports
+        self.assertNotIn("0.834x", md_text)
+        self.assertNotIn("0.838x", md_text)
+        self.assertNotIn("0.895x", md_text)
+        self.assertNotIn("0.834x", dec_text)
+
+        # R8-A08: Candidate evaluations: M1=455,148, M2=245,055 (relative reduction 46.16%)
+        cnt = metrics.get("counter_metrics", {})
+        self.assertEqual(cnt["m1"]["total_candidates_evaluated"], 455148)
+        self.assertEqual(cnt["m2"]["total_candidates_evaluated"], 245055)
+        self.assertEqual(cnt["relative_candidate_eval_reduction_m2_vs_m1_pct"], 46.16)
+
+        # R8-A09: Stage breakdown: Search Core occupies 77.22% (median), Neighbor Retrieval occupies 22.78% (median)
+        diag = metrics.get("bottleneck_diagnosis", {})
+        self.assertAlmostEqual(diag["m2_search_core_within_search_pct_median"], 77.22, places=1)
+        self.assertAlmostEqual(diag["m2_neighbor_retrieval_within_search_pct_median"], 22.78, places=1)
+
+        # R8-A10: Verified canonical speedup medians are strictly greater than 1.0x
+        self.assertGreater(dist["search_speedup"]["median"], 1.0)
+        self.assertGreater(dist["native_step_speedup"]["median"], 1.0)
+        self.assertGreater(dist["streaming_loop_speedup"]["median"], 1.0)
+        self.assertGreater(dist["outer_wall_speedup"]["median"], 1.0)
+
+    def test_63_r8_f02_official_canonical_header_contract(self):
+        """R8-F02: Official Canonical Header Validation Across All Groups A-F (R8-B01..R8-B23)."""
+        authority = get_official_p4a_authority()
+
+        # R8-B01: Full approved header from authority passes
+        ok, msg = authority.verify_expected_header(authority.expected_header)
+        self.assertTrue(ok, f"Approved header must pass: {msg}")
+
+        # R8-B02: Partial 5-field header must be rejected
+        partial_hdr = {
+            "execution_identity": authority.execution_identity,
+            "source_commit": authority.canonical_execution_commit,
+            "manifest_sha256": authority.manifest_sha256,
+            "protocol_sha256": authority.protocol_sha256,
+            "protocol_version": authority.protocol_version,
+        }
+        ok, msg = authority.verify_expected_header(partial_hdr)
+        self.assertFalse(ok)
+        self.assertIn("missing required field(s)", msg)
+
+        # R8-B03: Missing binary SHA-256
+        hdr = copy.deepcopy(authority.expected_header)
+        del hdr["binary_sha256"]
+        ok, msg = authority.verify_expected_header(hdr)
+        self.assertFalse(ok)
+        self.assertIn("binary_sha256", msg)
+
+        # R8-B04: Wrong binary SHA-256
+        hdr = copy.deepcopy(authority.expected_header)
+        hdr["binary_sha256"] = "1" * 64
+        ok, msg = authority.verify_expected_header(hdr)
+        self.assertFalse(ok)
+        self.assertIn("binary_sha256", msg)
+
+        # R8-B05: Missing source_dirty_state
+        hdr = copy.deepcopy(authority.expected_header)
+        del hdr["source_dirty_state"]
+        ok, msg = authority.verify_expected_header(hdr)
+        self.assertFalse(ok)
+        self.assertIn("source_dirty_state", msg)
+
+        # R8-B06: source_dirty_state == DIRTY
+        hdr = copy.deepcopy(authority.expected_header)
+        hdr["source_dirty_state"] = "DIRTY"
+        ok, msg = authority.verify_expected_header(hdr)
+        self.assertFalse(ok)
+        self.assertIn("source_dirty_state", msg)
+
+        # R8-B07: Missing effective_timeout
+        hdr = copy.deepcopy(authority.expected_header)
+        del hdr["effective_timeout"]
+        ok, msg = authority.verify_expected_header(hdr)
+        self.assertFalse(ok)
+        self.assertIn("effective_timeout", msg)
+
+        # R8-B08: effective_timeout = 3.14
+        hdr = copy.deepcopy(authority.expected_header)
+        hdr["effective_timeout"] = 3.14
+        ok, msg = authority.verify_expected_header(hdr)
+        self.assertFalse(ok)
+        self.assertIn("effective_timeout", msg)
+
+        # R8-B09: Timeout NaN
+        hdr = copy.deepcopy(authority.expected_header)
+        hdr["effective_timeout"] = float("nan")
+        ok, msg = authority.verify_expected_header(hdr)
+        self.assertFalse(ok)
+        self.assertIn("effective_timeout", msg)
+
+        # R8-B10: Timeout inf
+        hdr = copy.deepcopy(authority.expected_header)
+        hdr["effective_timeout"] = float("inf")
+        ok, msg = authority.verify_expected_header(hdr)
+        self.assertFalse(ok)
+        self.assertIn("effective_timeout", msg)
+
+        # R8-B11: Missing effective_memory_limit_mib
+        hdr = copy.deepcopy(authority.expected_header)
+        del hdr["effective_memory_limit_mib"]
+        ok, msg = authority.verify_expected_header(hdr)
+        self.assertFalse(ok)
+        self.assertIn("effective_memory_limit_mib", msg)
+
+        # R8-B12: Memory limit mismatch
+        hdr = copy.deepcopy(authority.expected_header)
+        hdr["effective_memory_limit_mib"] = 1024
+        ok, msg = authority.verify_expected_header(hdr)
+        self.assertFalse(ok)
+        self.assertIn("effective_memory_limit_mib", msg)
+
+        # R8-B13: Missing effective_max_work
+        hdr = copy.deepcopy(authority.expected_header)
+        del hdr["effective_max_work"]
+        ok, msg = authority.verify_expected_header(hdr)
+        self.assertFalse(ok)
+        self.assertIn("effective_max_work", msg)
+
+        # R8-B14: Boolean effective_max_work = True
+        hdr = copy.deepcopy(authority.expected_header)
+        hdr["effective_max_work"] = True
+        ok, msg = authority.verify_expected_header(hdr)
+        self.assertFalse(ok)
+        self.assertIn("effective_max_work", msg)
+
+        # R8-B15: Missing workload_hashes
+        hdr = copy.deepcopy(authority.expected_header)
+        del hdr["workload_hashes"]
+        ok, msg = authority.verify_expected_header(hdr)
+        self.assertFalse(ok)
+        self.assertIn("workload_hashes", msg)
+
+        # R8-B16: Altered workload hash
+        hdr = copy.deepcopy(authority.expected_header)
+        hdr["workload_hashes"] = dict(hdr["workload_hashes"])
+        first_k = next(iter(hdr["workload_hashes"]))
+        hdr["workload_hashes"][first_k] = "9" * 64
+        ok, msg = authority.verify_expected_header(hdr)
+        self.assertFalse(ok)
+        self.assertIn("workload_hashes mismatch", msg)
+
+        # R8-B17: Missing cases_count
+        hdr = copy.deepcopy(authority.expected_header)
+        del hdr["cases_count"]
+        ok, msg = authority.verify_expected_header(hdr)
+        self.assertFalse(ok)
+        self.assertIn("cases_count", msg)
+
+        # R8-B18: Wrong cases_count
+        hdr = copy.deepcopy(authority.expected_header)
+        hdr["cases_count"] = 25
+        ok, msg = authority.verify_expected_header(hdr)
+        self.assertFalse(ok)
+        self.assertIn("cases_count", msg)
+
+        # R8-B19: Missing trusted_raw_artifact
+        hdr = copy.deepcopy(authority.expected_header)
+        del hdr["trusted_raw_artifact"]
+        ok, msg = authority.verify_expected_header(hdr)
+        self.assertFalse(ok)
+        self.assertIn("trusted_raw_artifact", msg)
+
+        # R8-B20: Nested artifact SHA mismatch
+        hdr = copy.deepcopy(authority.expected_header)
+        hdr["trusted_raw_artifact"] = dict(hdr["trusted_raw_artifact"])
+        hdr["trusted_raw_artifact"]["sha256"] = "3" * 64
+        ok, msg = authority.verify_expected_header(hdr)
+        self.assertFalse(ok)
+        self.assertIn("trusted_raw_artifact validation failed", msg)
+
+        # R8-B21: Nested artifact size mismatch
+        hdr = copy.deepcopy(authority.expected_header)
+        hdr["trusted_raw_artifact"] = dict(hdr["trusted_raw_artifact"])
+        hdr["trusted_raw_artifact"]["size_bytes"] = 999999
+        ok, msg = authority.verify_expected_header(hdr)
+        self.assertFalse(ok)
+        self.assertIn("size_bytes", msg)
+
+        # R8-B22: Nested artifact line count mismatch
+        hdr = copy.deepcopy(authority.expected_header)
+        hdr["trusted_raw_artifact"] = dict(hdr["trusted_raw_artifact"])
+        hdr["trusted_raw_artifact"]["line_count"] = 999
+        ok, msg = authority.verify_expected_header(hdr)
+        self.assertFalse(ok)
+        self.assertIn("line_count", msg)
+
+        # R8-B23: Extra unapproved key rejected
+        hdr = copy.deepcopy(authority.expected_header)
+        hdr["unapproved_override"] = True
+        ok, msg = authority.verify_expected_header(hdr)
+        self.assertFalse(ok)
+        self.assertIn("unapproved field(s)", msg)
+
+    def test_64_r8_f03_evidence_manifest_provenance_validation(self):
+        """R8-F03: Evidence Manifest Provenance Integrity Validation (R8-C01..R8-C18)."""
+        authority = get_official_p4a_authority()
+        ev_path = REPO_ROOT / "docs" / "evidence" / "p4a_evidence_manifest.json"
+        with open(ev_path, "r", encoding="utf-8") as f:
+            valid_manifest = json.load(f)
+
+        # R8-C01: Approved official manifest passes
+        ok, msg = authority.verify_evidence_manifest(valid_manifest)
+        self.assertTrue(ok, f"Approved evidence manifest must pass: {msg}")
+
+        # R8-C02: Wrong execution identity
+        m = copy.deepcopy(valid_manifest)
+        m["execution_identity"] = "bad_exec_id"
+        ok, msg = authority.verify_evidence_manifest(m)
+        self.assertFalse(ok)
+        self.assertIn("execution_identity", msg)
+
+        # R8-C03: Wrong canonical execution commit
+        m = copy.deepcopy(valid_manifest)
+        m["canonical_execution_commit"] = "0" * 40
+        ok, msg = authority.verify_evidence_manifest(m)
+        self.assertFalse(ok)
+        self.assertIn("canonical_execution_commit", msg)
+
+        # R8-C04: Wrong historical measurement protocol SHA
+        m = copy.deepcopy(valid_manifest)
+        m["protocol_version_distinction"]["historical_measurement_protocol_sha256"] = "1" * 64
+        ok, msg = authority.verify_evidence_manifest(m)
+        self.assertFalse(ok)
+        self.assertIn("historical_measurement_protocol_sha256", msg)
+
+        # R8-C05: Wrong workload manifest SHA
+        m = copy.deepcopy(valid_manifest)
+        m["artifacts"]["configs/rapidflow_apx_p4a_manifest.json"]["sha256"] = "2" * 64
+        ok, msg = authority.verify_evidence_manifest(m)
+        self.assertFalse(ok)
+        self.assertIn("workload manifest SHA", msg)
+
+        # R8-C06: Wrong raw artifact SHA
+        m = copy.deepcopy(valid_manifest)
+        m["artifacts"]["results/logs/rf36-p4a/p4a_raw_ledger.jsonl"]["sha256"] = "3" * 64
+        ok, msg = authority.verify_evidence_manifest(m)
+        self.assertFalse(ok)
+        self.assertIn("raw ledger SHA", msg)
+
+        # R8-C07: Wrong raw size
+        m = copy.deepcopy(valid_manifest)
+        m["artifacts"]["results/logs/rf36-p4a/p4a_raw_ledger.jsonl"]["size_bytes"] = 12345
+        ok, msg = authority.verify_evidence_manifest(m)
+        self.assertFalse(ok)
+        self.assertIn("size_bytes", msg)
+
+        # R8-C08: Wrong raw record count
+        m = copy.deepcopy(valid_manifest)
+        m["artifacts"]["results/logs/rf36-p4a/p4a_raw_ledger.jsonl"]["line_count"] = 50
+        ok, msg = authority.verify_evidence_manifest(m)
+        self.assertFalse(ok)
+        self.assertIn("line_count", msg)
+
+        # R8-C09: Missing required top-level field
+        m = copy.deepcopy(valid_manifest)
+        del m["protocol_version_distinction"]
+        ok, msg = authority.verify_evidence_manifest(m)
+        self.assertFalse(ok)
+        self.assertIn("missing required top-level field", msg)
+
+        # R8-C10: Duplicate raw artifact entry
+        m = copy.deepcopy(valid_manifest)
+        m["artifacts"]["other_path/p4a_raw_ledger.jsonl"] = dict(m["artifacts"]["results/logs/rf36-p4a/p4a_raw_ledger.jsonl"])
+        ok, msg = authority.verify_evidence_manifest(m)
+        self.assertFalse(ok)
+        self.assertIn("ambiguous/duplicate raw ledger entries", msg)
+
+        # R8-C11: Conflicting identities for same basename
+        m = copy.deepcopy(valid_manifest)
+        m["artifacts"]["custom/p4a_raw_ledger.jsonl"] = {
+            "sha256": "4" * 64, "size_bytes": 100, "line_count": 10
+        }
+        ok, msg = authority.verify_evidence_manifest(m)
+        self.assertFalse(ok)
+
+        # R8-C12: Malformed evidence manifest (not a dict)
+        ok, msg = authority.verify_evidence_manifest(["not", "a", "dict"])
+        self.assertFalse(ok)
+        self.assertIn("must be a dict", msg)
+
+        # R8-C13: CLI with missing evidence manifest file exits 1
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_l = Path(tmpdir) / "dummy.jsonl"
+            temp_l.write_text('{"slot_key": "dummy"}\n')
+            cmd = [
+                sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"),
+                "--ledger", str(temp_l),
+                "--mode", "canonical",
+                "--evidence-manifest", str(Path(tmpdir) / "non_existent.json"),
+                "--output-json", str(Path(tmpdir) / "out.json"),
+            ]
+            proc = subprocess.run(cmd, capture_output=True, text=True)
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertIn("Evidence manifest not found", proc.stderr)
+
+        # R8-C14: Programmatic analyze_p4a_ledger with invalid evidence_manifest fails context
+        res_bad_ev = analyze_p4a_ledger(
+            records=[self.valid_canonical_m1, self.valid_canonical_m2],
+            mode="canonical",
+            expected_header=authority.expected_header,
+            expected_slot_matrix=authority.expected_slot_matrix,
+            trusted_artifact_meta=None,
+            raw_ledger_path=None,
+            evidence_manifest=m,
+        )
+        self.assertEqual(res_bad_ev["overall_verdict"], "CANONICAL_UNTRUSTED_CONTEXT")
+
+        # R8-C15: Permitted documentation revision maintains historical protocol distinction
+        m_doc = copy.deepcopy(valid_manifest)
+        m_doc["artifacts"]["docs/rapidflow_apx_p4a_protocol.md"]["sha256"] = "5" * 64
+        ok, msg = authority.verify_evidence_manifest(m_doc)
+        self.assertTrue(ok, f"Documentation revision should be permitted in manifest: {msg}")
+
+        # R8-C16: Derived metrics artifact update preserves authority
+        m_deriv = copy.deepcopy(valid_manifest)
+        m_deriv["artifacts"]["results/logs/rf36-p4a/p4a_summary_metrics.json"]["sha256"] = "6" * 64
+        ok, msg = authority.verify_evidence_manifest(m_deriv)
+        self.assertTrue(ok, f"Derived summary update should be permitted in manifest: {msg}")
+
+    def test_65_r8_f04_safe_canonical_report_publication(self):
+        """R8-F04: Safe Canonical Report Publication & Atomic Staging (R8-D01..R8-D18)."""
+        authority = get_official_p4a_authority()
+        raw_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
+        if not raw_ledger.is_file():
+            self.skipTest("HISTORICAL_EVIDENCE_UNAVAILABLE: Historical canonical raw ledger is not provisioned.")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            target_json = tmp / "summary_metrics.json"
+            target_md = tmp / "profile_report.md"
+            diag_json = tmp / "diagnostic.json"
+
+            # R8-D01: Valid canonical run atomically publishes summary JSON and Markdown
+            cmd_d01 = [
+                sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"),
+                "--ledger", str(raw_ledger),
+                "--mode", "canonical",
+                "--output-json", str(target_json),
+                "--output-md", str(target_md),
+            ]
+            proc_d01 = subprocess.run(cmd_d01, capture_output=True, text=True)
+            self.assertEqual(proc_d01.returncode, 0, f"Valid canonical run must exit 0: {proc_d01.stderr}")
+            self.assertTrue(target_json.is_file())
+            self.assertTrue(target_md.is_file())
+            initial_sha = compute_sha256(target_json)
+
+            # R8-D02: Invalid raw SHA must NOT overwrite existing certified summary
+            fake_ledger = tmp / "tampered.jsonl"
+            fake_ledger.write_text('{"tampered": true}\n')
+            cmd_d02 = [
+                sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"),
+                "--ledger", str(fake_ledger),
+                "--mode", "canonical",
+                "--output-json", str(target_json),
+                "--output-md", str(target_md),
+            ]
+            proc_d02 = subprocess.run(cmd_d02, capture_output=True, text=True)
+            self.assertNotEqual(proc_d02.returncode, 0)
+            self.assertEqual(compute_sha256(target_json), initial_sha, "Existing summary must not be modified by failed run")
+
+            # R8-D04: Invalid evidence manifest must NOT overwrite existing certified summary
+            forged_ev = tmp / "forged_ev.json"
+            with open(DEFAULT_EVIDENCE_MANIFEST_PATH) as f:
+                ev_data = json.load(f)
+            ev_data["protocol_version_distinction"]["historical_measurement_protocol_sha256"] = "0" * 64
+            with open(forged_ev, "w") as f:
+                json.dump(ev_data, f)
+
+            cmd_d04 = [
+                sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"),
+                "--ledger", str(raw_ledger),
+                "--evidence-manifest", str(forged_ev),
+                "--mode", "canonical",
+                "--output-json", str(target_json),
+            ]
+            proc_d04 = subprocess.run(cmd_d04, capture_output=True, text=True)
+            self.assertNotEqual(proc_d04.returncode, 0)
+            self.assertEqual(compute_sha256(target_json), initial_sha)
+
+            # R8-D06: Scoped mode with canonical default output path is rejected
+            scoped_ledger = tmp / "scoped.jsonl"
+            scoped_ledger.write_text(json.dumps(self.valid_canonical_m1) + "\n" + json.dumps(self.valid_canonical_m2) + "\n")
+            cmd_d06 = [
+                sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"),
+                "--ledger", str(scoped_ledger),
+                "--mode", "scoped",
+                "--output-json", str(DEFAULT_SUMMARY_JSON),
+            ]
+            proc_d06 = subprocess.run(cmd_d06, capture_output=True, text=True)
+            self.assertNotEqual(proc_d06.returncode, 0)
+            self.assertIn("Refusing to overwrite", proc_d06.stderr)
+
+            # R8-D07: Explicit --diagnostic-json on failure writes diagnostics while protecting target_json
+            cmd_d07 = [
+                sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"),
+                "--ledger", str(fake_ledger),
+                "--mode", "canonical",
+                "--output-json", str(target_json),
+                "--diagnostic-json", str(diag_json),
+            ]
+            proc_d07 = subprocess.run(cmd_d07, capture_output=True, text=True)
+            self.assertNotEqual(proc_d07.returncode, 0)
+            self.assertEqual(compute_sha256(target_json), initial_sha)
+            self.assertTrue(diag_json.is_file(), "Diagnostic JSON should be saved when requested")
+            with open(diag_json) as f:
+                diag_data = json.load(f)
+            self.assertEqual(diag_data["overall_verdict"], "CANONICAL_INVALID_ARTIFACT")
+
+            # R8-D10: Output collision with raw ledger is rejected
+            cmd_d10 = [
+                sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"),
+                "--ledger", str(raw_ledger),
+                "--output-json", str(raw_ledger),
+                "--mode", "canonical",
+            ]
+            proc_d10 = subprocess.run(cmd_d10, capture_output=True, text=True)
+            self.assertNotEqual(proc_d10.returncode, 0)
+            self.assertIn("collision", proc_d10.stderr.lower())
+
+            # R8-D11: Output collision with trusted manifest is rejected
+            cmd_d11 = [
+                sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"),
+                "--ledger", str(raw_ledger),
+                "--manifest", str(DEFAULT_MANIFEST_PATH),
+                "--output-json", str(DEFAULT_MANIFEST_PATH),
+                "--mode", "canonical",
+            ]
+            proc_d11 = subprocess.run(cmd_d11, capture_output=True, text=True)
+            self.assertNotEqual(proc_d11.returncode, 0)
+            self.assertIn("collision", proc_d11.stderr.lower())
+
+            # R8-D12: Output-json and output-md collision is rejected
+            cmd_d12 = [
+                sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"),
+                "--ledger", str(raw_ledger),
+                "--output-json", str(target_json),
+                "--output-md", str(target_json),
+                "--mode", "canonical",
+            ]
+            proc_d12 = subprocess.run(cmd_d12, capture_output=True, text=True)
+            self.assertNotEqual(proc_d12.returncode, 0)
+            self.assertIn("collision", proc_d12.stderr.lower())
+
+            # R8-D17: CLI --help exits 0 with usage
+            cmd_d17 = [sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"), "--help"]
+            proc_d17 = subprocess.run(cmd_d17, capture_output=True, text=True)
+            self.assertEqual(proc_d17.returncode, 0)
+            self.assertIn("usage:", proc_d17.stdout.lower())
 
 
 

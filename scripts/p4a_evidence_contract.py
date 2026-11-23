@@ -453,7 +453,7 @@ def get_trusted_canonical_header(
         "manifest_sha256": reg["manifest_sha256"],
         "source_commit": canon_commit,
         "source_dirty_state": "CLEAN",
-        "binary_sha256": "",
+        "binary_sha256": APPROVED_P4A_BINARY_SHA256,
         "effective_max_work": CANONICAL_MAX_WORK_CAP,
         "effective_timeout": CANONICAL_TIMEOUT_CEILING,
         "effective_memory_limit_mib": CANONICAL_AS_LIMIT_MIB,
@@ -557,32 +557,97 @@ class OfficialCanonicalAuthority:
         }
 
     def verify_expected_header(self, header: Any) -> Tuple[bool, str]:
-        """Strictly validates caller-supplied expected_header against approved authority."""
+        """
+        Strictly validates caller-supplied expected_header against approved canonical authority (R8-F02).
+        Requires exact match on all 13 canonical context fields across Groups A through F.
+        """
         if not isinstance(header, dict):
             return False, f"expected_header must be a dict, got {type(header).__name__}"
-        required_fields = [
-            "execution_identity", "source_commit", "manifest_sha256",
-            "protocol_sha256", "protocol_version"
-        ]
-        for rf in required_fields:
-            if not header.get(rf):
-                return False, f"expected_header missing required field: '{rf}'"
-        if header["execution_identity"] != self.execution_identity:
-            return False, f"execution_identity {header['execution_identity']} != approved {self.execution_identity}"
-        if header["source_commit"] != self.canonical_execution_commit:
-            return False, f"source_commit {header['source_commit']} != approved {self.canonical_execution_commit}"
-        if header["manifest_sha256"].lower() != self.manifest_sha256.lower():
-            return False, f"manifest_sha256 {header['manifest_sha256']} != approved {self.manifest_sha256}"
-        if header["protocol_sha256"].lower() != self.protocol_sha256.lower():
-            return False, f"protocol_sha256 {header['protocol_sha256']} != approved {self.protocol_sha256}"
-        if str(header["protocol_version"]).strip() != self.protocol_version:
-            return False, f"protocol_version {header['protocol_version']} != approved {self.protocol_version}"
-        if "effective_max_work" in header and header["effective_max_work"] != CANONICAL_MAX_WORK_CAP:
-            return False, f"effective_max_work {header['effective_max_work']} != approved {CANONICAL_MAX_WORK_CAP}"
-        if "trusted_raw_artifact" in header and isinstance(header["trusted_raw_artifact"], dict):
-            art_sha = header["trusted_raw_artifact"].get("sha256", "")
-            if art_sha.lower() != self.raw_artifact_sha256.lower():
-                return False, f"trusted_raw_artifact SHA {art_sha} in header != approved {self.raw_artifact_sha256}"
+
+        all_required_keys = {
+            "execution_identity", "protocol_version", "protocol_sha256", "manifest_sha256",
+            "source_commit", "source_dirty_state", "binary_sha256", "effective_max_work",
+            "effective_timeout", "effective_memory_limit_mib", "workload_hashes",
+            "cases_count", "trusted_raw_artifact"
+        }
+        caller_keys = set(header.keys())
+
+        # Check for missing required fields
+        missing_keys = all_required_keys - caller_keys
+        if missing_keys:
+            return False, f"expected_header missing required field(s): {sorted(list(missing_keys))}"
+
+        # Check for unapproved extra fields (fail-closed against unknown override fields)
+        extra_keys = caller_keys - all_required_keys
+        if extra_keys:
+            return False, f"expected_header contains unapproved field(s): {sorted(list(extra_keys))}"
+
+        # Group A — Experiment identity
+        if not isinstance(header["execution_identity"], str) or header["execution_identity"] != self.execution_identity:
+            return False, f"execution_identity '{header.get('execution_identity')}' != approved '{self.execution_identity}'"
+
+        if not isinstance(header["source_commit"], str) or header["source_commit"] != self.canonical_execution_commit:
+            return False, f"source_commit '{header.get('source_commit')}' != approved '{self.canonical_execution_commit}'"
+
+        if not isinstance(header["source_dirty_state"], str) or header["source_dirty_state"] != "CLEAN":
+            return False, f"source_dirty_state '{header.get('source_dirty_state')}' != approved 'CLEAN'"
+
+        # Group B — Measurement protocol
+        if not isinstance(header["protocol_version"], str) or header["protocol_version"].strip() != self.protocol_version:
+            return False, f"protocol_version '{header.get('protocol_version')}' != approved '{self.protocol_version}'"
+
+        if not isinstance(header["protocol_sha256"], str) or header["protocol_sha256"].strip().lower() != self.protocol_sha256.lower():
+            return False, f"protocol_sha256 '{header.get('protocol_sha256')}' != approved '{self.protocol_sha256}'"
+
+        # Group C — Workload plan
+        if not isinstance(header["manifest_sha256"], str) or header["manifest_sha256"].strip().lower() != self.manifest_sha256.lower():
+            return False, f"manifest_sha256 '{header.get('manifest_sha256')}' != approved '{self.manifest_sha256}'"
+
+        cases_cnt = header["cases_count"]
+        if type(cases_cnt) is not int or isinstance(cases_cnt, bool) or cases_cnt != self.workload_count:
+            return False, f"cases_count '{cases_cnt}' != approved integer {self.workload_count}"
+
+        wl_hashes = header["workload_hashes"]
+        if not isinstance(wl_hashes, dict):
+            return False, f"workload_hashes must be a dict, got {type(wl_hashes).__name__}"
+        approved_hashes = self.workload_manifest_registry["workload_hashes"]
+        if len(wl_hashes) != len(approved_hashes):
+            return False, f"workload_hashes count {len(wl_hashes)} != approved count {len(approved_hashes)}"
+        for w_id, approved_h in approved_hashes.items():
+            if w_id not in wl_hashes:
+                return False, f"workload_hashes missing approved workload '{w_id}'"
+            if not isinstance(wl_hashes[w_id], str) or wl_hashes[w_id].strip().lower() != approved_h.lower():
+                return False, f"workload_hashes mismatch for '{w_id}': got '{wl_hashes[w_id]}' != approved '{approved_h}'"
+        for w_id in wl_hashes:
+            if w_id not in approved_hashes:
+                return False, f"workload_hashes contains unapproved workload '{w_id}'"
+
+        # Group D — Executable identity
+        bin_sha = header["binary_sha256"]
+        if not isinstance(bin_sha, str) or bin_sha.strip().lower() != self.binary_sha256.lower():
+            return False, f"binary_sha256 '{bin_sha}' != approved '{self.binary_sha256}'"
+
+        # Group E — Resource configuration
+        max_work = header["effective_max_work"]
+        if type(max_work) is not int or isinstance(max_work, bool) or max_work != CANONICAL_MAX_WORK_CAP:
+            return False, f"effective_max_work '{max_work}' != approved integer {CANONICAL_MAX_WORK_CAP}"
+
+        to_val = header["effective_timeout"]
+        if isinstance(to_val, bool) or not isinstance(to_val, (int, float)) or math.isnan(to_val) or math.isinf(to_val) or float(to_val) != float(CANONICAL_TIMEOUT_CEILING):
+            return False, f"effective_timeout '{to_val}' != approved numeric {float(CANONICAL_TIMEOUT_CEILING)}"
+
+        mem_limit = header["effective_memory_limit_mib"]
+        if type(mem_limit) is not int or isinstance(mem_limit, bool) or mem_limit != CANONICAL_AS_LIMIT_MIB:
+            return False, f"effective_memory_limit_mib '{mem_limit}' != approved integer {CANONICAL_AS_LIMIT_MIB}"
+
+        # Group F — Raw artifact reference
+        art_ref = header["trusted_raw_artifact"]
+        if not isinstance(art_ref, dict):
+            return False, f"trusted_raw_artifact must be a dict, got {type(art_ref).__name__}"
+        ok_art, msg_art = self.verify_artifact_meta(art_ref)
+        if not ok_art:
+            return False, f"trusted_raw_artifact validation failed: {msg_art}"
+
         return True, ""
 
     def verify_expected_slot_matrix(self, matrix: Any) -> Tuple[bool, str]:
@@ -634,7 +699,7 @@ class OfficialCanonicalAuthority:
         return True, ""
 
     def verify_artifact_meta(self, meta: Any) -> Tuple[bool, str]:
-        """Strictly validates caller-supplied artifact metadata against approved authority (R7-F02)."""
+        """Strictly validates caller-supplied artifact metadata against approved authority (R7-F02, R8-F02)."""
         if not isinstance(meta, dict):
             return False, f"trusted_artifact_meta must be a dict, got {type(meta).__name__}"
         sha = meta.get("sha256")
@@ -642,14 +707,119 @@ class OfficialCanonicalAuthority:
             return False, f"Invalid or missing sha256 in artifact reference: {sha}"
         if sha.lower() != self.raw_artifact_sha256.lower():
             return False, f"Artifact sha256 '{sha}' does not match approved historical artifact sha256 '{self.raw_artifact_sha256}'"
+
+        # In canonical authority, size_bytes and line_count must be present and match
+        if "size_bytes" not in meta:
+            return False, "trusted_artifact_meta missing 'size_bytes'"
         size = meta.get("size_bytes")
-        if size is not None:
-            if type(size) is not int or isinstance(size, bool) or size != self.raw_artifact_size_bytes:
-                return False, f"Artifact size_bytes {size} does not match approved size {self.raw_artifact_size_bytes}"
+        if type(size) is not int or isinstance(size, bool) or size != self.raw_artifact_size_bytes:
+            return False, f"Artifact size_bytes {size} does not match approved size {self.raw_artifact_size_bytes}"
+
+        if "line_count" not in meta:
+            return False, "trusted_artifact_meta missing 'line_count'"
         lines = meta.get("line_count")
-        if lines is not None:
-            if type(lines) is not int or isinstance(lines, bool) or lines != self.raw_artifact_line_count:
-                return False, f"Artifact line_count {lines} does not match approved count {self.raw_artifact_line_count}"
+        if type(lines) is not int or isinstance(lines, bool) or lines != self.raw_artifact_line_count:
+            return False, f"Artifact line_count {lines} does not match approved count {self.raw_artifact_line_count}"
+
+        return True, ""
+
+    def verify_evidence_manifest(self, manifest_data: Any) -> Tuple[bool, str]:
+        """
+        Strictly validates evidence manifest against approved canonical authority (R8-F03).
+        Enforces immutable historical experiment identity, historical measurement protocol SHA,
+        registered workload manifest SHA, and registered raw ledger artifact metadata.
+        """
+        if not isinstance(manifest_data, dict):
+            return False, f"evidence_manifest must be a dict, got {type(manifest_data).__name__}"
+
+        required_fields = [
+            "manifest_version", "phase", "execution_identity",
+            "canonical_execution_commit", "protocol_version_distinction", "artifacts"
+        ]
+        for rf in required_fields:
+            if rf not in manifest_data:
+                return False, f"evidence_manifest missing required top-level field '{rf}'"
+
+        if manifest_data["phase"] != "P4a":
+            return False, f"evidence_manifest phase '{manifest_data['phase']}' != 'P4a'"
+
+        if manifest_data["execution_identity"] != self.execution_identity:
+            return False, f"evidence_manifest execution_identity '{manifest_data['execution_identity']}' != approved '{self.execution_identity}'"
+
+        if manifest_data["canonical_execution_commit"] != self.canonical_execution_commit:
+            return False, f"evidence_manifest canonical_execution_commit '{manifest_data['canonical_execution_commit']}' != approved '{self.canonical_execution_commit}'"
+
+        pvd = manifest_data.get("protocol_version_distinction")
+        if not isinstance(pvd, dict):
+            return False, f"protocol_version_distinction must be a dict, got {type(pvd).__name__}"
+        if pvd.get("measurement_protocol_version") != self.protocol_version:
+            return False, f"measurement_protocol_version '{pvd.get('measurement_protocol_version')}' != approved '{self.protocol_version}'"
+        hist_proto_sha = pvd.get("historical_measurement_protocol_sha256", "")
+        if not isinstance(hist_proto_sha, str) or hist_proto_sha.strip().lower() != self.protocol_sha256.lower():
+            return False, f"historical_measurement_protocol_sha256 '{hist_proto_sha}' != approved '{self.protocol_sha256}'"
+
+        artifacts = manifest_data.get("artifacts")
+        if not isinstance(artifacts, dict):
+            return False, f"artifacts must be a dict, got {type(artifacts).__name__}"
+
+        # 1. Raw ledger entry check
+        raw_ledger_entries = []
+        for art_path, art_meta in artifacts.items():
+            if Path(art_path).name == "p4a_raw_ledger.jsonl" or art_path == self.raw_artifact_rel_path:
+                raw_ledger_entries.append((art_path, art_meta))
+
+        if len(raw_ledger_entries) == 0:
+            return False, "evidence_manifest missing raw ledger artifact entry ('p4a_raw_ledger.jsonl')"
+        if len(raw_ledger_entries) > 1:
+            return False, f"evidence_manifest contains ambiguous/duplicate raw ledger entries: {[p for p, _ in raw_ledger_entries]}"
+
+        raw_path, raw_meta = raw_ledger_entries[0]
+        if not isinstance(raw_meta, dict):
+            return False, f"raw ledger entry in artifacts must be a dict, got {type(raw_meta).__name__}"
+        raw_sha = raw_meta.get("sha256", "")
+        if not isinstance(raw_sha, str) or raw_sha.strip().lower() != self.raw_artifact_sha256.lower():
+            return False, f"evidence_manifest raw ledger SHA '{raw_sha}' != approved '{self.raw_artifact_sha256}'"
+        raw_size = raw_meta.get("size_bytes")
+        if type(raw_size) is not int or isinstance(raw_size, bool) or raw_size != self.raw_artifact_size_bytes:
+            return False, f"evidence_manifest raw ledger size_bytes {raw_size} != approved {self.raw_artifact_size_bytes}"
+        raw_lines = raw_meta.get("line_count")
+        if type(raw_lines) is not int or isinstance(raw_lines, bool) or raw_lines != self.raw_artifact_line_count:
+            return False, f"evidence_manifest raw ledger line_count {raw_lines} != approved {self.raw_artifact_line_count}"
+
+        # 2. Workload manifest entry check
+        workload_manifest_entries = []
+        for art_path, art_meta in artifacts.items():
+            if Path(art_path).name in ("rapidflow_apx_p4a_manifest.json", "rapidflow_apx_p4a_workloads.json") or art_path in (
+                "configs/rapidflow_apx_p4a_manifest.json", "benchmarks/manifests/rapidflow_apx_p4a_workloads.json"
+            ):
+                workload_manifest_entries.append((art_path, art_meta))
+
+        if len(workload_manifest_entries) == 0:
+            return False, "evidence_manifest missing workload manifest entry ('rapidflow_apx_p4a_manifest.json')"
+        if len(workload_manifest_entries) > 1:
+            return False, f"evidence_manifest contains duplicate workload manifest entries: {[p for p, _ in workload_manifest_entries]}"
+
+        wl_path, wl_meta = workload_manifest_entries[0]
+        if not isinstance(wl_meta, dict):
+            return False, f"workload manifest entry in artifacts must be a dict, got {type(wl_meta).__name__}"
+        wl_sha = wl_meta.get("sha256", "")
+        if not isinstance(wl_sha, str) or wl_sha.strip().lower() != self.manifest_sha256.lower():
+            return False, f"evidence_manifest workload manifest SHA '{wl_sha}' != approved '{self.manifest_sha256}'"
+
+        # 3. Check for conflicting basenames across all artifacts
+        basename_map = {}
+        for art_path, art_meta in artifacts.items():
+            bname = Path(art_path).name
+            if isinstance(art_meta, dict):
+                art_sha = str(art_meta.get("sha256", "")).strip().lower()
+                art_size = art_meta.get("size_bytes")
+                if bname in basename_map:
+                    prev_path, prev_sha, prev_size = basename_map[bname]
+                    if prev_sha != art_sha or prev_size != art_size:
+                        return False, f"evidence_manifest has conflicting artifact identities for '{bname}': '{prev_path}' vs '{art_path}'"
+                else:
+                    basename_map[bname] = (art_path, art_sha, art_size)
+
         return True, ""
 
 

@@ -75,6 +75,10 @@ Across 90 paired comparisons (30 canonical workloads $\times$ 3 repetitions $\ti
 | Artifact Checksum Trust Anchoring | **ADD** | Raw artifact checksums in canonical certification must match the approved reference; caller-supplied self-generated SHAs fail closed with `CANONICAL_INVALID_ARTIFACT`. | Tested across T10-T14 in `test_58_r7_f02` (Round 7). |
 | Strict Provenance Non-Downgrade | **ADD** | Strict cryptographic validation is mandatory in canonical mode; disabling strict provenance is prohibited and fails closed with `CANONICAL_UNTRUSTED_CONTEXT`. | Tested across T15-T18 in `test_59_r7_f03` (Round 7). |
 | CLI Manifest Authority Lockdown | **ADD** | CLI rejects unverified `--evidence-manifest` and `--manifest` overrides; custom experiments are restricted to `--mode scoped` and never issue historical READY recommendations. | Tested across T19-T27 in `test_60_r7_f04` (Round 7). |
+| Research Performance Data Reconciliation | **CHANGE** | Reconciled scientific reporting to exact 4 canonical timing scopes (Search 2.13x, Step 1.80x, Loop 1.11x, Outer 1.04x, candidate reduction 46.16%); eliminated unprovenanced claims. | Tested across R8-A01..R8-A10 in `test_62_r8_f01` (Round 8). |
+| Complete Canonical Header Contract | **ADD** | Enforces all 13 fields across Groups A..F; rejects partial headers, dirty states, timeout alterations, and unknown fields. | Tested across R8-B01..R8-B23 in `test_63_r8_f02` (Round 8). |
+| Evidence Manifest Provenance Integrity | **ADD** | Validates top-level identity, commit, historical measurement protocol SHA, workload manifest SHA, and raw artifact metadata. | Tested across R8-C01..R8-C18 in `test_64_r8_f03` (Round 8). |
+| Safe Canonical Report Publication | **ADD** | Pipeline evaluates certification verdict prior to file creation; failed certifications never overwrite certified summary artifacts. Atomic staging ensures clean publication. | Tested across R8-D01..R8-D18 in `test_65_r8_f04` (Round 8). |
 
 
 ---

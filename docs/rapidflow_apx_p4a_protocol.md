@@ -228,6 +228,27 @@ To eliminate caller-defined trust bypasses and anchor historical certification t
 6. **Trust Model Scope & Limitations:**
    - The integrity guarantees are anchored to the content-addressed Git object model and cryptographic SHA-256 references approved during peer review. They enforce strict fail-closed boundary checking within the repository's execution model without relying on unverified external claims.
 
+### 4.19 Complete Header Authority, Manifest Provenance & Safe Report Publication (R8-F01, R8-F02, R8-F03, R8-F04)
+To ensure that official certifications are rooted in verified authority and that reports cannot be contaminated by failed runs, Round 8 enforces:
+1. **Full Canonical Header Contract Validation (R8-F02):**
+   - Enforces exact match across all 13 fields in 6 groups: Group A (Experiment identity: `execution_identity`, `source_commit`, `source_dirty_state` = CLEAN), Group B (Measurement protocol: `protocol_version`, `protocol_sha256`), Group C (Workload plan: `manifest_sha256`, `cases_count` = 30, `workload_hashes`), Group D (Executable identity: `binary_sha256`), Group E (Resource configuration: `effective_max_work` = 500000, `effective_timeout` = 60.0, `effective_memory_limit_mib` = 512), and Group F (Raw artifact reference: `trusted_raw_artifact` with `sha256`, `size_bytes` = 441311, `line_count` = 180).
+   - Partial headers, dirty source states, timeout alterations, NaN/inf timeouts, boolean type coercions, and unknown override fields fail closed with `CANONICAL_UNTRUSTED_CONTEXT` / `CANONICAL_PLAN_MISMATCH`.
+2. **Evidence Manifest Provenance Integrity (R8-F03):**
+   - `verify_evidence_manifest()` strictly validates top-level experiment identity, commit, protocol distinction (`historical_measurement_protocol_sha256`), registered workload manifest SHA, and registered raw ledger artifact metadata.
+   - Disallows forged historical protocol metadata, duplicate raw ledger entries, and conflicting identities sharing the same basename.
+   - Distinguishes between mutable documentation artifacts (whose SHA tracks documentation revisions) and immutable historical measurement protocol SHA (`dd3f39ca...`).
+3. **Safe Canonical Report Publication & Atomic Staging (R8-F04):**
+   - Inverts the CLI pipeline to evaluate certification verdict *before* any report is written to disk.
+   - Non-PASS certification runs (such as `CANONICAL_INVALID_ARTIFACT`, `CANONICAL_PLAN_MISMATCH`, `CANONICAL_UNTRUSTED_CONTEXT`) NEVER overwrite or create official summary artifacts (`p4a_summary_metrics.json`, `p4a_profile_report.md`).
+   - Diagnostic failure details are routed to stderr or an optional explicit `--diagnostic-json` path.
+   - Successful runs publish reports atomically via temporary staging files and atomic replacement (`os.replace`).
+   - Scoped mode execution with default canonical output path is rejected fail-closed to protect certified historical baselines.
+   - Comprehensive path collision checks prevent output paths from colliding with raw inputs, manifests, or protected repository code.
+4. **Performance Data Provenance & Scientific Reporting (R8-F01):**
+   - Official P4a claims strictly reflect the 4 measured canonical timing scopes: Search ($N=84$, Median 2.13x), Native Step ($N=90$, Median 1.80x), Streaming Loop ($N=90$, Median 1.11x), and Outer Wall ($N=90$, Median 1.04x).
+   - 6 zero-duration search runs are safely excluded from the ratio distribution (`RATIO_NOT_COMPUTABLE`), never falsified as 1.0x.
+   - Bare M2 evaluates 245,055 candidates vs M1's 455,148 candidates (46.16% relative reduction). Search Core occupies 77.22% (median) and Neighbor Retrieval occupies 22.78% (median) of Search.
+
 ---
 
 ## 5. Decision Gate & Phase P4b Transition Criteria (P4A-F08)

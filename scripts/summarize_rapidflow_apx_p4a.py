@@ -23,10 +23,11 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
@@ -164,6 +165,7 @@ def analyze_p4a_ledger(
     raw_ledger_path: Optional[Union[str, Path]] = None,
     trusted_artifact_meta: Optional[Dict[str, Any]] = None,
     expected_slot_matrix: Optional[Dict[str, Any]] = None,
+    evidence_manifest: Optional[Union[str, Path, Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """
     Processes ledger records into structured statistical metrics with strict identity checking,
@@ -267,6 +269,28 @@ def analyze_p4a_ledger(
             if not hdr_ok:
                 context_ok = False
                 context_diag = f"Untrusted canonical header: {hdr_diag}"
+
+        # Evidence manifest verification (R8-F03)
+        if evidence_manifest is not None and context_ok:
+            if isinstance(evidence_manifest, (str, Path)):
+                try:
+                    ev_data = load_trusted_evidence_manifest(Path(evidence_manifest))
+                except Exception as e:
+                    context_ok = False
+                    context_diag = f"Failed to load evidence manifest: {e}"
+                    ev_data = None
+            elif isinstance(evidence_manifest, dict):
+                ev_data = evidence_manifest
+            else:
+                context_ok = False
+                context_diag = f"Invalid evidence_manifest type: {type(evidence_manifest).__name__}"
+                ev_data = None
+
+            if ev_data is not None:
+                ev_ok, ev_msg = authority.verify_evidence_manifest(ev_data)
+                if not ev_ok:
+                    context_ok = False
+                    context_diag = f"Official evidence manifest verification failed: {ev_msg}"
 
     # Expected slot matrix calculation and authority validation (R5-F01, R6-F01, R7-F01)
     matrix_ok = True
@@ -1036,6 +1060,116 @@ def generate_markdown_report(metrics: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def publish_json_atomic(data: Any, target_path: Union[str, Path]) -> None:
+    """Atomically writes JSON to target_path using an isolated temporary file (R8-F04)."""
+    target_path = Path(target_path)
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = target_path.with_name(f".{target_path.name}.tmp.{os.getpid()}")
+    try:
+        with open(temp_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temp_path, target_path)
+    finally:
+        if temp_path.exists():
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass
+
+
+def publish_text_atomic(content: str, target_path: Union[str, Path]) -> None:
+    """Atomically writes text to target_path using an isolated temporary file (R8-F04)."""
+    target_path = Path(target_path)
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = target_path.with_name(f".{target_path.name}.tmp.{os.getpid()}")
+    try:
+        with open(temp_path, "w", encoding="utf-8") as f:
+            f.write(content)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temp_path, target_path)
+    finally:
+        if temp_path.exists():
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass
+
+
+def validate_output_destinations(args: argparse.Namespace) -> None:
+    """Validates output file paths against collisions, existing directories, and protected paths (R8-F04)."""
+    all_inputs = []
+    if args.ledger:
+        all_inputs.append(("ledger", Path(args.ledger)))
+    if args.manifest:
+        all_inputs.append(("manifest", Path(args.manifest)))
+    if args.evidence_manifest:
+        all_inputs.append(("evidence-manifest", Path(args.evidence_manifest)))
+
+    outputs = [("output-json", Path(args.output_json))]
+    if args.output_md:
+        outputs.append(("output-md", Path(args.output_md)))
+    if getattr(args, "diagnostic_json", None):
+        outputs.append(("diagnostic-json", Path(args.diagnostic_json)))
+
+    # 1. Directory check
+    for out_name, out_path in outputs:
+        if out_path.is_dir():
+            print(f"Error: Output path '{out_path}' for --{out_name} is an existing directory.", file=sys.stderr)
+            sys.exit(1)
+
+    # 2. Collision with input files
+    for out_name, out_path in outputs:
+        try:
+            res_out = out_path.resolve()
+        except Exception:
+            res_out = out_path
+        for inp_name, inp_path in all_inputs:
+            if inp_path.exists():
+                try:
+                    res_inp = inp_path.resolve()
+                except Exception:
+                    res_inp = inp_path
+                if res_out == res_inp:
+                    print(
+                        f"Error: Output path collision: --{out_name} '{out_path}' collides with input --{inp_name} '{inp_path}'.",
+                        file=sys.stderr,
+                    )
+                    sys.exit(1)
+
+    # 3. Collision between output-json and output-md
+    if args.output_md:
+        try:
+            if Path(args.output_json).resolve() == Path(args.output_md).resolve():
+                print(
+                    f"Error: Output path collision: --output-json and --output-md specify the same file: '{args.output_json}'.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+        except Exception:
+            if str(args.output_json) == str(args.output_md):
+                print(
+                    f"Error: Output path collision: --output-json and --output-md specify the same file: '{args.output_json}'.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+
+    # 4. Scoped mode protection against default canonical output
+    if args.mode == "scoped":
+        try:
+            if Path(args.output_json).resolve() == DEFAULT_SUMMARY_JSON.resolve():
+                print(
+                    f"Error: Refusing to overwrite official canonical summary path '{DEFAULT_SUMMARY_JSON}' "
+                    f"in scoped analysis mode. Please specify a separate --output-json.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+        except Exception:
+            pass
+
+
 def main():
     parser = argparse.ArgumentParser(description="P4a Native Profiling Summarizer & Evidence Certifier")
     parser.add_argument("--ledger", type=Path, default=DEFAULT_LEDGER, help="Path to raw ledger JSONL")
@@ -1044,8 +1178,12 @@ def main():
     parser.add_argument("--mode", choices=["canonical", "scoped"], default="canonical", help="Certification mode: 'canonical' (default) or 'scoped'")
     parser.add_argument("--output-json", type=Path, default=DEFAULT_SUMMARY_JSON, help="Path to summary metrics JSON")
     parser.add_argument("--output-md", type=Path, default=None, help="Path to output markdown report")
+    parser.add_argument("--diagnostic-json", type=Path, default=None, help="Optional diagnostic output path on certification failure")
     parser.add_argument("--strict-provenance", action="store_true", default=True, help="Enforce strict cryptographic provenance")
     args = parser.parse_args()
+
+    # Pre-execution output destination and path collision validation (R8-F04)
+    validate_output_destinations(args)
 
     try:
         records = load_ledger(args.ledger)
@@ -1071,7 +1209,7 @@ def main():
             print("Error: Canonical certification requires strict provenance (--strict-provenance cannot be False in canonical mode).", file=sys.stderr)
             sys.exit(1)
 
-        # Workload manifest check (R7-F04)
+        # Workload manifest check (R7-F04, R8-F03)
         if args.manifest:
             m_path = Path(args.manifest)
             if not m_path.is_file():
@@ -1086,7 +1224,7 @@ def main():
                 )
                 sys.exit(1)
 
-        # Evidence manifest check (R7-F04)
+        # Evidence manifest verification (R7-F04, R8-F03)
         if args.evidence_manifest:
             ev_path = Path(args.evidence_manifest)
             if not ev_path.is_file():
@@ -1098,36 +1236,12 @@ def main():
                 print(f"Error: Failed to parse evidence manifest {ev_path}: {e}", file=sys.stderr)
                 sys.exit(1)
 
-            ev_exec_id = ev_data.get("execution_identity", "")
-            ev_commit = ev_data.get("canonical_execution_commit", "")
-            if ev_exec_id != authority.execution_identity:
+            ev_ok, ev_msg = authority.verify_evidence_manifest(ev_data)
+            if not ev_ok:
                 print(
-                    f"Error: Canonical certification authority violation: evidence manifest execution_identity "
-                    f"'{ev_exec_id}' does not match approved authority '{authority.execution_identity}'.",
+                    f"Error: Canonical certification authority violation: evidence manifest validation failed: {ev_msg}",
                     file=sys.stderr,
                 )
-                sys.exit(1)
-            if ev_commit != authority.canonical_execution_commit:
-                print(
-                    f"Error: Canonical certification authority violation: evidence manifest canonical_execution_commit "
-                    f"'{ev_commit}' does not match approved authority '{authority.canonical_execution_commit}'.",
-                    file=sys.stderr,
-                )
-                sys.exit(1)
-
-            raw_art_found = False
-            for art_path, art_meta in ev_data.get("artifacts", {}).items():
-                if Path(art_path).name == "p4a_raw_ledger.jsonl" or art_path == authority.raw_artifact_rel_path:
-                    raw_art_found = True
-                    if art_meta.get("sha256", "").lower() != authority.raw_artifact_sha256.lower():
-                        print(
-                            f"Error: Canonical certification authority violation: evidence manifest redefines raw artifact SHA-256 "
-                            f"to '{art_meta.get('sha256')}', differing from approved authority '{authority.raw_artifact_sha256}'.",
-                            file=sys.stderr,
-                        )
-                        sys.exit(1)
-            if not raw_art_found:
-                print("Error: Canonical certification authority violation: evidence manifest missing raw ledger artifact entry.", file=sys.stderr)
                 sys.exit(1)
 
         target_rel = None
@@ -1160,12 +1274,42 @@ def main():
         raw_ledger_path=args.ledger,
         trusted_artifact_meta=artifact_meta,
         expected_slot_matrix=expected_slot_matrix,
+        evidence_manifest=args.evidence_manifest if args.mode == "canonical" else None,
     )
 
+    verdict = metrics.get("overall_verdict")
+    is_success = False
+    if args.mode == "canonical":
+        if verdict == "CANONICAL_PASS" and metrics.get("total_valid_pairs", 0) > 0:
+            is_success = True
+    elif args.mode == "scoped":
+        if verdict == "SCOPED_ANALYSIS_VALID" and metrics.get("total_valid_pairs", 0) > 0:
+            is_success = True
+
+    # Safe Publication Gate: Non-PASS certification NEVER overwrites official summary outputs (R8-F04)
+    if not is_success:
+        if args.diagnostic_json:
+            try:
+                publish_json_atomic(metrics, args.diagnostic_json)
+                print(f"Diagnostic failure metrics saved to {args.diagnostic_json}", file=sys.stderr)
+            except Exception as e:
+                print(f"Error saving diagnostic JSON to {args.diagnostic_json}: {e}", file=sys.stderr)
+
+        if args.mode == "canonical":
+            print(
+                f"Canonical certification FAILED: verdict={verdict}; total valid pairs={metrics.get('total_valid_pairs')}",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                f"Scoped analysis FAILED: verdict={verdict}; total valid pairs={metrics.get('total_valid_pairs')}",
+                file=sys.stderr,
+            )
+        sys.exit(1)
+
+    # Success: Atomic publication of certified outputs
     try:
-        args.output_json.parent.mkdir(parents=True, exist_ok=True)
-        with open(args.output_json, "w", encoding="utf-8") as f:
-            json.dump(metrics, f, indent=2)
+        publish_json_atomic(metrics, args.output_json)
         print(f"Summary metrics saved to {args.output_json}")
     except Exception as e:
         print(f"Error saving output JSON to {args.output_json}: {e}", file=sys.stderr)
@@ -1174,9 +1318,7 @@ def main():
     md_report = generate_markdown_report(metrics)
     if args.output_md:
         try:
-            args.output_md.parent.mkdir(parents=True, exist_ok=True)
-            with open(args.output_md, "w", encoding="utf-8") as f:
-                f.write(md_report)
+            publish_text_atomic(md_report, args.output_md)
             print(f"Markdown report saved to {args.output_md}")
         except Exception as e:
             print(f"Error saving markdown report to {args.output_md}: {e}", file=sys.stderr)
@@ -1184,15 +1326,13 @@ def main():
     else:
         print("\n" + md_report)
 
-    verdict = metrics.get("overall_verdict")
-    if args.mode == "canonical":
-        if verdict != "CANONICAL_PASS" or metrics.get("total_valid_pairs", 0) == 0:
-            print(f"Canonical certification FAILED: verdict={verdict}; total valid pairs={metrics.get('total_valid_pairs')}", file=sys.stderr)
-            sys.exit(1)
-    elif args.mode == "scoped":
-        if verdict != "SCOPED_ANALYSIS_VALID" or metrics.get("total_valid_pairs", 0) == 0:
-            print(f"Scoped analysis FAILED: verdict={verdict}; total valid pairs={metrics.get('total_valid_pairs')}", file=sys.stderr)
-            sys.exit(1)
+    if args.diagnostic_json:
+        try:
+            publish_json_atomic(metrics, args.diagnostic_json)
+        except Exception:
+            pass
+
+    sys.exit(0)
 
 
 if __name__ == "__main__":
