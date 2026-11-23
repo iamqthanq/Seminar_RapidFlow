@@ -12,6 +12,7 @@
 #include "rapidflow_apx/m1_enum_engine.h"
 #include "rapidflow_apx/m2_event_engine.h"
 #include "rapidflow_apx/engine_counters.h"
+#include "rapidflow_apx/profiler.h"
 
 namespace rapidflow_apx {
 
@@ -31,6 +32,7 @@ struct StreamStepResult {
     std::vector<std::vector<int64_t>> entered_tuples{};
     std::vector<std::vector<int64_t>> exited_tuples{};
     EngineCounters step_counters{};
+    StepProfiling step_profiling{};
 };
 
 class ApxStreamingEngine {
@@ -55,6 +57,13 @@ public:
     ApxTransactionManager& get_tx_manager() noexcept { return tx_manager_; }
     void set_m2_fault_hook(M2FaultHook hook) noexcept { m2_engine_.set_fault_hook(hook); }
 
+    void set_profiling_enabled(bool enabled) noexcept {
+        profiling_enabled_ = enabled;
+        tx_manager_.set_profiling_enabled(enabled);
+    }
+    bool is_profiling_enabled() const noexcept { return profiling_enabled_; }
+    const CumulativeProfiling& get_cumulative_profiling() const noexcept { return cumulative_profiling_; }
+
 private:
     ApxAuthoritativeGraph& graph_;
     ApxTypedCodec& codec_;
@@ -68,6 +77,8 @@ private:
     ApxTransactionManager tx_manager_;
     EngineCounters cumulative_counters_;
     EngineCounters step_counters_;
+    bool profiling_enabled_{false};
+    CumulativeProfiling cumulative_profiling_{};
 };
 
 } // namespace rapidflow_apx

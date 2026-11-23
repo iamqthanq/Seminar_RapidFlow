@@ -1,6 +1,7 @@
 #include "rapidflow_apx/transaction_manager.h"
 #include "rapidflow_apx/engine_counters.h"
 #include <new>
+#include <chrono>
 
 namespace rapidflow_apx {
 
@@ -69,7 +70,7 @@ StepResult ApxTransactionManager::execute_update(
     auto abort_and_rollback = [&](StepStatus status, const std::string& err) -> StepResult {
         // Run rollback BEFORE creating/returning error payload
         tx_scope.rollback_if_needed();
-        return {status, err, {}};
+        return {status, err, {}, 0, 0};
     };
 
     // 2. Prevalidation: Vertex existence & endpoints
@@ -119,6 +120,7 @@ StepResult ApxTransactionManager::execute_update(
 
     // 3. Snapshot Sequencing:
     // INSERT sees G_after -> apply mutation before search callback
+    uint64_t update_time_ns = 0;
     if (update.op == UpdateOp::INSERT) {
         if (fault_point_ == FaultPoint::ALLOCATION_FAILURE_MUTATION) {
             try {
@@ -131,7 +133,14 @@ StepResult ApxTransactionManager::execute_update(
         bool sim_rev_fail = (fault_point_ == FaultPoint::BETWEEN_FORWARD_REVERSE_MUTATION);
         bool applied = false;
         try {
-            applied = graph_.apply_insert(dense_u, dense_v, dense_label, sim_rev_fail);
+            if (profiling_enabled_) {
+                auto t0 = std::chrono::steady_clock::now();
+                applied = graph_.apply_insert(dense_u, dense_v, dense_label, sim_rev_fail);
+                auto t1 = std::chrono::steady_clock::now();
+                update_time_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
+            } else {
+                applied = graph_.apply_insert(dense_u, dense_v, dense_label, sim_rev_fail);
+            }
         } catch (const std::exception& ex) {
             return abort_and_rollback(StepStatus::FAULT_INJECTED, std::string("Insert mutation exception: ") + ex.what());
         }
@@ -189,7 +198,14 @@ StepResult ApxTransactionManager::execute_update(
 
         bool applied = false;
         try {
-            applied = graph_.apply_delete(dense_u, dense_v, dense_label);
+            if (profiling_enabled_) {
+                auto t0 = std::chrono::steady_clock::now();
+                applied = graph_.apply_delete(dense_u, dense_v, dense_label);
+                auto t1 = std::chrono::steady_clock::now();
+                update_time_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
+            } else {
+                applied = graph_.apply_delete(dense_u, dense_v, dense_label);
+            }
         } catch (const std::exception& ex) {
             return abort_and_rollback(StepStatus::FAULT_INJECTED, std::string("Delete mutation exception: ") + ex.what());
         }
@@ -206,8 +222,17 @@ StepResult ApxTransactionManager::execute_update(
 
     // 6. Commit and publish
     tx_scope.commit();
-    auto published_tuples = sink_.commit_step();
-    return {StepStatus::SUCCESS, "", std::move(published_tuples)};
+    uint64_t sink_time_ns = 0;
+    std::vector<std::vector<int64_t>> published_tuples;
+    if (profiling_enabled_) {
+        auto t0 = std::chrono::steady_clock::now();
+        published_tuples = sink_.commit_step();
+        auto t1 = std::chrono::steady_clock::now();
+        sink_time_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
+    } else {
+        published_tuples = sink_.commit_step();
+    }
+    return {StepStatus::SUCCESS, "", std::move(published_tuples), update_time_ns, sink_time_ns};
 }
 
 } // namespace rapidflow_apx

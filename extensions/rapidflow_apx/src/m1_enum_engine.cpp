@@ -10,7 +10,8 @@ uint64_t ApxM1EnumEngine::search_event(
     uint32_t v_upd,
     uint32_t label_upd,
     ApxTupleSink& sink,
-    EngineCounters& counters
+    EngineCounters& counters,
+    StepProfiling* profiler
 ) {
     uint32_t num_q = query_plan.get_vertices_count();
     uint32_t num_d = snapshot.get_vertices_count();
@@ -62,7 +63,8 @@ uint64_t ApxM1EnumEngine::search_event(
                     query_plan,
                     snapshot,
                     sink,
-                    counters
+                    counters,
+                    profiler
                 );
 
                 used_data[pa] = false;
@@ -84,7 +86,8 @@ void ApxM1EnumEngine::match_variant_dfs(
     const ApxQueryPlan& query_plan,
     const ApxAuthoritativeGraph& snapshot,
     ApxTupleSink& sink,
-    EngineCounters& counters
+    EngineCounters& counters,
+    StepProfiling* profiler
 ) {
     counters.dfs_states++;
     if (idx == variant.search_order.size()) {
@@ -132,7 +135,16 @@ void ApxM1EnumEngine::match_variant_dfs(
     uint32_t lbl1 = mapped_nbrs[0].second;
     uint32_t p1_data = mapping[p1_q];
 
-    const auto& candidates = snapshot.get_neighbors(p1_data);
+    std::vector<uint32_t> cand_storage;
+    if (profiler) {
+        auto t0 = ProfilingClock::now();
+        cand_storage = snapshot.get_neighbors(p1_data);
+        auto t1 = ProfilingClock::now();
+        profiler->neighbor_retrieval_ns += std::chrono::duration_cast<ProfilingNanoseconds>(t1 - t0).count();
+    } else {
+        cand_storage = snapshot.get_neighbors(p1_data);
+    }
+    const auto& candidates = cand_storage;
     for (uint32_t cand : candidates) {
         counters.candidate_evaluations++;
         counters.charge_work();
@@ -183,7 +195,8 @@ void ApxM1EnumEngine::match_variant_dfs(
             query_plan,
             snapshot,
             sink,
-            counters
+            counters,
+            profiler
         );
 
         // Backtrack

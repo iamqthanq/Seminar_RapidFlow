@@ -91,6 +91,12 @@ StreamStepResult ApxStreamingEngine::execute_step(const UpdateOperation& update,
         is_relevant = query_plan_.is_relevant_edge_label(dense_lbl);
     }
 
+    StepProfiling step_prof;
+    ProfilingTimePoint step_t0;
+    if (profiling_enabled_) {
+        step_t0 = ProfilingClock::now();
+    }
+
     SearchCallback callback = [&](
         const ApxAuthoritativeGraph& snapshot,
         const UpdateOperation&,
@@ -103,10 +109,24 @@ StreamStepResult ApxStreamingEngine::execute_step(const UpdateOperation& update,
         }
 
         try {
+            StepProfiling* prof_ptr = profiling_enabled_ ? &step_prof : nullptr;
+            ProfilingTimePoint search_t0;
+            if (profiling_enabled_) {
+                search_t0 = ProfilingClock::now();
+            }
             if (engine_type_ == EngineType::M1) {
-                m1_engine_.search_event(query_plan_, snapshot, du, dv, dlbl, sink_, step_counters_);
+                m1_engine_.search_event(query_plan_, snapshot, du, dv, dlbl, sink_, step_counters_, prof_ptr);
             } else {
-                m2_engine_.search_event(query_plan_, snapshot, du, dv, dlbl, sink_, step_counters_);
+                m2_engine_.search_event(query_plan_, snapshot, du, dv, dlbl, sink_, step_counters_, prof_ptr);
+            }
+            if (profiling_enabled_) {
+                auto search_t1 = ProfilingClock::now();
+                step_prof.search_ns = std::chrono::duration_cast<ProfilingNanoseconds>(search_t1 - search_t0).count();
+                if (step_prof.search_ns >= step_prof.neighbor_retrieval_ns) {
+                    step_prof.search_core_ns = step_prof.search_ns - step_prof.neighbor_retrieval_ns;
+                } else {
+                    step_prof.search_core_ns = 0;
+                }
             }
         } catch (const EngineException& e) {
             // Re-throw to trigger transaction abort
@@ -121,6 +141,15 @@ StreamStepResult ApxStreamingEngine::execute_step(const UpdateOperation& update,
     uint64_t disc_before = sink_.discarded_emissions();
 
     StepResult step_res = tx_manager_.execute_update(update, callback);
+
+    if (profiling_enabled_) {
+        auto step_t1 = ProfilingClock::now();
+        step_prof.step_total_ns = std::chrono::duration_cast<ProfilingNanoseconds>(step_t1 - step_t0).count();
+        step_prof.update_maintenance_ns = step_res.update_maintenance_ns;
+        step_prof.tuple_sink_ns = step_res.tuple_sink_ns;
+        res.step_profiling = step_prof;
+        cumulative_profiling_.accumulate(step_prof);
+    }
 
     step_counters_.raw_emissions = sink_.raw_emissions() - raw_before;
     step_counters_.unique_emissions = sink_.unique_emissions() - uniq_before;

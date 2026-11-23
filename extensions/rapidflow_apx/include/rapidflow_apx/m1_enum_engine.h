@@ -7,6 +7,7 @@
 #include "rapidflow_apx/authoritative_graph.h"
 #include "rapidflow_apx/tuple_sink.h"
 #include "rapidflow_apx/engine_counters.h"
+#include "rapidflow_apx/profiler.h"
 
 namespace rapidflow_apx {
 
@@ -25,7 +26,8 @@ public:
         uint32_t v_upd,
         uint32_t label_upd,
         ApxTupleSink& sink,
-        EngineCounters& counters
+        EngineCounters& counters,
+        StepProfiling* profiler = nullptr
     );
 
 private:
@@ -37,7 +39,8 @@ private:
         const ApxQueryPlan& query_plan,
         const ApxAuthoritativeGraph& snapshot,
         ApxTupleSink& sink,
-        EngineCounters& counters
+        EngineCounters& counters,
+        StepProfiling* profiler = nullptr
     );
 };
 
