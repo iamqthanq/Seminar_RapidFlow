@@ -48,12 +48,13 @@ def verify_observer_output_invariance(
     out_on: Dict[str, Any],
 ) -> Tuple[bool, str]:
     """
-    Verifies full functional and algorithmic counter invariance between PROFILE_OFF and PROFILE_ON (R3-F04).
+    Verifies full functional and algorithmic counter invariance between PROFILE_OFF and PROFILE_ON (R3-F04, R4-F05).
     Checks:
-    1. Step count equality.
-    2. Step-by-step raw duplicate rejection.
-    3. Step-by-step set equality of entered_tuples and exited_tuples preserving tuple coordinate ordering [v0, v1, ...].
-    4. Exact equality of all 6 algorithmic counters:
+    1. Output dictionary structure and non-emptiness.
+    2. Step count equality.
+    3. Step-by-step schema validation and raw duplicate rejection.
+    4. Step-by-step set equality of entered_tuples and exited_tuples preserving tuple coordinate ordering [v0, v1, ...].
+    5. Exact presence and equality of all 6 non-negative integer algorithmic counters:
        - candidate_evaluations
        - committed_emissions
        - dfs_states
@@ -62,15 +63,41 @@ def verify_observer_output_invariance(
        - vertex_label_checks
     Returns (is_valid, diagnostic_message).
     """
-    steps_off = out_off.get("steps", [])
-    steps_on = out_on.get("steps", [])
+    if not isinstance(out_off, dict) or not isinstance(out_on, dict):
+        return False, "Output payloads must be dictionaries"
+    if not out_off or not out_on:
+        return False, "Output payloads must not be empty"
+
+    if "steps" not in out_off or "steps" not in out_on:
+        return False, "Missing 'steps' field in output data"
+    if not isinstance(out_off["steps"], list) or not isinstance(out_on["steps"], list):
+        return False, "'steps' field must be a list"
+
+    if "counters" not in out_off or "counters" not in out_on:
+        return False, "Missing 'counters' field in output data"
+    if not isinstance(out_off["counters"], dict) or not isinstance(out_on["counters"], dict):
+        return False, "'counters' field must be a dict"
+
+    steps_off = out_off["steps"]
+    steps_on = out_on["steps"]
     if len(steps_off) != len(steps_on):
         return False, f"Step count mismatch: OFF has {len(steps_off)} steps vs ON has {len(steps_on)} steps"
 
     for s_idx, (s_off, s_on) in enumerate(zip(steps_off, steps_on)):
+        if not isinstance(s_off, dict) or not isinstance(s_on, dict):
+            return False, f"Step {s_idx} must be a dict"
+        if "entered_tuples" not in s_off or "entered_tuples" not in s_on:
+            return False, f"Step {s_idx} missing 'entered_tuples'"
+        if "exited_tuples" not in s_off or "exited_tuples" not in s_on:
+            return False, f"Step {s_idx} missing 'exited_tuples'"
+        if not isinstance(s_off["entered_tuples"], list) or not isinstance(s_on["entered_tuples"], list):
+            return False, f"Step {s_idx} 'entered_tuples' must be a list"
+        if not isinstance(s_off["exited_tuples"], list) or not isinstance(s_on["exited_tuples"], list):
+            return False, f"Step {s_idx} 'exited_tuples' must be a list"
+
         # Check raw duplicates
-        raw_ent_off = s_off.get("entered_tuples", [])
-        raw_ent_on = s_on.get("entered_tuples", [])
+        raw_ent_off = s_off["entered_tuples"]
+        raw_ent_on = s_on["entered_tuples"]
         uniq_ent_off = [list(t) for t in dict.fromkeys(tuple(x) for x in raw_ent_off)]
         uniq_ent_on = [list(t) for t in dict.fromkeys(tuple(x) for x in raw_ent_on)]
         if len(raw_ent_off) != len(uniq_ent_off):
@@ -78,8 +105,8 @@ def verify_observer_output_invariance(
         if len(raw_ent_on) != len(uniq_ent_on):
             return False, f"Step {s_idx} contains duplicate entered tuples in PROFILE_ON"
 
-        raw_ext_off = s_off.get("exited_tuples", [])
-        raw_ext_on = s_on.get("exited_tuples", [])
+        raw_ext_off = s_off["exited_tuples"]
+        raw_ext_on = s_on["exited_tuples"]
         uniq_ext_off = [list(t) for t in dict.fromkeys(tuple(x) for x in raw_ext_off)]
         uniq_ext_on = [list(t) for t in dict.fromkeys(tuple(x) for x in raw_ext_on)]
         if len(raw_ext_off) != len(uniq_ext_off):
@@ -94,8 +121,8 @@ def verify_observer_output_invariance(
             return False, f"Step {s_idx} exited tuples mismatch between PROFILE_OFF and PROFILE_ON"
 
     # Compare algorithmic counters
-    cnt_off = out_off.get("counters", {})
-    cnt_on = out_on.get("counters", {})
+    cnt_off = out_off["counters"]
+    cnt_on = out_on["counters"]
     monitored_counters = [
         "candidate_evaluations",
         "committed_emissions",
@@ -105,8 +132,16 @@ def verify_observer_output_invariance(
         "vertex_label_checks",
     ]
     for c_name in monitored_counters:
-        v_off = cnt_off.get(c_name)
-        v_on = cnt_on.get(c_name)
+        if c_name not in cnt_off:
+            return False, f"Missing monitored counter '{c_name}' in PROFILE_OFF output"
+        if c_name not in cnt_on:
+            return False, f"Missing monitored counter '{c_name}' in PROFILE_ON output"
+        v_off = cnt_off[c_name]
+        v_on = cnt_on[c_name]
+        if type(v_off) is not int or isinstance(v_off, bool) or v_off < 0:
+            return False, f"Invalid counter value for '{c_name}' in PROFILE_OFF: {v_off}"
+        if type(v_on) is not int or isinstance(v_on, bool) or v_on < 0:
+            return False, f"Invalid counter value for '{c_name}' in PROFILE_ON: {v_on}"
         if v_off != v_on:
             return False, f"Counter mismatch for '{c_name}': OFF={v_off} vs ON={v_on}"
 

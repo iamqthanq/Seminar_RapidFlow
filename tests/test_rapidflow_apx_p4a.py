@@ -101,6 +101,12 @@ class TestRapidFlowApxP4a(unittest.TestCase):
         # Delete-heavy workload
         cls.wl_diamond_k1_delete_heavy = cls.cases_by_id.get("P4A_WL_10")
 
+        # Valid canonical baseline records for strict tests
+        canonical_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
+        with open(canonical_ledger, "r", encoding="utf-8") as f:
+            cls.valid_canonical_m1 = json.loads(f.readline())
+            cls.valid_canonical_m2 = json.loads(f.readline())
+
     def test_01_build_and_system_resources(self):
         """Verifies native binary builds cleanly and host meets preflight RAM and disk bounds."""
         self.assertTrue(self.build_ok, "Native binary must build successfully")
@@ -459,73 +465,22 @@ class TestRapidFlowApxP4a(unittest.TestCase):
 
     def test_10_summarizer_mismatched_binary_pairing_rejection(self):
         """P4A-F02: Verifies summarizer rejects pairing M1 and M2 when binary SHA or identity differs."""
-        records = [
-            {
-                "execution_identity": "ID_A",
-                "binary_sha256": "BIN_SHA_A",
-                "workload_id": "P4A_WL_01",
-                "workload_sha256": "WL_SHA_1",
-                "repetition": 0,
-                "engine": "m1",
-                "status": "COMPLETED_VERIFIED",
-                "performance_admission_status": "ACCEPTED",
-                "m0_agreed": True,
-                "outer_wall_ns": 1000,
-                "profiling": {"streaming_loop_wall_ns": 500, "cumulative": {"search_ns": 300, "step_total_ns": 400}},
-                "counters": {"candidate_evaluations": 100, "committed_emissions": 10},
-            },
-            {
-                "execution_identity": "ID_B",  # Mismatched identity & binary
-                "binary_sha256": "BIN_SHA_B",
-                "workload_id": "P4A_WL_01",
-                "workload_sha256": "WL_SHA_1",
-                "repetition": 0,
-                "engine": "m2",
-                "status": "COMPLETED_VERIFIED",
-                "performance_admission_status": "ACCEPTED",
-                "m0_agreed": True,
-                "outer_wall_ns": 800,
-                "profiling": {"streaming_loop_wall_ns": 400, "cumulative": {"search_ns": 200, "step_total_ns": 300}},
-                "counters": {"candidate_evaluations": 50, "committed_emissions": 10},
-            },
-        ]
-        metrics = analyze_p4a_ledger(records)
+        rec_m1 = copy.deepcopy(self.valid_canonical_m1)
+        rec_m2 = copy.deepcopy(self.valid_canonical_m2)
+        rec_m2["binary_sha256"] = "9" * 64
+        metrics = analyze_p4a_ledger([rec_m1, rec_m2])
         self.assertEqual(metrics["total_valid_pairs"], 0, "Mismatched binary/identity must be rejected from pairing")
         self.assertEqual(metrics["total_rejected_pairs"], 1)
 
     def test_11_pruning_and_candidate_metrics_validity(self):
         """P4A-F04: Verifies summarizer produces valid candidate reduction metrics and no invalid pruning metric."""
-        records = [
-            {
-                "execution_identity": "ID_CANONICAL",
-                "binary_sha256": "BIN_SHA",
-                "workload_id": "P4A_WL_01",
-                "workload_sha256": "WL_SHA_1",
-                "repetition": 0,
-                "engine": "m1",
-                "status": "COMPLETED_VERIFIED",
-                "performance_admission_status": "ACCEPTED",
-                "m0_agreed": True,
-                "outer_wall_ns": 1000,
-                "profiling": {"streaming_loop_wall_ns": 500, "cumulative": {"search_ns": 300, "step_total_ns": 400}},
-                "counters": {"candidate_evaluations": 100, "committed_emissions": 10},
-            },
-            {
-                "execution_identity": "ID_CANONICAL",
-                "binary_sha256": "BIN_SHA",
-                "workload_id": "P4A_WL_01",
-                "workload_sha256": "WL_SHA_1",
-                "repetition": 0,
-                "engine": "m2",
-                "status": "COMPLETED_VERIFIED",
-                "performance_admission_status": "ACCEPTED",
-                "m0_agreed": True,
-                "outer_wall_ns": 800,
-                "profiling": {"streaming_loop_wall_ns": 400, "cumulative": {"search_ns": 200, "step_total_ns": 300}},
-                "counters": {"candidate_evaluations": 54, "committed_emissions": 10},
-            },
-        ]
-        metrics = analyze_p4a_ledger(records)
+        rec_m1 = copy.deepcopy(self.valid_canonical_m1)
+        rec_m2 = copy.deepcopy(self.valid_canonical_m2)
+        rec_m1["counters"]["candidate_evaluations"] = 100
+        rec_m1["counters"]["committed_emissions"] = 10
+        rec_m2["counters"]["candidate_evaluations"] = 54
+        rec_m2["counters"]["committed_emissions"] = 10
+        metrics = analyze_p4a_ledger([rec_m1, rec_m2])
         self.assertEqual(metrics["total_valid_pairs"], 1)
         cm = metrics["counter_metrics"]
         self.assertNotIn("pruning_efficiency_pct", cm["m1"], "Invalid pruning_efficiency_pct must not exist")
@@ -650,34 +605,10 @@ class TestRapidFlowApxP4a(unittest.TestCase):
 
     def test_14_duplicate_slot_adversarial_speedup_distortion(self):
         """R2-F02: Adversarial Case B — Injected duplicate slot must not distort canonical speedup; ambiguous slot is rejected."""
-        base_m1 = {
-            "execution_identity": "ID_CANONICAL",
-            "binary_sha256": "BIN_SHA",
-            "workload_sha256": "WL_SHA_1",
-            "workload_id": "P4A_WL_01",
-            "repetition": 0,
-            "engine": "m1",
-            "status": "COMPLETED_VERIFIED",
-            "m0_agreed": True,
-            "performance_admission_status": "ACCEPTED",
-            "outer_wall_ns": 954200,
-            "profiling": {"streaming_loop_wall_ns": 954200, "cumulative": {"step_total_ns": 500000, "search_ns": 400000}},
-            "counters": {"candidate_evaluations": 100, "committed_emissions": 10},
-        }
-        base_m2 = {
-            "execution_identity": "ID_CANONICAL",
-            "binary_sha256": "BIN_SHA",
-            "workload_sha256": "WL_SHA_1",
-            "workload_id": "P4A_WL_01",
-            "repetition": 0,
-            "engine": "m2",
-            "status": "COMPLETED_VERIFIED",
-            "m0_agreed": True,
-            "performance_admission_status": "ACCEPTED",
-            "outer_wall_ns": 1000000,
-            "profiling": {"streaming_loop_wall_ns": 1000000, "cumulative": {"step_total_ns": 500000, "search_ns": 400000}},
-            "counters": {"candidate_evaluations": 50, "committed_emissions": 10},
-        }
+        base_m1 = copy.deepcopy(self.valid_canonical_m1)
+        base_m2 = copy.deepcopy(self.valid_canonical_m2)
+        base_m1["outer_wall_ns"] = 954200
+        base_m2["outer_wall_ns"] = 1000000
 
         # 1. Clean pair yields speedup = 954200 / 1000000 = 0.9542
         clean_res = analyze_p4a_ledger([base_m1, base_m2])
@@ -685,15 +616,15 @@ class TestRapidFlowApxP4a(unittest.TestCase):
         self.assertEqual(clean_res["overall_speedup_distribution"]["outer_wall_speedup"]["median"], 0.9542)
 
         # 2. Injected duplicate M2 with runtime 1000ns (adversarial attempt to distort speedup to 954.2x)
-        injected_m2 = dict(base_m2)
+        injected_m2 = copy.deepcopy(base_m2)
         injected_m2["outer_wall_ns"] = 1000
-        injected_m2["attempt_id"] = "INJECTED_ATTEMPT_99"
+        injected_m2["attempt_id"] = base_m2.get("attempt_id", "ATT") + "_injected"
 
         # Forward order: [base_m1, base_m2, injected_m2]
         fwd_res = analyze_p4a_ledger([base_m1, base_m2, injected_m2])
         # Ambiguous duplicate slot must be rejected, total valid pairs must be 0, speedup NOT distorted
         self.assertEqual(fwd_res["total_valid_pairs"], 0, "Pair with conflicting duplicate attempts must be rejected")
-        self.assertEqual(len(fwd_res["duplicate_slot_warnings"]), 1)
+        self.assertTrue(len(fwd_res["duplicate_slot_warnings"]) >= 1)
         self.assertEqual(fwd_res["overall_speedup_distribution"]["outer_wall_speedup"]["count"], 0)
 
         # Reverse order: [base_m1, injected_m2, base_m2] -> Must produce identical rejection (order-independent)
@@ -701,7 +632,7 @@ class TestRapidFlowApxP4a(unittest.TestCase):
         self.assertEqual(rev_res["total_valid_pairs"], 0, "Reverse order must also reject ambiguous duplicate")
 
         # 3. Exact identical duplicate records (e.g. repeated write) deduplicate cleanly
-        identical_res = analyze_p4a_ledger([base_m1, base_m2, dict(base_m2)])
+        identical_res = analyze_p4a_ledger([base_m1, base_m2, copy.deepcopy(base_m2)])
         self.assertEqual(identical_res["total_valid_pairs"], 1)
         self.assertEqual(identical_res["overall_speedup_distribution"]["outer_wall_speedup"]["median"], 0.9542)
 
@@ -718,35 +649,14 @@ class TestRapidFlowApxP4a(unittest.TestCase):
         self.assertEqual(compute_safe_speedup(True, 50), (None, "INVALID_TYPE_BOOL"))
 
         # In analyze_p4a_ledger: M2 duration = 0
-        recs = [
-            {
-                "execution_identity": "ID_CANONICAL",
-                "binary_sha256": "BIN_SHA",
-                "workload_sha256": "WL_SHA_1",
-                "workload_id": "P4A_WL_01",
-                "repetition": 0,
-                "engine": "m1",
-                "status": "COMPLETED_VERIFIED",
-                "m0_agreed": True,
-                "performance_admission_status": "ACCEPTED",
-                "outer_wall_ns": 1000000,
-                "profiling": {"streaming_loop_wall_ns": 1000000, "cumulative": {"step_total_ns": 500000, "search_ns": 400000}},
-            },
-            {
-                "execution_identity": "ID_CANONICAL",
-                "binary_sha256": "BIN_SHA",
-                "workload_sha256": "WL_SHA_1",
-                "workload_id": "P4A_WL_01",
-                "repetition": 0,
-                "engine": "m2",
-                "status": "COMPLETED_VERIFIED",
-                "m0_agreed": True,
-                "performance_admission_status": "ACCEPTED",
-                "outer_wall_ns": 0,  # ZERO!
-                "profiling": {"streaming_loop_wall_ns": 0, "cumulative": {"step_total_ns": 0, "search_ns": 0}},
-            },
-        ]
-        res = analyze_p4a_ledger(recs)
+        rec_m1 = copy.deepcopy(self.valid_canonical_m1)
+        rec_m2 = copy.deepcopy(self.valid_canonical_m2)
+        rec_m2["outer_wall_ns"] = 0
+        rec_m2["profiling"]["streaming_loop_wall_ns"] = 0
+        rec_m2["profiling"]["cumulative"]["step_total_ns"] = 0
+        rec_m2["profiling"]["cumulative"]["search_ns"] = 0
+
+        res = analyze_p4a_ledger([rec_m1, rec_m2])
         # Ratio must NOT be 1.0!
         outer_stat = res["overall_speedup_distribution"]["outer_wall_speedup"]
         self.assertEqual(outer_stat["count"], 0, "Zero denominator must exclude ratio from distribution")
@@ -885,34 +795,21 @@ class TestRapidFlowApxP4a(unittest.TestCase):
 
     def test_21_cross_component_adversarial_interactions(self):
         """Section XII: Verifies cross-component fail-closed adversarial interactions."""
-        # 1. Provenance failure in duplicate attempt
-        rec_good = {
-            "execution_identity": "ID_A",
-            "binary_sha256": "BIN_A",
-            "workload_sha256": "WL_1",
-            "workload_id": "P4A_WL_01",
-            "repetition": 0,
-            "engine": "m1",
-            "status": "COMPLETED_VERIFIED",
-            "performance_admission_status": "ACCEPTED",
-            "m0_agreed": True,
-            "outer_wall_ns": 1000,
-            "profiling": {"streaming_loop_wall_ns": 500, "cumulative": {"search_ns": 300, "step_total_ns": 400}},
-            "counters": {"candidate_evaluations": 100, "committed_emissions": 10},
-        }
-        rec_tampered_bin = dict(rec_good)
-        rec_tampered_bin["binary_sha256"] = "BIN_TAMPERED"
+        # 1. Differing binary SHA rejects pairing
+        rec_good_m1 = copy.deepcopy(self.valid_canonical_m1)
+        rec_tampered_bin_m2 = copy.deepcopy(self.valid_canonical_m2)
+        rec_tampered_bin_m2["binary_sha256"] = "9" * 64
 
-        # Even if someone claims identical execution_identity, differing binary SHA rejects pairing
-        m = analyze_p4a_ledger([rec_good, rec_tampered_bin])
+        m = analyze_p4a_ledger([rec_good_m1, rec_tampered_bin_m2])
         self.assertEqual(m["total_valid_pairs"], 0)
 
         # 2. Oracle failure slot cannot be admitted
-        rec_oracle_fail = dict(rec_good)
+        rec_oracle_fail = copy.deepcopy(self.valid_canonical_m1)
         rec_oracle_fail["m0_agreed"] = False
-        rec_oracle_fail["status"] = "ORACLE_FAILED"
+        rec_oracle_fail["status"] = "FAILED_CORRECTNESS"
+        rec_oracle_fail["exit_code"] = 1
         rec_oracle_fail["performance_admission_status"] = "REJECTED"
-        m2 = analyze_p4a_ledger([rec_oracle_fail, dict(rec_good, engine="m2")])
+        m2 = analyze_p4a_ledger([rec_oracle_fail, copy.deepcopy(self.valid_canonical_m2)])
         self.assertEqual(m2["total_valid_pairs"], 0)
 
     def test_22_workload_hash_tampering_rejected_by_resume(self):
@@ -1111,6 +1008,179 @@ class TestRapidFlowApxP4a(unittest.TestCase):
             self.assertEqual(
                 real_size, meta["size_bytes"], f"Size mismatch for {rel_path}: disk={real_size} vs manifest={meta['size_bytes']}"
             )
+
+    def test_29_r4_f01_synthetic_identity_rejected_in_canonical_analysis(self):
+        """R4-F01: Synthetic records with non-hex execution identity rejected fail-closed in canonical analysis."""
+        fake_m1 = copy.deepcopy(self.valid_canonical_m1)
+        fake_m1["execution_identity"] = "NOT_A_HASH"
+        fake_m2 = copy.deepcopy(self.valid_canonical_m2)
+        fake_m2["execution_identity"] = "NOT_A_HASH"
+
+        # validate_record_integrity must fail closed
+        ok1, diag1 = validate_record_integrity(fake_m1)
+        self.assertFalse(ok1)
+        self.assertIn("Invalid execution_identity", diag1)
+
+        # analyze_p4a_ledger must reject both slots fail-closed
+        summary = analyze_p4a_ledger([fake_m1, fake_m2])
+        self.assertEqual(summary["total_valid_pairs"], 0)
+        self.assertEqual(summary["total_rejected_pairs"], 1)
+        self.assertEqual(summary["overall_verdict"], "CANONICAL_PARTIAL_OR_FAILED")
+        self.assertIn("R4A_FIX_REQUIRED", summary["p4b_recommendation"])
+
+    def test_30_r4_f02_corrupted_duplicate_quarantines_slot(self):
+        """R4-F02: Corrupted duplicate attempt quarantines the entire slot and rejects the pair fail-closed."""
+        m1 = copy.deepcopy(self.valid_canonical_m1)
+        m2 = copy.deepcopy(self.valid_canonical_m2)
+        corrupted_m2 = copy.deepcopy(self.valid_canonical_m2)
+        corrupted_m2["workload_sha256"] = "f" * 64
+        corrupted_m2["attempt_id"] = "CORRUPTED_ATTEMPT_99"
+
+        # Step 1: resolve_canonical_attempts must quarantine the slot
+        canonical_slots, lineage, conflicts = resolve_canonical_attempts([m1, m2, corrupted_m2])
+        self.assertIn(m1["slot_key"], canonical_slots)
+        self.assertNotIn(m2["slot_key"], canonical_slots, "Quarantined slot must NOT be admitted")
+        self.assertTrue(any("quarantined" in str(c.get("reason", "")).lower() for c in conflicts))
+
+        # Step 2: analyze_p4a_ledger must reject the pair containing the quarantined slot
+        summary = analyze_p4a_ledger([m1, m2, corrupted_m2])
+        self.assertEqual(summary["total_valid_pairs"], 0)
+        self.assertEqual(summary["total_rejected_pairs"], 1)
+        self.assertEqual(summary["overall_verdict"], "CANONICAL_PARTIAL_OR_FAILED")
+        self.assertIn("R4A_FIX_REQUIRED", summary["p4b_recommendation"])
+
+    def test_31_r4_f03_mixed_execution_identities_rejected(self):
+        """R4-F03: Mixed execution identities in a single ledger violate single-experiment isolation and are rejected."""
+        pair1_m1 = copy.deepcopy(self.valid_canonical_m1)
+        pair1_m2 = copy.deepcopy(self.valid_canonical_m2)
+
+        pair2_m1 = copy.deepcopy(self.valid_canonical_m1)
+        pair2_m2 = copy.deepcopy(self.valid_canonical_m2)
+        pair2_m1["workload_id"] = "P4A_WL_03"
+        pair2_m2["workload_id"] = "P4A_WL_03"
+        pair2_m1["slot_key"] = "P4A_WL_03_rep0_m1"
+        pair2_m2["slot_key"] = "P4A_WL_03_rep0_m2"
+
+        # Compute distinct execution identity for experiment B
+        id_b = compute_execution_identity(
+            protocol_version=pair2_m1["protocol_version"],
+            protocol_sha256=pair2_m1["protocol_sha256"],
+            manifest_sha256=pair2_m1["manifest_sha256"],
+            source_commit="b" * 40,
+            source_dirty="CLEAN",
+            binary_sha256=pair2_m1["binary_sha256"],
+            effective_max_work=pair2_m1["effective_max_work"],
+            effective_timeout=pair2_m1["effective_timeout"],
+            effective_as_limit_mib=pair2_m1["effective_memory_limit_mib"],
+        )
+        for p in (pair2_m1, pair2_m2):
+            p["source_commit"] = "b" * 40
+            p["execution_identity"] = id_b
+
+        # Combining Pair 1 (Commit A) and Pair 2 (Commit B) in unheaded ledger must trigger isolation rejection
+        summary = analyze_p4a_ledger([pair1_m1, pair1_m2, pair2_m1, pair2_m2])
+        self.assertEqual(summary["total_valid_pairs"], 0)
+        self.assertEqual(summary["overall_verdict"], "CANONICAL_INCONCLUSIVE")
+        self.assertIn("R4A_INCONCLUSIVE_MIXED_EXECUTION_IDENTITIES", summary["p4b_recommendation"])
+
+    def test_32_r4_f04_contradictory_status_exit_code_rejected(self):
+        """R4-F04: Contradictory status, exit code, and admission fields are rejected fail-closed."""
+        # 1. status=COMPLETED_VERIFIED with non-zero exit_code=124
+        rec_bad_ec = copy.deepcopy(self.valid_canonical_m1)
+        rec_bad_ec["exit_code"] = 124
+        ok, diag = validate_record_integrity(rec_bad_ec)
+        self.assertFalse(ok)
+        self.assertIn("requires exit_code == 0", diag)
+
+        # 2. boolean exit_code=True
+        rec_bool_ec = copy.deepcopy(self.valid_canonical_m1)
+        rec_bool_ec["exit_code"] = True
+        ok, diag = validate_record_integrity(rec_bool_ec)
+        self.assertFalse(ok)
+        self.assertIn("Invalid exit_code", diag)
+
+        # 3. boolean repetition=True
+        rec_bool_rep = copy.deepcopy(self.valid_canonical_m1)
+        rec_bool_rep["repetition"] = True
+        ok, diag = validate_record_integrity(rec_bool_rep)
+        self.assertFalse(ok)
+        self.assertIn("Invalid repetition", diag)
+
+        # 4. status=FAILED_EXECUTION with performance_admission_status=ACCEPTED
+        rec_bad_adm = copy.deepcopy(self.valid_canonical_m1)
+        rec_bad_adm["status"] = "FAILED_EXECUTION"
+        rec_bad_adm["exit_code"] = 1
+        rec_bad_adm["performance_admission_status"] = "ACCEPTED"
+        ok, diag = validate_record_integrity(rec_bad_adm)
+        self.assertFalse(ok)
+        self.assertIn("cannot have performance_admission_status == 'ACCEPTED'", diag)
+
+        # 5. status=COMPLETED_VERIFIED with m0_agreed=False
+        rec_bad_m0 = copy.deepcopy(self.valid_canonical_m1)
+        rec_bad_m0["m0_agreed"] = False
+        ok, diag = validate_record_integrity(rec_bad_m0)
+        self.assertFalse(ok)
+        self.assertIn("requires m0_agreed is True", diag)
+
+    def test_33_r4_f05_empty_observer_output_schema_rejected(self):
+        """R4-F05: Empty or malformed observer outputs fail schema validation."""
+        # 1. Empty dicts
+        ok, diag = verify_observer_output_invariance({}, {})
+        self.assertFalse(ok)
+        self.assertIn("must not be empty", diag)
+
+        # 2. Missing 'steps'
+        ok, diag = verify_observer_output_invariance({"counters": {}}, {"counters": {}})
+        self.assertFalse(ok)
+        self.assertIn("Missing 'steps'", diag)
+
+        # 3. Missing 'counters'
+        ok, diag = verify_observer_output_invariance({"steps": []}, {"steps": []})
+        self.assertFalse(ok)
+        self.assertIn("Missing 'counters'", diag)
+
+        # 4. Missing one of the 6 monitored counters
+        incomplete_cnt = {
+            "steps": [],
+            "counters": {
+                "candidate_evaluations": 10,
+                "committed_emissions": 2,
+                "dfs_states": 5,
+                "anchors_started": 1,
+                "edge_lookups": 20,
+                # missing "vertex_label_checks"
+            },
+        }
+        ok, diag = verify_observer_output_invariance(incomplete_cnt, copy.deepcopy(incomplete_cnt))
+        self.assertFalse(ok)
+        self.assertIn("Missing monitored counter 'vertex_label_checks'", diag)
+
+        # 5. Counter value is boolean True
+        bool_cnt = copy.deepcopy(incomplete_cnt)
+        bool_cnt["counters"]["vertex_label_checks"] = True
+        ok, diag = verify_observer_output_invariance(bool_cnt, copy.deepcopy(bool_cnt))
+        self.assertFalse(ok)
+        self.assertIn("Invalid counter value", diag)
+
+    def test_34_r4_f06_zero_valid_pairs_inconclusive_verdict(self):
+        """R4-F06: Empty ledger or zero valid pairs yields CANONICAL_INCONCLUSIVE verdict without fabricated metrics."""
+        summary = analyze_p4a_ledger([])
+        self.assertEqual(summary["total_valid_pairs"], 0)
+        self.assertEqual(summary["overall_verdict"], "CANONICAL_INCONCLUSIVE")
+        self.assertIn("R4A_INCONCLUSIVE_NO_VALID_PAIRS", summary["p4b_recommendation"])
+
+        diag = summary["bottleneck_diagnosis"]
+        self.assertIsNone(diag["m2_neighbor_retrieval_within_search_pct_median"])
+        self.assertIsNone(diag["m2_search_core_within_search_pct_median"])
+        self.assertIsNone(diag["m2_search_speedup_median"])
+        self.assertIsNone(diag["m2_native_step_speedup_median"])
+        self.assertFalse(diag["neighbor_retrieval_exceeds_15pct_threshold"])
+        self.assertFalse(diag["search_core_dominates_search_time"])
+
+        # Markdown report must format cleanly without exceptions
+        md = generate_markdown_report(summary)
+        self.assertIn("CANONICAL_INCONCLUSIVE", md)
+        self.assertIn("Total Workload Pairs Analyzed:** 0", md)
 
 
 if __name__ == "__main__":

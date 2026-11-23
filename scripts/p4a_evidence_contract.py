@@ -64,6 +64,17 @@ def compute_sha256(file_path: Union[str, Path]) -> str:
     return h.hexdigest()
 
 
+def is_valid_hex64(val: Any) -> bool:
+    """Returns True if val is a 64-character hexadecimal string."""
+    if not isinstance(val, str) or len(val) != 64:
+        return False
+    try:
+        int(val, 16)
+        return True
+    except ValueError:
+        return False
+
+
 def compute_dict_sha256(data: Any) -> str:
     """Computes deterministic SHA-256 of JSON-serializable structure with sorted keys."""
     raw = json.dumps(data, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -187,30 +198,21 @@ def validate_record_integrity(
     record: Dict[str, Any],
     expected_header: Optional[Union[str, Dict[str, Any]]] = None,
     workload_registry: Optional[Dict[str, str]] = None,
-    strict_provenance: Optional[bool] = None,
+    strict_provenance: bool = True,
 ) -> Tuple[bool, str]:
     """
     Validates a single ledger record for structural integrity, field types,
     cryptographic self-consistency, and agreement with the expected experiment configuration.
     Enforces fail-closed rejection on tampered, corrupted, or out-of-bounds metadata.
 
-    If strict_provenance is None, it defaults to True unless expected_header is None
-    and the record appears to be a lightweight synthetic test fixture (execution_identity length != 64).
+    strict_provenance defaults to True. All production pipelines enforce strict cryptographic
+    provenance without exception. Lightweight synthetic validation is only permitted
+    when strict_provenance=False is explicitly specified in isolated test fixtures.
     """
     if not isinstance(record, dict):
         return False, "Record is not a dict"
 
-    # Determine if strict cryptographic provenance check is required
-    is_synthetic = (
-        expected_header is None
-        and (
-            not isinstance(record.get("execution_identity"), str)
-            or len(record.get("execution_identity", "")) != 64
-        )
-    )
-    is_strict = strict_provenance if strict_provenance is not None else (not is_synthetic)
-
-    if not is_strict:
+    if not strict_provenance:
         # Lightweight validation for synthetic unit test fixtures
         synthetic_required = ["execution_identity", "workload_id", "engine", "repetition", "status"]
         for rf in synthetic_required:
@@ -218,7 +220,7 @@ def validate_record_integrity(
                 return False, f"Missing synthetic test field: {rf}"
         if record["engine"] not in ("m1", "m2"):
             return False, f"Invalid engine: {record['engine']}"
-        if not isinstance(record["repetition"], int) or record["repetition"] < 0:
+        if type(record["repetition"]) is not int or isinstance(record["repetition"], bool) or record["repetition"] < 0:
             return False, f"Invalid repetition: {record.get('repetition')}"
         if expected_header is not None:
             if isinstance(expected_header, str) and record["execution_identity"] != expected_header:
@@ -236,15 +238,15 @@ def validate_record_integrity(
             return False, f"Missing required metadata field: {rf}"
 
     # String & hex type validation
-    if not isinstance(record["execution_identity"], str) or len(record["execution_identity"]) != 64:
+    if not is_valid_hex64(record["execution_identity"]):
         return False, "Invalid execution_identity: must be 64-char hex string"
-    if not isinstance(record["protocol_sha256"], str) or len(record["protocol_sha256"]) != 64:
+    if not is_valid_hex64(record["protocol_sha256"]):
         return False, "Invalid protocol_sha256: must be 64-char hex string"
-    if not isinstance(record["manifest_sha256"], str) or len(record["manifest_sha256"]) != 64:
+    if not is_valid_hex64(record["manifest_sha256"]):
         return False, "Invalid manifest_sha256: must be 64-char hex string"
-    if not isinstance(record["binary_sha256"], str) or len(record["binary_sha256"]) != 64:
+    if not is_valid_hex64(record["binary_sha256"]):
         return False, "Invalid binary_sha256: must be 64-char hex string"
-    if not isinstance(record["workload_sha256"], str) or len(record["workload_sha256"]) != 64:
+    if not is_valid_hex64(record["workload_sha256"]):
         return False, "Invalid workload_sha256: must be 64-char hex string"
     if not isinstance(record["source_commit"], str) or not record["source_commit"]:
         return False, "Invalid source_commit: must be non-empty string"
@@ -252,19 +254,63 @@ def validate_record_integrity(
         return False, f"Invalid source_dirty_state: {record['source_dirty_state']}"
     if record["engine"] not in ("m1", "m2"):
         return False, f"Invalid engine: {record['engine']}"
-    if not isinstance(record["repetition"], int) or record["repetition"] < 0 or record["repetition"] > CANONICAL_REPETITIONS_CEILING:
+
+    # Strict integer type checks (rejecting booleans: bool is subclass of int in Python)
+    if type(record["repetition"]) is not int or isinstance(record["repetition"], bool) or record["repetition"] < 0 or record["repetition"] > CANONICAL_REPETITIONS_CEILING:
         return False, f"Invalid repetition: {record.get('repetition')} (must be int in [0, {CANONICAL_REPETITIONS_CEILING}])"
-    if not isinstance(record["exit_code"], int):
+    if type(record["exit_code"]) is not int or isinstance(record["exit_code"], bool):
         return False, "Invalid exit_code: must be int"
+
+    # Cross-field status invariants (R4-F04)
+    st = record.get("status")
+    ec = record.get("exit_code")
+    perf_status = record.get("performance_admission_status")
+    m0_agreed = record.get("m0_agreed")
+    corr_status = record.get("correctness_status")
+    fail_stage = record.get("failure_stage")
+    fail_cat = record.get("failure_category")
+
+    if st == "COMPLETED_VERIFIED":
+        if ec != 0:
+            return False, f"Status COMPLETED_VERIFIED requires exit_code == 0, got {ec}"
+        if perf_status != "ACCEPTED":
+            return False, f"Status COMPLETED_VERIFIED requires performance_admission_status == 'ACCEPTED', got {perf_status}"
+        if m0_agreed is not True:
+            return False, f"Status COMPLETED_VERIFIED requires m0_agreed is True, got {m0_agreed}"
+        if corr_status is not None and corr_status != "M0_VERIFIED":
+            return False, f"Status COMPLETED_VERIFIED requires correctness_status == 'M0_VERIFIED', got {corr_status}"
+        if fail_stage not in (None, "", "NONE"):
+            return False, f"Status COMPLETED_VERIFIED requires empty failure_stage, got {fail_stage}"
+        if fail_cat not in (None, "", "NONE"):
+            return False, f"Status COMPLETED_VERIFIED requires empty failure_category, got {fail_cat}"
+    else:
+        if perf_status == "ACCEPTED":
+            return False, f"Non-verified status {st} cannot have performance_admission_status == 'ACCEPTED'"
+
+    if ec != 0:
+        if st == "COMPLETED_VERIFIED":
+            return False, f"Non-zero exit_code {ec} cannot have status COMPLETED_VERIFIED"
+        if perf_status == "ACCEPTED":
+            return False, f"Non-zero exit_code {ec} cannot have performance_admission_status == 'ACCEPTED'"
+        if corr_status == "M0_VERIFIED":
+            return False, f"Non-zero exit_code {ec} cannot have correctness_status == 'M0_VERIFIED'"
+
+    if perf_status == "ACCEPTED":
+        if st != "COMPLETED_VERIFIED" or ec != 0 or m0_agreed is not True:
+            return False, "performance_admission_status 'ACCEPTED' requires COMPLETED_VERIFIED, exit_code 0, and m0_agreed True"
+
+    if m0_agreed is not True and (st == "COMPLETED_VERIFIED" or perf_status == "ACCEPTED"):
+        return False, "m0_agreed is not True incompatible with COMPLETED_VERIFIED / ACCEPTED"
 
     # Effective resource limits
     max_work = record.get("effective_max_work")
-    if not isinstance(max_work, int) or max_work <= 0 or max_work > CANONICAL_MAX_WORK_CAP:
+    if type(max_work) is not int or isinstance(max_work, bool) or max_work <= 0 or max_work > CANONICAL_MAX_WORK_CAP:
         return False, f"Invalid effective_max_work: {max_work} (approved ceiling={CANONICAL_MAX_WORK_CAP})"
 
     timeout = record.get("effective_timeout")
     if (
         not isinstance(timeout, (int, float))
+        or isinstance(timeout, bool)
         or math.isnan(timeout)
         or math.isinf(timeout)
         or timeout <= 0
@@ -275,7 +321,7 @@ def validate_record_integrity(
     mem_limit = record.get("effective_memory_limit_mib")
     if mem_limit is None:
         mem_limit = record.get("effective_as_limit_mib")
-    if not isinstance(mem_limit, int) or mem_limit <= 0 or mem_limit > CANONICAL_AS_LIMIT_MIB:
+    if type(mem_limit) is not int or isinstance(mem_limit, bool) or mem_limit <= 0 or mem_limit > CANONICAL_AS_LIMIT_MIB:
         return False, f"Invalid effective_memory_limit_mib: {mem_limit} (must be >0 and <={CANONICAL_AS_LIMIT_MIB} MiB)"
 
     # Slot key check
@@ -352,7 +398,7 @@ def resolve_canonical_attempts(
     records: List[Dict[str, Any]],
     expected_header: Optional[Union[str, Dict[str, Any]]] = None,
     strict_raise: bool = False,
-    strict_provenance: Optional[bool] = None,
+    strict_provenance: bool = True,
 ) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, List[Dict[str, Any]]], List[Dict[str, Any]]]:
     """
     Unified Attempt Resolution Policy for Runner Resume and Summarizer.
@@ -361,7 +407,9 @@ def resolve_canonical_attempts(
     1. Validates each record fail-closed using validate_record_integrity.
     2. Groups records by slot_key.
     3. Detects metadata conflicts (workload hash, binary hash, source commit tampering).
-    4. Evaluates duplicate attempts:
+    4. Slot-Level Integrity Quarantine (R4-F02): If ANY attempt claiming a slot_key fails record
+       integrity, that entire slot is permanently quarantined and excluded from canonical statistics.
+    5. Evaluates duplicate attempts:
        - Identical duplicate writes: canonical preserved.
        - Failed attempt + valid verified retry: selects verified retry (preserving failed history).
        - Ambiguous multiple verified attempts with conflicting runtimes: marks AMBIGUOUS_DUPLICATE_SLOT and excludes fail-closed.
@@ -378,15 +426,23 @@ def resolve_canonical_attempts(
         else (expected_header.get("execution_identity") if isinstance(expected_header, dict) else None)
     )
 
-    # Step 1: Validate individual records
+    # Step 1: Validate individual records and track quarantined slots
     valid_records_by_slot: Dict[str, List[Dict[str, Any]]] = {}
+    quarantined_slots: Dict[str, str] = {}
 
     for idx, rec in enumerate(records):
         line_no = idx + 1
-        rec_id = rec.get("execution_identity")
+        rec_id = rec.get("execution_identity") if isinstance(rec, dict) else None
         if exp_id and rec_id != exp_id:
             # Slot belongs to a different experiment run; skip for this experiment
             continue
+
+        slot_key = (
+            rec.get("slot_key")
+            or f"{rec.get('workload_id')}_rep{rec.get('repetition')}_{rec.get('engine')}"
+            if isinstance(rec, dict)
+            else "UNKNOWN"
+        )
 
         is_ok, diag = validate_record_integrity(
             rec,
@@ -396,20 +452,29 @@ def resolve_canonical_attempts(
         if not is_ok:
             conflict_info = {
                 "line": line_no,
-                "slot_key": rec.get("slot_key", "UNKNOWN"),
+                "slot_key": slot_key,
                 "reason": f"Record integrity failure: {diag}",
                 "record": rec,
             }
             rejected_conflicts.append(conflict_info)
+            if slot_key != "UNKNOWN":
+                quarantined_slots[slot_key] = f"Record integrity failure at line {line_no}: {diag}"
             if strict_raise:
                 raise CorruptedLedgerError(f"Corrupted or invalid record at line {line_no}: {diag}")
             continue
 
-        slot_key = rec.get("slot_key") or f"{rec.get('workload_id')}_rep{rec.get('repetition')}_{rec.get('engine')}"
         valid_records_by_slot.setdefault(slot_key, []).append(rec)
 
-    # Step 2: Resolve attempts per slot
+    # Step 2: Resolve attempts per slot with Slot-Level Quarantine enforcement (R4-F02)
     for slot_key, attempts in valid_records_by_slot.items():
+        if slot_key in quarantined_slots:
+            reason = f"Slot {slot_key} quarantined: {quarantined_slots[slot_key]}"
+            duplicate_lineage[slot_key] = attempts
+            rejected_conflicts.append({"slot_key": slot_key, "reason": reason})
+            if strict_raise:
+                raise CorruptedLedgerError(reason)
+            continue
+
         if len(attempts) == 1:
             rec = attempts[0]
             if (
@@ -437,6 +502,7 @@ def resolve_canonical_attempts(
                 reason = f"Slot {slot_key} contains conflicting workload_sha256 across attempts"
                 rejected_conflicts.append({"slot_key": slot_key, "reason": reason})
                 metadata_conflict = True
+                quarantined_slots[slot_key] = reason
                 if strict_raise:
                     raise IntegrityConflictError(reason)
                 break
@@ -444,6 +510,7 @@ def resolve_canonical_attempts(
                 reason = f"Slot {slot_key} contains conflicting binary or source commit across attempts"
                 rejected_conflicts.append({"slot_key": slot_key, "reason": reason})
                 metadata_conflict = True
+                quarantined_slots[slot_key] = reason
                 if strict_raise:
                     raise IntegrityConflictError(reason)
                 break
@@ -493,6 +560,7 @@ def resolve_canonical_attempts(
                 f"Arbitrary selection disallowed."
             )
             rejected_conflicts.append({"slot_key": slot_key, "reason": reason})
+            quarantined_slots[slot_key] = reason
             if strict_raise:
                 raise AmbiguousSlotError(reason)
             # Fail-closed: do not admit into canonical_slots!
@@ -504,6 +572,7 @@ def validate_pair_compatibility(
     m1: Dict[str, Any],
     m2: Dict[str, Any],
     expected_header: Optional[Union[str, Dict[str, Any]]] = None,
+    strict_provenance: bool = True,
 ) -> Tuple[bool, str]:
     """
     Verifies that M1 and M2 records form a valid, verifiable paired speedup sample:
@@ -512,10 +581,10 @@ def validate_pair_compatibility(
     - Repetitions and workload_ids match.
     - Both are COMPLETED_VERIFIED, ACCEPTED, and m0_agreed == True.
     """
-    ok_1, diag_1 = validate_record_integrity(m1, expected_header=expected_header)
+    ok_1, diag_1 = validate_record_integrity(m1, expected_header=expected_header, strict_provenance=strict_provenance)
     if not ok_1:
         return False, f"M1 record integrity failed: {diag_1}"
-    ok_2, diag_2 = validate_record_integrity(m2, expected_header=expected_header)
+    ok_2, diag_2 = validate_record_integrity(m2, expected_header=expected_header, strict_provenance=strict_provenance)
     if not ok_2:
         return False, f"M2 record integrity failed: {diag_2}"
 

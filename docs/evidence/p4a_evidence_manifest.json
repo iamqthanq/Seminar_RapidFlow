@@ -29,8 +29,8 @@
       "description": "Canonical summary JSON"
     },
     "results/logs/rf36-p4a/p4a_summary_metrics.json": {
-      "sha256": "554cbd96684f342eb4851e627e4431bec5b8c38d2d18cf371457fc8047ced7ac",
-      "size_bytes": 64716,
+      "sha256": "439d833cdac02b8e7cab775cd2a89230368bd0545ac89b47d4e66385395ffe23",
+      "size_bytes": 64755,
       "line_count": null,
       "git_tracked": false,
       "accessibility_status": "LOCAL_WORKTREE_REPRODUCIBLE",

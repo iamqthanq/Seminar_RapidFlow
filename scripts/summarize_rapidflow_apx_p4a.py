@@ -133,14 +133,40 @@ def load_ledger(ledger_path: Path) -> List[Dict[str, Any]]:
 def analyze_p4a_ledger(
     records: List[Dict[str, Any]],
     expected_header: Optional[Union[str, Dict[str, Any]]] = None,
+    strict_provenance: bool = True,
 ) -> Dict[str, Any]:
     """Processes ledger records into structured statistical metrics with strict identity checking."""
-    # 1. Resolve canonical attempt per slot using unified evidence contract (R2-F02, R3-F01, R3-F02)
+    # Experiment isolation check (R4-F03)
+    exp_id = (
+        expected_header
+        if isinstance(expected_header, str)
+        else (expected_header.get("execution_identity") if isinstance(expected_header, dict) else None)
+    )
+
+    distinct_exec_ids = sorted({
+        rec.get("execution_identity") for rec in records
+        if isinstance(rec, dict) and rec.get("execution_identity")
+    })
+
+    isolation_violation = False
+    isolation_reason = ""
+    if exp_id is None and len(distinct_exec_ids) > 1:
+        isolation_violation = True
+        isolation_reason = (
+            f"Experiment isolation violation: ledger contains multiple distinct execution identities: "
+            f"{distinct_exec_ids}. Aggregating results across differing execution environments is strictly prohibited."
+        )
+
+    # 1. Resolve canonical attempt per slot using unified evidence contract (R2-F02, R3-F01, R3-F02, R4-F02)
     canonical_slots, duplicate_lineage, rejected_conflicts = resolve_canonical_attempts(
         records=records,
         expected_header=expected_header,
         strict_raise=False,
+        strict_provenance=strict_provenance,
     )
+
+    if isolation_violation:
+        rejected_conflicts.append({"reason": isolation_reason, "slot_key": "GLOBAL_EXPERIMENT_ISOLATION"})
 
     duplicate_slot_warnings = []
     conflicts_by_slot = {c["slot_key"]: c.get("reason") for c in rejected_conflicts if "slot_key" in c}
@@ -200,11 +226,31 @@ def analyze_p4a_ledger(
             all_attempted_pairs.add((w_id, rep))
 
     for (w_id, rep) in sorted(all_attempted_pairs):
-        eng_dict = pairs_map.get((w_id, rep), {})
-        if "m1" not in eng_dict or "m2" not in eng_dict:
+        if isolation_violation:
             rejected_pairs.append({
                 "pair_key": [w_id, rep],
-                "reason": f"Missing or unadmitted engine attempt for pair ({w_id}, rep={rep})",
+                "reason": isolation_reason,
+            })
+            continue
+
+        eng_dict = pairs_map.get((w_id, rep), {})
+        m1_slot = f"{w_id}_rep{rep}_m1"
+        m2_slot = f"{w_id}_rep{rep}_m2"
+        if "m1" not in eng_dict or "m2" not in eng_dict:
+            missing_reasons = []
+            if "m1" not in eng_dict:
+                if m1_slot in conflicts_by_slot:
+                    missing_reasons.append(f"M1 quarantined: {conflicts_by_slot[m1_slot]}")
+                else:
+                    missing_reasons.append("M1 missing or unadmitted")
+            if "m2" not in eng_dict:
+                if m2_slot in conflicts_by_slot:
+                    missing_reasons.append(f"M2 quarantined: {conflicts_by_slot[m2_slot]}")
+                else:
+                    missing_reasons.append("M2 missing or unadmitted")
+            rejected_pairs.append({
+                "pair_key": [w_id, rep],
+                "reason": "; ".join(missing_reasons),
             })
             continue
 
@@ -212,7 +258,9 @@ def analyze_p4a_ledger(
         m2 = eng_dict["m2"]
 
         # Unified pair compatibility validation (R3-F03)
-        is_compat, reason = validate_pair_compatibility(m1, m2, expected_header=expected_header)
+        is_compat, reason = validate_pair_compatibility(
+            m1, m2, expected_header=expected_header, strict_provenance=strict_provenance
+        )
         if not is_compat:
             rejected_pairs.append({
                 "pair_key": [w_id, rep],
@@ -419,34 +467,65 @@ def analyze_p4a_ledger(
         "relative_candidate_eval_reduction_m2_vs_m1_pct": rel_cand_reduction,
     }
 
-    # Bottleneck Diagnosis (P4A-F05 & P4A-F08)
-    m2_neighbor_within_search_median = (
-        micro_breakdowns["m2"].get("neighbor_retrieval_within_search_pct", {}).get("median", 0.0)
-    )
-    m2_search_core_within_search_median = (
-        micro_breakdowns["m2"].get("search_core_within_search_pct", {}).get("median", 0.0)
-    )
-    m2_search_speedup_median = overall_speedup_stats["search_speedup"].get("median", 1.0)
-    m2_step_speedup_median = overall_speedup_stats["native_step_speedup"].get("median", 1.0)
+    # Bottleneck Diagnosis & Grounded Research Verdict (R4-F06)
+    if len(valid_pairs) == 0:
+        bottleneck_diagnosis = {
+            "m2_neighbor_retrieval_within_search_pct_median": None,
+            "m2_search_core_within_search_pct_median": None,
+            "m2_search_speedup_median": None,
+            "m2_native_step_speedup_median": None,
+            "neighbor_retrieval_exceeds_15pct_threshold": False,
+            "search_core_dominates_search_time": False,
+        }
+    else:
+        m2_neighbor_within_search_median = (
+            micro_breakdowns["m2"].get("neighbor_retrieval_within_search_pct", {}).get("median", 0.0)
+        )
+        m2_search_core_within_search_median = (
+            micro_breakdowns["m2"].get("search_core_within_search_pct", {}).get("median", 0.0)
+        )
+        m2_search_speedup_median = overall_speedup_stats["search_speedup"].get("median", 1.0)
+        m2_step_speedup_median = overall_speedup_stats["native_step_speedup"].get("median", 1.0)
 
-    bottleneck_diagnosis = {
-        "m2_neighbor_retrieval_within_search_pct_median": m2_neighbor_within_search_median,
-        "m2_search_core_within_search_pct_median": m2_search_core_within_search_median,
-        "m2_search_speedup_median": m2_search_speedup_median,
-        "m2_native_step_speedup_median": m2_step_speedup_median,
-        "neighbor_retrieval_exceeds_15pct_threshold": bool(m2_neighbor_within_search_median >= 15.0),
-        "search_core_dominates_search_time": bool(m2_search_core_within_search_median >= 50.0),
-    }
+        nr_median_val = m2_neighbor_within_search_median if m2_neighbor_within_search_median is not None else 0.0
+        sc_median_val = m2_search_core_within_search_median if m2_search_core_within_search_median is not None else 0.0
 
-    # P4b Recommendation (P4A-F08: Grounded, non-speculative verdict)
-    p4b_recommendation = (
-        "RECOMMENDATION: R4A_PROFILE_READY_FOR_P4B_REVIEW. "
-        f"Empirical data confirms that Search Core occupies {m2_search_core_within_search_median:.1f}% "
-        f"and Neighbor Retrieval occupies {m2_neighbor_within_search_median:.1f}% of Bare M2 search time. "
-        "Both Relaxed NLF (Option A) and Authoritative Graph CSR neighbor retrieval optimization (Option B) "
-        "address measurable cost centers. Future isolated experiments in Phase P4b must quantify attainable "
-        "end-to-end speedups without premature locking of combined Option B+A."
-    )
+        bottleneck_diagnosis = {
+            "m2_neighbor_retrieval_within_search_pct_median": m2_neighbor_within_search_median,
+            "m2_search_core_within_search_pct_median": m2_search_core_within_search_median,
+            "m2_search_speedup_median": m2_search_speedup_median,
+            "m2_native_step_speedup_median": m2_step_speedup_median,
+            "neighbor_retrieval_exceeds_15pct_threshold": bool(nr_median_val >= 15.0),
+            "search_core_dominates_search_time": bool(sc_median_val >= 50.0),
+        }
+
+    if isolation_violation:
+        overall_verdict = "CANONICAL_INCONCLUSIVE"
+        p4b_recommendation = f"RECOMMENDATION: R4A_INCONCLUSIVE_MIXED_EXECUTION_IDENTITIES. {isolation_reason}"
+    elif len(rejected_pairs) > 0 or len(duplicate_slot_warnings) > 0:
+        overall_verdict = "CANONICAL_PARTIAL_OR_FAILED"
+        p4b_recommendation = (
+            f"RECOMMENDATION: R4A_FIX_REQUIRED. "
+            f"{len(rejected_pairs)} pairs rejected due to contract/integrity violations. Review rejected_pairs for diagnostics."
+        )
+    elif len(valid_pairs) == 0:
+        overall_verdict = "CANONICAL_INCONCLUSIVE"
+        p4b_recommendation = (
+            "RECOMMENDATION: R4A_INCONCLUSIVE_NO_VALID_PAIRS. "
+            "Zero valid workload pairs admitted; empirical profiling data insufficient for P4b architectural evaluation."
+        )
+    else:
+        overall_verdict = "CANONICAL_PASS"
+        sc_val = bottleneck_diagnosis["m2_search_core_within_search_pct_median"] or 0.0
+        nr_val = bottleneck_diagnosis["m2_neighbor_retrieval_within_search_pct_median"] or 0.0
+        p4b_recommendation = (
+            "RECOMMENDATION: R4A_PROFILE_READY_FOR_P4B_REVIEW. "
+            f"Empirical data confirms that Search Core occupies {sc_val:.1f}% "
+            f"and Neighbor Retrieval occupies {nr_val:.1f}% of Bare M2 search time. "
+            "Both Relaxed NLF (Option A) and Authoritative Graph CSR neighbor retrieval optimization (Option B) "
+            "address measurable cost centers. Future isolated experiments in Phase P4b must quantify attainable "
+            "end-to-end speedups without premature locking of combined Option B+A."
+        )
 
     ref_rec = pairs_map[valid_pairs[0]]["m1"] if valid_pairs else (records[0] if records else {})
     summary_metrics = {
@@ -456,6 +535,7 @@ def analyze_p4a_ledger(
         "manifest_sha256": ref_rec.get("manifest_sha256"),
         "source_commit": ref_rec.get("source_commit"),
         "binary_sha256": ref_rec.get("binary_sha256"),
+        "overall_verdict": overall_verdict,
         "total_records_processed": len(records),
         "total_valid_pairs": len(valid_pairs),
         "total_rejected_pairs": len(rejected_pairs),
@@ -496,6 +576,11 @@ def format_markdown_table(headers: List[str], rows: List[List[Any]]) -> str:
     return "\n".join([hdr_line, sep_line] + data_lines)
 
 
+def fmt_stat(val: Optional[float], suffix: str = "") -> str:
+    """Safely formats a nullable float statistic."""
+    return f"{val:.2f}{suffix}" if val is not None else "N/A"
+
+
 def generate_markdown_report(metrics: Dict[str, Any]) -> str:
     """Generates comprehensive markdown report with exact, grounded semantics."""
     lines = []
@@ -505,11 +590,17 @@ def generate_markdown_report(metrics: Dict[str, Any]) -> str:
     lines.append("")
     lines.append(f"- **Total Workload Pairs Analyzed:** {metrics['total_valid_pairs']}")
     lines.append(f"- **Total Rejected Pairs:** {metrics['total_rejected_pairs']}")
-    lines.append(f"- **Median Search Speedup ($S_{{search}} = T_{{M1}} / T_{{M2}}$):** {metrics['overall_speedup_distribution']['search_speedup']['median']}x")
-    lines.append(f"- **Median Native Step Speedup ($S_{{step}} = T_{{M1}} / T_{{M2}}$):** {metrics['overall_speedup_distribution']['native_step_speedup']['median']}x")
-    lines.append(f"- **Median Streaming Loop Speedup ($S_{{loop}} = T_{{M1}} / T_{{M2}}$):** {metrics['overall_speedup_distribution']['streaming_loop_speedup']['median']}x")
-    lines.append(f"- **Median Outer Wall Speedup ($S_{{outer}} = T_{{M1}} / T_{{M2}}$):** {metrics['overall_speedup_distribution']['outer_wall_speedup']['median']}x")
-    lines.append(f"- **M2 Neighbor Retrieval within Search:** {metrics['micro_step_stage_breakdowns_pct']['m2'].get('neighbor_retrieval_within_search_pct', {}).get('median', 0.0):.2f}%")
+    lines.append(f"- **Overall Verdict:** {metrics.get('overall_verdict', 'UNKNOWN')}")
+    s_search = metrics['overall_speedup_distribution']['search_speedup']['median']
+    s_step = metrics['overall_speedup_distribution']['native_step_speedup']['median']
+    s_loop = metrics['overall_speedup_distribution']['streaming_loop_speedup']['median']
+    s_outer = metrics['overall_speedup_distribution']['outer_wall_speedup']['median']
+    lines.append(f"- **Median Search Speedup ($S_{{search}} = T_{{M1}} / T_{{M2}}$):** {fmt_stat(s_search, 'x')}")
+    lines.append(f"- **Median Native Step Speedup ($S_{{step}} = T_{{M1}} / T_{{M2}}$):** {fmt_stat(s_step, 'x')}")
+    lines.append(f"- **Median Streaming Loop Speedup ($S_{{loop}} = T_{{M1}} / T_{{M2}}$):** {fmt_stat(s_loop, 'x')}")
+    lines.append(f"- **Median Outer Wall Speedup ($S_{{outer}} = T_{{M1}} / T_{{M2}}$):** {fmt_stat(s_outer, 'x')}")
+    m2_nr = metrics['micro_step_stage_breakdowns_pct']['m2'].get('neighbor_retrieval_within_search_pct', {}).get('median')
+    lines.append(f"- **M2 Neighbor Retrieval within Search:** {fmt_stat(m2_nr, '%')}")
     lines.append(f"- **Relative Candidate Reduction (M2 vs M1):** {metrics['counter_metrics']['relative_candidate_eval_reduction_m2_vs_m1_pct']:.2f}%")
     lines.append(f"- **P4b Recommendation:** {metrics['p4b_recommendation']}")
     lines.append("")
@@ -525,7 +616,17 @@ def generate_markdown_report(metrics: Dict[str, Any]) -> str:
         ("outer_wall_speedup", "Outer Wall (Process Subprocess)"),
     ]:
         s = metrics["overall_speedup_distribution"][scope_key]
-        sp_rows.append([scope_name, s["count"], f"{s['min']:.2f}x", f"{s['q1']:.2f}x", f"{s['median']:.2f}x", f"{s['q3']:.2f}x", f"{s['max']:.2f}x", f"{s['mean']:.2f}x", f"{s['stddev']:.2f}"])
+        sp_rows.append([
+            scope_name,
+            s["count"],
+            fmt_stat(s['min'], 'x'),
+            fmt_stat(s['q1'], 'x'),
+            fmt_stat(s['median'], 'x'),
+            fmt_stat(s['q3'], 'x'),
+            fmt_stat(s['max'], 'x'),
+            fmt_stat(s['mean'], 'x'),
+            fmt_stat(s['stddev']),
+        ])
     lines.append(format_markdown_table(sp_headers, sp_rows))
     lines.append("")
 
@@ -536,7 +637,16 @@ def generate_markdown_report(metrics: Dict[str, Any]) -> str:
     qk_headers = ["Query & Tolerance", "Pairs", "Min", "Q1", "Median", "Q3", "Max", "Mean"]
     qk_rows = []
     for qk, s in metrics["stratified_speedup"]["by_query_k"].items():
-        qk_rows.append([qk, s["count"], f"{s['min']:.2f}x", f"{s['q1']:.2f}x", f"{s['median']:.2f}x", f"{s['q3']:.2f}x", f"{s['max']:.2f}x", f"{s['mean']:.2f}x"])
+        qk_rows.append([
+            qk,
+            s["count"],
+            fmt_stat(s['min'], 'x'),
+            fmt_stat(s['q1'], 'x'),
+            fmt_stat(s['median'], 'x'),
+            fmt_stat(s['q3'], 'x'),
+            fmt_stat(s['max'], 'x'),
+            fmt_stat(s['mean'], 'x'),
+        ])
     lines.append(format_markdown_table(qk_headers, qk_rows))
     lines.append("")
 
@@ -545,7 +655,16 @@ def generate_markdown_report(metrics: Dict[str, Any]) -> str:
     reg_headers = ["Label Regime", "Pairs", "Min", "Q1", "Median", "Q3", "Max", "Mean"]
     reg_rows = []
     for reg, s in metrics["stratified_speedup"]["by_regime"].items():
-        reg_rows.append([reg, s["count"], f"{s['min']:.2f}x", f"{s['q1']:.2f}x", f"{s['median']:.2f}x", f"{s['q3']:.2f}x", f"{s['max']:.2f}x", f"{s['mean']:.2f}x"])
+        reg_rows.append([
+            reg,
+            s["count"],
+            fmt_stat(s['min'], 'x'),
+            fmt_stat(s['q1'], 'x'),
+            fmt_stat(s['median'], 'x'),
+            fmt_stat(s['q3'], 'x'),
+            fmt_stat(s['max'], 'x'),
+            fmt_stat(s['mean'], 'x'),
+        ])
     lines.append(format_markdown_table(reg_headers, reg_rows))
     lines.append("")
 
@@ -554,7 +673,16 @@ def generate_markdown_report(metrics: Dict[str, Any]) -> str:
     top_headers = ["Topology", "Pairs", "Min", "Q1", "Median", "Q3", "Max", "Mean"]
     top_rows = []
     for top, s in metrics["stratified_speedup"]["by_topology"].items():
-        top_rows.append([top, s["count"], f"{s['min']:.2f}x", f"{s['q1']:.2f}x", f"{s['median']:.2f}x", f"{s['q3']:.2f}x", f"{s['max']:.2f}x", f"{s['mean']:.2f}x"])
+        top_rows.append([
+            top,
+            s["count"],
+            fmt_stat(s['min'], 'x'),
+            fmt_stat(s['q1'], 'x'),
+            fmt_stat(s['median'], 'x'),
+            fmt_stat(s['q3'], 'x'),
+            fmt_stat(s['max'], 'x'),
+            fmt_stat(s['mean'], 'x'),
+        ])
     lines.append(format_markdown_table(top_headers, top_rows))
     lines.append("")
 
@@ -563,7 +691,16 @@ def generate_markdown_report(metrics: Dict[str, Any]) -> str:
     ev_headers = ["Event Status", "Pairs", "Min", "Q1", "Median", "Q3", "Max", "Mean"]
     ev_rows = []
     for ev, s in metrics["stratified_speedup"]["by_event_status"].items():
-        ev_rows.append([ev, s["count"], f"{s['min']:.2f}x", f"{s['q1']:.2f}x", f"{s['median']:.2f}x", f"{s['q3']:.2f}x", f"{s['max']:.2f}x", f"{s['mean']:.2f}x"])
+        ev_rows.append([
+            ev,
+            s["count"],
+            fmt_stat(s['min'], 'x'),
+            fmt_stat(s['q1'], 'x'),
+            fmt_stat(s['median'], 'x'),
+            fmt_stat(s['q3'], 'x'),
+            fmt_stat(s['max'], 'x'),
+            fmt_stat(s['mean'], 'x'),
+        ])
     lines.append(format_markdown_table(ev_headers, ev_rows))
     lines.append("")
 
@@ -582,10 +719,10 @@ def generate_markdown_report(metrics: Dict[str, Any]) -> str:
         m2_s = metrics["macro_stage_breakdowns_pct"]["m2"].get(stage_key, {})
         macro_rows.append([
             stage_name,
-            f"{m1_s.get('median', 0.0):.2f}%",
-            f"{m1_s.get('mean', 0.0):.2f}%",
-            f"{m2_s.get('median', 0.0):.2f}%",
-            f"{m2_s.get('mean', 0.0):.2f}%",
+            fmt_stat(m1_s.get('median'), '%'),
+            fmt_stat(m1_s.get('mean'), '%'),
+            fmt_stat(m2_s.get('median'), '%'),
+            fmt_stat(m2_s.get('mean'), '%'),
         ])
     lines.append(format_markdown_table(macro_headers, macro_rows))
     lines.append("")
@@ -609,10 +746,10 @@ def generate_markdown_report(metrics: Dict[str, Any]) -> str:
         m2_s = metrics["micro_step_stage_breakdowns_pct"]["m2"].get(comp_key, {})
         micro_rows.append([
             comp_name,
-            f"{m1_s.get('median', 0.0):.2f}%",
-            f"{m1_s.get('mean', 0.0):.2f}%",
-            f"{m2_s.get('median', 0.0):.2f}%",
-            f"{m2_s.get('mean', 0.0):.2f}%",
+            fmt_stat(m1_s.get('median'), '%'),
+            fmt_stat(m1_s.get('mean'), '%'),
+            fmt_stat(m2_s.get('median'), '%'),
+            fmt_stat(m2_s.get('mean'), '%'),
         ])
     lines.append(format_markdown_table(micro_headers, micro_rows))
     lines.append("")
@@ -628,10 +765,10 @@ def generate_markdown_report(metrics: Dict[str, Any]) -> str:
         m2_s = metrics["micro_step_stage_breakdowns_pct"]["m2"].get(comp_key, {})
         search_norm_rows.append([
             comp_name,
-            f"{m1_s.get('median', 0.0):.2f}%",
-            f"{m1_s.get('mean', 0.0):.2f}%",
-            f"{m2_s.get('median', 0.0):.2f}%",
-            f"{m2_s.get('mean', 0.0):.2f}%",
+            fmt_stat(m1_s.get('median'), '%'),
+            fmt_stat(m1_s.get('mean'), '%'),
+            fmt_stat(m2_s.get('median'), '%'),
+            fmt_stat(m2_s.get('mean'), '%'),
         ])
     lines.append(format_markdown_table(search_norm_headers, search_norm_rows))
     lines.append("")
@@ -656,8 +793,8 @@ def generate_markdown_report(metrics: Dict[str, Any]) -> str:
     lines.append("## 7. Bottleneck Identification & P4b Architectural Evaluation")
     lines.append("")
     diag = metrics["bottleneck_diagnosis"]
-    lines.append(f"- **M2 Neighbor Retrieval within Search:** {diag['m2_neighbor_retrieval_within_search_pct_median']:.2f}% of search time.")
-    lines.append(f"- **M2 Search Core within Search:** {diag['m2_search_core_within_search_pct_median']:.2f}% of search time.")
+    lines.append(f"- **M2 Neighbor Retrieval within Search:** {fmt_stat(diag['m2_neighbor_retrieval_within_search_pct_median'], '%')} of search time.")
+    lines.append(f"- **M2 Search Core within Search:** {fmt_stat(diag['m2_search_core_within_search_pct_median'], '%')} of search time.")
     lines.append(f"- **Neighbor Retrieval Threshold Exceeded (>= 15%):** `{'CONFIRMED' if diag['neighbor_retrieval_exceeds_15pct_threshold'] else 'NOT EXCEEDED'}`.")
     lines.append(f"- **Search Core Dominates (>= 50%):** `{'CONFIRMED' if diag['search_core_dominates_search_time'] else 'NOT DOMINATING'}`.")
     lines.append("")
@@ -704,6 +841,6 @@ def main():
     else:
         print("\n" + md_report)
 
-
-if __name__ == "__main__":
-    main()
+    if metrics.get("overall_verdict") != "CANONICAL_PASS" or metrics.get("total_valid_pairs", 0) == 0:
+        print(f"Warning: Summarizer verdict is {metrics.get('overall_verdict')}; total valid pairs: {metrics.get('total_valid_pairs')}", file=sys.stderr)
+        sys.exit(1)
