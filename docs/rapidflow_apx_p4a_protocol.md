@@ -1,12 +1,13 @@
 # Experimental Protocol: Phase P4a Native Profiling, Baseline Measurement & Evidence-Driven Pilot
 
-**Document ID:** `docs/rapidflow_apx_p4a_protocol.md`  
-**Milestone:** Phase P4a  
-**Parent Issue:** [Issue #36](https://github.com/iamqthanq/Seminar_RapidFlow/issues/36)  
-**Target Integration Branch:** `QuangThang`  
-**Pre-P4 Base Commit:** `b5a5fe44fe594f9c550dcc44f04b9f4fc9a54245`  
-**Pinned Upstream RapidFlow:** `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` (Pristine: `true`)  
-**Status:** ACTIVE PROTOCOL SPECIFICATION  
+**Document ID:** `docs/rapidflow_apx_p4a_protocol.md`
+**Protocol Revision:** `1.2.0` (Updated for Round 1 Independent Review Remediation)
+**Milestone:** Phase P4a
+**Parent Issue:** [Issue #36](https://github.com/iamqthanq/Seminar_RapidFlow/issues/36)
+**Target Integration Branch:** `QuangThang`
+**Pre-P4 Base Commit:** `b5a5fe44fe594f9c550dcc44f04b9f4fc9a54245`
+**Pinned Upstream RapidFlow:** `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` (Pristine: `true`)
+**Status:** ACTIVE PROTOCOL SPECIFICATION (REVISION 1.2.0)
 
 ---
 
@@ -59,54 +60,57 @@ Prior informal proposals (e.g. Google Docs) suggested running arbitrary 180 conf
 
 ---
 
-## 4. Measurement Methodology & Experimental Safeguards
+## 4. Measurement Methodology & Experimental Safeguards (Revision 1.2.0)
 
-### 4.1 Paired AB/BA Execution
-To eliminate systematic bias from warm CPU caches, dynamic frequency scaling, or Linux kernel page cache effects:
-- Repetition 0: M1 executed first, then M2 ($A \to B$).
-- Repetition 1: M2 executed first, then M1 ($B \to A$).
-- Repetition 2: M1 executed first, then M2 ($A \to B$).
+### 4.1 Cryptographic Execution Identity Binding (P4A-F01)
+To prevent conflation of runs across different commits or configurations, every record binds a deterministic `execution_identity`:
+$$\text{ExecutionIdentity} = \text{SHA256}(\text{ProtocolRevision}, \text{ProtocolSHA}, \text{ManifestSHA}, \text{SourceCommit}, \text{DirtyState}, \text{BinarySHA}, \text{WorkCap}, \text{Timeout}, \text{MemoryLimit})$$
+Resume validation strictly enforces that slots in an existing ledger match the active `execution_identity`. Any slot with mismatched identity is rejected for resume.
 
-### 4.2 Disposable Warm-Up Replay
-Prior to each timed execution slot, a disposable untimed warm-up run is executed on identical workload data to warm filesystem buffers and binary instruction caches. The engine state is then completely discarded, and a fresh authoritative graph instance is initialized from $G_0$.
+### 4.2 Durable Append-Only Ledger Contract (P4A-F02)
+- Raw experiment logs are written in append-only JSONL format.
+- Every record append calls `flush()` followed by `os.fsync(fd)` before proceeding to the next slot.
+- Corrupted lines in a ledger trigger immediate fail-closed termination (`CorruptedLedgerError`).
+- Duplicate attempt lineages are preserved without silent overwrite.
 
-### 4.3 Native Nanosecond Monotonic Profiling
-The C++ harness (`tests/native/rapidflow_apx_engines/src/main.cpp`) uses `std::chrono::steady_clock` to record monotonic nanosecond intervals across two distinct scopes:
-1. **Macro Stages (Run-Level):**
-   - `input_parsing_ns`: Deserializing JSON workload input and validating schema.
-   - `graph_init_ns`: Constructing initial graph CSR and overlay structures.
-   - `query_prep_ns`: Building query plan, Edmonds-Karp min-cut, and variant structures.
-   - `streaming_exec_ns`: Total time spent in the streaming update loop.
-   - `total_wall_ns`: End-to-end process execution wall time.
-2. **Micro Stages (Step-Level Cumulative):**
-   - `update_maintenance_ns`: CSR/overlay edge insertion or deletion in `ApxTransactionManager`.
-   - `search_core_ns`: Candidate extension, edge commitment verification, and pruning.
-   - `neighbor_retrieval_ns`: Time spent inside `ApxAuthoritativeGraph::get_neighbors(u)`.
-   - `tuple_sink_ns`: Canonical tuple sorting, vertex injectivity check, and deduplication.
-   - `step_total_ns`: Total elapsed time for the streaming step.
+### 4.3 Fail-Closed M0 Dynamic Oracle Gate (P4A-F03)
+- If `compute_m0_ground_truth` raises an exception or fails, the slot is marked `status = "ORACLE_FAILED"`, `performance_admission_status = "REJECTED"`, and `m0_agreed = False`.
+- In native output verification, raw tuples are checked for duplicates **before** set conversion; duplicates trigger `DUPLICATE_EMISSION` and rejection.
+- Only slots with `status == "COMPLETED_VERIFIED"` and `performance_admission_status == "ACCEPTED"` are admitted into paired speedup calculations.
 
-### 4.4 Observer Overhead Minimization
-To prevent timing instrumentation from perturbing innermost DFS execution loops:
-- Individual edge lookups and vertex label comparisons are counted using software counters (`edge_lookups`, `candidate_evaluations`).
-- High-resolution timers (`steady_clock::now()`) are restricted to subroutine boundaries (`get_neighbors()`, `execute_step()`, and stage transitions).
-- Zero memory allocation occurs during profiling measurement.
+### 4.4 Four Explicit, Distinct Speedup Scopes (P4A-F05)
+To eliminate ambiguity, performance speedups are partitioned into four distinct measurement scopes:
+1. **Search Speedup ($S_{\text{search}}$):** $T_{M1, \text{search}} / T_{M2, \text{search}}$ measured inside the search callback.
+2. **Native Step Speedup ($S_{\text{step}}$):** $T_{M1, \text{step\_total}} / T_{M2, \text{step\_total}}$ measured across `execute_step()` invocations.
+3. **Streaming Loop Speedup ($S_{\text{loop}}$):** $T_{M1, \text{stream\_loop}} / T_{M2, \text{stream\_loop}}$ measured across the C++ streaming loop in `main.cpp`.
+4. **Outer Wall Speedup ($S_{\text{outer}}$):** $T_{M1, \text{outer}} / T_{M2, \text{outer}}$ measured as total subprocess wall time by the Python runner.
 
-### 4.5 Invariance & Schema Isolation
-- **Behavioral Invariance:** Profiling flags (`PROFILE_ON` vs `PROFILE_OFF`) produce bit-for-bit identical tuple outputs, step counts, and counter values.
-- **Schema Isolation:** When `--profile` is omitted, the CLI output strictly complies with P3 schema 1.1.0 with zero profiling keys. When `--profile` is supplied, profiling data is namespaced under `"profiling"`.
+### 4.5 Subprocess Containment & Real Timeout Termination (P4A-F06)
+- RLIMIT_AS enforces an address space cap of 512 MiB per child process.
+- Each child process is placed in a dedicated process group (`os.setpgrp()`).
+- On `TimeoutExpired`, the runner sends `SIGKILL` to the entire process group (`os.killpg`), preventing orphan processes, and records `status = "TIMEOUT"`.
+- Resource limit failures are classified accurately without speculative OOM inference.
+
+### 4.6 Mathematically Grounded Candidate Metrics (P4A-F04)
+- Removes invalid `pruning_efficiency_pct = 1 - events/candidates`.
+- Tracks raw physical counters: `candidate_evaluations`, `committed_emissions`, `steps`.
+- Reports descriptive ratio: $\text{events\_per\_candidate\_eval} = N_{\text{events}} / N_{\text{cand}}$.
+- Reports relative candidate evaluation reduction: $R = 1 - (C_{M2} / C_{M1})$.
 
 ---
 
-## 5. Pre-registered Hypotheses & P4b Decision Criteria
+## 5. Decision Gate & Phase P4b Transition Criteria (P4A-F08)
 
-| Hypothesis | Description | Confirmation Condition | Architectural Consequence |
-| :--- | :--- | :--- | :--- |
-| **$H_1$** | Bare M2 achieves wall-clock streaming speedup over M1 in streaming regimes. | Paired speedup $S_{\text{stream}} = T_{M1} / T_{M2} > 1.0\times$ (median). | Validates event-driven direct search over variant recomputation. |
-| **$H_2$** | Neighbor retrieval in `ApxAuthoritativeGraph` is a major search bottleneck. | $\text{neighbor\_retrieval\_ns} / \text{search\_ns} \ge 15.0\%$. | Requires CSR neighbor representation optimization or neighbor caching in P4b. |
-| **$H_3$** | Candidate evaluation dominates search time in uniform label regimes. | $C_{\text{eval}} \gg C_{\text{match}}$ and search core $> 50\%$ of step time. | Justifies Relaxed NLF implementation for candidate filtering in P4b. |
+The verdict for Milestone P4a is strictly confined to:
+- `R4A_PROFILE_READY_FOR_P4B_REVIEW`: Profiling is empirically validated, cost centers are quantified, and evidence is ready for independent review.
+- `R4A_INCONCLUSIVE`: Measurements exhibit excessive noise or lack statistical confidence.
+- `R4A_FIX_REQUIRED`: Further experimental fixes required.
 
-### Decision Pathways for Phase P4b:
-- **Option A (Relaxed NLF):** If candidate evaluation dominates and neighbor retrieval is modest ($<15\%$).
-- **Option B & A (Hybrid Optimization):** If neighbor retrieval exceeds $15\%$ and candidate evaluations are high, implement both Authoritative Graph neighbor optimization and Relaxed NLF.
-- **Option C (Pruning Reordering):** If commitment verification failure dominates.
-- **Option D (Pivot / Re-scope):** If M2 cannot achieve speedup over M1 due to fundamental DFS overhead.
+**P4b Recommendation Protocol:**
+Cost centers identified in P4a (Search Core at 77.4% and Neighbor Retrieval at 22.6%) formulate testable hypotheses for P4b:
+- **Option A (Relaxed NLF):** Reduces candidate evaluations in Search Core.
+- **Option B (Authoritative Graph Neighbor Optimization):** Replaces dynamic vector allocations in `get_neighbors(u)`.
+- **Option B+A (Hybrid):** Combines both optimizations if isolated tests justify both.
+- **Option C (Pruning Reordering) / Option D (Re-scope).**
+
+No speculative speedup numbers are claimed before isolated implementation and measurement in Phase P4b.

@@ -382,6 +382,11 @@ int main(int argc, char* argv[]) {
         return static_cast<int>(ExitCode::CLI_ARG_ERROR);
     }
 
+    if (!profile_output_path.empty() && profile_output_path == output_path) {
+        std::cerr << "Error: --profile-output path cannot be identical to --output path\n";
+        return static_cast<int>(ExitCode::CLI_ARG_ERROR);
+    }
+
     EngineType engine_type = EngineType::M2;
     if (engine_str == "m1") {
         engine_type = EngineType::M1;
@@ -795,6 +800,7 @@ int main(int argc, char* argv[]) {
                     p_step["search_ns"] = json::Value(static_cast<int64_t>(step_res.step_profiling.search_ns));
                     p_step["neighbor_retrieval_ns"] = json::Value(static_cast<int64_t>(step_res.step_profiling.neighbor_retrieval_ns));
                     p_step["search_core_ns"] = json::Value(static_cast<int64_t>(step_res.step_profiling.search_core_ns));
+                    p_step["tuple_commit_ns"] = json::Value(static_cast<int64_t>(step_res.step_profiling.tuple_commit_ns));
                     p_step["tuple_sink_ns"] = json::Value(static_cast<int64_t>(step_res.step_profiling.tuple_sink_ns));
                     step_json["profiling"] = p_step;
                 }
@@ -952,18 +958,24 @@ int main(int argc, char* argv[]) {
         if (profiling_enabled) {
             json::Value p_root = json::Value::make_object();
             p_root["enabled"] = json::Value(true);
+            p_root["profiling_schema_version"] = json::Value("1.2.0");
             p_root["input_parsing_ns"] = json::Value(static_cast<int64_t>(run_profiling.input_parsing_ns));
             p_root["graph_init_ns"] = json::Value(static_cast<int64_t>(run_profiling.graph_init_ns));
             p_root["query_prep_ns"] = json::Value(static_cast<int64_t>(run_profiling.query_prep_ns));
-            p_root["streaming_exec_ns"] = json::Value(static_cast<int64_t>(run_profiling.streaming_exec_ns));
+            p_root["streaming_loop_wall_ns"] = json::Value(static_cast<int64_t>(run_profiling.streaming_exec_ns));
+            p_root["streaming_exec_ns"] = json::Value(static_cast<int64_t>(run_profiling.streaming_exec_ns)); // alias for backward compatibility
+
             const auto& cp = streaming_engine.get_cumulative_profiling();
+            p_root["native_step_total_ns"] = json::Value(static_cast<int64_t>(cp.cumulative_step_total_ns));
+
             json::Value p_cum = json::Value::make_object();
             p_cum["step_total_ns"] = json::Value(static_cast<int64_t>(cp.cumulative_step_total_ns));
             p_cum["update_maintenance_ns"] = json::Value(static_cast<int64_t>(cp.cumulative_update_maintenance_ns));
             p_cum["search_ns"] = json::Value(static_cast<int64_t>(cp.cumulative_search_ns));
             p_cum["neighbor_retrieval_ns"] = json::Value(static_cast<int64_t>(cp.cumulative_neighbor_retrieval_ns));
             p_cum["search_core_ns"] = json::Value(static_cast<int64_t>(cp.cumulative_search_core_ns));
-            p_cum["tuple_sink_ns"] = json::Value(static_cast<int64_t>(cp.cumulative_tuple_sink_ns));
+            p_cum["tuple_commit_ns"] = json::Value(static_cast<int64_t>(cp.cumulative_tuple_sink_ns));
+            p_cum["tuple_sink_ns"] = json::Value(static_cast<int64_t>(cp.cumulative_tuple_sink_ns)); // alias for backward compatibility
             p_root["cumulative"] = p_cum;
 
             p_root["cumulative_step_total_ns"] = json::Value(static_cast<int64_t>(cp.cumulative_step_total_ns));
@@ -971,9 +983,12 @@ int main(int argc, char* argv[]) {
             p_root["cumulative_search_ns"] = json::Value(static_cast<int64_t>(cp.cumulative_search_ns));
             p_root["cumulative_neighbor_retrieval_ns"] = json::Value(static_cast<int64_t>(cp.cumulative_neighbor_retrieval_ns));
             p_root["cumulative_search_core_ns"] = json::Value(static_cast<int64_t>(cp.cumulative_search_core_ns));
+            p_root["cumulative_tuple_commit_ns"] = json::Value(static_cast<int64_t>(cp.cumulative_tuple_sink_ns));
             p_root["cumulative_tuple_sink_ns"] = json::Value(static_cast<int64_t>(cp.cumulative_tuple_sink_ns));
             auto cur_t = ProfilingClock::now();
-            p_root["total_wall_ns"] = json::Value(static_cast<int64_t>(std::chrono::duration_cast<ProfilingNanoseconds>(cur_t - run_wall_t0).count()));
+            int64_t pre_output_ns = static_cast<int64_t>(std::chrono::duration_cast<ProfilingNanoseconds>(cur_t - run_wall_t0).count());
+            p_root["pre_output_wall_ns"] = json::Value(pre_output_ns);
+            p_root["total_wall_ns"] = json::Value(pre_output_ns);
             root_out["profiling"] = p_root;
         }
 
@@ -1026,7 +1041,10 @@ int main(int argc, char* argv[]) {
     if (!profile_output_path.empty() && profiling_enabled && root_out.contains("profiling")) {
         std::string p_serialized = json::serialize(root_out["profiling"], 2);
         std::string p_err;
-        write_json_file_safe(profile_output_path, p_serialized, p_err);
+        if (!write_json_file_safe(profile_output_path, p_serialized, p_err)) {
+            std::cerr << "Error: Profile output write failure: " << p_err << "\n";
+            return static_cast<int>(ExitCode::IO_ERROR);
+        }
     }
 
     return static_cast<int>(final_exit_code);

@@ -17,7 +17,8 @@ struct StepProfiling {
     uint64_t search_ns{0};              // Total duration of search_event callback
     uint64_t neighbor_retrieval_ns{0};  // Nested in search: time spent in get_neighbors()
     uint64_t search_core_ns{0};         // search_ns - neighbor_retrieval_ns
-    uint64_t tuple_sink_ns{0};          // Tuple staging, canonical sorting, deduplication and commit
+    uint64_t tuple_commit_ns{0};        // Time spent committing step in tuple sink (commit_step)
+    uint64_t tuple_sink_ns{0};          // Alias for tuple_commit_ns (backward compatibility)
 
     void reset() noexcept {
         step_total_ns = 0;
@@ -25,6 +26,7 @@ struct StepProfiling {
         search_ns = 0;
         neighbor_retrieval_ns = 0;
         search_core_ns = 0;
+        tuple_commit_ns = 0;
         tuple_sink_ns = 0;
     }
 };
@@ -35,6 +37,7 @@ struct CumulativeProfiling {
     uint64_t cumulative_search_ns{0};
     uint64_t cumulative_neighbor_retrieval_ns{0};
     uint64_t cumulative_search_core_ns{0};
+    uint64_t cumulative_tuple_commit_ns{0};
     uint64_t cumulative_tuple_sink_ns{0};
 
     void reset() noexcept {
@@ -43,6 +46,7 @@ struct CumulativeProfiling {
         cumulative_search_ns = 0;
         cumulative_neighbor_retrieval_ns = 0;
         cumulative_search_core_ns = 0;
+        cumulative_tuple_commit_ns = 0;
         cumulative_tuple_sink_ns = 0;
     }
 
@@ -52,6 +56,7 @@ struct CumulativeProfiling {
         cumulative_search_ns += step.search_ns;
         cumulative_neighbor_retrieval_ns += step.neighbor_retrieval_ns;
         cumulative_search_core_ns += step.search_core_ns;
+        cumulative_tuple_commit_ns += step.tuple_commit_ns;
         cumulative_tuple_sink_ns += step.tuple_sink_ns;
     }
 };

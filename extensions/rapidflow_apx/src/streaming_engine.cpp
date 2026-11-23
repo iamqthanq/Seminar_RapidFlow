@@ -147,6 +147,7 @@ StreamStepResult ApxStreamingEngine::execute_step(const UpdateOperation& update,
         step_prof.step_total_ns = std::chrono::duration_cast<ProfilingNanoseconds>(step_t1 - step_t0).count();
         step_prof.update_maintenance_ns = step_res.update_maintenance_ns;
         step_prof.tuple_sink_ns = step_res.tuple_sink_ns;
+        step_prof.tuple_commit_ns = step_res.tuple_sink_ns;
         res.step_profiling = step_prof;
         cumulative_profiling_.accumulate(step_prof);
     }
