@@ -24,8 +24,13 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # Protocol & Versioning Standards
 PROTOCOL_MEASUREMENT_VERSION = "1.2.0"
-PROTOCOL_ANALYSIS_VERSION = "1.3.0"
-PROTOCOL_SPECIFICATION_REVISION = "1.3.0"
+PROTOCOL_ANALYSIS_VERSION = "1.4.0"
+PROTOCOL_SPECIFICATION_REVISION = "1.4.0"
+
+# Artifact Integrity Status Taxonomy (R6-F02)
+ARTIFACT_STATUS_NOT_CHECKED = "NOT_CHECKED"
+ARTIFACT_STATUS_VERIFIED = "VERIFIED"
+ARTIFACT_STATUS_FAILED = "FAILED"
 
 # Approved Hard Ceilings
 CANONICAL_MAX_WORK_CAP = 500000
@@ -207,47 +212,117 @@ def create_experiment_header(
     }
 
 
-def verify_raw_artifact_integrity(
-    ledger_path: Union[str, Path],
-    trusted_artifact_meta: Dict[str, Any],
-) -> Tuple[bool, str]:
+def load_verified_ledger(
+    ledger_path: Optional[Union[str, Path]],
+    trusted_artifact_meta: Optional[Dict[str, Any]],
+) -> Tuple[Optional[List[Dict[str, Any]]], bool, str, Dict[str, Any]]:
     """
-    Verifies raw artifact integrity against trusted external reference metadata (R5-F02).
-    Checks:
-    - Path exists and is a regular file.
-    - Actual SHA-256 matches expected SHA-256.
-    - Actual byte size matches expected byte size (if provided).
-    - Actual line count matches expected line count (if provided).
-    Returns (is_valid, diagnostic_message).
+    Loads and verifies raw ledger records against trusted external reference metadata in a single snapshot (R6-F02, R6-F03).
+    Reads raw bytes once, computes SHA-256 and byte length, verifies against trusted metadata,
+    and parses JSONL records directly from the verified bytes.
+    Returns: (records, is_valid, diagnostic_message, verification_meta)
     """
+    if ledger_path is None:
+        return None, False, "No ledger_path provided", {}
+    if trusted_artifact_meta is None:
+        return None, False, "No trusted_artifact_meta provided", {}
+
     p = Path(ledger_path)
     if not p.exists():
-        return False, f"Raw artifact file does not exist: {p}"
+        return None, False, f"Raw artifact file does not exist: {p}", {}
     if not p.is_file():
-        return False, f"Raw artifact path is not a file: {p}"
+        return None, False, f"Raw artifact path is not a file: {p}", {}
+
+    if not isinstance(trusted_artifact_meta, dict):
+        return None, False, f"trusted_artifact_meta must be a dict, got {type(trusted_artifact_meta).__name__}", {}
 
     expected_sha = trusted_artifact_meta.get("sha256")
     if not expected_sha or not is_valid_hex64(expected_sha):
-        return False, f"Invalid or missing trusted sha256 in artifact reference: {expected_sha}"
-
-    actual_sha = compute_sha256(p)
-    if actual_sha.lower() != expected_sha.lower():
-        return False, f"Raw artifact SHA-256 mismatch for {p}: actual {actual_sha} != expected {expected_sha}"
+        return None, False, f"Invalid or missing trusted sha256 in artifact reference: {expected_sha}", {}
 
     expected_size = trusted_artifact_meta.get("size_bytes")
-    if expected_size is not None:
-        actual_size = p.stat().st_size
-        if actual_size != expected_size:
-            return False, f"Raw artifact byte size mismatch for {p}: actual {actual_size} != expected {expected_size}"
-
     expected_lines = trusted_artifact_meta.get("line_count")
-    if expected_lines is not None:
-        with open(p, "r", encoding="utf-8") as f:
-            actual_lines = sum(1 for line in f if line.strip())
-        if actual_lines != expected_lines:
-            return False, f"Raw artifact line count mismatch for {p}: actual {actual_lines} != expected {expected_lines}"
 
-    return True, ""
+
+    # Read raw bytes once (atomic snapshot)
+    try:
+        raw_bytes = p.read_bytes()
+    except Exception as e:
+        return None, False, f"Failed to read raw artifact bytes from {p}: {e}", {}
+
+    actual_size = len(raw_bytes)
+    actual_sha = hashlib.sha256(raw_bytes).hexdigest()
+
+    if actual_sha.lower() != expected_sha.lower():
+        return None, False, f"Raw artifact SHA-256 mismatch for {p}: actual {actual_sha} != expected {expected_sha}", {
+            "actual_sha256": actual_sha,
+            "expected_sha256": expected_sha,
+            "actual_size_bytes": actual_size,
+        }
+
+    if expected_size is not None and actual_size != expected_size:
+        return None, False, f"Raw artifact byte size mismatch for {p}: actual {actual_size} != expected {expected_size}", {
+            "actual_sha256": actual_sha,
+            "actual_size_bytes": actual_size,
+            "expected_size_bytes": expected_size,
+        }
+
+    # Parse JSONL records directly from verified bytes
+    try:
+        text = raw_bytes.decode("utf-8")
+    except UnicodeDecodeError as e:
+        return None, False, f"Raw artifact UTF-8 decode error in {p}: {e}", {}
+
+    records = []
+    non_empty_lines = 0
+    for line_no, line in enumerate(text.splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        non_empty_lines += 1
+        try:
+            rec = json.loads(stripped)
+            if not isinstance(rec, dict):
+                return None, False, f"Record at line {line_no} in {p} is not a JSON object", {}
+            records.append(rec)
+        except Exception as e:
+            return None, False, f"Corrupted JSON in {p} at line {line_no}: {e}", {}
+
+    if expected_lines is not None and non_empty_lines != expected_lines:
+        return None, False, f"Raw artifact line count mismatch for {p}: actual {non_empty_lines} != expected {expected_lines}", {
+            "actual_lines": non_empty_lines,
+            "expected_lines": expected_lines,
+        }
+
+    meta = {
+        "actual_sha256": actual_sha,
+        "actual_size_bytes": actual_size,
+        "sha256": actual_sha,
+        "size_bytes": actual_size,
+        "record_count": len(records),
+        "status": ARTIFACT_STATUS_VERIFIED,
+    }
+    return records, True, "", meta
+
+
+def verify_raw_artifact_integrity(
+    ledger_path: Optional[Union[str, Path]],
+    trusted_artifact_meta: Optional[Dict[str, Any]],
+) -> Tuple[bool, str, str]:
+    """
+    Verifies raw artifact integrity against trusted external reference metadata (R5-F02, R6-F02, R6-F03).
+    Delegates to load_verified_ledger to enforce single-snapshot verification.
+    Returns: (is_valid, status, diagnostic_message)
+    where status is one of ARTIFACT_STATUS_NOT_CHECKED, ARTIFACT_STATUS_VERIFIED, ARTIFACT_STATUS_FAILED.
+    """
+    if ledger_path is None and trusted_artifact_meta is None:
+        return False, ARTIFACT_STATUS_NOT_CHECKED, "No artifact verification attempted"
+    if ledger_path is None or trusted_artifact_meta is None:
+        return False, ARTIFACT_STATUS_NOT_CHECKED, "Incomplete artifact verification parameters"
+    _, ok, diag, _ = load_verified_ledger(ledger_path, trusted_artifact_meta)
+    status = ARTIFACT_STATUS_VERIFIED if ok else ARTIFACT_STATUS_FAILED
+    return ok, status, diag
+
 
 
 def compute_expected_slot_matrix(
@@ -364,6 +439,23 @@ def get_trusted_canonical_header(
         "cases_count": reg["cases_count"],
         "trusted_raw_artifact": artifact_meta,
     }
+
+
+def get_trusted_raw_artifact_meta(
+    evidence_manifest_path: Optional[Union[str, Path]] = None,
+    target_rel_or_name: str = "results/logs/rf36-p4a/p4a_raw_ledger.jsonl",
+) -> Dict[str, Any]:
+    """Helper to retrieve trusted raw artifact metadata from evidence manifest (R6-F02)."""
+    ev_manifest = load_trusted_evidence_manifest(evidence_manifest_path)
+    artifacts = ev_manifest.get("artifacts", {})
+    if target_rel_or_name in artifacts:
+        return artifacts[target_rel_or_name]
+    target_name = Path(target_rel_or_name).name
+    for rel_path, meta in artifacts.items():
+        if Path(rel_path).name == target_name:
+            return meta
+    raise KeyError(f"Artifact '{target_rel_or_name}' not found in evidence manifest artifacts: {list(artifacts.keys())}")
+
 
 
 def validate_record_integrity(

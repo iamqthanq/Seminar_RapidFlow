@@ -66,6 +66,11 @@ Across 90 paired comparisons (30 canonical workloads $\times$ 3 repetitions $\ti
 | Three-Level Integrity Architecture | **ADD** | Record-level (Level A), pair-level (Level B), and canonical completeness & raw artifact binding (Level C). | Enforces 180/180 slot completeness and exact raw artifact SHA-256 verification (Round 5). |
 | Production CLI Contract Recovery | **ADD** | Restored fail-closed CLI entrypoint with `--mode canonical` and `--mode scoped`. | Tested across 16 CLI end-to-end integration scenarios E2E-01..E2E-16 (Round 5). |
 | Alien Experiment Contamination Protection | **ADD** | Interleaved alien experiment records are quarantined in `rejected_conflicts`, failing ledger closed. | Tested in `test_44_e2e_10_mixed_experiments` (Round 5). |
+| Unified Certification Boundary | **ADD** | Enforces fail-closed canonical API validation requiring authoritative expected header, slot matrix, and artifact binding. | Eliminates certification bypass; tested in `test_53_r6_f01` (Round 6). |
+| Strict Tristate Raw Artifact Taxonomy | **ADD** | Tristate status: `NOT_CHECKED`, `VERIFIED`, `FAILED`; prevents synthetic records claiming false verification. | Tested across B01-B11 in `test_54_r6_f02` (Round 6). |
+| Atomic Snapshot Loading & Data Binding | **ADD** | `load_verified_ledger` loads single byte snapshot and binds 1:1 against in-memory records. | Prevents in-memory payload tampering; tested in `test_55_r6_f03` (Round 6). |
+| Decoupled Test Fixtures | **ADD** | Decouples unit and adversarial tests from unversioned raw ledger logs via deterministic synthetic fixtures. | Guarantees fresh-checkout test reproducibility; tested in `test_56_r6_f04` (Round 6). |
+
 
 ---
 

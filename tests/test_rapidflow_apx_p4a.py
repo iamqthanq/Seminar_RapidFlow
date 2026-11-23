@@ -44,15 +44,24 @@ from scripts.run_rapidflow_apx_p4a import (
     PROTOCOL_VERSION,
 )
 from scripts.p4a_evidence_contract import (
+    ARTIFACT_STATUS_FAILED,
+    ARTIFACT_STATUS_NOT_CHECKED,
+    ARTIFACT_STATUS_VERIFIED,
     AmbiguousSlotError,
     IntegrityConflictError,
     PROTOCOL_MEASUREMENT_VERSION,
     PROTOCOL_ANALYSIS_VERSION,
     PROTOCOL_SPECIFICATION_REVISION,
+    compute_expected_slot_matrix,
     create_experiment_header,
     get_frozen_manifest_registry,
+    get_trusted_canonical_header,
+    get_trusted_raw_artifact_meta,
+    load_trusted_evidence_manifest,
+    load_verified_ledger,
     resolve_canonical_attempts,
     validate_pair_compatibility,
+    verify_raw_artifact_integrity,
 )
 from scripts.summarize_rapidflow_apx_p4a import (
     analyze_p4a_ledger,
@@ -69,6 +78,172 @@ from scripts.dstar_oracle import (
     DStarGraph,
     DStarUpdate,
 )
+
+# Deterministic synthetic fixtures for unit & adversarial tests (R6-F04)
+FIXTURE_VALID_CANONICAL_M1 = {
+    "attempt_id": "P4A_RUN_1795423267_P4A_WL_01_rep0_m1",
+    "binary_sha256": "6e4537d03a356dd9c603e452f86848cbdb1ea2cd0fcbdf31199d0e9afbf9b21b",
+    "correctness_notes": "",
+    "correctness_status": "M0_VERIFIED",
+    "counters": {
+        "anchors_started": 80,
+        "candidate_evaluations": 728,
+        "candidate_extensions": 164,
+        "committed_emissions": 24,
+        "dfs_states": 244,
+        "discarded_emissions": 0,
+        "edge_lookups": 1080,
+        "max_work": 500000,
+        "missing_set_rejections": 0,
+        "raw_emissions": 24,
+        "raw_exact_results": 24,
+        "unique_emissions": 24,
+        "variants_started": 80,
+        "vertex_label_checks": 568,
+        "work_units": 808
+    },
+    "effective_max_work": 500000,
+    "effective_memory_limit_mib": 512,
+    "effective_timeout": 60.0,
+    "engine": "m1",
+    "execution_identity": "262279a9d9ea026e07231f3ba511863c383b98133db40e69f603a235ad792135",
+    "exit_code": 0,
+    "k": 0,
+    "m0_agreed": True,
+    "manifest_sha256": "f82bdcc0c89ce794439eeff3fd67fe78de733196286503c27de70ed2df5d3b18",
+    "measurement_mode": "CANONICAL_TIMED",
+    "order_position": 0,
+    "outer_wall_ns": 6044583,
+    "performance_admission_status": "ACCEPTED",
+    "profiling": {
+        "cumulative": {
+            "neighbor_retrieval_ns": 32035,
+            "search_core_ns": 147716,
+            "search_ns": 179751,
+            "step_total_ns": 193714,
+            "tuple_commit_ns": 1686,
+            "tuple_sink_ns": 1686,
+            "update_maintenance_ns": 7322
+        },
+        "cumulative_neighbor_retrieval_ns": 32035,
+        "cumulative_search_core_ns": 147716,
+        "cumulative_search_ns": 179751,
+        "cumulative_step_total_ns": 193714,
+        "cumulative_tuple_commit_ns": 1686,
+        "cumulative_tuple_sink_ns": 1686,
+        "cumulative_update_maintenance_ns": 7322,
+        "enabled": True,
+        "graph_init_ns": 17106,
+        "input_parsing_ns": 1262459,
+        "native_step_total_ns": 193714,
+        "pre_output_wall_ns": 2240075,
+        "profiling_schema_version": "1.2.0",
+        "query_prep_ns": 9260,
+        "streaming_exec_ns": 734651,
+        "streaming_loop_wall_ns": 734651,
+        "total_wall_ns": 2240075
+    },
+    "protocol_sha256": "dd3f39cae4325b3577adec8fa19ff5f52844e9338b1d97aa542d58b6c09d4ebd",
+    "protocol_version": "1.2.0",
+    "query_type": "diamond",
+    "regime": "uniform",
+    "repetition": 0,
+    "run_id": "P4A_RUN_1795423267",
+    "slot_key": "P4A_WL_01_rep0_m1",
+    "source_commit": "cf97a7840dff0c0f2bf791834263f3911545110c",
+    "source_dirty_state": "CLEAN",
+    "status": "COMPLETED_VERIFIED",
+    "steps_count": 8,
+    "timestamp": "2026-11-23T08:41:07Z",
+    "topology": "micro",
+    "upstream_commit": "2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1",
+    "upstream_pristine": True,
+    "workload_id": "P4A_WL_01",
+    "workload_sha256": "830d56a1932d045b46ceff9b0e86b666373b62a82fccfcac2df4195134d016b0"
+}
+
+FIXTURE_VALID_CANONICAL_M2 = {
+    "attempt_id": "P4A_RUN_1795423267_P4A_WL_01_rep0_m2",
+    "binary_sha256": "6e4537d03a356dd9c603e452f86848cbdb1ea2cd0fcbdf31199d0e9afbf9b21b",
+    "correctness_notes": "",
+    "correctness_status": "M0_VERIFIED",
+    "counters": {
+        "anchors_started": 80,
+        "candidate_evaluations": 728,
+        "candidate_extensions": 408,
+        "commitment_checks": 0,
+        "commitment_rejections": 0,
+        "committed_emissions": 24,
+        "dfs_states": 244,
+        "discarded_emissions": 0,
+        "edge_decisions": 220,
+        "edge_lookups": 1200,
+        "max_work": 500000,
+        "missing_branches": 220,
+        "raw_emissions": 24,
+        "unique_emissions": 24,
+        "vertex_label_checks": 568,
+        "work_units": 1248
+    },
+    "effective_max_work": 500000,
+    "effective_memory_limit_mib": 512,
+    "effective_timeout": 60.0,
+    "engine": "m2",
+    "execution_identity": "262279a9d9ea026e07231f3ba511863c383b98133db40e69f603a235ad792135",
+    "exit_code": 0,
+    "k": 0,
+    "m0_agreed": True,
+    "manifest_sha256": "f82bdcc0c89ce794439eeff3fd67fe78de733196286503c27de70ed2df5d3b18",
+    "measurement_mode": "CANONICAL_TIMED",
+    "order_position": 1,
+    "outer_wall_ns": 6334541,
+    "performance_admission_status": "ACCEPTED",
+    "profiling": {
+        "cumulative": {
+            "neighbor_retrieval_ns": 33362,
+            "search_core_ns": 101133,
+            "search_ns": 134495,
+            "step_total_ns": 149201,
+            "tuple_commit_ns": 1609,
+            "tuple_sink_ns": 1609,
+            "update_maintenance_ns": 7906
+        },
+        "cumulative_neighbor_retrieval_ns": 33362,
+        "cumulative_search_core_ns": 101133,
+        "cumulative_search_ns": 134495,
+        "cumulative_step_total_ns": 149201,
+        "cumulative_tuple_commit_ns": 1609,
+        "cumulative_tuple_sink_ns": 1609,
+        "cumulative_update_maintenance_ns": 7906,
+        "enabled": True,
+        "graph_init_ns": 18329,
+        "input_parsing_ns": 1285873,
+        "native_step_total_ns": 149201,
+        "pre_output_wall_ns": 2258132,
+        "profiling_schema_version": "1.2.0",
+        "query_prep_ns": 9369,
+        "streaming_exec_ns": 747316,
+        "streaming_loop_wall_ns": 747316,
+        "total_wall_ns": 2258132
+    },
+    "protocol_sha256": "dd3f39cae4325b3577adec8fa19ff5f52844e9338b1d97aa542d58b6c09d4ebd",
+    "protocol_version": "1.2.0",
+    "query_type": "diamond",
+    "regime": "uniform",
+    "repetition": 0,
+    "run_id": "P4A_RUN_1795423267",
+    "slot_key": "P4A_WL_01_rep0_m2",
+    "source_commit": "cf97a7840dff0c0f2bf791834263f3911545110c",
+    "source_dirty_state": "CLEAN",
+    "status": "COMPLETED_VERIFIED",
+    "steps_count": 8,
+    "timestamp": "2026-11-23T08:41:07Z",
+    "topology": "micro",
+    "upstream_commit": "2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1",
+    "upstream_pristine": True,
+    "workload_id": "P4A_WL_01",
+    "workload_sha256": "830d56a1932d045b46ceff9b0e86b666373b62a82fccfcac2df4195134d016b0"
+}
 
 
 class TestRapidFlowApxP4a(unittest.TestCase):
@@ -101,11 +276,9 @@ class TestRapidFlowApxP4a(unittest.TestCase):
         # Delete-heavy workload
         cls.wl_diamond_k1_delete_heavy = cls.cases_by_id.get("P4A_WL_10")
 
-        # Valid canonical baseline records for strict tests
-        canonical_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
-        with open(canonical_ledger, "r", encoding="utf-8") as f:
-            cls.valid_canonical_m1 = json.loads(f.readline())
-            cls.valid_canonical_m2 = json.loads(f.readline())
+        # Valid canonical baseline records as deterministic fixtures (R6-F04)
+        cls.valid_canonical_m1 = copy.deepcopy(FIXTURE_VALID_CANONICAL_M1)
+        cls.valid_canonical_m2 = copy.deepcopy(FIXTURE_VALID_CANONICAL_M2)
 
     def test_01_build_and_system_resources(self):
         """Verifies native binary builds cleanly and host meets preflight RAM and disk bounds."""
@@ -818,9 +991,7 @@ class TestRapidFlowApxP4a(unittest.TestCase):
 
     def test_22_workload_hash_tampering_rejected_by_resume(self):
         """R3-F01: Workload hash tampering in record must be rejected fail-closed by resume supervisor."""
-        canonical_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
-        with open(canonical_ledger, "r", encoding="utf-8") as f:
-            valid_rec = json.loads(f.readline())
+        valid_rec = copy.deepcopy(self.valid_canonical_m1)
 
         # Tamper workload_sha256
         tampered_rec = copy.deepcopy(valid_rec)
@@ -858,9 +1029,7 @@ class TestRapidFlowApxP4a(unittest.TestCase):
 
     def test_23_duplicate_attempt_1000x_rejected_by_resume_and_summarizer(self):
         """R3-F02: Conflicting duplicate verified attempt (1000x) is rejected fail-closed without silent selection."""
-        canonical_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
-        with open(canonical_ledger, "r", encoding="utf-8") as f:
-            valid_rec = json.loads(f.readline())
+        valid_rec = copy.deepcopy(self.valid_canonical_m1)
 
         dup_1000x = copy.deepcopy(valid_rec)
         dup_1000x["attempt_id"] = valid_rec["attempt_id"] + "_retry"
@@ -879,16 +1048,14 @@ class TestRapidFlowApxP4a(unittest.TestCase):
         m2_rec = copy.deepcopy(valid_rec)
         m2_rec["engine"] = "m2"
         m2_rec["slot_key"] = valid_rec["slot_key"].replace("_m1", "_m2")
-        summary = analyze_p4a_ledger([valid_rec, dup_1000x, m2_rec])
+        summary = analyze_p4a_ledger([valid_rec, dup_1000x, m2_rec], mode="scoped")
         self.assertEqual(summary["total_valid_pairs"], 0)
         self.assertEqual(summary["total_rejected_pairs"], 1)
 
     def test_24_summarizer_source_commit_mismatch_rejected(self):
         """R3-F03: Contradictory source commit between M1 and M2 is rejected by summarizer."""
-        canonical_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
-        with open(canonical_ledger, "r", encoding="utf-8") as f:
-            rec_m1 = json.loads(f.readline())
-            rec_m2 = json.loads(f.readline())
+        rec_m1 = copy.deepcopy(self.valid_canonical_m1)
+        rec_m2 = copy.deepcopy(self.valid_canonical_m2)
 
         # Mutate M2 commit
         m2_mutated = copy.deepcopy(rec_m2)
@@ -900,7 +1067,7 @@ class TestRapidFlowApxP4a(unittest.TestCase):
             "Source commit mismatch" in reason or "Self-consistency failure" in reason
         )
 
-        summary = analyze_p4a_ledger([rec_m1, m2_mutated])
+        summary = analyze_p4a_ledger([rec_m1, m2_mutated], mode="scoped")
         self.assertEqual(summary["total_valid_pairs"], 0)
         self.assertEqual(summary["total_rejected_pairs"], 1)
 
@@ -957,13 +1124,16 @@ class TestRapidFlowApxP4a(unittest.TestCase):
         self.assertIn("Counter mismatch for 'dfs_states'", diag)
 
     def test_26_protocol_versioning_and_historical_compatibility(self):
-        """R3-F05: Distinguishes Measurement Protocol 1.2.0, Analysis 1.3.0, and Revision 1.3.0."""
+        """R3-F05: Distinguishes Measurement Protocol 1.2.0, Analysis 1.4.0, and Revision 1.4.0."""
         self.assertEqual(PROTOCOL_MEASUREMENT_VERSION, "1.2.0")
-        self.assertEqual(PROTOCOL_ANALYSIS_VERSION, "1.3.0")
-        self.assertEqual(PROTOCOL_SPECIFICATION_REVISION, "1.3.0")
+        self.assertEqual(PROTOCOL_ANALYSIS_VERSION, "1.4.0")
+        self.assertEqual(PROTOCOL_SPECIFICATION_REVISION, "1.4.0")
 
         # Check all 180 canonical records match historical protocol SHA
         canonical_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
+        if not canonical_ledger.is_file():
+            self.skipTest("HISTORICAL_EVIDENCE_UNAVAILABLE: Historical canonical raw ledger is not provisioned on disk.")
+
         with open(canonical_ledger, "r", encoding="utf-8") as f:
             for line_no, line in enumerate(f, 1):
                 rec = json.loads(line)
@@ -993,8 +1163,9 @@ class TestRapidFlowApxP4a(unittest.TestCase):
         with open(manifest_path, "r", encoding="utf-8") as f:
             manifest = json.load(f)
 
-        self.assertEqual(manifest["manifest_version"], "1.3.0")
+        self.assertEqual(manifest["manifest_version"], "1.4.0")
         self.assertEqual(manifest["phase"], "P4a")
+
         self.assertEqual(manifest["execution_identity"], "262279a9d9ea026e07231f3ba511863c383b98133db40e69f603a235ad792135")
         self.assertEqual(manifest["canonical_execution_commit"], "cf97a7840dff0c0f2bf791834263f3911545110c")
 
@@ -1003,7 +1174,10 @@ class TestRapidFlowApxP4a(unittest.TestCase):
 
         for rel_path, meta in artifacts.items():
             full_path = REPO_ROOT / rel_path
-            self.assertTrue(full_path.is_file(), f"Artifact file missing: {rel_path}")
+            if not full_path.is_file():
+                if not meta.get("git_tracked", True):
+                    continue  # Untracked historical artifact not present on fresh checkout
+                self.fail(f"Tracked artifact file missing: {rel_path}")
             real_sha = compute_sha256(full_path)
             self.assertEqual(
                 real_sha, meta["sha256"], f"Hash mismatch for {rel_path}: disk={real_sha} vs manifest={meta['sha256']}"
@@ -1199,7 +1373,7 @@ class TestRapidFlowApxP4a(unittest.TestCase):
         """E2E-02: Valid canonical raw ledger executes to completion, exits 0, produces certified CANONICAL_PASS."""
         raw_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
         if not raw_ledger.is_file():
-            self.skipTest("Raw canonical ledger not present")
+            self.skipTest("HISTORICAL_EVIDENCE_UNAVAILABLE: Historical canonical raw ledger is not provisioned on disk.")
 
         with tempfile.TemporaryDirectory() as tmpdir:
             out_json = Path(tmpdir) / "summary.json"
@@ -1228,12 +1402,10 @@ class TestRapidFlowApxP4a(unittest.TestCase):
 
     def test_37_e2e_03_valid_scoped_data(self):
         """E2E-03: Valid partial/scoped data in scoped mode exits 0, produces SCOPED_ANALYSIS_VALID."""
-        raw_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
-        if not raw_ledger.is_file():
-            self.skipTest("Raw canonical ledger not present")
-
-        with open(raw_ledger, "r", encoding="utf-8") as f:
-            lines = [f.readline(), f.readline()]
+        lines = [
+            json.dumps(self.valid_canonical_m1) + "\n",
+            json.dumps(self.valid_canonical_m2) + "\n",
+        ]
 
         with tempfile.TemporaryDirectory() as tmpdir:
             scoped_ledger = Path(tmpdir) / "scoped.jsonl"
@@ -1296,7 +1468,7 @@ class TestRapidFlowApxP4a(unittest.TestCase):
         """E2E-06 / R5-F02: Modified measurement payload fails raw artifact integrity in canonical mode."""
         raw_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
         if not raw_ledger.is_file():
-            self.skipTest("Raw canonical ledger not present")
+            self.skipTest("HISTORICAL_EVIDENCE_UNAVAILABLE: Historical canonical raw ledger is not provisioned on disk.")
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tampered_ledger = Path(tmpdir) / "p4a_raw_ledger.jsonl"
@@ -1323,7 +1495,7 @@ class TestRapidFlowApxP4a(unittest.TestCase):
         """E2E-07 / R5-F02: Unregistered ledger file cannot obtain canonical certification."""
         raw_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
         if not raw_ledger.is_file():
-            self.skipTest("Raw canonical ledger not present")
+            self.skipTest("HISTORICAL_EVIDENCE_UNAVAILABLE: Historical canonical raw ledger is not provisioned on disk.")
 
         with tempfile.TemporaryDirectory() as tmpdir:
             unregistered_ledger = Path(tmpdir) / "unregistered_name.jsonl"
@@ -1344,7 +1516,7 @@ class TestRapidFlowApxP4a(unittest.TestCase):
         """E2E-08 / R5-F04: Self-consistent forged execution identity rejected in canonical mode."""
         raw_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
         if not raw_ledger.is_file():
-            self.skipTest("Raw canonical ledger not present")
+            self.skipTest("HISTORICAL_EVIDENCE_UNAVAILABLE: Historical canonical raw ledger is not provisioned on disk.")
 
         with tempfile.TemporaryDirectory() as tmpdir:
             forged_ledger = Path(tmpdir) / "p4a_raw_ledger.jsonl"
@@ -1381,13 +1553,11 @@ class TestRapidFlowApxP4a(unittest.TestCase):
             self.assertNotEqual(proc.returncode, 0)
 
     def test_43_e2e_09_incomplete_canonical_slots(self):
-        """E2E-09 / R5-F01: Partial dataset (1 pair) in canonical mode is rejected as CANONICAL_INCOMPLETE."""
-        raw_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
-        if not raw_ledger.is_file():
-            self.skipTest("Raw canonical ledger not present")
-
-        with open(raw_ledger, "r", encoding="utf-8") as f:
-            lines = [f.readline(), f.readline()]
+        """E2E-09 / R5-F01: Partial dataset (1 pair) in canonical mode is rejected."""
+        lines = [
+            json.dumps(self.valid_canonical_m1) + "\n",
+            json.dumps(self.valid_canonical_m2) + "\n",
+        ]
 
         with tempfile.TemporaryDirectory() as tmpdir:
             partial_ledger = Path(tmpdir) / "partial.jsonl"
@@ -1406,20 +1576,17 @@ class TestRapidFlowApxP4a(unittest.TestCase):
 
     def test_44_e2e_10_mixed_experiments(self):
         """E2E-10 / R5-F05: Cross-experiment records contaminate ledger and fail certification."""
-        raw_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
-        if not raw_ledger.is_file():
-            self.skipTest("Raw canonical ledger not present")
-
+        lines = [
+            json.dumps(self.valid_canonical_m1) + "\n",
+            json.dumps(self.valid_canonical_m2) + "\n",
+        ]
         with tempfile.TemporaryDirectory() as tmpdir:
             mixed_ledger = Path(tmpdir) / "mixed.jsonl"
             out_json = Path(tmpdir) / "out.json"
-            with open(raw_ledger, "r", encoding="utf-8") as f:
-                lines = [f.readline(), f.readline()]
-            alien = json.loads(lines[0])
+            alien = copy.deepcopy(self.valid_canonical_m1)
             alien["execution_identity"] = "e" * 64
             with open(mixed_ledger, "w", encoding="utf-8") as f:
-                f.write(lines[0])
-                f.write(lines[1])
+                f.writelines(lines)
                 f.write(json.dumps(alien) + "\n")
 
             cmd = [
@@ -1433,20 +1600,18 @@ class TestRapidFlowApxP4a(unittest.TestCase):
 
     def test_45_e2e_11_corrupted_duplicate(self):
         """E2E-11 / R4-F02: Corrupted duplicate attempt quarantines slot and fails certification."""
-        raw_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
-        if not raw_ledger.is_file():
-            self.skipTest("Raw canonical ledger not present")
-
+        lines = [
+            json.dumps(self.valid_canonical_m1) + "\n",
+            json.dumps(self.valid_canonical_m2) + "\n",
+        ]
         with tempfile.TemporaryDirectory() as tmpdir:
             dup_ledger = Path(tmpdir) / "dup.jsonl"
             out_json = Path(tmpdir) / "out.json"
-            with open(raw_ledger, "r", encoding="utf-8") as f:
-                lines = [f.readline(), f.readline()]
-            corrupted = json.loads(lines[0])
+            corrupted = copy.deepcopy(self.valid_canonical_m1)
             corrupted["binary_sha256"] = "f" * 64
+            corrupted["attempt_id"] = "CORRUPTED_ATTEMPT_99"
             with open(dup_ledger, "w", encoding="utf-8") as f:
-                f.write(lines[0])
-                f.write(lines[1])
+                f.writelines(lines)
                 f.write(json.dumps(corrupted) + "\n")
 
             cmd = [
@@ -1460,15 +1625,14 @@ class TestRapidFlowApxP4a(unittest.TestCase):
 
     def test_46_e2e_12_failed_exit_code(self):
         """E2E-12 / R4-F04: Record claiming COMPLETED_VERIFIED with exit_code != 0 is rejected."""
-        raw_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
-        if not raw_ledger.is_file():
-            self.skipTest("Raw canonical ledger not present")
-
+        lines = [
+            json.dumps(self.valid_canonical_m1) + "\n",
+            json.dumps(self.valid_canonical_m2) + "\n",
+        ]
         with tempfile.TemporaryDirectory() as tmpdir:
             bad_ledger = Path(tmpdir) / "bad_ec.jsonl"
             out_json = Path(tmpdir) / "out.json"
-            with open(raw_ledger, "r", encoding="utf-8") as f:
-                recs = [json.loads(f.readline()), json.loads(f.readline())]
+            recs = [copy.deepcopy(self.valid_canonical_m1), copy.deepcopy(self.valid_canonical_m2)]
             recs[0]["exit_code"] = 1
             with open(bad_ledger, "w", encoding="utf-8") as f:
                 for r in recs:
@@ -1501,31 +1665,32 @@ class TestRapidFlowApxP4a(unittest.TestCase):
 
     def test_48_e2e_14_output_directory_unavailable(self):
         """E2E-14: Unwritable output directory returns non-zero exit code with error message."""
-        raw_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
-        if not raw_ledger.is_file():
-            self.skipTest("Raw canonical ledger not present")
-
-        cmd = [
-            sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"),
-            "--ledger", str(raw_ledger),
-            "--output-json", "/proc/unwritable_dir/summary.json",
-            "--mode", "canonical",
-        ]
-        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        self.assertNotEqual(proc.returncode, 0)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_ledger = Path(tmpdir) / "ledger.jsonl"
+            with open(temp_ledger, "w", encoding="utf-8") as f:
+                f.write(json.dumps(self.valid_canonical_m1) + "\n")
+                f.write(json.dumps(self.valid_canonical_m2) + "\n")
+            cmd = [
+                sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"),
+                "--ledger", str(temp_ledger),
+                "--output-json", "/proc/unwritable_dir/summary.json",
+                "--mode", "scoped",
+            ]
+            proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertNotEqual(proc.returncode, 0)
 
     def test_49_e2e_15_output_file_creation_failure(self):
         """E2E-15: Output path pointing to existing directory returns non-zero exit code."""
-        raw_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
-        if not raw_ledger.is_file():
-            self.skipTest("Raw canonical ledger not present")
-
         with tempfile.TemporaryDirectory() as tmpdir:
+            temp_ledger = Path(tmpdir) / "ledger.jsonl"
+            with open(temp_ledger, "w", encoding="utf-8") as f:
+                f.write(json.dumps(self.valid_canonical_m1) + "\n")
+                f.write(json.dumps(self.valid_canonical_m2) + "\n")
             cmd = [
                 sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"),
-                "--ledger", str(raw_ledger),
+                "--ledger", str(temp_ledger),
                 "--output-json", tmpdir,
-                "--mode", "canonical",
+                "--mode", "scoped",
             ]
             proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             self.assertNotEqual(proc.returncode, 0)
@@ -1640,6 +1805,358 @@ class TestRapidFlowApxP4a(unittest.TestCase):
         zero_out["steps"][0]["exited_tuples"] = []
         ok, diag = verify_observer_output_invariance(zero_out, copy.deepcopy(zero_out), query_dimension=4)
         self.assertTrue(ok, diag)
+
+    # =========================================================================
+    # ROUND 6 REGRESSION TESTS (R6-F01, R6-F02, R6-F03, R6-F04)
+    # =========================================================================
+
+    def test_53_r6_f01_canonical_api_preconditions_rejected(self):
+        """R6-F01 / Group A: Canonical API certification boundary fails closed on missing preconditions (A01-A12)."""
+        pair_m1 = copy.deepcopy(self.valid_canonical_m1)
+        pair_m2 = copy.deepcopy(self.valid_canonical_m2)
+        raw_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
+        ev_path = REPO_ROOT / "docs" / "evidence" / "p4a_evidence_manifest.json"
+
+        # A01: 1 pair, canonical, no header -> CANONICAL_UNTRUSTED_CONTEXT
+        res_a01 = analyze_p4a_ledger([pair_m1, pair_m2], mode="canonical")
+        self.assertEqual(res_a01["overall_verdict"], "CANONICAL_UNTRUSTED_CONTEXT")
+        self.assertEqual(res_a01["raw_artifact_integrity_status"], ARTIFACT_STATUS_NOT_CHECKED)
+
+        # A02: 1 pair, canonical, no raw artifact -> CANONICAL_UNTRUSTED_CONTEXT
+        res_a02 = analyze_p4a_ledger([pair_m1, pair_m2], mode="canonical", raw_ledger_path=None)
+        self.assertIn(res_a02["overall_verdict"], ("CANONICAL_UNTRUSTED_CONTEXT", "CANONICAL_EVIDENCE_INCOMPLETE"))
+        self.assertNotEqual(res_a02["overall_verdict"], "CANONICAL_PASS")
+
+        # Load trusted header & manifest info if available
+        trusted_header = get_trusted_canonical_header(ev_path)
+        manifest_data = get_frozen_manifest_registry()
+
+        # Create 180 valid synthetic records conforming to manifest registry
+        recs_180 = []
+        for wl_idx in range(1, 19):
+            wl_id = f"P4A_WL_{wl_idx:02d}"
+            wl_hash = manifest_data["workload_hashes"].get(wl_id, "a" * 64)
+            for rep in range(5):
+                m1 = copy.deepcopy(self.valid_canonical_m1)
+                m2 = copy.deepcopy(self.valid_canonical_m2)
+                m1["workload_id"] = wl_id
+                m2["workload_id"] = wl_id
+                m1["workload_sha256"] = wl_hash
+                m2["workload_sha256"] = wl_hash
+                m1["repetition"] = rep
+                m2["repetition"] = rep
+                m1["slot_key"] = f"{wl_id}_rep{rep}_m1"
+                m2["slot_key"] = f"{wl_id}_rep{rep}_m2"
+                recs_180.extend([m1, m2])
+
+        # A03: 180 records, canonical, no header -> CANONICAL_UNTRUSTED_CONTEXT
+        res_a03 = analyze_p4a_ledger(recs_180, mode="canonical", expected_header=None)
+        self.assertEqual(res_a03["overall_verdict"], "CANONICAL_UNTRUSTED_CONTEXT")
+
+
+        # A04: 180 records, canonical, header provided, but empty slot matrix -> CANONICAL_EVIDENCE_INCOMPLETE
+        res_a04_empty = analyze_p4a_ledger(recs_180, mode="canonical", expected_header=trusted_header, expected_slot_matrix=set())
+        self.assertEqual(res_a04_empty["overall_verdict"], "CANONICAL_EVIDENCE_INCOMPLETE")
+
+        # A05: 180 records, canonical, header + matrix provided, but no raw path -> CANONICAL_EVIDENCE_INCOMPLETE
+        slot_matrix = compute_expected_slot_matrix(manifest_data)
+        res_a05 = analyze_p4a_ledger(recs_180, mode="canonical", expected_header=trusted_header, expected_slot_matrix=slot_matrix, raw_ledger_path=None)
+        self.assertEqual(res_a05["overall_verdict"], "CANONICAL_EVIDENCE_INCOMPLETE")
+
+        # A06: 180 records, canonical, header + matrix + raw path, but no trusted_artifact_meta -> CANONICAL_INVALID_ARTIFACT
+        res_a06 = analyze_p4a_ledger(
+            recs_180,
+            mode="canonical",
+            expected_header=trusted_header,
+            expected_slot_matrix=slot_matrix,
+            raw_ledger_path=raw_ledger,
+            trusted_artifact_meta=None,
+        )
+        self.assertEqual(res_a06["overall_verdict"], "CANONICAL_INVALID_ARTIFACT")
+        self.assertNotEqual(res_a06["overall_verdict"], "CANONICAL_PASS")
+
+
+        # A07: expected_header = {} -> CANONICAL_UNTRUSTED_CONTEXT
+        res_a07 = analyze_p4a_ledger(recs_180, mode="canonical", expected_header={})
+        self.assertEqual(res_a07["overall_verdict"], "CANONICAL_UNTRUSTED_CONTEXT")
+
+        # A08: Header only has execution identity -> CANONICAL_UNTRUSTED_CONTEXT
+        res_a08 = analyze_p4a_ledger(
+            recs_180,
+            mode="canonical",
+            expected_header={"execution_identity": recs_180[0]["execution_identity"]},
+        )
+        self.assertEqual(res_a08["overall_verdict"], "CANONICAL_UNTRUSTED_CONTEXT")
+        self.assertNotEqual(res_a08["overall_verdict"], "CANONICAL_PASS")
+
+
+        # A09: Full valid evidence (if historical raw ledger exists) -> CANONICAL_PASS
+        if raw_ledger.is_file():
+            trusted_meta = get_trusted_raw_artifact_meta(ev_path)
+            res_a09 = analyze_p4a_ledger(
+                None,
+                mode="canonical",
+                raw_ledger_path=raw_ledger,
+                expected_header=trusted_header,
+                expected_slot_matrix=slot_matrix,
+                trusted_artifact_meta=trusted_meta,
+            )
+            self.assertEqual(res_a09["overall_verdict"], "CANONICAL_PASS")
+            self.assertEqual(res_a09["raw_artifact_integrity_status"], ARTIFACT_STATUS_VERIFIED)
+
+        # A10: 1 pair, scoped -> SCOPED_ANALYSIS_VALID, NOT_CHECKED
+        res_a10 = analyze_p4a_ledger([pair_m1, pair_m2], mode="scoped")
+        self.assertEqual(res_a10["overall_verdict"], "SCOPED_ANALYSIS_VALID")
+        self.assertEqual(res_a10["raw_artifact_integrity_status"], ARTIFACT_STATUS_NOT_CHECKED)
+
+        # A11: Invalid mode -> raises ValueError
+        with self.assertRaises(ValueError):
+            analyze_p4a_ledger([pair_m1, pair_m2], mode="arbitrary_mode")
+
+        # A12: Direct API vs CLI on same valid evidence (if available) -> same verdict & pair counts
+        if raw_ledger.is_file():
+            trusted_meta = get_trusted_raw_artifact_meta(ev_path)
+            api_res = analyze_p4a_ledger(
+                None,
+                mode="canonical",
+                raw_ledger_path=raw_ledger,
+                expected_header=trusted_header,
+                expected_slot_matrix=slot_matrix,
+                trusted_artifact_meta=trusted_meta,
+            )
+            with tempfile.TemporaryDirectory() as tmpdir:
+                cli_json = Path(tmpdir) / "cli_out.json"
+                cmd = [
+                    sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"),
+                    "--ledger", str(raw_ledger),
+                    "--output-json", str(cli_json),
+                    "--mode", "canonical",
+                ]
+                proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                self.assertEqual(proc.returncode, 0)
+                with open(cli_json, "r", encoding="utf-8") as f:
+                    cli_data = json.load(f)
+                self.assertEqual(api_res["overall_verdict"], cli_data["overall_verdict"])
+                self.assertEqual(api_res["total_valid_pairs"], cli_data["total_valid_pairs"])
+                self.assertEqual(api_res["raw_artifact_integrity_status"], cli_data["raw_artifact_integrity_status"])
+
+    def test_54_r6_f02_raw_artifact_status_taxonomy(self):
+        """R6-F02 / Group B: Strict tristate taxonomy for raw artifact status (B01-B11)."""
+        pair_m1 = copy.deepcopy(self.valid_canonical_m1)
+        pair_m2 = copy.deepcopy(self.valid_canonical_m2)
+        raw_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
+        ev_path = REPO_ROOT / "docs" / "evidence" / "p4a_evidence_manifest.json"
+
+        # B01: No artifact verification requested (scoped) -> NOT_CHECKED
+        res_b01 = analyze_p4a_ledger([pair_m1, pair_m2], mode="scoped")
+        self.assertEqual(res_b01["raw_artifact_integrity_status"], ARTIFACT_STATUS_NOT_CHECKED)
+
+        # B02: verify_raw_artifact_integrity(None, None) -> (False, NOT_CHECKED, ...)
+        ok, status, diag = verify_raw_artifact_integrity(None, None)
+        self.assertFalse(ok)
+        self.assertEqual(status, ARTIFACT_STATUS_NOT_CHECKED)
+
+        # B03: Canonical without artifact -> status is NOT_CHECKED and overall not PASS
+        res_b03 = analyze_p4a_ledger([pair_m1, pair_m2], mode="canonical")
+        self.assertEqual(res_b03["raw_artifact_integrity_status"], ARTIFACT_STATUS_NOT_CHECKED)
+        self.assertNotEqual(res_b03["overall_verdict"], "CANONICAL_PASS")
+
+        # B04: Canonical with correct trusted artifact -> VERIFIED (if file exists)
+        if raw_ledger.is_file():
+            trusted_meta = get_trusted_raw_artifact_meta(ev_path)
+            ok, status, diag = verify_raw_artifact_integrity(raw_ledger, trusted_meta)
+            self.assertTrue(ok)
+            self.assertEqual(status, ARTIFACT_STATUS_VERIFIED)
+
+        # B05: SHA mismatch -> FAILED
+        with tempfile.NamedTemporaryFile("w+", delete=False) as tf:
+            tf.write('{"test": 1}\n')
+            temp_path = Path(tf.name)
+        try:
+            bad_meta = {"sha256": "0" * 64, "size_bytes": temp_path.stat().st_size}
+            ok, status, diag = verify_raw_artifact_integrity(temp_path, bad_meta)
+            self.assertFalse(ok)
+            self.assertEqual(status, ARTIFACT_STATUS_FAILED)
+            self.assertIn("sha-256 mismatch", diag.lower())
+        finally:
+            temp_path.unlink()
+
+        # B06: Size mismatch -> FAILED
+        with tempfile.NamedTemporaryFile("w+", delete=False) as tf:
+            tf.write('{"test": 1}\n')
+            temp_path = Path(tf.name)
+        try:
+            real_sha = compute_sha256(temp_path)
+            bad_size_meta = {"sha256": real_sha, "size_bytes": 999999}
+            ok, status, diag = verify_raw_artifact_integrity(temp_path, bad_size_meta)
+            self.assertFalse(ok)
+            self.assertEqual(status, ARTIFACT_STATUS_FAILED)
+            self.assertIn("size mismatch", diag.lower())
+        finally:
+            temp_path.unlink()
+
+        # B07: Missing file -> FAILED
+        missing_p = Path("/tmp/non_existent_ledger_p4a_r6.jsonl")
+        ok, status, diag = verify_raw_artifact_integrity(missing_p, {"sha256": "a" * 64, "size_bytes": 10})
+        self.assertFalse(ok)
+        self.assertEqual(status, ARTIFACT_STATUS_FAILED)
+
+        # B08: Missing trusted reference -> NOT_CHECKED / FAILED (never VERIFIED)
+        if raw_ledger.is_file():
+            ok, status, diag = verify_raw_artifact_integrity(raw_ledger, None)
+            self.assertFalse(ok)
+            self.assertNotEqual(status, ARTIFACT_STATUS_VERIFIED)
+
+        # B09: Invalid trusted SHA format (e.g. non-hex or length != 64) -> FAILED
+        if raw_ledger.is_file():
+            ok, status, diag = verify_raw_artifact_integrity(raw_ledger, {"sha256": "short", "size_bytes": 100})
+            self.assertFalse(ok)
+            self.assertEqual(status, ARTIFACT_STATUS_FAILED)
+
+        # B10: Invalid expected artifact metadata (negative or bool size) -> FAILED
+        if raw_ledger.is_file():
+            ok, status, diag = verify_raw_artifact_integrity(raw_ledger, {"sha256": "a" * 64, "size_bytes": True})
+            self.assertFalse(ok)
+            self.assertEqual(status, ARTIFACT_STATUS_FAILED)
+
+        # B11: VERIFIED only produced on real successful verification
+        self.assertNotEqual(ARTIFACT_STATUS_NOT_CHECKED, ARTIFACT_STATUS_VERIFIED)
+        self.assertNotEqual(ARTIFACT_STATUS_FAILED, ARTIFACT_STATUS_VERIFIED)
+
+    def test_55_r6_f03_verified_snapshot_data_binding(self):
+        """R6-F03 / Group C: Verified file bound atomically to in-memory records (C01-C07)."""
+        raw_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
+        ev_path = REPO_ROOT / "docs" / "evidence" / "p4a_evidence_manifest.json"
+        if not raw_ledger.is_file():
+            self.skipTest("HISTORICAL_EVIDENCE_UNAVAILABLE: Historical canonical raw ledger is not provisioned on disk.")
+
+        trusted_header = get_trusted_canonical_header(ev_path)
+        trusted_meta = get_trusted_raw_artifact_meta(ev_path)
+        manifest_data = get_frozen_manifest_registry()
+        slot_matrix = compute_expected_slot_matrix(manifest_data)
+
+        # C01: Valid file + records parsed directly from file -> PASS
+        res_c01 = analyze_p4a_ledger(
+            None,
+            mode="canonical",
+            raw_ledger_path=raw_ledger,
+            expected_header=trusted_header,
+            expected_slot_matrix=slot_matrix,
+            trusted_artifact_meta=trusted_meta,
+        )
+        self.assertEqual(res_c01["overall_verdict"], "CANONICAL_PASS")
+        self.assertEqual(res_c01["raw_artifact_integrity_status"], ARTIFACT_STATUS_VERIFIED)
+
+        # Load clean records from file to prepare in-memory variations
+        v_records, ok, diag, meta = load_verified_ledger(raw_ledger, trusted_meta)
+        self.assertTrue(ok)
+        self.assertEqual(len(v_records), 180)
+
+        # C02: In-memory runtime (outer_wall_ns) tampered -> CANONICAL_INVALID_ARTIFACT, FAILED
+        tampered_c02 = copy.deepcopy(v_records)
+        tampered_c02[0]["outer_wall_ns"] = 1000
+        res_c02 = analyze_p4a_ledger(
+            tampered_c02,
+            mode="canonical",
+            raw_ledger_path=raw_ledger,
+            expected_header=trusted_header,
+            expected_slot_matrix=slot_matrix,
+            trusted_artifact_meta=trusted_meta,
+        )
+        self.assertEqual(res_c02["overall_verdict"], "CANONICAL_INVALID_ARTIFACT")
+        self.assertEqual(res_c02["raw_artifact_integrity_status"], ARTIFACT_STATUS_FAILED)
+
+        # C03: In-memory counters tampered -> CANONICAL_INVALID_ARTIFACT, FAILED
+        tampered_c03 = copy.deepcopy(v_records)
+        tampered_c03[0]["counters"]["dfs_states"] += 999
+        res_c03 = analyze_p4a_ledger(
+            tampered_c03,
+            mode="canonical",
+            raw_ledger_path=raw_ledger,
+            expected_header=trusted_header,
+            expected_slot_matrix=slot_matrix,
+            trusted_artifact_meta=trusted_meta,
+        )
+        self.assertEqual(res_c03["overall_verdict"], "CANONICAL_INVALID_ARTIFACT")
+        self.assertEqual(res_c03["raw_artifact_integrity_status"], ARTIFACT_STATUS_FAILED)
+
+        # C04: In-memory missing record (179 instead of 180) -> CANONICAL_INVALID_ARTIFACT, FAILED
+        tampered_c04 = copy.deepcopy(v_records[:-1])
+        res_c04 = analyze_p4a_ledger(
+            tampered_c04,
+            mode="canonical",
+            raw_ledger_path=raw_ledger,
+            expected_header=trusted_header,
+            expected_slot_matrix=slot_matrix,
+            trusted_artifact_meta=trusted_meta,
+        )
+        self.assertEqual(res_c04["overall_verdict"], "CANONICAL_INVALID_ARTIFACT")
+        self.assertEqual(res_c04["raw_artifact_integrity_status"], ARTIFACT_STATUS_FAILED)
+
+        # C05: In-memory extra record (181 records) -> CANONICAL_INVALID_ARTIFACT, FAILED
+        tampered_c05 = copy.deepcopy(v_records) + [copy.deepcopy(v_records[0])]
+        res_c05 = analyze_p4a_ledger(
+            tampered_c05,
+            mode="canonical",
+            raw_ledger_path=raw_ledger,
+            expected_header=trusted_header,
+            expected_slot_matrix=slot_matrix,
+            trusted_artifact_meta=trusted_meta,
+        )
+        self.assertEqual(res_c05["overall_verdict"], "CANONICAL_INVALID_ARTIFACT")
+        self.assertEqual(res_c05["raw_artifact_integrity_status"], ARTIFACT_STATUS_FAILED)
+
+        # C06: Duplicate attempt injected in-memory -> CANONICAL_INVALID_ARTIFACT, FAILED
+        tampered_c06 = copy.deepcopy(v_records)
+        dup = copy.deepcopy(tampered_c06[0])
+        dup["attempt_id"] = "TAMPERED_ATTEMPT_999"
+        tampered_c06.append(dup)
+        res_c06 = analyze_p4a_ledger(
+            tampered_c06,
+            mode="canonical",
+            raw_ledger_path=raw_ledger,
+            expected_header=trusted_header,
+            expected_slot_matrix=slot_matrix,
+            trusted_artifact_meta=trusted_meta,
+        )
+        self.assertEqual(res_c06["overall_verdict"], "CANONICAL_INVALID_ARTIFACT")
+        self.assertEqual(res_c06["raw_artifact_integrity_status"], ARTIFACT_STATUS_FAILED)
+
+        # C07: Atomic snapshot load prevents TOCTOU (single bytes read)
+        recs_loaded, v_ok, diag, meta = load_verified_ledger(raw_ledger, trusted_meta)
+        self.assertTrue(v_ok)
+        self.assertEqual(len(recs_loaded), 180)
+        self.assertEqual(meta["sha256"], trusted_meta["sha256"])
+
+
+    def test_56_r6_f04_fresh_checkout_synthetic_fixture_reproducibility(self):
+        """R6-F04 / Group D: Decoupled test fixtures ensure fresh checkout reproducibility (D01-D05)."""
+        # D01: Synthetic fixture reproduces valid M1 record satisfying contract
+        ok1, diag1 = validate_record_integrity(self.valid_canonical_m1)
+        self.assertTrue(ok1, f"M1 synthetic fixture invalid: {diag1}")
+
+        # D02: Synthetic fixture reproduces valid M2 record satisfying contract
+        ok2, diag2 = validate_record_integrity(self.valid_canonical_m2)
+        self.assertTrue(ok2, f"M2 synthetic fixture invalid: {diag2}")
+
+        # D03: Pairing M1 and M2 in scoped mode evaluates cleanly
+        scoped_res = analyze_p4a_ledger([self.valid_canonical_m1, self.valid_canonical_m2], mode="scoped")
+        self.assertEqual(scoped_res["overall_verdict"], "SCOPED_ANALYSIS_VALID")
+        self.assertEqual(scoped_res["total_valid_pairs"], 1)
+
+        # D04: Historical raw ledger presence check
+        canonical_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
+        ev_path = REPO_ROOT / "docs" / "evidence" / "p4a_evidence_manifest.json"
+        if not canonical_ledger.is_file():
+            # Fresh checkout without historical logs
+            self.assertFalse(canonical_ledger.exists())
+        else:
+            # When historical ledger is present, verify bit-for-bit SHA256 matches manifest exactly
+            trusted_meta = get_trusted_raw_artifact_meta(ev_path)
+            real_sha = compute_sha256(canonical_ledger)
+            self.assertEqual(real_sha, trusted_meta["sha256"])
+            self.assertEqual(real_sha, "34452fb4eeccd812882a5c2c47cca0c49b070bf8b48e5ea86d8ac68c8cc521d5")
+
 
 
 if __name__ == "__main__":

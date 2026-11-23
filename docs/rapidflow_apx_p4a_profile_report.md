@@ -4,10 +4,11 @@
 
 - **Total Workload Pairs Analyzed:** 90
 - **Total Rejected Pairs:** 0
-- **Median Search Speedup ($S_{search} = T_{M1} / T_{M2}$):** 2.1269x
-- **Median Native Step Speedup ($S_{step} = T_{M1} / T_{M2}$):** 1.8021x
-- **Median Streaming Loop Speedup ($S_{loop} = T_{M1} / T_{M2}$):** 1.1136x
-- **Median Outer Wall Speedup ($S_{outer} = T_{M1} / T_{M2}$):** 1.0414x
+- **Overall Verdict:** CANONICAL_PASS
+- **Median Search Speedup ($S_{search} = T_{M1} / T_{M2}$):** 2.13x
+- **Median Native Step Speedup ($S_{step} = T_{M1} / T_{M2}$):** 1.80x
+- **Median Streaming Loop Speedup ($S_{loop} = T_{M1} / T_{M2}$):** 1.11x
+- **Median Outer Wall Speedup ($S_{outer} = T_{M1} / T_{M2}$):** 1.04x
 - **M2 Neighbor Retrieval within Search:** 22.78%
 - **Relative Candidate Reduction (M2 vs M1):** 46.16%
 - **P4b Recommendation:** RECOMMENDATION: R4A_PROFILE_READY_FOR_P4B_REVIEW. Empirical data confirms that Search Core occupies 77.2% and Neighbor Retrieval occupies 22.8% of Bare M2 search time. Both Relaxed NLF (Option A) and Authoritative Graph CSR neighbor retrieval optimization (Option B) address measurable cost centers. Future isolated experiments in Phase P4b must quantify attainable end-to-end speedups without premature locking of combined Option B+A.

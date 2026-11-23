@@ -37,6 +37,9 @@ from scripts.p4a_evidence_contract import (
     DEFAULT_EVIDENCE_MANIFEST_PATH,
     DEFAULT_MANIFEST_PATH,
     DEFAULT_PROTOCOL_PATH,
+    ARTIFACT_STATUS_FAILED,
+    ARTIFACT_STATUS_NOT_CHECKED,
+    ARTIFACT_STATUS_VERIFIED,
     compute_expected_slot_matrix,
     compute_sha256,
     create_experiment_header,
@@ -44,6 +47,7 @@ from scripts.p4a_evidence_contract import (
     get_trusted_canonical_header,
     is_valid_hex64,
     load_trusted_evidence_manifest,
+    load_verified_ledger,
     resolve_canonical_attempts,
     validate_pair_compatibility,
     validate_record_integrity,
@@ -147,7 +151,7 @@ def load_ledger(ledger_path: Union[str, Path]) -> List[Dict[str, Any]]:
 
 
 def analyze_p4a_ledger(
-    records: List[Dict[str, Any]],
+    records: Optional[List[Dict[str, Any]]] = None,
     expected_header: Optional[Union[str, Dict[str, Any]]] = None,
     strict_provenance: bool = True,
     mode: str = "canonical",
@@ -155,7 +159,123 @@ def analyze_p4a_ledger(
     trusted_artifact_meta: Optional[Dict[str, Any]] = None,
     expected_slot_matrix: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Processes ledger records into structured statistical metrics with strict identity checking."""
+    """
+    Processes ledger records into structured statistical metrics with strict identity checking,
+    three-level integrity certification, and verified snapshot data binding (R5-F01..R6-F03).
+    """
+    if mode not in ("canonical", "scoped"):
+        raise ValueError(f"Unknown analysis mode: '{mode}'. Must be 'canonical' or 'scoped'.")
+
+    # Mode-dependent raw artifact integrity verification and data binding (R6-F02, R6-F03)
+    raw_artifact_status = ARTIFACT_STATUS_NOT_CHECKED
+    art_ok = False
+    art_diag = ""
+    verified_records = None
+    data_binding_ok = True
+    data_binding_diag = ""
+
+    if mode == "scoped":
+        raw_artifact_status = ARTIFACT_STATUS_NOT_CHECKED
+        if records is None:
+            if raw_ledger_path is not None:
+                records = load_ledger(raw_ledger_path)
+            else:
+                records = []
+    elif mode == "canonical":
+        if raw_ledger_path is not None and trusted_artifact_meta is not None:
+            v_recs, v_ok, v_diag, v_meta = load_verified_ledger(raw_ledger_path, trusted_artifact_meta)
+            if v_ok and v_recs is not None:
+                art_ok = True
+                raw_artifact_status = ARTIFACT_STATUS_VERIFIED
+                verified_records = v_recs
+                if records is not None:
+                    # Gate D: Data binding check (R6-F03)
+                    if len(records) != len(verified_records):
+                        data_binding_ok = False
+                        data_binding_diag = (
+                            f"Data binding violation: in-memory record count ({len(records)}) "
+                            f"does not match verified artifact record count ({len(verified_records)})"
+                        )
+                    else:
+                        for idx, (in_rec, v_rec) in enumerate(zip(records, verified_records)):
+                            if in_rec != v_rec:
+                                data_binding_ok = False
+                                data_binding_diag = (
+                                    f"Data binding violation: in-memory record at index {idx} "
+                                    f"differs from verified artifact snapshot"
+                                )
+                                break
+                    if not data_binding_ok:
+                        art_ok = False
+                        raw_artifact_status = ARTIFACT_STATUS_FAILED
+                        art_diag = data_binding_diag
+                else:
+                    records = verified_records
+            else:
+                art_ok = False
+                raw_artifact_status = ARTIFACT_STATUS_FAILED
+                art_diag = v_diag
+        elif raw_ledger_path is not None or trusted_artifact_meta is not None:
+            art_ok = False
+            raw_artifact_status = ARTIFACT_STATUS_FAILED
+            art_diag = "Incomplete canonical artifact verification parameters: both raw_ledger_path and trusted_artifact_meta are required."
+        else:
+            art_ok = False
+            raw_artifact_status = ARTIFACT_STATUS_NOT_CHECKED
+            art_diag = "No raw artifact verification attempted (raw_ledger_path and trusted_artifact_meta both omitted)."
+
+        if records is None:
+            records = []
+
+    # Trusted context check (R5-F04, R6-F01)
+    context_ok = True
+    context_diag = ""
+    if mode == "canonical":
+        if expected_header is None:
+            context_ok = False
+            context_diag = "Canonical certification requires a verified expected_header / trusted experiment context."
+        elif isinstance(expected_header, dict):
+            required_header_fields = [
+                "execution_identity", "source_commit",
+                "manifest_sha256", "protocol_sha256", "protocol_version"
+            ]
+            missing_fields = [f for f in required_header_fields if not expected_header.get(f)]
+            if missing_fields:
+                context_ok = False
+                context_diag = f"expected_header missing required fields: {missing_fields}"
+            elif not is_valid_hex64(expected_header["execution_identity"]):
+                context_ok = False
+                context_diag = "expected_header execution_identity is missing or not a valid hex64"
+        elif isinstance(expected_header, str):
+            if not is_valid_hex64(expected_header):
+                context_ok = False
+                context_diag = "expected_header string is not a valid hex64 execution identity"
+        else:
+            context_ok = False
+            context_diag = f"Invalid expected_header type: {type(expected_header).__name__}"
+
+    # Expected slot matrix calculation (R5-F01, R6-F01)
+    matrix_ok = True
+    matrix_diag = ""
+    if mode == "canonical":
+        if expected_slot_matrix is None and isinstance(expected_header, dict) and "workload_hashes" in expected_header:
+            expected_slot_matrix = compute_expected_slot_matrix(
+                expected_header, repetitions=CANONICAL_REPETITIONS, engines=CANONICAL_ENGINES
+            )
+        if expected_slot_matrix is None:
+            matrix_ok = False
+            matrix_diag = "Canonical certification requires a frozen expected_slot_matrix derived from experiment plan."
+        elif not isinstance(expected_slot_matrix, dict) or "expected_slots" not in expected_slot_matrix:
+            matrix_ok = False
+            matrix_diag = "expected_slot_matrix must be a dict containing 'expected_slots'."
+
+    if expected_slot_matrix is not None and isinstance(expected_slot_matrix, dict) and "expected_slots" in expected_slot_matrix:
+        exp_slots = set(expected_slot_matrix["expected_slots"])
+        exp_pairs = set(expected_slot_matrix.get("expected_pairs", []))
+    else:
+        exp_slots = set()
+        exp_pairs = set()
+
     # Experiment isolation check (R4-F03)
     exp_id = (
         expected_header
@@ -196,47 +316,6 @@ def analyze_p4a_ledger(
         or "different execution_identity" in str(c.get("reason", ""))
     ]
     has_alien_contamination = (len(alien_conflicts) > 0)
-
-    # Raw artifact integrity verification (R5-F02)
-    art_ok = True
-    art_diag = ""
-    if mode == "canonical":
-        if raw_ledger_path is not None and trusted_artifact_meta is not None:
-            art_ok, art_diag = verify_raw_artifact_integrity(raw_ledger_path, trusted_artifact_meta)
-        elif raw_ledger_path is not None and trusted_artifact_meta is None:
-            art_ok = False
-            art_diag = f"Missing trusted artifact metadata reference for canonical ledger {raw_ledger_path}"
-        elif trusted_artifact_meta is not None and raw_ledger_path is None:
-            art_ok = False
-            art_diag = "Missing raw ledger path for canonical artifact verification"
-        else:
-            art_ok = True
-
-    # Trusted context check (R5-F04)
-    context_ok = True
-    context_diag = ""
-    if mode == "canonical" and expected_header is not None:
-        if isinstance(expected_header, dict):
-            if not expected_header.get("execution_identity") or not is_valid_hex64(expected_header["execution_identity"]):
-                context_ok = False
-                context_diag = "expected_header execution_identity is missing or not a valid hex64"
-        elif isinstance(expected_header, str):
-            if not is_valid_hex64(expected_header):
-                context_ok = False
-                context_diag = "expected_header string is not a valid hex64 execution identity"
-
-    # Expected slot matrix calculation (R5-F01)
-    if expected_slot_matrix is None and isinstance(expected_header, dict) and "workload_hashes" in expected_header:
-        expected_slot_matrix = compute_expected_slot_matrix(
-            expected_header, repetitions=CANONICAL_REPETITIONS, engines=CANONICAL_ENGINES
-        )
-
-    if expected_slot_matrix is not None:
-        exp_slots = set(expected_slot_matrix["expected_slots"])
-        exp_pairs = set(expected_slot_matrix["expected_pairs"])
-    else:
-        exp_slots = set()
-        exp_pairs = set()
 
     duplicate_slot_warnings = []
     conflicts_by_slot = {c["slot_key"]: c.get("reason") for c in rejected_conflicts if "slot_key" in c}
@@ -577,19 +656,22 @@ def analyze_p4a_ledger(
         }
 
     if mode == "canonical":
-        if not context_ok:
-            overall_verdict = "CANONICAL_UNTRUSTED_CONTEXT"
-            p4b_recommendation = f"RECOMMENDATION: R4A_UNTRUSTED_CONTEXT. {context_diag}"
-        elif isolation_violation:
+        if isolation_violation:
             overall_verdict = "CANONICAL_INCONCLUSIVE"
             p4b_recommendation = f"RECOMMENDATION: R4A_INCONCLUSIVE_MIXED_EXECUTION_IDENTITIES. {isolation_reason}"
         elif has_alien_contamination:
             overall_verdict = "CANONICAL_CONTAMINATED"
             p4b_recommendation = (
-                f"RECOMMENDATION: R4A_EXPERIMENT_CONTAMINATION. "
-                f"Alien records claiming differing execution identities detected in canonical ledger."
+                "RECOMMENDATION: R4A_EXPERIMENT_CONTAMINATION. "
+                "Alien records claiming differing execution identities detected in canonical ledger."
             )
-        elif not art_ok:
+        elif len(records) == 0 or (len(valid_pairs) == 0 and len(rejected_pairs) == 0):
+            overall_verdict = "CANONICAL_INCONCLUSIVE"
+            p4b_recommendation = (
+                "RECOMMENDATION: R4A_INCONCLUSIVE_NO_VALID_PAIRS. "
+                "Zero valid workload pairs admitted; empirical profiling data insufficient for P4b architectural evaluation."
+            )
+        elif raw_artifact_status == ARTIFACT_STATUS_FAILED:
             overall_verdict = "CANONICAL_INVALID_ARTIFACT"
             p4b_recommendation = f"RECOMMENDATION: R4A_RAW_ARTIFACT_INTEGRITY_FAILURE. {art_diag}"
         elif len(rejected_pairs) > 0 or len(duplicate_slot_warnings) > 0:
@@ -598,12 +680,12 @@ def analyze_p4a_ledger(
                 f"RECOMMENDATION: R4A_FIX_REQUIRED. "
                 f"{len(rejected_pairs)} pairs rejected due to contract/integrity violations. Review rejected_pairs for diagnostics."
             )
-        elif len(valid_pairs) == 0:
-            overall_verdict = "CANONICAL_INCONCLUSIVE"
-            p4b_recommendation = (
-                "RECOMMENDATION: R4A_INCONCLUSIVE_NO_VALID_PAIRS. "
-                "Zero valid workload pairs admitted; empirical profiling data insufficient for P4b architectural evaluation."
-            )
+        elif not context_ok:
+            overall_verdict = "CANONICAL_UNTRUSTED_CONTEXT"
+            p4b_recommendation = f"RECOMMENDATION: R4A_UNTRUSTED_CONTEXT. {context_diag}"
+        elif not matrix_ok or raw_artifact_status == ARTIFACT_STATUS_NOT_CHECKED:
+            overall_verdict = "CANONICAL_EVIDENCE_INCOMPLETE"
+            p4b_recommendation = f"RECOMMENDATION: R4A_EVIDENCE_INCOMPLETE. {matrix_diag if not matrix_ok else art_diag}"
         elif exp_slots and not is_slots_complete:
             overall_verdict = "CANONICAL_INCOMPLETE"
             p4b_recommendation = (
@@ -647,9 +729,7 @@ def analyze_p4a_ledger(
             if (mode == "canonical" and overall_verdict == "CANONICAL_PASS")
             else ("SCOPED_VALID" if (mode == "scoped" and overall_verdict == "SCOPED_ANALYSIS_VALID") else "INCOMPLETE")
         ),
-        "raw_artifact_integrity_status": (
-            "VERIFIED" if art_ok else ("NOT_CHECKED" if mode == "scoped" else "FAILED")
-        ),
+        "raw_artifact_integrity_status": raw_artifact_status,
         "execution_identity": ref_rec.get("execution_identity"),
         "protocol_version": ref_rec.get("protocol_version"),
         "protocol_sha256": ref_rec.get("protocol_sha256"),

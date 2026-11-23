@@ -195,6 +195,22 @@ To prevent certification leakage where partial or tampered experiment logs could
   - `--mode scoped`: Supports exploratory or subset evaluation without claiming canonical completeness, emitting `SCOPED_ANALYSIS_VALID` (exit 0) when valid.
   - Hardened observer verification checks that event coordinate tuples are non-negative integers matching query dimension, rejects duplicate embeddings, and accepts valid zero-event stream steps.
 
+### 4.17 Unified Certification Boundary, Verified Snapshot Binding & Fresh-Checkout Reproducibility (R6-F01, R6-F02, R6-F03, R6-F04)
+To ensure that empirical certification cannot be bypassed or weakened under any programmatic or environmental invocation, Round 6 enforces:
+1. **Unified Certification Boundary (R6-F01):**
+   - The canonical analysis engine `analyze_p4a_ledger(..., mode="canonical")` requires authoritative external evidence context: `expected_header` containing complete configuration provenance (`execution_identity`, `source_commit`, `manifest_sha256`, `protocol_sha256`, `protocol_version`), expected slot completeness matrix (`expected_slot_matrix`), and verified raw ledger path and trusted metadata.
+   - Any missing precondition fails closed with specific diagnostics: `CANONICAL_UNTRUSTED_CONTEXT` (missing or incomplete header), `CANONICAL_EVIDENCE_INCOMPLETE` (missing slot matrix or unverified artifact), or `CANONICAL_INVALID_ARTIFACT` (mismatched file hash/size or data binding violation).
+   - Direct API calls and production CLI calls with identical evidence produce bit-for-bit identical certification verdicts.
+2. **Strict Tristate Raw Artifact Taxonomy (R6-F02):**
+   - Raw artifact verification status is strictly tristate: `NOT_CHECKED`, `VERIFIED`, and `FAILED`.
+   - `VERIFIED` is strictly reserved for instances where whole-file SHA-256 and byte length were read from disk and matched trusted metadata 100%. In scoped analysis or when artifact verification is omitted, the status is explicitly reported as `NOT_CHECKED`.
+3. **Atomic Snapshot Loading & In-Memory Data Binding (R6-F03):**
+   - `load_verified_ledger()` reads raw disk bytes in a single atomic snapshot, verifies whole-file SHA-256 and byte size against trusted metadata, and parses JSONL records directly from verified bytes, eliminating time-of-check to time-of-use (TOCTOU) races.
+   - When in-memory records are supplied to the canonical API alongside a verified raw artifact, every in-memory record is verified for 1:1 element-wise equality against the on-disk snapshot (`records == verified_records`). Any discrepancy (modified runtime, altered counters, dropped records, injected duplicates) immediately fails with `CANONICAL_INVALID_ARTIFACT` and sets status to `FAILED`.
+4. **Decoupled Test Fixtures & Fresh-Checkout Reproducibility (R6-F04):**
+   - All unit, regression, contract, and adversarial test cases are completely decoupled from unversioned, git-ignored runtime logs via self-consistent, deterministic synthetic fixtures (`FIXTURE_VALID_CANONICAL_M1`, `FIXTURE_VALID_CANONICAL_M2`).
+   - On a clean repository checkout lacking `results/logs/`, all unit and contract tests run and pass 100% without crashing `setUpClass()`. Tests verifying historical empirical evidence cleanly skip with `HISTORICAL_EVIDENCE_UNAVAILABLE` rather than failing or falsely passing.
+
 ---
 
 ## 5. Decision Gate & Phase P4b Transition Criteria (P4A-F08)
