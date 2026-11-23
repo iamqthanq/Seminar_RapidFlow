@@ -38,6 +38,23 @@ CANONICAL_TIMEOUT_CEILING = 60.0
 CANONICAL_AS_LIMIT_MIB = 512
 CANONICAL_REPETITIONS_CEILING = 10
 
+# Approved Historical Canonical Authority Constants (R7-F01..R7-F04)
+APPROVED_P4A_EXECUTION_IDENTITY = "262279a9d9ea026e07231f3ba511863c383b98133db40e69f603a235ad792135"
+APPROVED_P4A_CANONICAL_COMMIT = "cf97a7840dff0c0f2bf791834263f3911545110c"
+APPROVED_P4A_MANIFEST_SHA256 = "f82bdcc0c89ce794439eeff3fd67fe78de733196286503c27de70ed2df5d3b18"
+APPROVED_P4A_PROTOCOL_SHA256 = "dd3f39cae4325b3577adec8fa19ff5f52844e9338b1d97aa542d58b6c09d4ebd"
+APPROVED_P4A_PROTOCOL_VERSION = "1.2.0"
+APPROVED_P4A_BINARY_SHA256 = "6e4537d03a356dd9c603e452f86848cbdb1ea2cd0fcbdf31199d0e9afbf9b21b"
+APPROVED_P4A_RAW_ARTIFACT_SHA256 = "34452fb4eeccd812882a5c2c47cca0c49b070bf8b48e5ea86d8ac68c8cc521d5"
+APPROVED_P4A_RAW_ARTIFACT_SIZE_BYTES = 441311
+APPROVED_P4A_RAW_ARTIFACT_LINE_COUNT = 180
+APPROVED_P4A_RAW_ARTIFACT_REL_PATH = "results/logs/rf36-p4a/p4a_raw_ledger.jsonl"
+APPROVED_P4A_WORKLOAD_COUNT = 30
+APPROVED_P4A_REPETITIONS = 3
+APPROVED_P4A_ENGINES = ("m1", "m2")
+APPROVED_P4A_TOTAL_SLOTS = 180
+APPROVED_P4A_TOTAL_PAIRS = 90
+
 DEFAULT_MANIFEST_PATH = REPO_ROOT / "configs" / "rapidflow_apx_p4a_manifest.json"
 DEFAULT_PROTOCOL_PATH = REPO_ROOT / "docs" / "rapidflow_apx_p4a_protocol.md"
 DEFAULT_EVIDENCE_MANIFEST_PATH = REPO_ROOT / "docs" / "evidence" / "p4a_evidence_manifest.json"
@@ -47,6 +64,11 @@ CANONICAL_ENGINES = ("m1", "m2")
 
 class CorruptedLedgerError(Exception):
     """Raised when ledger contains unparseable lines, corrupted schemas, or tampered records."""
+    pass
+
+
+class CanonicalAuthorityError(CorruptedLedgerError):
+    """Raised when canonical certification authority is violated or untrusted (R7-F01..R7-F04)."""
     pass
 
 
@@ -446,6 +468,10 @@ def get_trusted_raw_artifact_meta(
     target_rel_or_name: str = "results/logs/rf36-p4a/p4a_raw_ledger.jsonl",
 ) -> Dict[str, Any]:
     """Helper to retrieve trusted raw artifact metadata from evidence manifest (R6-F02)."""
+    if evidence_manifest_path is None:
+        authority = get_official_p4a_authority()
+        if target_rel_or_name == authority.raw_artifact_rel_path or Path(target_rel_or_name).name == Path(authority.raw_artifact_rel_path).name:
+            return dict(authority.trusted_artifact_meta)
     ev_manifest = load_trusted_evidence_manifest(evidence_manifest_path)
     artifacts = ev_manifest.get("artifacts", {})
     if target_rel_or_name in artifacts:
@@ -455,6 +481,212 @@ def get_trusted_raw_artifact_meta(
         if Path(rel_path).name == target_name:
             return meta
     raise KeyError(f"Artifact '{target_rel_or_name}' not found in evidence manifest artifacts: {list(artifacts.keys())}")
+
+
+class OfficialCanonicalAuthority:
+    """
+    Immutable trust anchor for Phase P4a canonical certification (R7-F01..R7-F04).
+    Anchors the human-approved, peer-reviewed historical canonical pilot specification:
+    - Target revision / commit: cf97a7840dff0c0f2bf791834263f3911545110c
+    - Execution identity: 262279a9d9ea026e07231f3ba511863c383b98133db40e69f603a235ad792135
+    - Raw artifact SHA-256: 34452fb4eeccd812882a5c2c47cca0c49b070bf8b48e5ea86d8ac68c8cc521d5 (441311 bytes, 180 records)
+    - Workload manifest SHA-256: f82bdcc0c89ce794439eeff3fd67fe78de733196286503c27de70ed2df5d3b18 (30 workloads)
+    - Measurement protocol SHA-256: dd3f39cae4325b3577adec8fa19ff5f52844e9338b1d97aa542d58b6c09d4ebd (version 1.2.0)
+    - Resource limits: max_work=500000, timeout=60.0s, as_limit=512MiB
+    - Expected slot matrix: 30 workloads x 3 repetitions x 2 engines = 180 slots, 90 pairs
+    """
+    def __init__(
+        self,
+        workload_manifest_path: Optional[Union[str, Path]] = None,
+    ):
+        self.execution_identity = APPROVED_P4A_EXECUTION_IDENTITY
+        self.canonical_execution_commit = APPROVED_P4A_CANONICAL_COMMIT
+        self.manifest_sha256 = APPROVED_P4A_MANIFEST_SHA256
+        self.protocol_sha256 = APPROVED_P4A_PROTOCOL_SHA256
+        self.protocol_version = APPROVED_P4A_PROTOCOL_VERSION
+        self.binary_sha256 = APPROVED_P4A_BINARY_SHA256
+        self.raw_artifact_sha256 = APPROVED_P4A_RAW_ARTIFACT_SHA256
+        self.raw_artifact_size_bytes = APPROVED_P4A_RAW_ARTIFACT_SIZE_BYTES
+        self.raw_artifact_line_count = APPROVED_P4A_RAW_ARTIFACT_LINE_COUNT
+        self.raw_artifact_rel_path = APPROVED_P4A_RAW_ARTIFACT_REL_PATH
+        self.workload_count = APPROVED_P4A_WORKLOAD_COUNT
+        self.repetitions = APPROVED_P4A_REPETITIONS
+        self.engines = APPROVED_P4A_ENGINES
+        self.total_expected_slots = APPROVED_P4A_TOTAL_SLOTS
+        self.total_expected_pairs = APPROVED_P4A_TOTAL_PAIRS
+
+        # Compute approved expected slot matrix from frozen manifest
+        m_path = Path(workload_manifest_path) if workload_manifest_path is not None else DEFAULT_MANIFEST_PATH
+        self.workload_manifest_registry = get_frozen_manifest_registry(m_path)
+        if self.workload_manifest_registry["manifest_sha256"] != self.manifest_sha256:
+            raise CanonicalAuthorityError(
+                f"Workload manifest SHA-256 mismatch: {self.workload_manifest_registry['manifest_sha256']} "
+                f"!= approved {self.manifest_sha256}"
+            )
+        self.expected_slot_matrix = compute_expected_slot_matrix(
+            self.workload_manifest_registry,
+            repetitions=self.repetitions,
+            engines=self.engines,
+        )
+
+        # Expected trusted artifact meta
+        self.trusted_artifact_meta = {
+            "sha256": self.raw_artifact_sha256,
+            "size_bytes": self.raw_artifact_size_bytes,
+            "line_count": self.raw_artifact_line_count,
+            "git_tracked": False,
+            "accessibility_status": "LOCAL_WORKTREE_REPRODUCIBLE",
+            "description": "Primary raw experiment ledger",
+        }
+
+        # Expected canonical header
+        self.expected_header = {
+            "execution_identity": self.execution_identity,
+            "protocol_version": self.protocol_version,
+            "protocol_sha256": self.protocol_sha256,
+            "manifest_sha256": self.manifest_sha256,
+            "source_commit": self.canonical_execution_commit,
+            "source_dirty_state": "CLEAN",
+            "binary_sha256": self.binary_sha256,
+            "effective_max_work": CANONICAL_MAX_WORK_CAP,
+            "effective_timeout": CANONICAL_TIMEOUT_CEILING,
+            "effective_memory_limit_mib": CANONICAL_AS_LIMIT_MIB,
+            "workload_hashes": self.workload_manifest_registry["workload_hashes"],
+            "cases_count": self.workload_count,
+            "trusted_raw_artifact": self.trusted_artifact_meta,
+        }
+
+    def verify_expected_header(self, header: Any) -> Tuple[bool, str]:
+        """Strictly validates caller-supplied expected_header against approved authority."""
+        if not isinstance(header, dict):
+            return False, f"expected_header must be a dict, got {type(header).__name__}"
+        required_fields = [
+            "execution_identity", "source_commit", "manifest_sha256",
+            "protocol_sha256", "protocol_version"
+        ]
+        for rf in required_fields:
+            if not header.get(rf):
+                return False, f"expected_header missing required field: '{rf}'"
+        if header["execution_identity"] != self.execution_identity:
+            return False, f"execution_identity {header['execution_identity']} != approved {self.execution_identity}"
+        if header["source_commit"] != self.canonical_execution_commit:
+            return False, f"source_commit {header['source_commit']} != approved {self.canonical_execution_commit}"
+        if header["manifest_sha256"].lower() != self.manifest_sha256.lower():
+            return False, f"manifest_sha256 {header['manifest_sha256']} != approved {self.manifest_sha256}"
+        if header["protocol_sha256"].lower() != self.protocol_sha256.lower():
+            return False, f"protocol_sha256 {header['protocol_sha256']} != approved {self.protocol_sha256}"
+        if str(header["protocol_version"]).strip() != self.protocol_version:
+            return False, f"protocol_version {header['protocol_version']} != approved {self.protocol_version}"
+        if "effective_max_work" in header and header["effective_max_work"] != CANONICAL_MAX_WORK_CAP:
+            return False, f"effective_max_work {header['effective_max_work']} != approved {CANONICAL_MAX_WORK_CAP}"
+        if "trusted_raw_artifact" in header and isinstance(header["trusted_raw_artifact"], dict):
+            art_sha = header["trusted_raw_artifact"].get("sha256", "")
+            if art_sha.lower() != self.raw_artifact_sha256.lower():
+                return False, f"trusted_raw_artifact SHA {art_sha} in header != approved {self.raw_artifact_sha256}"
+        return True, ""
+
+    def verify_expected_slot_matrix(self, matrix: Any) -> Tuple[bool, str]:
+        """Strictly validates caller-supplied expected_slot_matrix against approved authority (R7-F01)."""
+        if not isinstance(matrix, dict):
+            return False, f"expected_slot_matrix must be a dict, got {type(matrix).__name__}"
+        if "expected_slots" not in matrix:
+            return False, "expected_slot_matrix missing 'expected_slots'"
+
+        # Repetitions check
+        if "repetitions" in matrix:
+            rep = matrix["repetitions"]
+            if type(rep) is not int or isinstance(rep, bool) or rep != self.repetitions:
+                return False, f"Invalid repetitions {rep}: must be int {self.repetitions}"
+
+        # Engines check
+        if "engines" in matrix:
+            engs = set(matrix["engines"])
+            if engs != set(self.engines):
+                return False, f"Invalid engines {engs}: must be {set(self.engines)}"
+
+        # Workload IDs check
+        if "workload_ids" in matrix:
+            wids = list(matrix["workload_ids"])
+            if wids != self.expected_slot_matrix["workload_ids"]:
+                return False, "workload_ids do not match approved workload registry"
+
+        caller_slots = set(matrix["expected_slots"])
+        if caller_slots != self.expected_slot_matrix["expected_slots"]:
+            diff_missing = self.expected_slot_matrix["expected_slots"] - caller_slots
+            diff_extra = caller_slots - self.expected_slot_matrix["expected_slots"]
+            return False, (
+                f"expected_slots mismatch: {len(caller_slots)} slots provided != {self.total_expected_slots} approved slots. "
+                f"Missing {len(diff_missing)}, extra {len(diff_extra)}."
+            )
+
+        if "expected_pairs" in matrix:
+            caller_pairs = set(matrix["expected_pairs"])
+            normalized_pairs = {tuple(p) for p in caller_pairs}
+            if normalized_pairs != self.expected_slot_matrix["expected_pairs"]:
+                return False, f"expected_pairs mismatch: {len(normalized_pairs)} pairs != {self.total_expected_pairs} approved pairs."
+
+        if matrix.get("total_expected_slots") is not None and matrix.get("total_expected_slots") != self.total_expected_slots:
+            return False, f"total_expected_slots {matrix.get('total_expected_slots')} != {self.total_expected_slots}"
+
+        if matrix.get("total_expected_pairs") is not None and matrix.get("total_expected_pairs") != self.total_expected_pairs:
+            return False, f"total_expected_pairs {matrix.get('total_expected_pairs')} != {self.total_expected_pairs}"
+
+        return True, ""
+
+    def verify_artifact_meta(self, meta: Any) -> Tuple[bool, str]:
+        """Strictly validates caller-supplied artifact metadata against approved authority (R7-F02)."""
+        if not isinstance(meta, dict):
+            return False, f"trusted_artifact_meta must be a dict, got {type(meta).__name__}"
+        sha = meta.get("sha256")
+        if not sha or not isinstance(sha, str) or not is_valid_hex64(sha):
+            return False, f"Invalid or missing sha256 in artifact reference: {sha}"
+        if sha.lower() != self.raw_artifact_sha256.lower():
+            return False, f"Artifact sha256 '{sha}' does not match approved historical artifact sha256 '{self.raw_artifact_sha256}'"
+        size = meta.get("size_bytes")
+        if size is not None:
+            if type(size) is not int or isinstance(size, bool) or size != self.raw_artifact_size_bytes:
+                return False, f"Artifact size_bytes {size} does not match approved size {self.raw_artifact_size_bytes}"
+        lines = meta.get("line_count")
+        if lines is not None:
+            if type(lines) is not int or isinstance(lines, bool) or lines != self.raw_artifact_line_count:
+                return False, f"Artifact line_count {lines} does not match approved count {self.raw_artifact_line_count}"
+        return True, ""
+
+
+_DEFAULT_AUTHORITY: Optional[OfficialCanonicalAuthority] = None
+
+
+def get_official_p4a_authority() -> OfficialCanonicalAuthority:
+    """Returns singleton instance of OfficialCanonicalAuthority."""
+    global _DEFAULT_AUTHORITY
+    if _DEFAULT_AUTHORITY is None:
+        _DEFAULT_AUTHORITY = OfficialCanonicalAuthority()
+    return _DEFAULT_AUTHORITY
+
+
+def certify_official_p4a(
+    ledger_path: Optional[Union[str, Path]] = None,
+    workload_manifest_path: Optional[Union[str, Path]] = None,
+) -> Dict[str, Any]:
+    """
+    Official top-level canonical certification entrypoint for Phase P4a (Section XIII.1).
+    Anchors certification directly to the immutable approved historical authority.
+    """
+    authority = get_official_p4a_authority()
+    p = Path(ledger_path) if ledger_path is not None else REPO_ROOT / APPROVED_P4A_RAW_ARTIFACT_REL_PATH
+    if not p.is_file():
+        raise FileNotFoundError(f"Canonical raw ledger not found: {p}")
+
+    from scripts.summarize_rapidflow_apx_p4a import analyze_p4a_ledger
+    return analyze_p4a_ledger(
+        records=None,
+        expected_header=authority.expected_header,
+        strict_provenance=True,
+        mode="canonical",
+        raw_ledger_path=p,
+        trusted_artifact_meta=authority.trusted_artifact_meta,
+        expected_slot_matrix=authority.expected_slot_matrix,
+    )
 
 
 

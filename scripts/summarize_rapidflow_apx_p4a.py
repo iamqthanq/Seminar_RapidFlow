@@ -32,18 +32,24 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.p4a_evidence_contract import (
+    APPROVED_P4A_RAW_ARTIFACT_REL_PATH,
+    APPROVED_P4A_RAW_ARTIFACT_SHA256,
     CANONICAL_ENGINES,
     CANONICAL_REPETITIONS,
+    CanonicalAuthorityError,
     DEFAULT_EVIDENCE_MANIFEST_PATH,
     DEFAULT_MANIFEST_PATH,
     DEFAULT_PROTOCOL_PATH,
+    OfficialCanonicalAuthority,
     ARTIFACT_STATUS_FAILED,
     ARTIFACT_STATUS_NOT_CHECKED,
     ARTIFACT_STATUS_VERIFIED,
+    certify_official_p4a,
     compute_expected_slot_matrix,
     compute_sha256,
     create_experiment_header,
     get_frozen_manifest_registry,
+    get_official_p4a_authority,
     get_trusted_canonical_header,
     is_valid_hex64,
     load_trusted_evidence_manifest,
@@ -166,13 +172,30 @@ def analyze_p4a_ledger(
     if mode not in ("canonical", "scoped"):
         raise ValueError(f"Unknown analysis mode: '{mode}'. Must be 'canonical' or 'scoped'.")
 
-    # Mode-dependent raw artifact integrity verification and data binding (R6-F02, R6-F03)
+    # Mode-dependent raw artifact integrity verification and data binding (R6-F02, R6-F03, R7-F02)
     raw_artifact_status = ARTIFACT_STATUS_NOT_CHECKED
     art_ok = False
     art_diag = ""
     verified_records = None
     data_binding_ok = True
     data_binding_diag = ""
+
+    authority = None
+    if mode == "canonical":
+        authority = get_official_p4a_authority()
+
+        # Strict provenance downgrade check (R7-F03)
+        if not strict_provenance:
+            context_ok = False
+            context_diag = "Canonical certification strictly requires strict_provenance=True; provenance downgrade is prohibited."
+
+        # Artifact metadata trust anchor check (R7-F02)
+        if trusted_artifact_meta is not None:
+            art_meta_ok, art_meta_diag = authority.verify_artifact_meta(trusted_artifact_meta)
+            if not art_meta_ok:
+                art_ok = False
+                raw_artifact_status = ARTIFACT_STATUS_FAILED
+                art_diag = f"Untrusted artifact metadata: {art_meta_diag}"
 
     if mode == "scoped":
         raw_artifact_status = ARTIFACT_STATUS_NOT_CHECKED
@@ -182,7 +205,7 @@ def analyze_p4a_ledger(
             else:
                 records = []
     elif mode == "canonical":
-        if raw_ledger_path is not None and trusted_artifact_meta is not None:
+        if raw_ledger_path is not None and trusted_artifact_meta is not None and raw_artifact_status != ARTIFACT_STATUS_FAILED:
             v_recs, v_ok, v_diag, v_meta = load_verified_ledger(raw_ledger_path, trusted_artifact_meta)
             if v_ok and v_recs is not None:
                 art_ok = True
@@ -216,9 +239,10 @@ def analyze_p4a_ledger(
                 raw_artifact_status = ARTIFACT_STATUS_FAILED
                 art_diag = v_diag
         elif raw_ledger_path is not None or trusted_artifact_meta is not None:
-            art_ok = False
-            raw_artifact_status = ARTIFACT_STATUS_FAILED
-            art_diag = "Incomplete canonical artifact verification parameters: both raw_ledger_path and trusted_artifact_meta are required."
+            if raw_artifact_status != ARTIFACT_STATUS_FAILED:
+                art_ok = False
+                raw_artifact_status = ARTIFACT_STATUS_FAILED
+                art_diag = "Incomplete canonical artifact verification parameters: both raw_ledger_path and trusted_artifact_meta are required."
         else:
             art_ok = False
             raw_artifact_status = ARTIFACT_STATUS_NOT_CHECKED
@@ -227,47 +251,43 @@ def analyze_p4a_ledger(
         if records is None:
             records = []
 
-    # Trusted context check (R5-F04, R6-F01)
-    context_ok = True
-    context_diag = ""
+    # Trusted context check (R5-F04, R6-F01, R7-F01..R7-F03)
+    context_ok = True if (mode != "canonical" or strict_provenance) else False
+    if mode == "canonical" and not strict_provenance:
+        context_diag = "Canonical certification strictly requires strict_provenance=True; provenance downgrade is prohibited."
+    else:
+        context_diag = ""
+
     if mode == "canonical":
         if expected_header is None:
             context_ok = False
             context_diag = "Canonical certification requires a verified expected_header / trusted experiment context."
-        elif isinstance(expected_header, dict):
-            required_header_fields = [
-                "execution_identity", "source_commit",
-                "manifest_sha256", "protocol_sha256", "protocol_version"
-            ]
-            missing_fields = [f for f in required_header_fields if not expected_header.get(f)]
-            if missing_fields:
-                context_ok = False
-                context_diag = f"expected_header missing required fields: {missing_fields}"
-            elif not is_valid_hex64(expected_header["execution_identity"]):
-                context_ok = False
-                context_diag = "expected_header execution_identity is missing or not a valid hex64"
-        elif isinstance(expected_header, str):
-            if not is_valid_hex64(expected_header):
-                context_ok = False
-                context_diag = "expected_header string is not a valid hex64 execution identity"
         else:
-            context_ok = False
-            context_diag = f"Invalid expected_header type: {type(expected_header).__name__}"
+            hdr_ok, hdr_diag = authority.verify_expected_header(expected_header)
+            if not hdr_ok:
+                context_ok = False
+                context_diag = f"Untrusted canonical header: {hdr_diag}"
 
-    # Expected slot matrix calculation (R5-F01, R6-F01)
+    # Expected slot matrix calculation and authority validation (R5-F01, R6-F01, R7-F01)
     matrix_ok = True
+    plan_mismatch = False
     matrix_diag = ""
     if mode == "canonical":
-        if expected_slot_matrix is None and isinstance(expected_header, dict) and "workload_hashes" in expected_header:
-            expected_slot_matrix = compute_expected_slot_matrix(
-                expected_header, repetitions=CANONICAL_REPETITIONS, engines=CANONICAL_ENGINES
-            )
         if expected_slot_matrix is None:
-            matrix_ok = False
-            matrix_diag = "Canonical certification requires a frozen expected_slot_matrix derived from experiment plan."
+            if context_ok:
+                expected_slot_matrix = authority.expected_slot_matrix
+            else:
+                matrix_ok = False
+                matrix_diag = "Canonical certification requires a frozen expected_slot_matrix derived from experiment plan."
         elif not isinstance(expected_slot_matrix, dict) or "expected_slots" not in expected_slot_matrix:
             matrix_ok = False
             matrix_diag = "expected_slot_matrix must be a dict containing 'expected_slots'."
+        else:
+            m_ok, m_diag = authority.verify_expected_slot_matrix(expected_slot_matrix)
+            if not m_ok:
+                matrix_ok = False
+                plan_mismatch = True
+                matrix_diag = f"Canonical expected_slot_matrix plan violation: {m_diag}"
 
     if expected_slot_matrix is not None and isinstance(expected_slot_matrix, dict) and "expected_slots" in expected_slot_matrix:
         exp_slots = set(expected_slot_matrix["expected_slots"])
@@ -297,12 +317,13 @@ def analyze_p4a_ledger(
             f"{distinct_exec_ids}. Aggregating results across differing execution environments is strictly prohibited."
         )
 
-    # 1. Resolve canonical attempt per slot using unified evidence contract (R2-F02, R3-F01, R3-F02, R4-F02, R5-F05)
+    # 1. Resolve canonical attempt per slot using unified evidence contract (R2-F02, R3-F01, R3-F02, R4-F02, R5-F05, R7-F03)
+    resolve_provenance = True if mode == "canonical" else strict_provenance
     canonical_slots, duplicate_lineage, rejected_conflicts = resolve_canonical_attempts(
         records=records,
         expected_header=expected_header,
         strict_raise=False,
-        strict_provenance=strict_provenance,
+        strict_provenance=resolve_provenance,
     )
 
     if isolation_violation:
@@ -656,7 +677,13 @@ def analyze_p4a_ledger(
         }
 
     if mode == "canonical":
-        if isolation_violation:
+        if raw_artifact_status == ARTIFACT_STATUS_FAILED:
+            overall_verdict = "CANONICAL_INVALID_ARTIFACT"
+            p4b_recommendation = f"RECOMMENDATION: R4A_RAW_ARTIFACT_INTEGRITY_FAILURE. {art_diag}"
+        elif plan_mismatch:
+            overall_verdict = "CANONICAL_PLAN_MISMATCH"
+            p4b_recommendation = f"RECOMMENDATION: R4A_PLAN_MISMATCH. {matrix_diag}"
+        elif isolation_violation:
             overall_verdict = "CANONICAL_INCONCLUSIVE"
             p4b_recommendation = f"RECOMMENDATION: R4A_INCONCLUSIVE_MIXED_EXECUTION_IDENTITIES. {isolation_reason}"
         elif has_alien_contamination:
@@ -671,9 +698,6 @@ def analyze_p4a_ledger(
                 "RECOMMENDATION: R4A_INCONCLUSIVE_NO_VALID_PAIRS. "
                 "Zero valid workload pairs admitted; empirical profiling data insufficient for P4b architectural evaluation."
             )
-        elif raw_artifact_status == ARTIFACT_STATUS_FAILED:
-            overall_verdict = "CANONICAL_INVALID_ARTIFACT"
-            p4b_recommendation = f"RECOMMENDATION: R4A_RAW_ARTIFACT_INTEGRITY_FAILURE. {art_diag}"
         elif len(rejected_pairs) > 0 or len(duplicate_slot_warnings) > 0:
             overall_verdict = "CANONICAL_PARTIAL_OR_FAILED"
             p4b_recommendation = (
@@ -1037,38 +1061,94 @@ def main():
 
     expected_header = None
     artifact_meta = None
+    expected_slot_matrix = None
 
     if args.mode == "canonical":
-        if args.evidence_manifest and args.evidence_manifest.is_file():
-            try:
-                ev_data = load_trusted_evidence_manifest(args.evidence_manifest)
-                target_rel = None
-                try:
-                    target_rel = str(args.ledger.resolve().relative_to(REPO_ROOT.resolve()))
-                except ValueError:
-                    target_rel = str(args.ledger)
+        authority = get_official_p4a_authority()
 
-                if target_rel in ev_data.get("artifacts", {}):
-                    artifact_meta = ev_data["artifacts"][target_rel]
-                elif args.ledger.name == "p4a_raw_ledger.jsonl":
-                    for k, meta in ev_data.get("artifacts", {}).items():
-                        if Path(k).name == "p4a_raw_ledger.jsonl":
-                            artifact_meta = meta
-                            break
-                else:
-                    artifact_meta = None
-                expected_header = get_trusted_canonical_header(
-                    evidence_manifest_path=args.evidence_manifest,
-                    workload_manifest_path=args.manifest,
+        # Strict provenance enforcement in CLI canonical mode (R7-F03)
+        if not args.strict_provenance:
+            print("Error: Canonical certification requires strict provenance (--strict-provenance cannot be False in canonical mode).", file=sys.stderr)
+            sys.exit(1)
+
+        # Workload manifest check (R7-F04)
+        if args.manifest:
+            m_path = Path(args.manifest)
+            if not m_path.is_file():
+                print(f"Error: Workload manifest not found: {m_path}", file=sys.stderr)
+                sys.exit(1)
+            manifest_sha = compute_sha256(m_path)
+            if manifest_sha != authority.manifest_sha256:
+                print(
+                    f"Error: Canonical certification authority violation: workload manifest '{m_path}' SHA-256 ({manifest_sha}) "
+                    f"does not match approved canonical authority ({authority.manifest_sha256}).",
+                    file=sys.stderr,
                 )
+                sys.exit(1)
+
+        # Evidence manifest check (R7-F04)
+        if args.evidence_manifest:
+            ev_path = Path(args.evidence_manifest)
+            if not ev_path.is_file():
+                print(f"Error: Evidence manifest not found: {ev_path}", file=sys.stderr)
+                sys.exit(1)
+            try:
+                ev_data = load_trusted_evidence_manifest(ev_path)
             except Exception as e:
-                print(f"Warning: Failed to load canonical trusted header from {args.evidence_manifest}: {e}", file=sys.stderr)
+                print(f"Error: Failed to parse evidence manifest {ev_path}: {e}", file=sys.stderr)
+                sys.exit(1)
+
+            ev_exec_id = ev_data.get("execution_identity", "")
+            ev_commit = ev_data.get("canonical_execution_commit", "")
+            if ev_exec_id != authority.execution_identity:
+                print(
+                    f"Error: Canonical certification authority violation: evidence manifest execution_identity "
+                    f"'{ev_exec_id}' does not match approved authority '{authority.execution_identity}'.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            if ev_commit != authority.canonical_execution_commit:
+                print(
+                    f"Error: Canonical certification authority violation: evidence manifest canonical_execution_commit "
+                    f"'{ev_commit}' does not match approved authority '{authority.canonical_execution_commit}'.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+
+            raw_art_found = False
+            for art_path, art_meta in ev_data.get("artifacts", {}).items():
+                if Path(art_path).name == "p4a_raw_ledger.jsonl" or art_path == authority.raw_artifact_rel_path:
+                    raw_art_found = True
+                    if art_meta.get("sha256", "").lower() != authority.raw_artifact_sha256.lower():
+                        print(
+                            f"Error: Canonical certification authority violation: evidence manifest redefines raw artifact SHA-256 "
+                            f"to '{art_meta.get('sha256')}', differing from approved authority '{authority.raw_artifact_sha256}'.",
+                            file=sys.stderr,
+                        )
+                        sys.exit(1)
+            if not raw_art_found:
+                print("Error: Canonical certification authority violation: evidence manifest missing raw ledger artifact entry.", file=sys.stderr)
+                sys.exit(1)
+
+        target_rel = None
+        try:
+            target_rel = str(args.ledger.resolve().relative_to(REPO_ROOT.resolve()))
+        except ValueError:
+            target_rel = str(args.ledger)
+
+        if target_rel == authority.raw_artifact_rel_path or args.ledger.name == Path(authority.raw_artifact_rel_path).name:
+            artifact_meta = authority.trusted_artifact_meta
         else:
-            print(f"Warning: Evidence manifest not found: {args.evidence_manifest}", file=sys.stderr)
+            artifact_meta = None
+
+        expected_header = authority.expected_header
+        expected_slot_matrix = authority.expected_slot_matrix
+
     elif args.mode == "scoped":
         if args.manifest and args.manifest.is_file():
             try:
                 expected_header = get_frozen_manifest_registry(args.manifest)
+                expected_slot_matrix = compute_expected_slot_matrix(args.manifest)
             except Exception as e:
                 print(f"Warning: Failed to load manifest {args.manifest}: {e}", file=sys.stderr)
 
@@ -1079,6 +1159,7 @@ def main():
         mode=args.mode,
         raw_ledger_path=args.ledger,
         trusted_artifact_meta=artifact_meta,
+        expected_slot_matrix=expected_slot_matrix,
     )
 
     try:

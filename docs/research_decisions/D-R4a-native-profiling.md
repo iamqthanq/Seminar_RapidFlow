@@ -70,6 +70,11 @@ Across 90 paired comparisons (30 canonical workloads $\times$ 3 repetitions $\ti
 | Strict Tristate Raw Artifact Taxonomy | **ADD** | Tristate status: `NOT_CHECKED`, `VERIFIED`, `FAILED`; prevents synthetic records claiming false verification. | Tested across B01-B11 in `test_54_r6_f02` (Round 6). |
 | Atomic Snapshot Loading & Data Binding | **ADD** | `load_verified_ledger` loads single byte snapshot and binds 1:1 against in-memory records. | Prevents in-memory payload tampering; tested in `test_55_r6_f03` (Round 6). |
 | Decoupled Test Fixtures | **ADD** | Decouples unit and adversarial tests from unversioned raw ledger logs via deterministic synthetic fixtures. | Guarantees fresh-checkout test reproducibility; tested in `test_56_r6_f04` (Round 6). |
+| Official Canonical Authority Lockdown | **ADD** | Single authoritative `OfficialCanonicalAuthority` binds human-approved historical revision `cf97a7840dff0c0f2bf791834263f3911545110c`, raw artifact SHA `34452fb4ee...`, workload manifest `f82bdcc0...`, and 180-slot plan. | Eliminates caller-defined authority bypasses; tested in `test_57_r7_f01` and `test_61_r7` (Round 7). |
+| Immutable Expected Slot Matrix Enforcement | **ADD** | Caller-supplied expected matrix must deeply match the approved 180-slot, 90-pair experiment matrix; small matrices (e.g. 2 slots) rejected with `CANONICAL_PLAN_MISMATCH`. | Tested across T02-T09 in `test_57_r7_f01` (Round 7). |
+| Artifact Checksum Trust Anchoring | **ADD** | Raw artifact checksums in canonical certification must match the approved reference; caller-supplied self-generated SHAs fail closed with `CANONICAL_INVALID_ARTIFACT`. | Tested across T10-T14 in `test_58_r7_f02` (Round 7). |
+| Strict Provenance Non-Downgrade | **ADD** | Strict cryptographic validation is mandatory in canonical mode; disabling strict provenance is prohibited and fails closed with `CANONICAL_UNTRUSTED_CONTEXT`. | Tested across T15-T18 in `test_59_r7_f03` (Round 7). |
+| CLI Manifest Authority Lockdown | **ADD** | CLI rejects unverified `--evidence-manifest` and `--manifest` overrides; custom experiments are restricted to `--mode scoped` and never issue historical READY recommendations. | Tested across T19-T27 in `test_60_r7_f04` (Round 7). |
 
 
 ---

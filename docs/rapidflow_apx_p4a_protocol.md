@@ -211,6 +211,23 @@ To ensure that empirical certification cannot be bypassed or weakened under any 
    - All unit, regression, contract, and adversarial test cases are completely decoupled from unversioned, git-ignored runtime logs via self-consistent, deterministic synthetic fixtures (`FIXTURE_VALID_CANONICAL_M1`, `FIXTURE_VALID_CANONICAL_M2`).
    - On a clean repository checkout lacking `results/logs/`, all unit and contract tests run and pass 100% without crashing `setUpClass()`. Tests verifying historical empirical evidence cleanly skip with `HISTORICAL_EVIDENCE_UNAVAILABLE` rather than failing or falsely passing.
 
+### 4.18 Trusted Canonical Authority, Immutable Experiment Policy & Artifact Trust Anchoring (R7-F01, R7-F02, R7-F03, R7-F04)
+To eliminate caller-defined trust bypasses and anchor historical certification to an immutable, peer-reviewed standard, Round 7 enforces:
+1. **Official Canonical Authority Anchor (Section XII):**
+   - Centralized in `OfficialCanonicalAuthority` / `get_official_p4a_authority()` in `scripts/p4a_evidence_contract.py`.
+   - Binds the approved historical execution commit (`cf97a7840dff0c0f2bf791834263f3911545110c`), execution identity (`262279a9d9ea026e07231f3ba511863c383b98133db40e69f603a235ad792135`), workload manifest SHA (`f82bdcc0c89ce794439eeff3fd67fe78de733196286503c27de70ed2df5d3b18`), measurement protocol SHA (`dd3f39cae4325b3577adec8fa19ff5f52844e9338b1d97aa542d58b6c09d4ebd`), and historical raw artifact SHA (`34452fb4eeccd812882a5c2c47cca0c49b070bf8b48e5ea86d8ac68c8cc521d5`, 441,311 bytes, 180 records).
+   - Dedicated top-level programmatic entrypoint: `certify_official_p4a()`.
+2. **Canonical Expected Matrix Authority Lockdown (R7-F01):**
+   - In `mode="canonical"`, `expected_slot_matrix` is verified against `authority.expected_slot_matrix`. Caller-supplied subset matrices (e.g. 2 slots / 1 pair) or altered slot identities are rejected fail-closed with `CANONICAL_PLAN_MISMATCH` and diagnostic `R4A_PLAN_MISMATCH`.
+3. **Artifact Checksum Trust Anchoring (R7-F02):**
+   - Caller-supplied `trusted_artifact_meta` in canonical certification must match `authority.raw_artifact_sha256` exactly. Self-generated checksums of modified or tampered data cannot forge trust and fail closed with `CANONICAL_INVALID_ARTIFACT`.
+4. **Strict Provenance Non-Downgrade (R7-F03):**
+   - Canonical certification strictly requires `strict_provenance=True`. Passing `strict_provenance=False` in canonical mode is prohibited and fails closed with `CANONICAL_UNTRUSTED_CONTEXT`. All record validations in canonical mode enforce strict cross-field invariant checks.
+5. **CLI Evidence Manifest Authority Lockdown (R7-F04):**
+   - CLI in `--mode canonical` verifies that `--evidence-manifest` and `--manifest` match the approved authority. Arbitrary or forged manifests are rejected with exit code 1. Custom exploratory experiments are restricted to `--mode scoped` and cannot emit historical `CANONICAL_PASS` or `R4A_PROFILE_READY_FOR_P4B_REVIEW` recommendations.
+6. **Trust Model Scope & Limitations:**
+   - The integrity guarantees are anchored to the content-addressed Git object model and cryptographic SHA-256 references approved during peer review. They enforce strict fail-closed boundary checking within the repository's execution model without relying on unverified external claims.
+
 ---
 
 ## 5. Decision Gate & Phase P4b Transition Criteria (P4A-F08)

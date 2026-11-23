@@ -44,11 +44,25 @@ from scripts.run_rapidflow_apx_p4a import (
     PROTOCOL_VERSION,
 )
 from scripts.p4a_evidence_contract import (
+    APPROVED_P4A_CANONICAL_COMMIT,
+    APPROVED_P4A_EXECUTION_IDENTITY,
+    APPROVED_P4A_MANIFEST_SHA256,
+    APPROVED_P4A_PROTOCOL_SHA256,
+    APPROVED_P4A_RAW_ARTIFACT_SHA256,
+    APPROVED_P4A_RAW_ARTIFACT_SIZE_BYTES,
+    APPROVED_P4A_RAW_ARTIFACT_LINE_COUNT,
+    CanonicalAuthorityError,
+    OfficialCanonicalAuthority,
+    certify_official_p4a,
+    get_official_p4a_authority,
     ARTIFACT_STATUS_FAILED,
     ARTIFACT_STATUS_NOT_CHECKED,
     ARTIFACT_STATUS_VERIFIED,
     AmbiguousSlotError,
     IntegrityConflictError,
+    DEFAULT_EVIDENCE_MANIFEST_PATH,
+    DEFAULT_MANIFEST_PATH,
+    DEFAULT_PROTOCOL_PATH,
     PROTOCOL_MEASUREMENT_VERSION,
     PROTOCOL_ANALYSIS_VERSION,
     PROTOCOL_SPECIFICATION_REVISION,
@@ -2156,6 +2170,380 @@ class TestRapidFlowApxP4a(unittest.TestCase):
             real_sha = compute_sha256(canonical_ledger)
             self.assertEqual(real_sha, trusted_meta["sha256"])
             self.assertEqual(real_sha, "34452fb4eeccd812882a5c2c47cca0c49b070bf8b48e5ea86d8ac68c8cc521d5")
+
+    def test_57_r7_f01_expected_matrix_authority_lockdown(self):
+        """R7-F01: Official canonical certification strictly enforces immutable expected matrix authority (T02-T09)."""
+        pair_m1 = copy.deepcopy(self.valid_canonical_m1)
+        pair_m2 = copy.deepcopy(self.valid_canonical_m2)
+        authority = get_official_p4a_authority()
+
+        # T02: Caller passes a small 2-slot matrix for 1 pair -> CANONICAL_PLAN_MISMATCH (not CANONICAL_PASS)
+        small_matrix = {
+            "expected_slots": {f"{pair_m1['workload_id']}_rep0_m1", f"{pair_m1['workload_id']}_rep0_m2"},
+            "expected_pairs": {(pair_m1["workload_id"], 0)},
+        }
+        res_t02 = analyze_p4a_ledger(
+            [pair_m1, pair_m2],
+            mode="canonical",
+            expected_header=authority.expected_header,
+            expected_slot_matrix=small_matrix,
+        )
+        self.assertNotEqual(res_t02["overall_verdict"], "CANONICAL_PASS")
+        self.assertEqual(res_t02["overall_verdict"], "CANONICAL_PLAN_MISMATCH")
+        self.assertIn("R4A_PLAN_MISMATCH", res_t02["p4b_recommendation"])
+
+        # T03: One-pair subset with real trusted header and small matrix -> CANONICAL_PLAN_MISMATCH
+        res_t03 = analyze_p4a_ledger(
+            [pair_m1, pair_m2],
+            mode="canonical",
+            expected_header=authority.expected_header,
+            expected_slot_matrix=small_matrix,
+        )
+        self.assertEqual(res_t03["overall_verdict"], "CANONICAL_PLAN_MISMATCH")
+
+        # T04: Header passed as bare string in canonical mode -> CANONICAL_UNTRUSTED_CONTEXT
+        res_t04 = analyze_p4a_ledger(
+            [pair_m1, pair_m2],
+            mode="canonical",
+            expected_header=authority.execution_identity,
+            expected_slot_matrix=authority.expected_slot_matrix,
+        )
+        self.assertEqual(res_t04["overall_verdict"], "CANONICAL_UNTRUSTED_CONTEXT")
+
+        # T05: Partial header missing required fields -> CANONICAL_UNTRUSTED_CONTEXT
+        res_t05 = analyze_p4a_ledger(
+            [pair_m1, pair_m2],
+            mode="canonical",
+            expected_header={"execution_identity": authority.execution_identity},
+            expected_slot_matrix=authority.expected_slot_matrix,
+        )
+        self.assertEqual(res_t05["overall_verdict"], "CANONICAL_UNTRUSTED_CONTEXT")
+
+        # T06: 180 slots with correct count (180) but wrong/forged slot identities -> CANONICAL_PLAN_MISMATCH
+        forged_slots_180 = {f"P4A_WL_FAKE_{idx:02d}_rep0_m1" for idx in range(90)} | {f"P4A_WL_FAKE_{idx:02d}_rep0_m2" for idx in range(90)}
+        forged_matrix = {
+            "expected_slots": forged_slots_180,
+            "expected_pairs": {(f"P4A_WL_FAKE_{idx:02d}", 0) for idx in range(90)},
+        }
+        res_t06 = analyze_p4a_ledger(
+            None,
+            mode="canonical",
+            expected_header=authority.expected_header,
+            expected_slot_matrix=forged_matrix,
+        )
+        self.assertEqual(res_t06["overall_verdict"], "CANONICAL_PLAN_MISMATCH")
+
+        # T07: Caller matrix differing from frozen matrix (179 slots - missing 1) -> CANONICAL_PLAN_MISMATCH
+        sub_slots = set(list(authority.expected_slot_matrix["expected_slots"])[:-1])
+        matrix_179 = copy.deepcopy(authority.expected_slot_matrix)
+        matrix_179["expected_slots"] = sub_slots
+        res_t07 = analyze_p4a_ledger(
+            None,
+            mode="canonical",
+            expected_header=authority.expected_header,
+            expected_slot_matrix=matrix_179,
+        )
+        self.assertEqual(res_t07["overall_verdict"], "CANONICAL_PLAN_MISMATCH")
+
+        # T08: Caller matrix matching frozen matrix exactly -> passes matrix authority check
+        m_ok, m_diag = authority.verify_expected_slot_matrix(authority.expected_slot_matrix)
+        self.assertTrue(m_ok, f"Authority self-verification failed: {m_diag}")
+
+        # T09: Invalid repetition type (bool True, negative, or non-int) -> CANONICAL_PLAN_MISMATCH
+        bad_rep_matrix = copy.deepcopy(authority.expected_slot_matrix)
+        bad_rep_matrix["repetitions"] = True
+        res_t09 = analyze_p4a_ledger(
+            None,
+            mode="canonical",
+            expected_header=authority.expected_header,
+            expected_slot_matrix=bad_rep_matrix,
+        )
+        self.assertEqual(res_t09["overall_verdict"], "CANONICAL_PLAN_MISMATCH")
+
+    def test_58_r7_f02_artifact_checksum_trust_anchor(self):
+        """R7-F02: Artifact checksums must be anchored to approved authority; caller-supplied SHAs cannot forge trust (T10-T14)."""
+        authority = get_official_p4a_authority()
+        raw_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
+        if not raw_ledger.is_file():
+            self.skipTest("HISTORICAL_EVIDENCE_UNAVAILABLE: Historical canonical raw ledger is not provisioned on disk.")
+
+        with tempfile.NamedTemporaryFile("w+", suffix=".jsonl", delete=False) as tf:
+            tf.write('{"tampered": true}\n')
+            tampered_path = Path(tf.name)
+
+        try:
+            tampered_sha = compute_sha256(tampered_path)
+
+            # T10: Modified raw artifact file on disk + original official SHA -> FAIL (CANONICAL_INVALID_ARTIFACT)
+            res_t10 = analyze_p4a_ledger(
+                mode="canonical",
+                raw_ledger_path=tampered_path,
+                expected_header=authority.expected_header,
+                expected_slot_matrix=authority.expected_slot_matrix,
+                trusted_artifact_meta=authority.trusted_artifact_meta,
+            )
+            self.assertEqual(res_t10["overall_verdict"], "CANONICAL_INVALID_ARTIFACT")
+            self.assertEqual(res_t10["raw_artifact_integrity_status"], ARTIFACT_STATUS_FAILED)
+
+            # T11: Modified raw artifact file + caller self-generated SHA -> FAIL (CANONICAL_INVALID_ARTIFACT)
+            forged_meta = {
+                "sha256": tampered_sha,
+                "size_bytes": tampered_path.stat().st_size,
+                "line_count": 1,
+            }
+            res_t11 = analyze_p4a_ledger(
+                mode="canonical",
+                raw_ledger_path=tampered_path,
+                expected_header=authority.expected_header,
+                expected_slot_matrix=authority.expected_slot_matrix,
+                trusted_artifact_meta=forged_meta,
+            )
+            self.assertEqual(res_t11["overall_verdict"], "CANONICAL_INVALID_ARTIFACT")
+            self.assertEqual(res_t11["raw_artifact_integrity_status"], ARTIFACT_STATUS_FAILED)
+
+            # T12: Modified raw artifact + trusted header + fake artifact metadata -> CANONICAL_INVALID_ARTIFACT
+            res_t12 = analyze_p4a_ledger(
+                mode="canonical",
+                raw_ledger_path=tampered_path,
+                expected_header=authority.expected_header,
+                expected_slot_matrix=authority.expected_slot_matrix,
+                trusted_artifact_meta=forged_meta,
+            )
+            self.assertEqual(res_t12["overall_verdict"], "CANONICAL_INVALID_ARTIFACT")
+
+            # T13: Official raw ledger file + wrong caller SHA -> CANONICAL_INVALID_ARTIFACT
+            wrong_caller_meta = {
+                "sha256": "0" * 64,
+                "size_bytes": authority.raw_artifact_size_bytes,
+                "line_count": authority.raw_artifact_line_count,
+            }
+            res_t13 = analyze_p4a_ledger(
+                mode="canonical",
+                raw_ledger_path=raw_ledger,
+                expected_header=authority.expected_header,
+                expected_slot_matrix=authority.expected_slot_matrix,
+                trusted_artifact_meta=wrong_caller_meta,
+            )
+            self.assertEqual(res_t13["overall_verdict"], "CANONICAL_INVALID_ARTIFACT")
+            self.assertEqual(res_t13["raw_artifact_integrity_status"], ARTIFACT_STATUS_FAILED)
+
+            # T14: Official raw ledger file + approved SHA -> CANONICAL_PASS
+            res_t14 = analyze_p4a_ledger(
+                mode="canonical",
+                raw_ledger_path=raw_ledger,
+                expected_header=authority.expected_header,
+                expected_slot_matrix=authority.expected_slot_matrix,
+                trusted_artifact_meta=authority.trusted_artifact_meta,
+            )
+            self.assertEqual(res_t14["overall_verdict"], "CANONICAL_PASS")
+            self.assertEqual(res_t14["raw_artifact_integrity_status"], ARTIFACT_STATUS_VERIFIED)
+            self.assertEqual(res_t14["total_valid_pairs"], 90)
+
+        finally:
+            tampered_path.unlink()
+
+    def test_59_r7_f03_strict_provenance_downgrade_prohibited(self):
+        """R7-F03: Strict provenance downgrade is strictly prohibited in canonical certification (T15-T18)."""
+        authority = get_official_p4a_authority()
+        pair_m1 = copy.deepcopy(self.valid_canonical_m1)
+        pair_m2 = copy.deepcopy(self.valid_canonical_m2)
+
+        # T15: Canonical API called with strict_provenance=False -> CANONICAL_UNTRUSTED_CONTEXT
+        res_t15 = analyze_p4a_ledger(
+            [pair_m1, pair_m2],
+            mode="canonical",
+            expected_header=authority.expected_header,
+            expected_slot_matrix=authority.expected_slot_matrix,
+            strict_provenance=False,
+        )
+        self.assertNotEqual(res_t15["overall_verdict"], "CANONICAL_PASS")
+        self.assertEqual(res_t15["overall_verdict"], "CANONICAL_UNTRUSTED_CONTEXT")
+        self.assertIn("strict_provenance=True", res_t15["p4b_recommendation"])
+
+        # T16: Canonical API called with strict_provenance=True -> strict validation enforced
+        res_t16 = analyze_p4a_ledger(
+            [pair_m1, pair_m2],
+            mode="canonical",
+            expected_header=authority.expected_header,
+            strict_provenance=True,
+        )
+        self.assertNotEqual(res_t16["overall_verdict"], "CANONICAL_PASS")
+
+        # T17: Contradictory status/exit code passed to canonical API with strict_provenance=False -> rejected fail-closed
+        bad_rec = copy.deepcopy(pair_m2)
+        bad_rec["status"] = "COMPLETED_VERIFIED"
+        bad_rec["exit_code"] = 124
+        bad_rec["correctness_status"] = "NOT_CHECKED"
+        res_t17 = analyze_p4a_ledger(
+            [pair_m1, bad_rec],
+            mode="canonical",
+            expected_header=authority.expected_header,
+            expected_slot_matrix=authority.expected_slot_matrix,
+            strict_provenance=False,
+        )
+        self.assertNotEqual(res_t17["overall_verdict"], "CANONICAL_PASS")
+        self.assertEqual(res_t17["total_valid_pairs"], 0)
+        self.assertEqual(res_t17["total_rejected_pairs"], 1)
+
+        # T18: Forged workload SHA passed to canonical API with strict_provenance=False -> rejected fail-closed
+        bad_wl_rec = copy.deepcopy(pair_m2)
+        bad_wl_rec["workload_sha256"] = "f" * 64
+        res_t18 = analyze_p4a_ledger(
+            [pair_m1, bad_wl_rec],
+            mode="canonical",
+            expected_header=authority.expected_header,
+            expected_slot_matrix=authority.expected_slot_matrix,
+            strict_provenance=False,
+        )
+        self.assertNotEqual(res_t18["overall_verdict"], "CANONICAL_PASS")
+        self.assertEqual(res_t18["total_valid_pairs"], 0)
+
+    def test_60_r7_f04_cli_manifest_authority_lockdown(self):
+        """R7-F04: CLI evidence manifest and workload manifest authority lockdown (T19-T27)."""
+        authority = get_official_p4a_authority()
+        raw_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
+        if not raw_ledger.is_file():
+            self.skipTest("HISTORICAL_EVIDENCE_UNAVAILABLE: Historical canonical raw ledger is not provisioned on disk.")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_json = Path(tmpdir) / "out.json"
+
+            # T19: Official CLI + original raw ledger -> exit code 0, CANONICAL_PASS
+            cmd_t19 = [
+                sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"),
+                "--ledger", str(raw_ledger),
+                "--output-json", str(out_json),
+                "--mode", "canonical",
+            ]
+            proc_t19 = subprocess.run(cmd_t19, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertEqual(proc_t19.returncode, 0, f"CLI canonical run failed: {proc_t19.stderr}")
+            with open(out_json) as f:
+                d19 = json.load(f)
+            self.assertEqual(d19["overall_verdict"], "CANONICAL_PASS")
+            self.assertEqual(d19["total_valid_pairs"], 90)
+
+            # T20: Official CLI + forged evidence manifest redefining raw artifact SHA -> exit code 1
+            forged_ev = Path(tmpdir) / "forged_ev.json"
+            with open(DEFAULT_EVIDENCE_MANIFEST_PATH) as f:
+                ev_data = json.load(f)
+            ev_data["artifacts"]["results/logs/rf36-p4a/p4a_raw_ledger.jsonl"]["sha256"] = "0" * 64
+            with open(forged_ev, "w") as f:
+                json.dump(ev_data, f)
+
+            cmd_t20 = [
+                sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"),
+                "--ledger", str(raw_ledger),
+                "--evidence-manifest", str(forged_ev),
+                "--output-json", str(out_json),
+                "--mode", "canonical",
+            ]
+            proc_t20 = subprocess.run(cmd_t20, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertNotEqual(proc_t20.returncode, 0)
+            self.assertIn("Canonical certification authority violation", proc_t20.stderr)
+
+            # T21: Official CLI + modified workload manifest -> exit code 1
+            forged_wl = Path(tmpdir) / "modified_manifest.json"
+            with open(DEFAULT_MANIFEST_PATH) as f:
+                wl_data = json.load(f)
+            wl_data["cases"] = wl_data["cases"][:5]
+            with open(forged_wl, "w") as f:
+                json.dump(wl_data, f)
+
+            cmd_t21 = [
+                sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"),
+                "--ledger", str(raw_ledger),
+                "--manifest", str(forged_wl),
+                "--output-json", str(out_json),
+                "--mode", "canonical",
+            ]
+            proc_t21 = subprocess.run(cmd_t21, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertNotEqual(proc_t21.returncode, 0)
+            self.assertIn("Canonical certification authority violation", proc_t21.stderr)
+
+            # T22: Official CLI + renamed forged manifest -> exit code 1
+            renamed_forged = Path(tmpdir) / "p4a_evidence_manifest.json"
+            shutil.copy(forged_ev, renamed_forged)
+            cmd_t22 = [
+                sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"),
+                "--ledger", str(raw_ledger),
+                "--evidence-manifest", str(renamed_forged),
+                "--output-json", str(out_json),
+                "--mode", "canonical",
+            ]
+            proc_t22 = subprocess.run(cmd_t22, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertNotEqual(proc_t22.returncode, 0)
+
+            # T23: Official CLI + matching basename, wrong bytes -> exit code 1, CANONICAL_INVALID_ARTIFACT
+            fake_ledger = Path(tmpdir) / "p4a_raw_ledger.jsonl"
+            with open(fake_ledger, "w") as f:
+                f.write('{"tampered": 1}\n')
+            cmd_t23 = [
+                sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"),
+                "--ledger", str(fake_ledger),
+                "--output-json", str(out_json),
+                "--mode", "canonical",
+            ]
+            proc_t23 = subprocess.run(cmd_t23, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertNotEqual(proc_t23.returncode, 0)
+            self.assertIn("CANONICAL_INVALID_ARTIFACT", proc_t23.stderr)
+
+            # T24: Scoped mode on 1 pair -> exit code 0, SCOPED_ANALYSIS_VALID
+            scoped_ledger = Path(tmpdir) / "scoped.jsonl"
+            with open(scoped_ledger, "w") as f:
+                f.write(json.dumps(self.valid_canonical_m1) + "\n")
+                f.write(json.dumps(self.valid_canonical_m2) + "\n")
+            cmd_t24 = [
+                sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"),
+                "--ledger", str(scoped_ledger),
+                "--output-json", str(out_json),
+                "--mode", "scoped",
+            ]
+            proc_t24 = subprocess.run(cmd_t24, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertEqual(proc_t24.returncode, 0)
+            with open(out_json) as f:
+                d24 = json.load(f)
+            self.assertEqual(d24["overall_verdict"], "SCOPED_ANALYSIS_VALID")
+            self.assertEqual(d24["total_valid_pairs"], 1)
+
+            # T25: Custom analysis recommendation in scoped mode is SCOPED_PILOT_VALID, NOT historical READY
+            self.assertIn("SCOPED_PILOT_VALID", d24["p4b_recommendation"])
+            self.assertNotIn("R4A_PROFILE_READY_FOR_P4B_REVIEW", d24["p4b_recommendation"])
+
+    def test_61_r7_authority_and_reproducibility(self):
+        """R7-AUDIT: Top-level entrypoint certify_official_p4a, authority immutability & fresh checkout (T28-T34)."""
+        authority = get_official_p4a_authority()
+        raw_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
+        if not raw_ledger.is_file():
+            self.skipTest("HISTORICAL_EVIDENCE_UNAVAILABLE: Historical canonical raw ledger is not provisioned on disk.")
+
+        # T28: Top-level entrypoint certify_official_p4a on historical ledger
+        res_t28 = certify_official_p4a(raw_ledger)
+        self.assertEqual(res_t28["overall_verdict"], "CANONICAL_PASS")
+        self.assertEqual(res_t28["total_valid_pairs"], 90)
+        self.assertEqual(res_t28["raw_artifact_integrity_status"], ARTIFACT_STATUS_VERIFIED)
+
+        # T29: Malformed authority / manifest SHA mismatch raises CanonicalAuthorityError
+        with tempfile.NamedTemporaryFile("w+", suffix=".json") as tf:
+            tf.write('{"cases": [{"case_id": "P4A_WL_01"}]}\n')
+            tf.flush()
+            with self.assertRaises(CanonicalAuthorityError):
+                OfficialCanonicalAuthority(workload_manifest_path=tf.name)
+
+        # T30: Historical raw ledger unchanged (bit-for-bit SHA256 and size)
+        real_sha = compute_sha256(raw_ledger)
+        self.assertEqual(real_sha, APPROVED_P4A_RAW_ARTIFACT_SHA256)
+        self.assertEqual(raw_ledger.stat().st_size, APPROVED_P4A_RAW_ARTIFACT_SIZE_BYTES)
+        with open(raw_ledger, "r", encoding="utf-8") as f:
+            lines = [l for l in f if l.strip()]
+        self.assertEqual(len(lines), APPROVED_P4A_RAW_ARTIFACT_LINE_COUNT)
+
+        # T31: Copied valid ledger to temp directory (content SHA anchored) passes canonical certification
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_copy = Path(tmpdir) / "p4a_raw_ledger.jsonl"
+            shutil.copy(raw_ledger, temp_copy)
+            res_t31 = certify_official_p4a(temp_copy)
+            self.assertEqual(res_t31["overall_verdict"], "CANONICAL_PASS")
+            self.assertEqual(res_t31["total_valid_pairs"], 90)
 
 
 
