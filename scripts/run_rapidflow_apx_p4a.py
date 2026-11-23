@@ -21,6 +21,7 @@ import argparse
 import copy
 import hashlib
 import json
+import math
 import os
 import resource
 import shutil
@@ -97,17 +98,136 @@ def compute_execution_identity(
 ) -> str:
     """Computes a deterministic, cryptographic hash identifying the entire experimental environment."""
     payload = {
-        "protocol_version": protocol_version,
-        "protocol_sha256": protocol_sha256,
-        "manifest_sha256": manifest_sha256,
-        "source_commit": source_commit,
-        "source_dirty": source_dirty,
-        "binary_sha256": binary_sha256,
-        "effective_max_work": effective_max_work,
-        "effective_timeout": effective_timeout,
-        "effective_as_limit_mib": effective_as_limit_mib,
+        "binary_sha256": str(binary_sha256),
+        "effective_as_limit_mib": int(effective_as_limit_mib),
+        "effective_max_work": int(effective_max_work),
+        "effective_timeout": float(effective_timeout),
+        "manifest_sha256": str(manifest_sha256),
+        "protocol_sha256": str(protocol_sha256),
+        "protocol_version": str(protocol_version),
+        "source_commit": str(source_commit),
+        "source_dirty": str(source_dirty),
     }
     return compute_dict_sha256(payload)
+
+
+def validate_record_integrity(
+    record: Dict[str, Any],
+    expected_header: Optional[Union[str, Dict[str, Any]]] = None,
+) -> Tuple[bool, str]:
+    """
+    Validates a single ledger record for structural integrity, field types,
+    cryptographic self-consistency, and agreement with the expected experiment configuration.
+    Enforces fail-closed rejection on tampered, corrupted, or out-of-bounds metadata.
+    """
+    if not isinstance(record, dict):
+        return False, "Record is not a dict"
+
+    required_fields = [
+        "execution_identity", "protocol_version", "protocol_sha256", "manifest_sha256",
+        "source_commit", "source_dirty_state", "binary_sha256",
+        "workload_id", "workload_sha256", "engine", "repetition",
+        "status", "exit_code", "slot_key"
+    ]
+    for rf in required_fields:
+        if rf not in record:
+            return False, f"Missing required metadata field: {rf}"
+
+    # String & hex type validation
+    if not isinstance(record["execution_identity"], str) or len(record["execution_identity"]) != 64:
+        return False, "Invalid execution_identity: must be 64-char hex string"
+    if not isinstance(record["protocol_sha256"], str) or len(record["protocol_sha256"]) != 64:
+        return False, "Invalid protocol_sha256: must be 64-char hex string"
+    if not isinstance(record["manifest_sha256"], str) or len(record["manifest_sha256"]) != 64:
+        return False, "Invalid manifest_sha256: must be 64-char hex string"
+    if not isinstance(record["binary_sha256"], str) or len(record["binary_sha256"]) != 64:
+        return False, "Invalid binary_sha256: must be 64-char hex string"
+    if not isinstance(record["workload_sha256"], str) or len(record["workload_sha256"]) != 64:
+        return False, "Invalid workload_sha256: must be 64-char hex string"
+    if not isinstance(record["source_commit"], str) or not record["source_commit"]:
+        return False, "Invalid source_commit: must be non-empty string"
+    if record["source_dirty_state"] not in ("CLEAN", "DIRTY", "DIRTY_ALLOWED"):
+        return False, f"Invalid source_dirty_state: {record['source_dirty_state']}"
+    if record["engine"] not in ("m1", "m2"):
+        return False, f"Invalid engine: {record['engine']}"
+    if not isinstance(record["repetition"], int) or record["repetition"] < 0:
+        return False, "Invalid repetition: must be non-negative int"
+    if not isinstance(record["exit_code"], int):
+        return False, "Invalid exit_code: must be int"
+
+    # Effective resource limits
+    max_work = record.get("effective_max_work")
+    if not isinstance(max_work, int) or max_work <= 0 or max_work > CANONICAL_MAX_WORK_CAP:
+        return False, f"Invalid effective_max_work: {max_work} (approved ceiling={CANONICAL_MAX_WORK_CAP})"
+
+    timeout = record.get("effective_timeout")
+    if (
+        not isinstance(timeout, (int, float))
+        or math.isnan(timeout)
+        or math.isinf(timeout)
+        or timeout <= 0
+        or timeout > 60.0
+    ):
+        return False, f"Invalid effective_timeout: {timeout} (must be finite, >0 and <=60.0s)"
+
+    mem_limit = record.get("effective_memory_limit_mib")
+    if mem_limit is None:
+        mem_limit = record.get("effective_as_limit_mib")
+    if not isinstance(mem_limit, int) or mem_limit <= 0 or mem_limit > 512:
+        return False, f"Invalid effective_memory_limit_mib: {mem_limit} (must be >0 and <=512 MiB)"
+
+    # Slot key check
+    expected_slot_key = f"{record['workload_id']}_rep{record['repetition']}_{record['engine']}"
+    if record.get("slot_key") != expected_slot_key:
+        return False, f"Slot key mismatch: claimed {record.get('slot_key')} vs expected {expected_slot_key}"
+
+    # Self-consistency check: recompute execution_identity from record metadata
+    dirty_val = record.get("source_dirty_state") or record.get("source_dirty", "CLEAN")
+    derived_id = compute_execution_identity(
+        protocol_version=record["protocol_version"],
+        protocol_sha256=record["protocol_sha256"],
+        manifest_sha256=record["manifest_sha256"],
+        source_commit=record["source_commit"],
+        source_dirty=dirty_val,
+        binary_sha256=record["binary_sha256"],
+        effective_max_work=max_work,
+        effective_timeout=float(timeout),
+        effective_as_limit_mib=mem_limit,
+    )
+    if derived_id != record["execution_identity"]:
+        return False, f"Self-consistency failure: execution_identity {record['execution_identity']} != derived {derived_id}"
+
+    # Agreement with expected experiment header if provided
+    if expected_header:
+        if isinstance(expected_header, str):
+            if record["execution_identity"] != expected_header:
+                return False, f"Execution identity mismatch: claimed {record['execution_identity']} vs expected {expected_header}"
+        elif isinstance(expected_header, dict):
+            if "execution_identity" in expected_header and record["execution_identity"] != expected_header["execution_identity"]:
+                return False, "Execution identity mismatch against experiment header"
+            if "binary_sha256" in expected_header and record["binary_sha256"] != expected_header["binary_sha256"]:
+                return False, f"Binary SHA-256 mismatch against experiment header: {record['binary_sha256']} != {expected_header['binary_sha256']}"
+            if "source_commit" in expected_header and record["source_commit"] != expected_header["source_commit"]:
+                return False, f"Source commit mismatch against experiment header: {record['source_commit']} != {expected_header['source_commit']}"
+            if "manifest_sha256" in expected_header and record["manifest_sha256"] != expected_header["manifest_sha256"]:
+                return False, f"Manifest SHA-256 mismatch against experiment header: {record['manifest_sha256']} != {expected_header['manifest_sha256']}"
+            if "protocol_sha256" in expected_header and record["protocol_sha256"] != expected_header["protocol_sha256"]:
+                return False, f"Protocol SHA-256 mismatch against experiment header: {record['protocol_sha256']} != {expected_header['protocol_sha256']}"
+            if "source_dirty_state" in expected_header and record["source_dirty_state"] != expected_header["source_dirty_state"]:
+                return False, f"Source dirty state mismatch: {record['source_dirty_state']} != {expected_header['source_dirty_state']}"
+            if "effective_max_work" in expected_header and record["effective_max_work"] != expected_header["effective_max_work"]:
+                return False, f"Effective max work mismatch: {record['effective_max_work']} != {expected_header['effective_max_work']}"
+            if "effective_timeout" in expected_header and float(record["effective_timeout"]) != float(expected_header["effective_timeout"]):
+                return False, f"Effective timeout mismatch: {record['effective_timeout']} != {expected_header['effective_timeout']}"
+            exp_as = expected_header.get("effective_as_limit_mib", expected_header.get("effective_memory_limit_mib"))
+            if exp_as is not None and mem_limit != exp_as:
+                return False, f"Effective memory limit mismatch: {mem_limit} != {exp_as}"
+            if "workload_hashes" in expected_header:
+                exp_wl = expected_header["workload_hashes"].get(record["workload_id"])
+                if exp_wl and record["workload_sha256"] != exp_wl:
+                    return False, f"Workload SHA-256 mismatch for {record['workload_id']}: {record['workload_sha256']} != {exp_wl}"
+
+    return True, ""
 
 
 def verify_git_provenance(allow_dirty: bool = False) -> Tuple[Dict[str, Any], bool]:
@@ -406,12 +526,16 @@ def compute_m0_ground_truth(workload_data: Dict[str, Any]) -> Tuple[Optional[Lis
 
 
 def load_existing_ledger(
-    ledger_path: Path, expected_identity: Optional[str] = None
+    ledger_path: Path,
+    expected_identity: Optional[str] = None,
+    expected_header: Optional[Dict[str, Any]] = None,
 ) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, List[Dict[str, Any]]]]:
     """
     Loads raw JSONL experiment ledger fail-closed:
-    - Raises CorruptedLedgerError on any unparseable JSON line.
-    - If expected_identity is provided, verifies that every resumed slot matches it.
+    - Raises CorruptedLedgerError on any unparseable JSON line or non-dict record.
+    - Validates complete record integrity (field schema, types, limits, and self-consistency).
+    - If expected_identity or expected_header is provided, verifies that every resumed slot matches.
+    - If a record claims expected_identity but fails integrity/self-consistency, raises CorruptedLedgerError fail-closed.
     - Only admits COMPLETED_VERIFIED slots with performance_admission_status == "ACCEPTED".
     - Detects and tracks duplicate attempt lineage instead of silently overwriting.
     Returns (resumable_slots, duplicate_attempts).
@@ -421,6 +545,9 @@ def load_existing_ledger(
 
     if not ledger_path.is_file():
         return resumable_slots, duplicate_attempts
+
+    target_header = expected_header if expected_header is not None else expected_identity
+    exp_id = expected_identity or (expected_header.get("execution_identity") if isinstance(expected_header, dict) else None)
 
     line_no = 0
     with open(ledger_path, "r", encoding="utf-8") as f:
@@ -437,6 +564,24 @@ def load_existing_ledger(
             if not isinstance(rec, dict):
                 raise CorruptedLedgerError(f"Invalid record type (not dict) at line {line_no} in {ledger_path}")
 
+            rec_id = rec.get("execution_identity")
+
+            # Validate record integrity and experiment agreement
+            is_valid, diag = validate_record_integrity(rec, expected_header=target_header)
+
+            if exp_id:
+                if rec_id == exp_id:
+                    if not is_valid:
+                        raise CorruptedLedgerError(
+                            f"Tampered or corrupted record in {ledger_path} at line {line_no} (claimed identity {exp_id}): {diag}"
+                        )
+                else:
+                    # Slot from a different experiment cannot be resumed
+                    continue
+            else:
+                if not is_valid:
+                    raise CorruptedLedgerError(f"Corrupted record in {ledger_path} at line {line_no}: {diag}")
+
             slot_key = rec.get("slot_key") or f"{rec.get('workload_id')}_rep{rec.get('repetition')}_{rec.get('engine')}"
 
             # Check for duplicate attempt lineage
@@ -444,12 +589,6 @@ def load_existing_ledger(
                 if slot_key not in duplicate_attempts:
                     duplicate_attempts[slot_key] = [resumable_slots[slot_key]]
                 duplicate_attempts[slot_key].append(rec)
-
-            # Check identity match if required
-            rec_id = rec.get("execution_identity")
-            if expected_identity and rec_id != expected_identity:
-                # Slot from incompatible experiment cannot be resumed
-                continue
 
             # Check if verified and admitted
             if (
@@ -474,7 +613,28 @@ def main():
     parser.add_argument("--repetitions", type=int, default=3, help="Number of measured pairs per workload")
     parser.add_argument("--timeout", type=float, default=60.0, help="Per-run timeout in seconds")
     parser.add_argument("--as-limit-mib", type=int, default=512, help="RLIMIT_AS limit in MiB")
+    parser.add_argument("--warmup", action="store_true", help="Explicit disposable warm-up check")
     args = parser.parse_args()
+
+    # Strict resource limits and configuration validation (R2-F08)
+    if (
+        args.timeout is None
+        or math.isnan(args.timeout)
+        or math.isinf(args.timeout)
+        or args.timeout <= 0
+        or args.timeout > 60.0
+    ):
+        print(f"ERROR: Invalid --timeout: {args.timeout}. Must be > 0 and <= 60.0 seconds.", file=sys.stderr)
+        sys.exit(1)
+    if args.as_limit_mib is None or args.as_limit_mib <= 0 or args.as_limit_mib > 512:
+        print(f"ERROR: Invalid --as-limit-mib: {args.as_limit_mib}. Must be > 0 and <= 512 MiB.", file=sys.stderr)
+        sys.exit(1)
+    if args.repetitions is None or args.repetitions <= 0 or args.repetitions > 10:
+        print(f"ERROR: Invalid --repetitions: {args.repetitions}. Must be > 0 and <= 10.", file=sys.stderr)
+        sys.exit(1)
+    if CANONICAL_MAX_WORK_CAP > 500000:
+        print(f"ERROR: CANONICAL_MAX_WORK_CAP exceeds approved ceiling: {CANONICAL_MAX_WORK_CAP} > 500000", file=sys.stderr)
+        sys.exit(1)
 
     print("=" * 80)
     print("      RapidFlow-APX Native Profiling & Measurement Runner (Phase P4a)     ")
@@ -564,6 +724,24 @@ def main():
     skipped_slots = 0
     correctness_violations = 0
 
+    slot_counters: Dict[str, int] = {
+        "planned_slots": total_slots,
+        "attempted_slots": 0,
+        "completed_slots": 0,
+        "verified_slots": 0,
+        "admitted_slots": 0,
+        "rejected_slots": 0,
+        "censored_slots": 0,
+        "timeout_slots": 0,
+        "work_limit_slots": 0,
+        "oom_slots": 0,
+        "oracle_failed_slots": 0,
+        "execution_failed_slots": 0,
+        "warmup_failed_slots": 0,
+        "skipped_verified_slots": 0,
+        "correctness_violations": 0,
+    }
+
     for w_idx, wl in enumerate(cases):
         case_id = wl["case_id"]
         q_type = wl.get("query_type", "unknown")
@@ -589,11 +767,14 @@ def main():
 
                 if slot_key in existing_ledger:
                     skipped_slots += 1
+                    slot_counters["skipped_verified_slots"] += 1
                     all_results.append(existing_ledger[slot_key])
                     continue
 
+                slot_counters["attempted_slots"] += 1
+
                 # 1. Disposable Warm-Up Run (untimed state, discard)
-                execute_native_run(
+                warm_res = execute_native_run(
                     binary_path=bin_path,
                     engine=engine,
                     workload_data=copy.deepcopy(wl),
@@ -602,16 +783,32 @@ def main():
                     as_limit_mib=args.as_limit_mib,
                 )
 
-                # 2. Timed Measured Run (fresh state)
-                run_res = execute_native_run(
-                    binary_path=bin_path,
-                    engine=engine,
-                    workload_data=copy.deepcopy(wl),
-                    profile=True,
-                    timeout_s=args.timeout,
-                    as_limit_mib=args.as_limit_mib,
-                )
-                executed_slots += 1
+                if warm_res["status"] != "COMPLETED":
+                    # Warm-up failed! Fail-closed: block measured replay for this slot (R2-F08)
+                    print(
+                        f"  [WARN] Warm-up failed for {slot_key} with status {warm_res['status']} "
+                        f"(exit={warm_res['exit_code']})",
+                        file=sys.stderr,
+                    )
+                    run_status = warm_res["status"] if warm_res["status"] in ("TIMEOUT", "WORK_LIMIT", "OOM_CENSORED", "SIGNAL_KILL_CENSORED") else "WARMUP_FAILED"
+                    correctness_status = f"WARMUP_{warm_res['status']}"
+                    correctness_notes = f"Disposable warm-up execution failed with status {warm_res['status']}"
+                    performance_admission_status = "REJECTED"
+                    m0_agreed = False
+                    run_res = warm_res
+                    executed_slots += 1
+                    slot_counters["warmup_failed_slots"] += 1
+                else:
+                    # 2. Timed Measured Run (fresh state)
+                    run_res = execute_native_run(
+                        binary_path=bin_path,
+                        engine=engine,
+                        workload_data=copy.deepcopy(wl),
+                        profile=True,
+                        timeout_s=args.timeout,
+                        as_limit_mib=args.as_limit_mib,
+                    )
+                    executed_slots += 1
 
                 # Correctness & Admission Verification (P4A-F03)
                 m0_agreed = False
@@ -624,6 +821,8 @@ def main():
                     correctness_status = "ORACLE_FAILED"
                     correctness_notes = f"M0 Oracle error: {m0_error}"
                     run_status = "ORACLE_FAILED"
+                elif warm_res["status"] != "COMPLETED":
+                    pass  # Already marked
                 elif run_res["status"] == "COMPLETED" and "steps" in out_data:
                     steps = out_data["steps"]
                     if len(steps) != len(m0_ground_truth):
@@ -672,9 +871,32 @@ def main():
                     run_status = run_res["status"]
                     correctness_notes = f"Subprocess terminated with status {run_res['status']}"
 
-                if not m0_agreed and run_res["status"] == "COMPLETED":
-                    correctness_violations += 1
-                    print(f"  [FAIL] Correctness violation on {slot_key}: {correctness_notes} ({correctness_status})")
+                # Update slot counters (R2-F04)
+                if run_status == "COMPLETED_VERIFIED":
+                    slot_counters["completed_slots"] += 1
+                    slot_counters["verified_slots"] += 1
+                    slot_counters["admitted_slots"] += 1
+                else:
+                    slot_counters["rejected_slots"] += 1
+                    if run_status == "TIMEOUT":
+                        slot_counters["timeout_slots"] += 1
+                        slot_counters["censored_slots"] += 1
+                    elif run_status == "WORK_LIMIT":
+                        slot_counters["work_limit_slots"] += 1
+                        slot_counters["censored_slots"] += 1
+                    elif run_status in ("OOM_CENSORED", "SIGNAL_KILL_CENSORED"):
+                        slot_counters["oom_slots"] += 1
+                        slot_counters["censored_slots"] += 1
+                    elif run_status == "ORACLE_FAILED":
+                        slot_counters["oracle_failed_slots"] += 1
+                    elif run_status == "FAILED_CORRECTNESS":
+                        slot_counters["correctness_violations"] += 1
+                        correctness_violations += 1
+                        print(f"  [FAIL] Correctness violation on {slot_key}: {correctness_notes} ({correctness_status})")
+                    elif run_status == "WARMUP_FAILED":
+                        slot_counters["warmup_failed_slots"] += 1
+                    else:
+                        slot_counters["execution_failed_slots"] += 1
 
                 # Extract profiling & counters
                 profiling_info = out_data.get("profiling", {})
@@ -688,6 +910,7 @@ def main():
                     "workload_id": case_id,
                     "workload_sha256": wl_sha256,
                     "source_commit": prov_meta.get("repo_commit"),
+                    "source_dirty": prov_meta.get("dirty_state"),
                     "source_dirty_state": prov_meta.get("dirty_state"),
                     "upstream_commit": prov_meta.get("upstream_commit"),
                     "upstream_pristine": prov_meta.get("upstream_pristine"),
@@ -697,6 +920,7 @@ def main():
                     "effective_max_work": CANONICAL_MAX_WORK_CAP,
                     "effective_timeout": args.timeout,
                     "effective_memory_limit_mib": args.as_limit_mib,
+                    "effective_as_limit_mib": args.as_limit_mib,
                     "run_id": run_id,
                     "attempt_id": attempt_id,
                     "slot_key": slot_key,
@@ -728,7 +952,29 @@ def main():
 
     ledger_file.close()
 
-    # 6. Generate Canonical Summary
+    # 6. Generate Canonical Summary & Determine Overall Verdict (R2-F04)
+    effective_admitted = slot_counters["admitted_slots"] + slot_counters["skipped_verified_slots"]
+    has_critical_failures = (
+        slot_counters["timeout_slots"] > 0
+        or slot_counters["work_limit_slots"] > 0
+        or slot_counters["oom_slots"] > 0
+        or slot_counters["oracle_failed_slots"] > 0
+        or slot_counters["execution_failed_slots"] > 0
+        or slot_counters["warmup_failed_slots"] > 0
+        or slot_counters["correctness_violations"] > 0
+    )
+
+    if (
+        not has_critical_failures
+        and effective_admitted == slot_counters["planned_slots"]
+        and slot_counters["planned_slots"] > 0
+    ):
+        overall_verdict = "CANONICAL_PASS"
+    elif slot_counters["correctness_violations"] > 0 or slot_counters["oracle_failed_slots"] > 0:
+        overall_verdict = "CANONICAL_FAILED"
+    else:
+        overall_verdict = "CANONICAL_INCOMPLETE"
+
     summary: Dict[str, Any] = {
         "execution_identity": execution_identity,
         "protocol_version": PROTOCOL_VERSION,
@@ -740,10 +986,12 @@ def main():
         "binary_sha256": bin_sha,
         "git_provenance": prov_meta,
         "system_resources": res_meta,
+        "overall_verdict": overall_verdict,
+        "slot_counters": slot_counters,
         "total_slots": total_slots,
         "executed_slots": executed_slots,
         "skipped_slots": skipped_slots,
-        "correctness_violations": correctness_violations,
+        "correctness_violations": slot_counters["correctness_violations"],
         "total_workloads": len(cases),
         "repetitions_per_workload": args.repetitions,
         "results": all_results,
@@ -754,14 +1002,15 @@ def main():
 
     print("=" * 80)
     print("                      Phase P4a Pilot Execution Finished                      ")
-    print(f"  Slots Executed: {executed_slots} | Skipped: {skipped_slots} | Violations: {correctness_violations}")
+    print(f"  Slots Planned:  {slot_counters['planned_slots']} | Admitted: {effective_admitted} | Verdict: {overall_verdict}")
+    print(f"  Timeouts:       {slot_counters['timeout_slots']} | Violations: {slot_counters['correctness_violations']}")
     print(f"  Execution ID:   {execution_identity[:16]}... (Full: {execution_identity})")
     print(f"  Raw Ledger:     {args.ledger}")
     print(f"  Summary Report: {args.output}")
     print("=" * 80)
 
-    if correctness_violations > 0:
-        print("ERROR: Correctness violations detected!", file=sys.stderr)
+    if overall_verdict != "CANONICAL_PASS":
+        print(f"ERROR: Experiment concluded with non-canonical verdict: {overall_verdict}", file=sys.stderr)
         sys.exit(1)
 
 

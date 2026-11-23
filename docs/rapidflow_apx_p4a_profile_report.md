@@ -4,7 +4,7 @@
 
 - **Total Workload Pairs Analyzed:** 90
 - **Total Rejected Pairs:** 0
-- **Median Search Speedup ($S_{search} = T_{M1} / T_{M2}$):** 1.9617x
+- **Median Search Speedup ($S_{search} = T_{M1} / T_{M2}$):** 2.1269x
 - **Median Native Step Speedup ($S_{step} = T_{M1} / T_{M2}$):** 1.8021x
 - **Median Streaming Loop Speedup ($S_{loop} = T_{M1} / T_{M2}$):** 1.1136x
 - **Median Outer Wall Speedup ($S_{outer} = T_{M1} / T_{M2}$):** 1.0414x
@@ -16,7 +16,7 @@
 
 | Timer Scope                      | Count | Min   | Q1 (25%) | Median | Q3 (75%) | Max   | Mean  | StdDev |
 | -------------------------------- | ----- | ----- | -------- | ------ | -------- | ----- | ----- | ------ |
-| Search (Callback Duration)       | 90    | 1.00x | 1.33x    | 1.96x  | 3.23x    | 9.74x | 2.60x | 1.75   |
+| Search (Callback Duration)       | 84    | 1.05x | 1.37x    | 2.13x  | 3.36x    | 9.74x | 2.71x | 1.75   |
 | Native Step Total (execute_step) | 90    | 0.98x | 1.33x    | 1.80x  | 2.67x    | 6.18x | 2.15x | 1.06   |
 | Streaming Loop (C++ main loop)   | 90    | 0.93x | 1.05x    | 1.11x  | 1.27x    | 2.48x | 1.21x | 0.26   |
 | Outer Wall (Process Subprocess)  | 90    | 0.43x | 1.00x    | 1.04x  | 1.10x    | 1.71x | 1.06x | 0.13   |
@@ -68,8 +68,24 @@
 
 ## 5. Micro-Step Stage Execution Breakdown (% of Step Total Time)
 
-| Step Component | M1 Median % | M1 Mean % | M2 Median % | M2 Mean % |
-| -------------- | ----------- | --------- | ----------- | --------- |
+> [!NOTE]
+> Micro-step components below are normalized as percentages of the native step total duration (`execute_step`).
+> To evaluate search bottlenecks specifically, `Neighbor Retrieval within Search` is computed separately
+> with the search callback duration ($T_{search}$) as its denominator (M2 median: 22.78%, vs 16.25% of step total).
+
+| Step Component                                    | M1 Median % | M1 Mean % | M2 Median % | M2 Mean % |
+| ------------------------------------------------- | ----------- | --------- | ----------- | --------- |
+| Update Maintenance (TransactionMgr)               | 2.09%       | 7.13%     | 3.12%       | 11.22%    |
+| Search Core (Search excluding Neighbor Retrieval) | 79.53%      | 71.42%    | 67.23%      | 59.76%    |
+| Neighbor Retrieval (AuthoritativeGraph)           | 15.74%      | 13.62%    | 16.25%      | 15.94%    |
+| Tuple Commit (sink.commit_step)                   | 0.62%       | 0.81%     | 1.38%       | 1.33%     |
+
+### 5.1 Search-Normalized Breakdown (% of Search Duration)
+
+| Search Subcomponent              | M1 Median % | M1 Mean % | M2 Median % | M2 Mean % |
+| -------------------------------- | ----------- | --------- | ----------- | --------- |
+| Search Core within Search        | 83.24%      | 84.24%    | 77.22%      | 78.09%    |
+| Neighbor Retrieval within Search | 16.76%      | 15.76%    | 22.78%      | 21.91%    |
 
 ## 6. Engine Counters and Candidate Reduction
 

@@ -48,18 +48,18 @@ def percentile(data: List[float], p: float) -> float:
     return sorted_d[low] * (1.0 - weight) + sorted_d[high] * weight
 
 
-def compute_distribution_stats(values: List[float]) -> Dict[str, float]:
+def compute_distribution_stats(values: List[float]) -> Dict[str, Any]:
     """Computes basic distribution metrics: min, Q1, median, Q3, max, mean, stddev."""
     if not values:
         return {
             "count": 0,
-            "min": 0.0,
-            "q1": 0.0,
-            "median": 0.0,
-            "q3": 0.0,
-            "max": 0.0,
-            "mean": 0.0,
-            "stddev": 0.0,
+            "min": None,
+            "q1": None,
+            "median": None,
+            "q3": None,
+            "max": None,
+            "mean": None,
+            "stddev": None,
         }
     cnt = len(values)
     mean_val = sum(values) / cnt
@@ -74,6 +74,32 @@ def compute_distribution_stats(values: List[float]) -> Dict[str, float]:
         "mean": round(mean_val, 4),
         "stddev": round(math.sqrt(var_val), 4),
     }
+
+
+def compute_safe_speedup(t_m1: Any, t_m2: Any) -> Tuple[Optional[float], str]:
+    """
+    Computes t_m1 / t_m2 safely under strict timer validity contracts:
+    - Rejects None, non-numeric, boolean, NaN, Inf.
+    - Rejects zero or negative duration (RATIO_NOT_COMPUTABLE; never defaults to 1.0x).
+    Returns (speedup_ratio, diagnostic_status).
+    """
+    if t_m1 is None or t_m2 is None:
+        return None, "MISSING_OR_NONE"
+    if isinstance(t_m1, bool) or isinstance(t_m2, bool):
+        return None, "INVALID_TYPE_BOOL"
+    if not isinstance(t_m1, (int, float)) or not isinstance(t_m2, (int, float)):
+        return None, "INVALID_TYPE_NON_NUMERIC"
+    if math.isnan(t_m1) or math.isnan(t_m2):
+        return None, "NAN_VALUE"
+    if math.isinf(t_m1) or math.isinf(t_m2):
+        return None, "INFINITE_VALUE"
+    if t_m1 <= 0 or t_m2 <= 0:
+        return None, "ZERO_OR_NEGATIVE_DURATION"
+
+    ratio = t_m1 / t_m2
+    if math.isnan(ratio) or math.isinf(ratio):
+        return None, "NONFINITE_RATIO"
+    return ratio, "VALID"
 
 
 def load_ledger(ledger_path: Path) -> List[Dict[str, Any]]:
@@ -96,25 +122,67 @@ def load_ledger(ledger_path: Path) -> List[Dict[str, Any]]:
 
 def analyze_p4a_ledger(records: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Processes ledger records into structured statistical metrics with strict identity checking."""
-    # Group records by (workload_id, repetition) -> { "m1": rec, "m2": rec }
-    pairs_map: Dict[Tuple[str, int], Dict[str, Any]] = defaultdict(dict)
+    # 1. Collect all attempts per slot (w_id, rep, eng) to prevent silent overwrite (R2-F02)
+    slot_attempts: Dict[Tuple[str, int, str], List[Dict[str, Any]]] = defaultdict(list)
     duplicate_slot_warnings = []
+    ambiguous_slots = set()
 
     for rec in records:
         w_id = rec.get("workload_id")
         rep = rec.get("repetition", 0)
         eng = rec.get("engine")
         if w_id and eng in ("m1", "m2"):
-            if eng in pairs_map[(w_id, rep)]:
-                duplicate_slot_warnings.append({
-                    "slot_key": f"{w_id}_rep{rep}_{eng}",
-                    "previous_attempt": pairs_map[(w_id, rep)][eng].get("attempt_id"),
-                    "duplicate_attempt": rec.get("attempt_id"),
-                })
-            pairs_map[(w_id, rep)][eng] = rec
+            slot_attempts[(w_id, rep, eng)].append(rec)
+
+    # 2. Resolve canonical attempt per slot fail-closed on ambiguous duplicates
+    canonical_slot_records: Dict[Tuple[str, int, str], Dict[str, Any]] = {}
+    for slot_key, attempts in slot_attempts.items():
+        w_id, rep, eng = slot_key
+        slot_str = f"{w_id}_rep{rep}_{eng}"
+        if len(attempts) == 1:
+            canonical_slot_records[slot_key] = attempts[0]
+        else:
+            duplicate_slot_warnings.append({
+                "slot_key": slot_str,
+                "attempt_count": len(attempts),
+                "attempt_ids": [a.get("attempt_id") for a in attempts],
+            })
+            # Filter to admitted, verified attempts
+            verified_attempts = [
+                a for a in attempts
+                if a.get("status") == "COMPLETED_VERIFIED"
+                and a.get("performance_admission_status") == "ACCEPTED"
+                and a.get("m0_agreed") is True
+            ]
+            if len(verified_attempts) == 1:
+                # Unique verified attempt selected (e.g. valid retry after previous failed attempt)
+                canonical_slot_records[slot_key] = verified_attempts[0]
+            elif len(verified_attempts) == 0:
+                # No verified attempt; slot failed
+                canonical_slot_records[slot_key] = attempts[-1]
+            else:
+                # Multiple verified attempts: check if they are identical byte/data duplicates
+                first = verified_attempts[0]
+                all_identical = all(
+                    a.get("outer_wall_ns") == first.get("outer_wall_ns")
+                    and a.get("profiling") == first.get("profiling")
+                    and a.get("counters") == first.get("counters")
+                    and a.get("execution_identity") == first.get("execution_identity")
+                    for a in verified_attempts[1:]
+                )
+                if all_identical:
+                    canonical_slot_records[slot_key] = first
+                else:
+                    # Ambiguous duplicate slot: conflicting timing/data! Mark ambiguous to reject pair
+                    ambiguous_slots.add(slot_key)
+
+    pairs_map: Dict[Tuple[str, int], Dict[str, Any]] = defaultdict(dict)
+    for (w_id, rep, eng), rec in canonical_slot_records.items():
+        pairs_map[(w_id, rep)][eng] = rec
 
     valid_pairs = []
     rejected_pairs = []
+    timer_exclusions = []
 
     outer_speedups = []
     stream_loop_speedups = []
@@ -138,6 +206,14 @@ def analyze_p4a_ledger(records: List[Dict[str, Any]]) -> Dict[str, Any]:
     pair_details = []
 
     for (w_id, rep), eng_dict in sorted(pairs_map.items()):
+        # Check if slot was flagged as an ambiguous duplicate (R2-F02)
+        if (w_id, rep, "m1") in ambiguous_slots or (w_id, rep, "m2") in ambiguous_slots:
+            rejected_pairs.append({
+                "pair_key": [w_id, rep],
+                "reason": f"Ambiguous duplicate verified attempts detected for pair ({w_id}, rep={rep}) without valid retry lineage",
+            })
+            continue
+
         if "m1" not in eng_dict or "m2" not in eng_dict:
             rejected_pairs.append({
                 "pair_key": [w_id, rep],
@@ -199,46 +275,61 @@ def analyze_p4a_ledger(records: List[Dict[str, Any]]) -> Dict[str, Any]:
         query_k_key = f"{q_type}_k{k}"
 
         # 1. Outer wall speedup (subprocess wall time)
-        t_m1_outer = m1.get("outer_wall_ns", 0)
-        t_m2_outer = m2.get("outer_wall_ns", 0)
-        s_outer = (t_m1_outer / t_m2_outer) if t_m2_outer > 0 else 1.0
+        t_m1_outer = m1.get("outer_wall_ns")
+        t_m2_outer = m2.get("outer_wall_ns")
+        s_outer, s_outer_status = compute_safe_speedup(t_m1_outer, t_m2_outer)
 
         # 2. Profiling timings
         m1_prof = m1.get("profiling", {})
         m2_prof = m2.get("profiling", {})
 
         # Streaming loop wall speedup (C++ streaming loop in main.cpp)
-        t_m1_stream_loop = m1_prof.get("streaming_loop_wall_ns", m1_prof.get("streaming_exec_ns", 0))
-        t_m2_stream_loop = m2_prof.get("streaming_loop_wall_ns", m2_prof.get("streaming_exec_ns", 0))
-        s_stream_loop = (t_m1_stream_loop / t_m2_stream_loop) if t_m2_stream_loop > 0 else 1.0
+        t_m1_stream_loop = m1_prof.get("streaming_loop_wall_ns", m1_prof.get("streaming_exec_ns"))
+        t_m2_stream_loop = m2_prof.get("streaming_loop_wall_ns", m2_prof.get("streaming_exec_ns"))
+        s_stream_loop, s_loop_status = compute_safe_speedup(t_m1_stream_loop, t_m2_stream_loop)
 
         m1_cum = m1_prof.get("cumulative", {})
         m2_cum = m2_prof.get("cumulative", {})
 
         # Native step total speedup (sum of execute_step durations)
-        t_m1_step_tot = m1_cum.get("step_total_ns", m1_cum.get("cumulative_step_total_ns", 0))
-        t_m2_step_tot = m2_cum.get("step_total_ns", m2_cum.get("cumulative_step_total_ns", 0))
-        s_step_tot = (t_m1_step_tot / t_m2_step_tot) if t_m2_step_tot > 0 else 1.0
+        t_m1_step_tot = m1_cum.get("step_total_ns", m1_cum.get("cumulative_step_total_ns"))
+        t_m2_step_tot = m2_cum.get("step_total_ns", m2_cum.get("cumulative_step_total_ns"))
+        s_step_tot, s_step_status = compute_safe_speedup(t_m1_step_tot, t_m2_step_tot)
 
         # Search speedup (time inside search callback)
-        t_m1_search = m1_cum.get("search_ns", m1_cum.get("cumulative_search_ns", 0))
-        t_m2_search = m2_cum.get("search_ns", m2_cum.get("cumulative_search_ns", 0))
-        s_search = (t_m1_search / t_m2_search) if t_m2_search > 0 else 1.0
+        t_m1_search = m1_cum.get("search_ns", m1_cum.get("cumulative_search_ns"))
+        t_m2_search = m2_cum.get("search_ns", m2_cum.get("cumulative_search_ns"))
+        s_search, s_search_status = compute_safe_speedup(t_m1_search, t_m2_search)
 
-        outer_speedups.append(s_outer)
-        stream_loop_speedups.append(s_stream_loop)
-        native_step_speedups.append(s_step_tot)
-        search_speedups.append(s_search)
+        if s_outer is not None:
+            outer_speedups.append(s_outer)
+        else:
+            timer_exclusions.append({"scope": "outer_wall", "pair": [w_id, rep], "reason": s_outer_status})
 
-        speedups_by_query_k[query_k_key].append(s_stream_loop)
-        speedups_by_regime[regime].append(s_stream_loop)
-        speedups_by_topology[topology].append(s_stream_loop)
+        if s_stream_loop is not None:
+            stream_loop_speedups.append(s_stream_loop)
+            speedups_by_query_k[query_k_key].append(s_stream_loop)
+            speedups_by_regime[regime].append(s_stream_loop)
+            speedups_by_topology[topology].append(s_stream_loop)
+        else:
+            timer_exclusions.append({"scope": "streaming_loop", "pair": [w_id, rep], "reason": s_loop_status})
+
+        if s_step_tot is not None:
+            native_step_speedups.append(s_step_tot)
+        else:
+            timer_exclusions.append({"scope": "native_step_total", "pair": [w_id, rep], "reason": s_step_status})
+
+        if s_search is not None:
+            search_speedups.append(s_search)
+        else:
+            timer_exclusions.append({"scope": "search", "pair": [w_id, rep], "reason": s_search_status})
 
         # Event status
         m2_cnt = m2.get("counters", {})
         events_emitted = m2_cnt.get("committed_emissions", m2_cnt.get("events_emitted", 0))
         ev_key = "zero_event" if events_emitted == 0 else "event_bearing"
-        speedups_by_event_status[ev_key].append(s_stream_loop)
+        if s_stream_loop is not None:
+            speedups_by_event_status[ev_key].append(s_stream_loop)
 
         # Record pair details
         pair_details.append({
@@ -251,16 +342,16 @@ def analyze_p4a_ledger(records: List[Dict[str, Any]]) -> Dict[str, Any]:
             "events_emitted": events_emitted,
             "m1_outer_ns": t_m1_outer,
             "m2_outer_ns": t_m2_outer,
-            "speedup_outer": round(s_outer, 4),
+            "speedup_outer": round(s_outer, 4) if s_outer is not None else None,
             "m1_stream_loop_ns": t_m1_stream_loop,
             "m2_stream_loop_ns": t_m2_stream_loop,
-            "speedup_stream_loop": round(s_stream_loop, 4),
+            "speedup_stream_loop": round(s_stream_loop, 4) if s_stream_loop is not None else None,
             "m1_step_total_ns": t_m1_step_tot,
             "m2_step_total_ns": t_m2_step_tot,
-            "speedup_step_total": round(s_step_tot, 4),
+            "speedup_step_total": round(s_step_tot, 4) if s_step_tot is not None else None,
             "m1_search_ns": t_m1_search,
             "m2_search_ns": t_m2_search,
-            "speedup_search": round(s_search, 4),
+            "speedup_search": round(s_search, 4) if s_search is not None else None,
         })
 
         # Macro breakdowns (% of pre_output_wall_ns / total_wall_ns)
@@ -412,6 +503,13 @@ def analyze_p4a_ledger(records: List[Dict[str, Any]]) -> Dict[str, Any]:
         "rejected_pairs": rejected_pairs,
         "duplicate_slot_warnings": duplicate_slot_warnings,
         "overall_speedup_distribution": overall_speedup_stats,
+        "scope_sample_counts": {
+            "search_speedup": len(search_speedups),
+            "native_step_speedup": len(native_step_speedups),
+            "streaming_loop_speedup": len(stream_loop_speedups),
+            "outer_wall_speedup": len(outer_speedups),
+        },
+        "timer_exclusions": timer_exclusions,
         "stratified_speedup": stratified_stats,
         "macro_stage_breakdowns_pct": macro_breakdowns,
         "micro_step_stage_breakdowns_pct": micro_breakdowns,
@@ -535,6 +633,11 @@ def generate_markdown_report(metrics: Dict[str, Any]) -> str:
 
     lines.append("## 5. Micro-Step Stage Execution Breakdown (% of Step Total Time)")
     lines.append("")
+    lines.append("> [!NOTE]")
+    lines.append("> Micro-step components below are normalized as percentages of the native step total duration (`execute_step`).")
+    lines.append("> To evaluate search bottlenecks specifically, `Neighbor Retrieval within Search` is computed separately")
+    lines.append("> with the search callback duration ($T_{search}$) as its denominator (M2 median: 22.78%, vs 16.25% of step total).")
+    lines.append("")
     micro_headers = ["Step Component", "M1 Median %", "M1 Mean %", "M2 Median %", "M2 Mean %"]
     micro_rows = []
     for comp_key, comp_name in [
@@ -545,7 +648,7 @@ def generate_markdown_report(metrics: Dict[str, Any]) -> str:
     ]:
         m1_s = metrics["micro_step_stage_breakdowns_pct"]["m1"].get(comp_key, {})
         m2_s = metrics["micro_step_stage_breakdowns_pct"]["m2"].get(comp_key, {})
-        macro_rows.append([
+        micro_rows.append([
             comp_name,
             f"{m1_s.get('median', 0.0):.2f}%",
             f"{m1_s.get('mean', 0.0):.2f}%",
@@ -553,6 +656,25 @@ def generate_markdown_report(metrics: Dict[str, Any]) -> str:
             f"{m2_s.get('mean', 0.0):.2f}%",
         ])
     lines.append(format_markdown_table(micro_headers, micro_rows))
+    lines.append("")
+    lines.append("### 5.1 Search-Normalized Breakdown (% of Search Duration)")
+    lines.append("")
+    search_norm_headers = ["Search Subcomponent", "M1 Median %", "M1 Mean %", "M2 Median %", "M2 Mean %"]
+    search_norm_rows = []
+    for comp_key, comp_name in [
+        ("search_core_within_search_pct", "Search Core within Search"),
+        ("neighbor_retrieval_within_search_pct", "Neighbor Retrieval within Search"),
+    ]:
+        m1_s = metrics["micro_step_stage_breakdowns_pct"]["m1"].get(comp_key, {})
+        m2_s = metrics["micro_step_stage_breakdowns_pct"]["m2"].get(comp_key, {})
+        search_norm_rows.append([
+            comp_name,
+            f"{m1_s.get('median', 0.0):.2f}%",
+            f"{m1_s.get('mean', 0.0):.2f}%",
+            f"{m2_s.get('median', 0.0):.2f}%",
+            f"{m2_s.get('mean', 0.0):.2f}%",
+        ])
+    lines.append(format_markdown_table(search_norm_headers, search_norm_rows))
     lines.append("")
 
     lines.append("## 6. Engine Counters and Candidate Reduction")

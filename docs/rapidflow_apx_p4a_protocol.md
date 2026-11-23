@@ -1,13 +1,13 @@
 # Experimental Protocol: Phase P4a Native Profiling, Baseline Measurement & Evidence-Driven Pilot
 
 **Document ID:** `docs/rapidflow_apx_p4a_protocol.md`
-**Protocol Revision:** `1.2.0` (Updated for Round 1 Independent Review Remediation)
+**Protocol Revision:** `1.3.0` (Updated for Round 2 Independent Review Remediation)
 **Milestone:** Phase P4a
 **Parent Issue:** [Issue #36](https://github.com/iamqthanq/Seminar_RapidFlow/issues/36)
 **Target Integration Branch:** `QuangThang`
 **Pre-P4 Base Commit:** `b5a5fe44fe594f9c550dcc44f04b9f4fc9a54245`
 **Pinned Upstream RapidFlow:** `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` (Pristine: `true`)
-**Status:** ACTIVE PROTOCOL SPECIFICATION (REVISION 1.2.0)
+**Status:** ACTIVE PROTOCOL SPECIFICATION (REVISION 1.3.0)
 
 ---
 
@@ -97,6 +97,57 @@ To eliminate ambiguity, performance speedups are partitioned into four distinct 
 - Reports descriptive ratio: $\text{events\_per\_candidate\_eval} = N_{\text{events}} / N_{\text{cand}}$.
 - Reports relative candidate evaluation reduction: $R = 1 - (C_{M2} / C_{M1})$.
 
+### 4.7 Cryptographic Self-Consistency & Ledger Integrity Enforcement (R2-F01)
+- Merely checking that a record claims `execution_identity == expected_identity` is insufficient if the internal fields can be modified.
+- Every record is strictly validated against a comprehensive metadata schema (`validate_record_integrity`):
+  - Mandatory fields: `protocol_version`, `protocol_sha256`, `manifest_sha256`, `source_commit`, `source_dirty_state`, `binary_sha256`, `workload_id`, `workload_sha256`, `engine`, `repetition`, `status`, `exit_code`, `slot_key`.
+  - Format checks: 64-character lowercase hex strings for all SHA-256 hashes and identity.
+  - Resource boundary bounds: `effective_max_work <= 500000`, `0 < effective_timeout <= 60.0`, `0 < effective_memory_limit_mib <= 512`.
+  - Cryptographic self-consistency: The runner recomputes `derived_id` from internal metadata fields and strictly asserts `derived_id == record["execution_identity"]`.
+  - Any record with tampered metadata or header mismatch raises `CorruptedLedgerError` fail-closed.
+
+### 4.8 Ambiguous Duplicate Slot Lineage & Conflict Rejection (R2-F02)
+- Replay runs or manual interventions may produce multiple attempts for the same slot.
+- Rather than blindly replacing or averaging, the summarizer groups all attempts per slot:
+  - If a slot has multiple attempts, it identifies whether a unique canonical verified attempt exists.
+  - If conflicting attempts exist (e.g. differing wall-clock durations or different status), the slot is marked ambiguous, and the paired comparison is rejected fail-closed (`total_valid_pairs` drops, preventing data falsification).
+
+### 4.9 Safe Speedup Calculation & Micro-Duration Censorship (R2-F03)
+- Direct floating-point division $T_{M1} / T_{M2}$ is vulnerable to zero denominators ($T_{M2} = 0$), negative times, NaN, Inf, and non-numeric types.
+- The summarizer enforces `compute_safe_speedup(t_m1, t_m2)`:
+  - Rejects any pair where $T_{M1} \le 0$ or $T_{M2} \le 0$.
+  - Rejects NaN, Inf, None, or boolean values.
+  - Returns `None` (`RATIO_NOT_COMPUTABLE`), excluding the pair from that specific scope's speedup distribution rather than substituting an artificial 1.0x ratio.
+  - In the canonical dataset, 6 micro-search runs in zero-event workloads (`P4A_WL_09` and `P4A_WL_21`) execute in 0 ns; these are excluded from $S_{\text{search}}$ ($N_{\text{search}} = 84$, median 2.13x) while being fully counted in $S_{\text{step}}$, $S_{\text{loop}}$, and $S_{\text{outer}}$ ($N = 90$).
+
+### 4.10 Explicit Run Verdict & Process Exit Code Contract (R2-F04)
+- The experiment runner emits an explicit top-level verdict:
+  - `CANONICAL_PASS`: All scheduled slots executed, 100% verified against M0 Oracle, zero correctness violations, and zero timeouts/censorship. Exits with code `0`.
+  - `CANONICAL_INCOMPLETE`: At least one slot timed out, ran out of work budget, exceeded memory limits, or was skipped due to warm-up failure. Exits with code `1`.
+  - `CANONICAL_FAILED`: Correctness violation, Oracle failure, or unhandled exception. Exits with code `1`.
+- The runner NEVER exits 0 when workers fail, time out, or produce unverified data.
+
+### 4.11 Resource Limit CLI Hard Enforcement (R2-F08)
+- CLI arguments `--max-work`, `--timeout`, `--as-limit-mib`, and `--repetitions` are validated against approved hard ceilings before invoking any native binary:
+  - `--max-work`: Strictly capped at `CANONICAL_MAX_WORK_CAP = 500000`.
+  - `--timeout`: Strictly capped at `60.0` seconds.
+  - `--as-limit-mib`: Strictly capped at `512` MiB.
+  - `--repetitions`: Strictly capped at `10`.
+- Violating any limit immediately exits with code 1.
+
+### 4.12 Disposable Warm-Up Protocol & Replay Containment (R2-F08)
+- To stabilize branch predictor and cache warm-up without contaminating timed profiling metrics, each slot executes a disposable untimed warm-up run (`profile=False`) before the timed measured run (`profile=True`).
+- If the disposable warm-up run fails, times out, or exceeds resource limits, the runner does NOT proceed to the measured run; it immediately marks the slot `WARMUP_FAILED` (or `TIMEOUT`), records admission status `REJECTED`, and increments `warmup_failed_slots`.
+
+### 4.13 Dedicated Observer Overhead Protocol (R2-F07)
+- Profiling overhead is measured using an independent, dedicated script `scripts/measure_observer_overhead_p4a.py`.
+- Protocol specifications:
+  - 16 balanced trials across 4 representative workloads (`P4A_WL_01`, `P4A_WL_04`, `P4A_WL_07`, `P4A_WL_13`).
+  - Alternating execution order (`PROFILE_OFF` $\rightarrow$ `PROFILE_ON` vs `PROFILE_ON` $\rightarrow$ `PROFILE_OFF`).
+  - Bit-for-bit equivalence and counter equality verified between modes.
+  - Persisted raw evidence: `results/logs/rf36-p4a/p4a_observer_overhead.jsonl`.
+  - Persisted statistical metrics: `results/logs/rf36-p4a/p4a_observer_overhead_summary.json`.
+
 ---
 
 ## 5. Decision Gate & Phase P4b Transition Criteria (P4A-F08)
@@ -107,9 +158,9 @@ The verdict for Milestone P4a is strictly confined to:
 - `R4A_FIX_REQUIRED`: Further experimental fixes required.
 
 **P4b Recommendation Protocol:**
-Cost centers identified in P4a (Search Core at 77.4% and Neighbor Retrieval at 22.6%) formulate testable hypotheses for P4b:
-- **Option A (Relaxed NLF):** Reduces candidate evaluations in Search Core.
-- **Option B (Authoritative Graph Neighbor Optimization):** Replaces dynamic vector allocations in `get_neighbors(u)`.
+Cost centers identified in P4a (Search Core at 77.22% and Neighbor Retrieval at 22.78% within search) formulate testable hypotheses for P4b:
+- **Option A (Relaxed NLF):** Reduces candidate evaluations in Search Core (77.22% of search time).
+- **Option B (Authoritative Graph Neighbor Optimization):** Replaces dynamic vector allocations in `get_neighbors(u)` (22.78% of search time).
 - **Option B+A (Hybrid):** Combines both optimizations if isolated tests justify both.
 - **Option C (Pruning Reordering) / Option D (Re-scope).**
 
