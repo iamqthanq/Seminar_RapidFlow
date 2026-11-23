@@ -197,29 +197,18 @@ void ApxQueryPlan::build(
     }
 }
 
-static void combine_subsets(
-    const std::vector<uint32_t>& items,
-    size_t k,
-    size_t start,
-    std::vector<uint32_t>& current,
-    std::vector<std::vector<uint32_t>>& result
-) {
-    if (current.size() == k) {
-        result.push_back(current);
-        return;
-    }
-    for (size_t i = start; i < items.size(); ++i) {
-        current.push_back(items[i]);
-        combine_subsets(items, k, i + 1, current, result);
-        current.pop_back();
-    }
-}
-
-std::vector<M1VariantPlan> ApxQueryPlan::generate_m1_variants(
+void ApxQueryPlan::for_each_m1_variant(
     uint32_t anchor_idx,
     uint32_t qa,
-    uint32_t qb
+    uint32_t qb,
+    EngineCounters& counters,
+    const std::function<void(const M1VariantPlan&)>& callback
 ) const {
+    // 1. Upfront charge for combinatorial variant enumeration setup on this anchor edge (k > 0)
+    if (k_ > 0) {
+        counters.charge_work(1);
+    }
+
     std::vector<uint32_t> other_edges;
     other_edges.reserve(edges_.size() - 1);
     for (size_t i = 0; i < edges_.size(); ++i) {
@@ -228,14 +217,13 @@ std::vector<M1VariantPlan> ApxQueryPlan::generate_m1_variants(
         }
     }
 
-    std::vector<std::vector<uint32_t>> missing_subsets;
     std::vector<uint32_t> cur_subset;
-    combine_subsets(other_edges, k_, 0, cur_subset, missing_subsets);
+    cur_subset.reserve(k_);
 
-    std::vector<M1VariantPlan> plans;
-    plans.reserve(missing_subsets.size());
+    auto process_subset = [&](const std::vector<uint32_t>& D) {
+        // 2. Charge budget for constructing and materializing variant plan Q - D
+        counters.charge_work(1);
 
-    for (const auto& D : missing_subsets) {
         M1VariantPlan plan;
         plan.anchor_edge_idx = anchor_idx;
         plan.anchor_qa = qa;
@@ -295,10 +283,29 @@ std::vector<M1VariantPlan> ApxQueryPlan::generate_m1_variants(
         }
 
         plan.search_order = std::move(order);
-        plans.push_back(std::move(plan));
-    }
+        counters.variants_started++;
+        callback(plan);
+    };
 
-    return plans;
+    std::function<void(size_t, size_t)> recurse = [&](size_t start, size_t remaining_k) {
+        if (remaining_k == 0) {
+            process_subset(cur_subset);
+            return;
+        }
+        size_t available = other_edges.size() - start;
+        if (available < remaining_k) {
+            return;
+        }
+        for (size_t i = start; i <= other_edges.size() - remaining_k; ++i) {
+            // Charge budget for exploring combination branch
+            counters.charge_work(1);
+            cur_subset.push_back(other_edges[i]);
+            recurse(i + 1, remaining_k - 1);
+            cur_subset.pop_back();
+        }
+    };
+
+    recurse(0, k_);
 }
 
 } // namespace rapidflow_apx

@@ -42,6 +42,8 @@ MAX_RUNTIME_ADDRESS_SPACE_MIB = 512
 MAX_BUILD_TIMEOUT_SECONDS = 120
 MAX_BUILD_ADDRESS_SPACE_MIB = 1024
 
+EXPECTED_UPSTREAM_COMMIT = "2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1"
+
 MANDATORY_CASES = {
     "CASE_PROBE_A_PROVENANCE": {
         "probe_group": "PROBE_A",
@@ -176,6 +178,32 @@ def get_git_info(repo_dir: Path) -> tuple:
         dirty_state = "UNKNOWN_ERROR"
 
     return commit, dirty_state
+
+
+def check_upstream_git_root(upstream_dir: Path) -> tuple:
+    """Verify that upstream_dir is its own genuine Git root (not falling back to parent repo).
+    Returns (is_valid, resolved_toplevel_or_error)
+    """
+    try:
+        resolved_dir = upstream_dir.resolve()
+    except Exception as e:
+        return False, f"Failed to resolve path: {e}"
+
+    if not resolved_dir.exists() or not resolved_dir.is_dir():
+        return False, f"Directory does not exist: {resolved_dir}"
+
+    try:
+        toplevel = subprocess.check_output(
+            ["git", "-C", str(resolved_dir), "rev-parse", "--show-toplevel"],
+            stderr=subprocess.PIPE,
+            text=True
+        ).strip()
+        resolved_toplevel = Path(toplevel).resolve()
+        if resolved_toplevel != resolved_dir:
+            return False, f"Directory falls back to parent repository: {resolved_toplevel} != {resolved_dir}"
+        return True, str(resolved_toplevel)
+    except Exception as e:
+        return False, f"Git rev-parse --show-toplevel failed: {e}"
 
 
 def get_tool_versions(root_dir: Path) -> dict:
@@ -701,6 +729,7 @@ def main():
         "execution_head": git_head,
         "dirty_state": git_dirty,
         "base_commit": "03be8b56a9479609adf87d213122eabefc9162fb",
+        "expected_upstream_sha": EXPECTED_UPSTREAM_COMMIT,
         "upstream_sha": upstream_head,
         "upstream_dirty_state": upstream_dirty,
         "binary_origin": "PRE_BUILT_PROVIDED" if args.binary else "BUILT_BY_RUNNER",
@@ -746,10 +775,22 @@ def main():
         provenance_errors.append("repository Git commit SHA could not be determined")
     if git_dirty == "UNKNOWN_ERROR":
         provenance_errors.append("repository Git status could not be determined")
+
+    is_valid_root, root_msg = check_upstream_git_root(upstream_dir)
+    if not is_valid_root:
+        provenance_errors.append(f"upstream RapidFlow Git root invalid: {root_msg}")
+
     if upstream_head == "UNKNOWN_COMMIT":
         provenance_errors.append("upstream RapidFlow Git commit SHA could not be determined")
+    elif upstream_head != EXPECTED_UPSTREAM_COMMIT:
+        provenance_errors.append(
+            f"upstream RapidFlow commit mismatch: expected {EXPECTED_UPSTREAM_COMMIT}, got {upstream_head}"
+        )
+
     if upstream_dirty == "UNKNOWN_ERROR":
         provenance_errors.append("upstream RapidFlow Git status could not be determined")
+    elif upstream_dirty != "CLEAN":
+        provenance_errors.append(f"upstream RapidFlow working tree is not pristine (state={upstream_dirty})")
 
     if provenance_errors:
         err_msg = "; ".join(provenance_errors)

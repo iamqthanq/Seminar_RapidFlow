@@ -126,7 +126,7 @@ where $u_1 < u_2 < \dots < u_n$ are the original signed 64-bit query vertex IDs 
   - Builds indexed query edge lists $E_Q = [(qa_0, qb_0), \dots, (qa_{m-1}, qb_{m-1})]$ with internal dense indices.
   - Builds fast label-to-edges lookup: maps each edge label ID to compatible query edge indices.
   - Precomputes incident edge tables for every query vertex.
-  - For M1: precomputes variant subsets $D \subset E_Q \setminus \{q\}$ with $|D| = k$ and their deterministic connected search orders.
+  - For M1: lazily enumerates all $\binom{m-1}{k}$ variant subsets $D \subset E_Q \setminus \{q\}$ on demand via `ApxQueryPlan::for_each_m1_variant()` and builds deterministic connected search orders under upfront work-budget containment.
 
 ### 4.2. `ApxM1EnumEngine` (Native M1-enum-Exact-$k$)
 - **Algorithm Flow**:
@@ -334,7 +334,7 @@ Let $f \in \Delta \mathcal{M}$ be an arbitrary valid event mapping on snapshot $
 2. Because $Q$ is simple, $q$ is unique. Because $u_{\text{upd}} \ne v_{\text{upd}}$ and $f$ is injective, exactly one orientation $(f(qa)=u_{\text{upd}}, f(qb)=v_{\text{upd}})$ or $(f(qa)=v_{\text{upd}}, f(qb)=u_{\text{upd}})$ holds. `ApxM1EnumEngine` iterates over all candidate edges matching $l_{\text{upd}}$ and both orientations, so anchor $(q, \text{orient})$ is visited.
 3. Let $D = R_{G_{\text{snap}}}(f)$. Since $|R_{G_{\text{snap}}}(f)| = k$, we have $|D| = k$. Since $q$ is present in $G_{\text{snap}}$, $q \notin D$, so $D \subset E_Q \setminus \{q\}$.
 4. **Connectivity of $Q - D$**: Since $|D| = k$ and Domain D-R enforces $k < \lambda(Q)$, removing $D$ cannot disconnect $Q$. By definition of edge connectivity, any edge cut of $Q$ has size at least $\lambda(Q) > k$. Therefore, $Q - D$ is guaranteed to be a connected graph containing all $n$ vertices.
-5. In `ApxQueryPlan::generate_m1_variants`, all $\binom{m-1}{k}$ subsets $D \subset E_Q \setminus \{q\}$ are generated. Since $Q - D$ is connected, this variant plan is retained.
+5. In `ApxQueryPlan::for_each_m1_variant`, all $\binom{m-1}{k}$ subsets $D \subset E_Q \setminus \{q\}$ are streamed lazily on demand. Since $Q - D$ is connected, each variant plan is retained and explored under upfront work-budget containment.
 6. The variant plan constructs a connected BFS search order starting from $\{qa, qb\}$. The standard DFS on $Q - D$ exhaustively explores all candidate data neighbors matching query vertex and edge labels. Since $f$ satisfies all edges in $Q - D$ by definition of $D = R(f)$, DFS will reach leaf $f$.
 7. At the leaf, the filter verifies $R(f) = D$, which holds by definition of $D$. Hence $f$ is emitted. $\blacksquare$
 
