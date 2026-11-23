@@ -1,0 +1,72 @@
+{
+  "manifest_version": "1.3.0",
+  "phase": "P4a",
+  "execution_identity": "262279a9d9ea026e07231f3ba511863c383b98133db40e69f603a235ad792135",
+  "canonical_execution_commit": "cf97a7840dff0c0f2bf791834263f3911545110c",
+  "remediation_round3_starting_head": "1458a1a4fd79cd4426ad625377827ed34b943f3e",
+  "protocol_version_distinction": {
+    "measurement_protocol_version": "1.2.0",
+    "historical_measurement_protocol_sha256": "dd3f39cae4325b3577adec8fa19ff5f52844e9338b1d97aa542d58b6c09d4ebd",
+    "evidence_analysis_version": "1.3.0",
+    "protocol_specification_revision": "1.3.0",
+    "historical_evidence_reuse_justified": true
+  },
+  "artifacts": {
+    "results/logs/rf36-p4a/p4a_raw_ledger.jsonl": {
+      "sha256": "34452fb4eeccd812882a5c2c47cca0c49b070bf8b48e5ea86d8ac68c8cc521d5",
+      "size_bytes": 441311,
+      "line_count": 180,
+      "git_tracked": false,
+      "accessibility_status": "LOCAL_WORKTREE_REPRODUCIBLE",
+      "description": "Primary raw experiment ledger"
+    },
+    "results/logs/rf36-p4a/p4a_canonical_summary.json": {
+      "sha256": "44b476b932f809b0c49db311b415f29d41c1af59746eeab8ebe2b12a8327368d",
+      "size_bytes": 548825,
+      "line_count": null,
+      "git_tracked": false,
+      "accessibility_status": "LOCAL_WORKTREE_REPRODUCIBLE",
+      "description": "Canonical summary JSON"
+    },
+    "results/logs/rf36-p4a/p4a_summary_metrics.json": {
+      "sha256": "554cbd96684f342eb4851e627e4431bec5b8c38d2d18cf371457fc8047ced7ac",
+      "size_bytes": 64716,
+      "line_count": null,
+      "git_tracked": false,
+      "accessibility_status": "LOCAL_WORKTREE_REPRODUCIBLE",
+      "description": "Summary metrics JSON"
+    },
+    "results/logs/rf36-p4a/p4a_observer_overhead.jsonl": {
+      "sha256": "7aa52f8519d6145d325a0750c12c80abb49d25b75df679ef05d0f4324ad535e1",
+      "size_bytes": 6459,
+      "line_count": 16,
+      "git_tracked": false,
+      "accessibility_status": "LOCAL_WORKTREE_REPRODUCIBLE",
+      "description": "Raw observer overhead ledger"
+    },
+    "results/logs/rf36-p4a/p4a_observer_overhead_summary.json": {
+      "sha256": "cf0f1d801f67d9f1194009ae3cfc6f0cc852cf049ad7fda5db3f1215e2822f61",
+      "size_bytes": 1325,
+      "line_count": null,
+      "git_tracked": false,
+      "accessibility_status": "LOCAL_WORKTREE_REPRODUCIBLE",
+      "description": "Observer overhead summary"
+    },
+    "configs/rapidflow_apx_p4a_manifest.json": {
+      "sha256": "f82bdcc0c89ce794439eeff3fd67fe78de733196286503c27de70ed2df5d3b18",
+      "size_bytes": 133822,
+      "line_count": null,
+      "git_tracked": true,
+      "accessibility_status": "TRACKED_IN_GIT",
+      "description": "Workload manifest"
+    },
+    "docs/rapidflow_apx_p4a_protocol.md": {
+      "sha256": "c211b3e9a98d78c8cbe4b3cfde4cbb8c148ab58a4413fbd18bcd7346b6140e9f",
+      "size_bytes": 16319,
+      "line_count": 192,
+      "git_tracked": true,
+      "accessibility_status": "TRACKED_IN_GIT",
+      "description": "Protocol specification markdown"
+    }
+  }
+}

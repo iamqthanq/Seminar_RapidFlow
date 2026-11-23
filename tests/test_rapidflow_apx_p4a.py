@@ -43,13 +43,27 @@ from scripts.run_rapidflow_apx_p4a import (
     CorruptedLedgerError,
     PROTOCOL_VERSION,
 )
+from scripts.p4a_evidence_contract import (
+    AmbiguousSlotError,
+    IntegrityConflictError,
+    PROTOCOL_MEASUREMENT_VERSION,
+    PROTOCOL_ANALYSIS_VERSION,
+    PROTOCOL_SPECIFICATION_REVISION,
+    create_experiment_header,
+    get_frozen_manifest_registry,
+    resolve_canonical_attempts,
+    validate_pair_compatibility,
+)
 from scripts.summarize_rapidflow_apx_p4a import (
     analyze_p4a_ledger,
     compute_distribution_stats,
     compute_safe_speedup,
     generate_markdown_report,
 )
-from scripts.measure_observer_overhead_p4a import measure_observer_overhead
+from scripts.measure_observer_overhead_p4a import (
+    measure_observer_overhead,
+    verify_observer_output_invariance,
+)
 from scripts.dstar_oracle import (
     DStarDynamicOracle,
     DStarGraph,
@@ -900,6 +914,203 @@ class TestRapidFlowApxP4a(unittest.TestCase):
         rec_oracle_fail["performance_admission_status"] = "REJECTED"
         m2 = analyze_p4a_ledger([rec_oracle_fail, dict(rec_good, engine="m2")])
         self.assertEqual(m2["total_valid_pairs"], 0)
+
+    def test_22_workload_hash_tampering_rejected_by_resume(self):
+        """R3-F01: Workload hash tampering in record must be rejected fail-closed by resume supervisor."""
+        canonical_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
+        with open(canonical_ledger, "r", encoding="utf-8") as f:
+            valid_rec = json.loads(f.readline())
+
+        # Tamper workload_sha256
+        tampered_rec = copy.deepcopy(valid_rec)
+        tampered_rec["workload_sha256"] = "f" * 64
+
+        reg = get_frozen_manifest_registry()
+        is_ok, diag = validate_record_integrity(
+            tampered_rec,
+            workload_registry=reg["workload_hashes"],
+            strict_provenance=True,
+        )
+        self.assertFalse(is_ok)
+        self.assertIn("Workload SHA-256 mismatch", diag)
+
+        with tempfile.NamedTemporaryFile("w+", delete=False, suffix=".jsonl") as tf:
+            tf.write(json.dumps(tampered_rec) + "\n")
+            tf.flush()
+            tmp_path = Path(tf.name)
+
+        try:
+            # Runner resume must raise CorruptedLedgerError fail-closed
+            header = create_experiment_header(
+                manifest_path=REPO_ROOT / "configs" / "rapidflow_apx_p4a_manifest.json",
+                protocol_version=valid_rec["protocol_version"],
+                protocol_sha256=valid_rec["protocol_sha256"],
+                source_commit=valid_rec["source_commit"],
+                source_dirty_state=valid_rec["source_dirty_state"],
+                binary_sha256=valid_rec["binary_sha256"],
+            )
+            with self.assertRaises(CorruptedLedgerError):
+                load_existing_ledger(tmp_path, expected_header=header)
+        finally:
+            if tmp_path.is_file():
+                tmp_path.unlink()
+
+    def test_23_duplicate_attempt_1000x_rejected_by_resume_and_summarizer(self):
+        """R3-F02: Conflicting duplicate verified attempt (1000x) is rejected fail-closed without silent selection."""
+        canonical_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
+        with open(canonical_ledger, "r", encoding="utf-8") as f:
+            valid_rec = json.loads(f.readline())
+
+        dup_1000x = copy.deepcopy(valid_rec)
+        dup_1000x["attempt_id"] = valid_rec["attempt_id"] + "_retry"
+        dup_1000x["outer_wall_ns"] = valid_rec["outer_wall_ns"] * 1000
+
+        # resolve_canonical_attempts must detect conflict and exclude slot
+        canonical_slots, duplicate_lineage, conflicts = resolve_canonical_attempts(
+            [valid_rec, dup_1000x],
+            strict_raise=False,
+        )
+        self.assertNotIn(valid_rec["slot_key"], canonical_slots)
+        self.assertTrue(len(conflicts) > 0)
+        self.assertIn("conflicting verified attempts", conflicts[0]["reason"])
+
+        # Summarizer must reject the pair containing the ambiguous slot
+        m2_rec = copy.deepcopy(valid_rec)
+        m2_rec["engine"] = "m2"
+        m2_rec["slot_key"] = valid_rec["slot_key"].replace("_m1", "_m2")
+        summary = analyze_p4a_ledger([valid_rec, dup_1000x, m2_rec])
+        self.assertEqual(summary["total_valid_pairs"], 0)
+        self.assertEqual(summary["total_rejected_pairs"], 1)
+
+    def test_24_summarizer_source_commit_mismatch_rejected(self):
+        """R3-F03: Contradictory source commit between M1 and M2 is rejected by summarizer."""
+        canonical_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
+        with open(canonical_ledger, "r", encoding="utf-8") as f:
+            rec_m1 = json.loads(f.readline())
+            rec_m2 = json.loads(f.readline())
+
+        # Mutate M2 commit
+        m2_mutated = copy.deepcopy(rec_m2)
+        m2_mutated["source_commit"] = "0" * 40
+
+        is_compat, reason = validate_pair_compatibility(rec_m1, m2_mutated)
+        self.assertFalse(is_compat)
+        self.assertTrue(
+            "Source commit mismatch" in reason or "Self-consistency failure" in reason
+        )
+
+        summary = analyze_p4a_ledger([rec_m1, m2_mutated])
+        self.assertEqual(summary["total_valid_pairs"], 0)
+        self.assertEqual(summary["total_rejected_pairs"], 1)
+
+    def test_25_observer_full_tuple_equivalence_guard(self):
+        """R3-F04: verify_observer_output_invariance checks step count, duplicate tuples, coordinate ordering, and counters."""
+        mock_off = {
+            "steps": [
+                {
+                    "entered_tuples": [[1, 2, 3, 4], [2, 3, 4, 5]],
+                    "exited_tuples": [[6, 7, 8, 9]],
+                }
+            ],
+            "counters": {
+                "candidate_evaluations": 100,
+                "committed_emissions": 3,
+                "dfs_states": 50,
+                "anchors_started": 10,
+                "edge_lookups": 200,
+                "vertex_label_checks": 80,
+            },
+        }
+        mock_on = copy.deepcopy(mock_off)
+
+        # Baseline: identical outputs pass
+        ok, diag = verify_observer_output_invariance(mock_off, mock_on)
+        self.assertTrue(ok, diag)
+
+        # 1. Step count mismatch
+        mut_steps = copy.deepcopy(mock_on)
+        mut_steps["steps"].append({"entered_tuples": [], "exited_tuples": []})
+        ok, diag = verify_observer_output_invariance(mock_off, mut_steps)
+        self.assertFalse(ok)
+        self.assertIn("Step count mismatch", diag)
+
+        # 2. Duplicate raw tuple in step
+        mut_dup = copy.deepcopy(mock_on)
+        mut_dup["steps"][0]["entered_tuples"].append([1, 2, 3, 4])
+        ok, diag = verify_observer_output_invariance(mock_off, mut_dup)
+        self.assertFalse(ok)
+        self.assertIn("duplicate entered tuples", diag)
+
+        # 3. Tuple set mismatch
+        mut_coord = copy.deepcopy(mock_on)
+        mut_coord["steps"][0]["entered_tuples"][0] = [1, 2, 3, 99]
+        ok, diag = verify_observer_output_invariance(mock_off, mut_coord)
+        self.assertFalse(ok)
+        self.assertIn("entered tuples mismatch", diag)
+
+        # 4. Counter mismatch (dfs_states)
+        mut_cnt = copy.deepcopy(mock_on)
+        mut_cnt["counters"]["dfs_states"] += 1
+        ok, diag = verify_observer_output_invariance(mock_off, mut_cnt)
+        self.assertFalse(ok)
+        self.assertIn("Counter mismatch for 'dfs_states'", diag)
+
+    def test_26_protocol_versioning_and_historical_compatibility(self):
+        """R3-F05: Distinguishes Measurement Protocol 1.2.0, Analysis 1.3.0, and Revision 1.3.0."""
+        self.assertEqual(PROTOCOL_MEASUREMENT_VERSION, "1.2.0")
+        self.assertEqual(PROTOCOL_ANALYSIS_VERSION, "1.3.0")
+        self.assertEqual(PROTOCOL_SPECIFICATION_REVISION, "1.3.0")
+
+        # Check all 180 canonical records match historical protocol SHA
+        canonical_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
+        with open(canonical_ledger, "r", encoding="utf-8") as f:
+            for line_no, line in enumerate(f, 1):
+                rec = json.loads(line)
+                self.assertEqual(rec["protocol_version"], "1.2.0", f"Line {line_no}")
+                self.assertEqual(
+                    rec["protocol_sha256"],
+                    "dd3f39cae4325b3577adec8fa19ff5f52844e9338b1d97aa542d58b6c09d4ebd",
+                    f"Line {line_no}",
+                )
+                # Validates cleanly under contract
+                ok, diag = validate_record_integrity(rec)
+                self.assertTrue(ok, f"Line {line_no}: {diag}")
+
+    def test_27_warmup_failure_metadata_preservation(self):
+        """R3-F06: Warmup failure preserves failure_stage, failure_category, and diagnostic notes."""
+        # Check runner source code ensures diagnostic preservation
+        runner_source = (REPO_ROOT / "scripts" / "run_rapidflow_apx_p4a.py").read_text(encoding="utf-8")
+        self.assertIn('failure_stage = "WARMUP"', runner_source)
+        self.assertIn('failure_category = warm_res["status"]', runner_source)
+        self.assertIn('correctness_notes = f"Disposable warm-up execution failed during stage WARMUP', runner_source)
+
+    def test_28_evidence_manifest_integrity(self):
+        """R3-F08: Verifies docs/evidence/p4a_evidence_manifest.json hashes and byte sizes against disk."""
+        manifest_path = REPO_ROOT / "docs" / "evidence" / "p4a_evidence_manifest.json"
+        self.assertTrue(manifest_path.is_file())
+
+        with open(manifest_path, "r", encoding="utf-8") as f:
+            manifest = json.load(f)
+
+        self.assertEqual(manifest["manifest_version"], "1.3.0")
+        self.assertEqual(manifest["phase"], "P4a")
+        self.assertEqual(manifest["execution_identity"], "262279a9d9ea026e07231f3ba511863c383b98133db40e69f603a235ad792135")
+        self.assertEqual(manifest["canonical_execution_commit"], "cf97a7840dff0c0f2bf791834263f3911545110c")
+
+        artifacts = manifest.get("artifacts", {})
+        self.assertTrue(len(artifacts) >= 5)
+
+        for rel_path, meta in artifacts.items():
+            full_path = REPO_ROOT / rel_path
+            self.assertTrue(full_path.is_file(), f"Artifact file missing: {rel_path}")
+            real_sha = compute_sha256(full_path)
+            self.assertEqual(
+                real_sha, meta["sha256"], f"Hash mismatch for {rel_path}: disk={real_sha} vs manifest={meta['sha256']}"
+            )
+            real_size = full_path.stat().st_size
+            self.assertEqual(
+                real_size, meta["size_bytes"], f"Size mismatch for {rel_path}: disk={real_size} vs manifest={meta['size_bytes']}"
+            )
 
 
 if __name__ == "__main__":

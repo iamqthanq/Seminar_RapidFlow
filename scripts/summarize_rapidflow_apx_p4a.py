@@ -26,9 +26,19 @@ import math
 import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+
+from scripts.p4a_evidence_contract import (
+    compute_sha256,
+    create_experiment_header,
+    get_frozen_manifest_registry,
+    resolve_canonical_attempts,
+    validate_pair_compatibility,
+    validate_record_integrity,
+)
 DEFAULT_LEDGER = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
 DEFAULT_SUMMARY_JSON = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_summary_metrics.json"
 
@@ -120,65 +130,41 @@ def load_ledger(ledger_path: Path) -> List[Dict[str, Any]]:
     return records
 
 
-def analyze_p4a_ledger(records: List[Dict[str, Any]]) -> Dict[str, Any]:
+def analyze_p4a_ledger(
+    records: List[Dict[str, Any]],
+    expected_header: Optional[Union[str, Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
     """Processes ledger records into structured statistical metrics with strict identity checking."""
-    # 1. Collect all attempts per slot (w_id, rep, eng) to prevent silent overwrite (R2-F02)
-    slot_attempts: Dict[Tuple[str, int, str], List[Dict[str, Any]]] = defaultdict(list)
-    duplicate_slot_warnings = []
-    ambiguous_slots = set()
+    # 1. Resolve canonical attempt per slot using unified evidence contract (R2-F02, R3-F01, R3-F02)
+    canonical_slots, duplicate_lineage, rejected_conflicts = resolve_canonical_attempts(
+        records=records,
+        expected_header=expected_header,
+        strict_raise=False,
+    )
 
-    for rec in records:
+    duplicate_slot_warnings = []
+    conflicts_by_slot = {c["slot_key"]: c.get("reason") for c in rejected_conflicts if "slot_key" in c}
+    for slot_key, lineage in sorted(duplicate_lineage.items()):
+        if len(lineage) > 1:
+            warn = {
+                "slot_key": slot_key,
+                "attempt_count": len(lineage),
+                "attempt_ids": [a.get("attempt_id") for a in lineage],
+            }
+            if slot_key in conflicts_by_slot:
+                warn["conflict_reason"] = conflicts_by_slot[slot_key]
+            duplicate_slot_warnings.append(warn)
+    for conf in rejected_conflicts:
+        if conf.get("slot_key") not in duplicate_lineage:
+            duplicate_slot_warnings.append(conf)
+
+    pairs_map: Dict[Tuple[str, int], Dict[str, Any]] = defaultdict(dict)
+    for slot_key, rec in canonical_slots.items():
         w_id = rec.get("workload_id")
         rep = rec.get("repetition", 0)
         eng = rec.get("engine")
         if w_id and eng in ("m1", "m2"):
-            slot_attempts[(w_id, rep, eng)].append(rec)
-
-    # 2. Resolve canonical attempt per slot fail-closed on ambiguous duplicates
-    canonical_slot_records: Dict[Tuple[str, int, str], Dict[str, Any]] = {}
-    for slot_key, attempts in slot_attempts.items():
-        w_id, rep, eng = slot_key
-        slot_str = f"{w_id}_rep{rep}_{eng}"
-        if len(attempts) == 1:
-            canonical_slot_records[slot_key] = attempts[0]
-        else:
-            duplicate_slot_warnings.append({
-                "slot_key": slot_str,
-                "attempt_count": len(attempts),
-                "attempt_ids": [a.get("attempt_id") for a in attempts],
-            })
-            # Filter to admitted, verified attempts
-            verified_attempts = [
-                a for a in attempts
-                if a.get("status") == "COMPLETED_VERIFIED"
-                and a.get("performance_admission_status") == "ACCEPTED"
-                and a.get("m0_agreed") is True
-            ]
-            if len(verified_attempts) == 1:
-                # Unique verified attempt selected (e.g. valid retry after previous failed attempt)
-                canonical_slot_records[slot_key] = verified_attempts[0]
-            elif len(verified_attempts) == 0:
-                # No verified attempt; slot failed
-                canonical_slot_records[slot_key] = attempts[-1]
-            else:
-                # Multiple verified attempts: check if they are identical byte/data duplicates
-                first = verified_attempts[0]
-                all_identical = all(
-                    a.get("outer_wall_ns") == first.get("outer_wall_ns")
-                    and a.get("profiling") == first.get("profiling")
-                    and a.get("counters") == first.get("counters")
-                    and a.get("execution_identity") == first.get("execution_identity")
-                    for a in verified_attempts[1:]
-                )
-                if all_identical:
-                    canonical_slot_records[slot_key] = first
-                else:
-                    # Ambiguous duplicate slot: conflicting timing/data! Mark ambiguous to reject pair
-                    ambiguous_slots.add(slot_key)
-
-    pairs_map: Dict[Tuple[str, int], Dict[str, Any]] = defaultdict(dict)
-    for (w_id, rep, eng), rec in canonical_slot_records.items():
-        pairs_map[(w_id, rep)][eng] = rec
+            pairs_map[(w_id, rep)][eng] = rec
 
     valid_pairs = []
     rejected_pairs = []
@@ -205,66 +191,32 @@ def analyze_p4a_ledger(records: List[Dict[str, Any]]) -> Dict[str, Any]:
 
     pair_details = []
 
-    for (w_id, rep), eng_dict in sorted(pairs_map.items()):
-        # Check if slot was flagged as an ambiguous duplicate (R2-F02)
-        if (w_id, rep, "m1") in ambiguous_slots or (w_id, rep, "m2") in ambiguous_slots:
-            rejected_pairs.append({
-                "pair_key": [w_id, rep],
-                "reason": f"Ambiguous duplicate verified attempts detected for pair ({w_id}, rep={rep}) without valid retry lineage",
-            })
-            continue
+    # Detect all attempted (w_id, rep) pairs in the ledger
+    all_attempted_pairs: Set[Tuple[str, int]] = set()
+    for rec in records:
+        w_id = rec.get("workload_id")
+        rep = rec.get("repetition")
+        if w_id is not None and rep is not None:
+            all_attempted_pairs.add((w_id, rep))
 
+    for (w_id, rep) in sorted(all_attempted_pairs):
+        eng_dict = pairs_map.get((w_id, rep), {})
         if "m1" not in eng_dict or "m2" not in eng_dict:
             rejected_pairs.append({
                 "pair_key": [w_id, rep],
-                "reason": "Missing engine attempt (either m1 or m2 incomplete)",
+                "reason": f"Missing or unadmitted engine attempt for pair ({w_id}, rep={rep})",
             })
             continue
 
         m1 = eng_dict["m1"]
         m2 = eng_dict["m2"]
 
-        # Strict identity and environment matching (P4A-F02)
-        if m1.get("execution_identity") != m2.get("execution_identity"):
+        # Unified pair compatibility validation (R3-F03)
+        is_compat, reason = validate_pair_compatibility(m1, m2, expected_header=expected_header)
+        if not is_compat:
             rejected_pairs.append({
                 "pair_key": [w_id, rep],
-                "reason": f"Execution identity mismatch (m1={m1.get('execution_identity')} vs m2={m2.get('execution_identity')})",
-            })
-            continue
-
-        if m1.get("binary_sha256") != m2.get("binary_sha256"):
-            rejected_pairs.append({
-                "pair_key": [w_id, rep],
-                "reason": f"Binary SHA-256 mismatch (m1={m1.get('binary_sha256')} vs m2={m2.get('binary_sha256')})",
-            })
-            continue
-
-        if m1.get("workload_sha256") != m2.get("workload_sha256"):
-            rejected_pairs.append({
-                "pair_key": [w_id, rep],
-                "reason": "Workload SHA-256 mismatch",
-            })
-            continue
-
-        # Correctness admission gating (P4A-F03)
-        if m1.get("performance_admission_status") != "ACCEPTED" or m2.get("performance_admission_status") != "ACCEPTED":
-            rejected_pairs.append({
-                "pair_key": [w_id, rep],
-                "reason": f"Performance admission rejected (m1={m1.get('performance_admission_status')}, m2={m2.get('performance_admission_status')})",
-            })
-            continue
-
-        if m1.get("status") != "COMPLETED_VERIFIED" or m2.get("status") != "COMPLETED_VERIFIED":
-            rejected_pairs.append({
-                "pair_key": [w_id, rep],
-                "reason": f"Slot status not COMPLETED_VERIFIED (m1={m1.get('status')}, m2={m2.get('status')})",
-            })
-            continue
-
-        if not m1.get("m0_agreed") or not m2.get("m0_agreed"):
-            rejected_pairs.append({
-                "pair_key": [w_id, rep],
-                "reason": "M0 Oracle agreement flag is False",
+                "reason": reason,
             })
             continue
 
@@ -496,7 +448,14 @@ def analyze_p4a_ledger(records: List[Dict[str, Any]]) -> Dict[str, Any]:
         "end-to-end speedups without premature locking of combined Option B+A."
     )
 
+    ref_rec = pairs_map[valid_pairs[0]]["m1"] if valid_pairs else (records[0] if records else {})
     summary_metrics = {
+        "execution_identity": ref_rec.get("execution_identity"),
+        "protocol_version": ref_rec.get("protocol_version"),
+        "protocol_sha256": ref_rec.get("protocol_sha256"),
+        "manifest_sha256": ref_rec.get("manifest_sha256"),
+        "source_commit": ref_rec.get("source_commit"),
+        "binary_sha256": ref_rec.get("binary_sha256"),
         "total_records_processed": len(records),
         "total_valid_pairs": len(valid_pairs),
         "total_rejected_pairs": len(rejected_pairs),
@@ -711,6 +670,7 @@ def generate_markdown_report(metrics: Dict[str, Any]) -> str:
 def main():
     parser = argparse.ArgumentParser(description="P4a Native Profiling Summarizer")
     parser.add_argument("--ledger", type=Path, default=DEFAULT_LEDGER, help="Path to raw ledger JSONL")
+    parser.add_argument("--manifest", type=Path, default=None, help="Optional workload manifest path for header binding")
     parser.add_argument("--output-json", type=Path, default=DEFAULT_SUMMARY_JSON, help="Path to summary metrics JSON")
     parser.add_argument("--output-md", type=Path, default=None, help="Path to output markdown report")
     args = parser.parse_args()
@@ -721,7 +681,14 @@ def main():
         sys.exit(1)
 
     print(f"Loaded {len(records)} records from {args.ledger}")
-    metrics = analyze_p4a_ledger(records)
+    expected_header = None
+    if args.manifest and args.manifest.is_file():
+        try:
+            expected_header = get_frozen_manifest_registry(args.manifest)
+        except Exception as e:
+            print(f"Warning: Failed to load manifest {args.manifest}: {e}", file=sys.stderr)
+
+    metrics = analyze_p4a_ledger(records, expected_header=expected_header)
 
     args.output_json.parent.mkdir(parents=True, exist_ok=True)
     with open(args.output_json, "w", encoding="utf-8") as f:

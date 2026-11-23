@@ -139,14 +139,39 @@ To eliminate ambiguity, performance speedups are partitioned into four distinct 
 - To stabilize branch predictor and cache warm-up without contaminating timed profiling metrics, each slot executes a disposable untimed warm-up run (`profile=False`) before the timed measured run (`profile=True`).
 - If the disposable warm-up run fails, times out, or exceeds resource limits, the runner does NOT proceed to the measured run; it immediately marks the slot `WARMUP_FAILED` (or `TIMEOUT`), records admission status `REJECTED`, and increments `warmup_failed_slots`.
 
-### 4.13 Dedicated Observer Overhead Protocol (R2-F07)
+### 4.13 Dedicated Observer Overhead Protocol (R2-F07, R3-F04)
 - Profiling overhead is measured using an independent, dedicated script `scripts/measure_observer_overhead_p4a.py`.
 - Protocol specifications:
-  - 16 balanced trials across 4 representative workloads (`P4A_WL_01`, `P4A_WL_04`, `P4A_WL_07`, `P4A_WL_13`).
+  - 16 balanced trials across 4 representative workloads (`P4A_WL_01`, `P4A_WL_03`, `P4A_WL_11`, `P4A_WL_14`).
   - Alternating execution order (`PROFILE_OFF` $\rightarrow$ `PROFILE_ON` vs `PROFILE_ON` $\rightarrow$ `PROFILE_OFF`).
-  - Bit-for-bit equivalence and counter equality verified between modes.
+  - Full functional and counter invariance verified between modes:
+    - Step count equivalence.
+    - Raw duplicate rejection per step.
+    - Full coordinate tuple set equality for `entered_tuples` and `exited_tuples`.
+    - Exact equality across all 6 algorithmic counters (`candidate_evaluations`, `committed_emissions`, `dfs_states`, `anchors_started`, `edge_lookups`, `vertex_label_checks`).
   - Persisted raw evidence: `results/logs/rf36-p4a/p4a_observer_overhead.jsonl`.
   - Persisted statistical metrics: `results/logs/rf36-p4a/p4a_observer_overhead_summary.json`.
+
+### 4.14 Protocol Versioning Distinction & Historical Evidence Compatibility (R3-F05)
+To ensure rigorous provenance without retroactively rewriting historical experimental logs, this project strictly distinguishes between three protocol version concepts:
+
+1. **Measurement Protocol Version (`1.2.0`):**
+   - The measurement execution contract under which the 180 canonical pilot slots were executed at commit `cf97a7840dff0c0f2bf791834263f3911545110c`.
+   - Binds historical protocol SHA-256: `dd3f39cae4325b3577adec8fa19ff5f52844e9338b1d97aa542d58b6c09d4ebd`.
+   - Every canonical record in `results/logs/rf36-p4a/p4a_raw_ledger.jsonl` records `protocol_version = "1.2.0"` and `protocol_sha256 = "dd3f39ca..."`.
+2. **Evidence Analysis Version (`1.3.0`):**
+   - The analytical contract version implemented by `scripts/p4a_evidence_contract.py` and `scripts/summarize_rapidflow_apx_p4a.py`.
+   - Enforces cryptographic self-consistency, duplicate attempt lineage resolution, and fail-closed pair compatibility gating.
+3. **Protocol Specification Revision (`1.3.0`):**
+   - The current documentation revision of this document (`docs/rapidflow_apx_p4a_protocol.md`), reflecting review remediations, observer invariance contracts, and evidence manifest specifications.
+
+**Historical Evidence Reuse Justification:**
+The 180 canonical records generated under commit `cf97a7840dff...` are verified to be 100% compatible and reusable under Evidence Analysis Version 1.3.0 without re-running:
+- **Binary Invariance:** Native harness binary SHA-256 is identically `6e4537d03a356dd9c603e452f86848cbdb1ea2cd0fcbdf31199d0e9afbf9b21b`.
+- **Manifest Invariance:** Workload manifest SHA-256 is identically `f82bdcc0c89ce794439eeff3fd67fe78de733196286503c27de70ed2df5d3b18`, with all 30 case hashes matching 100%.
+- **Environmental Parity:** Resource limits (`effective_max_work = 500000`, `timeout = 60.0`, `as_limit_mib = 512`) are identical.
+- **Oracle Verification:** All 180 slots achieved bit-for-bit M0 Oracle verification (`status = COMPLETED_VERIFIED`, `m0_agreed = True`, `performance_admission_status = ACCEPTED`).
+- Therefore, rewriting historical ledger logs to artificially alter `protocol_sha256` or `protocol_version` would violate research integrity. The ledger is preserved pristine, while the evidence contract verifies its self-consistency.
 
 ---
 

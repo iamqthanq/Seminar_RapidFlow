@@ -30,7 +30,7 @@ Across 90 paired comparisons (30 canonical workloads $\times$ 3 repetitions $\ti
    - Bare M2 evaluated **245,055** candidates compared to M1's **455,148** candidates (a **46.16% relative reduction** in candidates evaluated).
    - Both engines emitted exactly **37,152** events across 828 streaming steps with zero duplicate embeddings.
 3. **Stage Breakdown & Bottleneck Identification:**
-   - Within native step total, Search Core occupies **67.57%** (median) and Neighbor Retrieval occupies **16.25%** (median).
+   - Within native step total, Search Core occupies **67.23%** (median), Neighbor Retrieval occupies **16.25%** (median), Update Maintenance occupies **3.12%** (median), and Tuple Commit occupies **1.38%** (median).
    - Within search duration specifically, `ApxAuthoritativeGraph::get_neighbors(u)` accounts for **22.78%** (median) of search time and Search Core accounts for **77.22%** (median).
 4. **P4b Architectural Decision:**
    - Hypothesis $H_1$ (Streaming speedup > 1.0x) is **CONFIRMED** across all 4 timing scopes.

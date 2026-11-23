@@ -43,6 +43,76 @@ DEFAULT_RAW_OUTPUT = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_observer
 DEFAULT_SUMMARY_OUTPUT = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_observer_overhead_summary.json"
 
 
+def verify_observer_output_invariance(
+    out_off: Dict[str, Any],
+    out_on: Dict[str, Any],
+) -> Tuple[bool, str]:
+    """
+    Verifies full functional and algorithmic counter invariance between PROFILE_OFF and PROFILE_ON (R3-F04).
+    Checks:
+    1. Step count equality.
+    2. Step-by-step raw duplicate rejection.
+    3. Step-by-step set equality of entered_tuples and exited_tuples preserving tuple coordinate ordering [v0, v1, ...].
+    4. Exact equality of all 6 algorithmic counters:
+       - candidate_evaluations
+       - committed_emissions
+       - dfs_states
+       - anchors_started
+       - edge_lookups
+       - vertex_label_checks
+    Returns (is_valid, diagnostic_message).
+    """
+    steps_off = out_off.get("steps", [])
+    steps_on = out_on.get("steps", [])
+    if len(steps_off) != len(steps_on):
+        return False, f"Step count mismatch: OFF has {len(steps_off)} steps vs ON has {len(steps_on)} steps"
+
+    for s_idx, (s_off, s_on) in enumerate(zip(steps_off, steps_on)):
+        # Check raw duplicates
+        raw_ent_off = s_off.get("entered_tuples", [])
+        raw_ent_on = s_on.get("entered_tuples", [])
+        uniq_ent_off = [list(t) for t in dict.fromkeys(tuple(x) for x in raw_ent_off)]
+        uniq_ent_on = [list(t) for t in dict.fromkeys(tuple(x) for x in raw_ent_on)]
+        if len(raw_ent_off) != len(uniq_ent_off):
+            return False, f"Step {s_idx} contains duplicate entered tuples in PROFILE_OFF"
+        if len(raw_ent_on) != len(uniq_ent_on):
+            return False, f"Step {s_idx} contains duplicate entered tuples in PROFILE_ON"
+
+        raw_ext_off = s_off.get("exited_tuples", [])
+        raw_ext_on = s_on.get("exited_tuples", [])
+        uniq_ext_off = [list(t) for t in dict.fromkeys(tuple(x) for x in raw_ext_off)]
+        uniq_ext_on = [list(t) for t in dict.fromkeys(tuple(x) for x in raw_ext_on)]
+        if len(raw_ext_off) != len(uniq_ext_off):
+            return False, f"Step {s_idx} contains duplicate exited tuples in PROFILE_OFF"
+        if len(raw_ext_on) != len(uniq_ext_on):
+            return False, f"Step {s_idx} contains duplicate exited tuples in PROFILE_ON"
+
+        # Compare entered and exited tuples (sorted list of coordinate tuples)
+        if sorted(tuple(x) for x in raw_ent_off) != sorted(tuple(x) for x in raw_ent_on):
+            return False, f"Step {s_idx} entered tuples mismatch between PROFILE_OFF and PROFILE_ON"
+        if sorted(tuple(x) for x in raw_ext_off) != sorted(tuple(x) for x in raw_ext_on):
+            return False, f"Step {s_idx} exited tuples mismatch between PROFILE_OFF and PROFILE_ON"
+
+    # Compare algorithmic counters
+    cnt_off = out_off.get("counters", {})
+    cnt_on = out_on.get("counters", {})
+    monitored_counters = [
+        "candidate_evaluations",
+        "committed_emissions",
+        "dfs_states",
+        "anchors_started",
+        "edge_lookups",
+        "vertex_label_checks",
+    ]
+    for c_name in monitored_counters:
+        v_off = cnt_off.get(c_name)
+        v_on = cnt_on.get(c_name)
+        if v_off != v_on:
+            return False, f"Counter mismatch for '{c_name}': OFF={v_off} vs ON={v_on}"
+
+    return True, ""
+
+
 def measure_observer_overhead(
     manifest_path: Path = DEFAULT_MANIFEST,
     raw_output_path: Path = DEFAULT_RAW_OUTPUT,
@@ -67,7 +137,7 @@ def measure_observer_overhead(
     else:
         # Default representative workloads: Diamond k=0, Diamond k=1, K4 k=0, K4 k=1
         rep_ids = {"P4A_WL_01", "P4A_WL_03", "P4A_WL_11", "P4A_WL_14"}
-        cases = [c for c in cases if c.get("case_id") in rep_ids]
+        cases = sorted([c for c in cases if c.get("case_id") in rep_ids], key=lambda x: x["case_id"])
 
     raw_output_path.parent.mkdir(parents=True, exist_ok=True)
     summary_output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -106,21 +176,15 @@ def measure_observer_overhead(
                 res_off = run_res["PROFILE_OFF"]
                 res_on = run_res["PROFILE_ON"]
 
-                # Verify identical functional and counter outputs
+                # Verify full functional and counter output invariance (R3-F04)
                 out_off = res_off.get("output_data") or {}
                 out_on = res_on.get("output_data") or {}
 
-                steps_off = out_off.get("steps", [])
-                steps_on = out_on.get("steps", [])
-                if len(steps_off) != len(steps_on):
-                    raise ValueError(f"Step count mismatch between OFF ({len(steps_off)}) and ON ({len(steps_on)})")
-
-                cnt_off = out_off.get("counters", {})
-                cnt_on = out_on.get("counters", {})
-                if cnt_off.get("committed_emissions") != cnt_on.get("committed_emissions"):
-                    raise ValueError("Emitted events mismatch between PROFILE_OFF and PROFILE_ON")
-                if cnt_off.get("candidate_evaluations") != cnt_on.get("candidate_evaluations"):
-                    raise ValueError("Candidate evaluations mismatch between PROFILE_OFF and PROFILE_ON")
+                is_invar, invar_diag = verify_observer_output_invariance(out_off, out_on)
+                if not is_invar:
+                    raise ValueError(
+                        f"Observer functional invariance failure on {case_id} rep {rep}: {invar_diag}"
+                    )
 
                 t_off_ns = res_off["outer_wall_ns"]
                 t_on_ns = res_on["outer_wall_ns"]

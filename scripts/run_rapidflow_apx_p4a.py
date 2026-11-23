@@ -42,17 +42,33 @@ from scripts.dstar_oracle import (
 )
 
 EXPECTED_UPSTREAM_COMMIT = "2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1"
-CANONICAL_MAX_WORK_CAP = 500000
-PROTOCOL_VERSION = "1.2.0"
 DEFAULT_PROTOCOL_PATH = REPO_ROOT / "docs" / "rapidflow_apx_p4a_protocol.md"
 DEFAULT_MANIFEST = REPO_ROOT / "configs" / "rapidflow_apx_p4a_manifest.json"
 DEFAULT_LEDGER = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
 DEFAULT_SUMMARY = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_canonical_summary.json"
 
+from scripts.p4a_evidence_contract import (
+    PROTOCOL_MEASUREMENT_VERSION,
+    PROTOCOL_ANALYSIS_VERSION,
+    PROTOCOL_SPECIFICATION_REVISION,
+    CANONICAL_MAX_WORK_CAP,
+    CANONICAL_TIMEOUT_CEILING,
+    CANONICAL_AS_LIMIT_MIB,
+    CANONICAL_REPETITIONS_CEILING,
+    compute_sha256,
+    compute_dict_sha256,
+    compute_execution_identity,
+    get_frozen_manifest_registry,
+    create_experiment_header,
+    validate_record_integrity,
+    resolve_canonical_attempts,
+    validate_pair_compatibility,
+    CorruptedLedgerError,
+    IntegrityConflictError,
+    AmbiguousSlotError,
+)
 
-class CorruptedLedgerError(Exception):
-    """Raised when the raw experiment ledger contains unparseable or corrupted lines."""
-    pass
+PROTOCOL_VERSION = PROTOCOL_MEASUREMENT_VERSION
 
 
 class OracleExecutionError(Exception):
@@ -65,169 +81,9 @@ class IdentityMismatchError(Exception):
     pass
 
 
-def compute_sha256(filepath: Path) -> str:
-    """Computes SHA-256 hash of a file."""
-    h = hashlib.sha256()
-    with open(filepath, "rb") as f:
-        while chunk := f.read(65536):
-            h.update(chunk)
-    return h.hexdigest()
-
-
 def compute_str_sha256(data: str) -> str:
     """Computes SHA-256 hash of a string."""
     return hashlib.sha256(data.encode("utf-8")).hexdigest()
-
-
-def compute_dict_sha256(data: Dict[str, Any]) -> str:
-    """Computes canonical SHA-256 of a JSON-serializable dictionary."""
-    serialized = json.dumps(data, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
-
-
-def compute_execution_identity(
-    protocol_version: str,
-    protocol_sha256: str,
-    manifest_sha256: str,
-    source_commit: str,
-    source_dirty: str,
-    binary_sha256: str,
-    effective_max_work: int,
-    effective_timeout: float,
-    effective_as_limit_mib: int,
-) -> str:
-    """Computes a deterministic, cryptographic hash identifying the entire experimental environment."""
-    payload = {
-        "binary_sha256": str(binary_sha256),
-        "effective_as_limit_mib": int(effective_as_limit_mib),
-        "effective_max_work": int(effective_max_work),
-        "effective_timeout": float(effective_timeout),
-        "manifest_sha256": str(manifest_sha256),
-        "protocol_sha256": str(protocol_sha256),
-        "protocol_version": str(protocol_version),
-        "source_commit": str(source_commit),
-        "source_dirty": str(source_dirty),
-    }
-    return compute_dict_sha256(payload)
-
-
-def validate_record_integrity(
-    record: Dict[str, Any],
-    expected_header: Optional[Union[str, Dict[str, Any]]] = None,
-) -> Tuple[bool, str]:
-    """
-    Validates a single ledger record for structural integrity, field types,
-    cryptographic self-consistency, and agreement with the expected experiment configuration.
-    Enforces fail-closed rejection on tampered, corrupted, or out-of-bounds metadata.
-    """
-    if not isinstance(record, dict):
-        return False, "Record is not a dict"
-
-    required_fields = [
-        "execution_identity", "protocol_version", "protocol_sha256", "manifest_sha256",
-        "source_commit", "source_dirty_state", "binary_sha256",
-        "workload_id", "workload_sha256", "engine", "repetition",
-        "status", "exit_code", "slot_key"
-    ]
-    for rf in required_fields:
-        if rf not in record:
-            return False, f"Missing required metadata field: {rf}"
-
-    # String & hex type validation
-    if not isinstance(record["execution_identity"], str) or len(record["execution_identity"]) != 64:
-        return False, "Invalid execution_identity: must be 64-char hex string"
-    if not isinstance(record["protocol_sha256"], str) or len(record["protocol_sha256"]) != 64:
-        return False, "Invalid protocol_sha256: must be 64-char hex string"
-    if not isinstance(record["manifest_sha256"], str) or len(record["manifest_sha256"]) != 64:
-        return False, "Invalid manifest_sha256: must be 64-char hex string"
-    if not isinstance(record["binary_sha256"], str) or len(record["binary_sha256"]) != 64:
-        return False, "Invalid binary_sha256: must be 64-char hex string"
-    if not isinstance(record["workload_sha256"], str) or len(record["workload_sha256"]) != 64:
-        return False, "Invalid workload_sha256: must be 64-char hex string"
-    if not isinstance(record["source_commit"], str) or not record["source_commit"]:
-        return False, "Invalid source_commit: must be non-empty string"
-    if record["source_dirty_state"] not in ("CLEAN", "DIRTY", "DIRTY_ALLOWED"):
-        return False, f"Invalid source_dirty_state: {record['source_dirty_state']}"
-    if record["engine"] not in ("m1", "m2"):
-        return False, f"Invalid engine: {record['engine']}"
-    if not isinstance(record["repetition"], int) or record["repetition"] < 0:
-        return False, "Invalid repetition: must be non-negative int"
-    if not isinstance(record["exit_code"], int):
-        return False, "Invalid exit_code: must be int"
-
-    # Effective resource limits
-    max_work = record.get("effective_max_work")
-    if not isinstance(max_work, int) or max_work <= 0 or max_work > CANONICAL_MAX_WORK_CAP:
-        return False, f"Invalid effective_max_work: {max_work} (approved ceiling={CANONICAL_MAX_WORK_CAP})"
-
-    timeout = record.get("effective_timeout")
-    if (
-        not isinstance(timeout, (int, float))
-        or math.isnan(timeout)
-        or math.isinf(timeout)
-        or timeout <= 0
-        or timeout > 60.0
-    ):
-        return False, f"Invalid effective_timeout: {timeout} (must be finite, >0 and <=60.0s)"
-
-    mem_limit = record.get("effective_memory_limit_mib")
-    if mem_limit is None:
-        mem_limit = record.get("effective_as_limit_mib")
-    if not isinstance(mem_limit, int) or mem_limit <= 0 or mem_limit > 512:
-        return False, f"Invalid effective_memory_limit_mib: {mem_limit} (must be >0 and <=512 MiB)"
-
-    # Slot key check
-    expected_slot_key = f"{record['workload_id']}_rep{record['repetition']}_{record['engine']}"
-    if record.get("slot_key") != expected_slot_key:
-        return False, f"Slot key mismatch: claimed {record.get('slot_key')} vs expected {expected_slot_key}"
-
-    # Self-consistency check: recompute execution_identity from record metadata
-    dirty_val = record.get("source_dirty_state") or record.get("source_dirty", "CLEAN")
-    derived_id = compute_execution_identity(
-        protocol_version=record["protocol_version"],
-        protocol_sha256=record["protocol_sha256"],
-        manifest_sha256=record["manifest_sha256"],
-        source_commit=record["source_commit"],
-        source_dirty=dirty_val,
-        binary_sha256=record["binary_sha256"],
-        effective_max_work=max_work,
-        effective_timeout=float(timeout),
-        effective_as_limit_mib=mem_limit,
-    )
-    if derived_id != record["execution_identity"]:
-        return False, f"Self-consistency failure: execution_identity {record['execution_identity']} != derived {derived_id}"
-
-    # Agreement with expected experiment header if provided
-    if expected_header:
-        if isinstance(expected_header, str):
-            if record["execution_identity"] != expected_header:
-                return False, f"Execution identity mismatch: claimed {record['execution_identity']} vs expected {expected_header}"
-        elif isinstance(expected_header, dict):
-            if "execution_identity" in expected_header and record["execution_identity"] != expected_header["execution_identity"]:
-                return False, "Execution identity mismatch against experiment header"
-            if "binary_sha256" in expected_header and record["binary_sha256"] != expected_header["binary_sha256"]:
-                return False, f"Binary SHA-256 mismatch against experiment header: {record['binary_sha256']} != {expected_header['binary_sha256']}"
-            if "source_commit" in expected_header and record["source_commit"] != expected_header["source_commit"]:
-                return False, f"Source commit mismatch against experiment header: {record['source_commit']} != {expected_header['source_commit']}"
-            if "manifest_sha256" in expected_header and record["manifest_sha256"] != expected_header["manifest_sha256"]:
-                return False, f"Manifest SHA-256 mismatch against experiment header: {record['manifest_sha256']} != {expected_header['manifest_sha256']}"
-            if "protocol_sha256" in expected_header and record["protocol_sha256"] != expected_header["protocol_sha256"]:
-                return False, f"Protocol SHA-256 mismatch against experiment header: {record['protocol_sha256']} != {expected_header['protocol_sha256']}"
-            if "source_dirty_state" in expected_header and record["source_dirty_state"] != expected_header["source_dirty_state"]:
-                return False, f"Source dirty state mismatch: {record['source_dirty_state']} != {expected_header['source_dirty_state']}"
-            if "effective_max_work" in expected_header and record["effective_max_work"] != expected_header["effective_max_work"]:
-                return False, f"Effective max work mismatch: {record['effective_max_work']} != {expected_header['effective_max_work']}"
-            if "effective_timeout" in expected_header and float(record["effective_timeout"]) != float(expected_header["effective_timeout"]):
-                return False, f"Effective timeout mismatch: {record['effective_timeout']} != {expected_header['effective_timeout']}"
-            exp_as = expected_header.get("effective_as_limit_mib", expected_header.get("effective_memory_limit_mib"))
-            if exp_as is not None and mem_limit != exp_as:
-                return False, f"Effective memory limit mismatch: {mem_limit} != {exp_as}"
-            if "workload_hashes" in expected_header:
-                exp_wl = expected_header["workload_hashes"].get(record["workload_id"])
-                if exp_wl and record["workload_sha256"] != exp_wl:
-                    return False, f"Workload SHA-256 mismatch for {record['workload_id']}: {record['workload_sha256']} != {exp_wl}"
-
-    return True, ""
 
 
 def verify_git_provenance(allow_dirty: bool = False) -> Tuple[Dict[str, Any], bool]:
@@ -536,8 +392,8 @@ def load_existing_ledger(
     - Validates complete record integrity (field schema, types, limits, and self-consistency).
     - If expected_identity or expected_header is provided, verifies that every resumed slot matches.
     - If a record claims expected_identity but fails integrity/self-consistency, raises CorruptedLedgerError fail-closed.
-    - Only admits COMPLETED_VERIFIED slots with performance_admission_status == "ACCEPTED".
-    - Detects and tracks duplicate attempt lineage instead of silently overwriting.
+    - Resolves duplicate attempt lineage using unified resolve_canonical_attempts policy.
+    - Disallows arbitrary / silent selection of conflicting verified attempts.
     Returns (resumable_slots, duplicate_attempts).
     """
     resumable_slots: Dict[str, Dict[str, Any]] = {}
@@ -547,8 +403,8 @@ def load_existing_ledger(
         return resumable_slots, duplicate_attempts
 
     target_header = expected_header if expected_header is not None else expected_identity
-    exp_id = expected_identity or (expected_header.get("execution_identity") if isinstance(expected_header, dict) else None)
 
+    records: List[Dict[str, Any]] = []
     line_no = 0
     with open(ledger_path, "r", encoding="utf-8") as f:
         for line in f:
@@ -560,45 +416,16 @@ def load_existing_ledger(
                 rec = json.loads(line)
             except json.JSONDecodeError as jde:
                 raise CorruptedLedgerError(f"Corrupted JSON in ledger {ledger_path} at line {line_no}: {jde}") from jde
-
             if not isinstance(rec, dict):
                 raise CorruptedLedgerError(f"Invalid record type (not dict) at line {line_no} in {ledger_path}")
+            records.append(rec)
 
-            rec_id = rec.get("execution_identity")
-
-            # Validate record integrity and experiment agreement
-            is_valid, diag = validate_record_integrity(rec, expected_header=target_header)
-
-            if exp_id:
-                if rec_id == exp_id:
-                    if not is_valid:
-                        raise CorruptedLedgerError(
-                            f"Tampered or corrupted record in {ledger_path} at line {line_no} (claimed identity {exp_id}): {diag}"
-                        )
-                else:
-                    # Slot from a different experiment cannot be resumed
-                    continue
-            else:
-                if not is_valid:
-                    raise CorruptedLedgerError(f"Corrupted record in {ledger_path} at line {line_no}: {diag}")
-
-            slot_key = rec.get("slot_key") or f"{rec.get('workload_id')}_rep{rec.get('repetition')}_{rec.get('engine')}"
-
-            # Check for duplicate attempt lineage
-            if slot_key in resumable_slots:
-                if slot_key not in duplicate_attempts:
-                    duplicate_attempts[slot_key] = [resumable_slots[slot_key]]
-                duplicate_attempts[slot_key].append(rec)
-
-            # Check if verified and admitted
-            if (
-                rec.get("status") == "COMPLETED_VERIFIED"
-                and rec.get("performance_admission_status") == "ACCEPTED"
-                and rec.get("m0_agreed") is True
-            ):
-                resumable_slots[slot_key] = rec
-
-    return resumable_slots, duplicate_attempts
+    canonical_slots, duplicate_lineage, conflicts = resolve_canonical_attempts(
+        records=records,
+        expected_header=target_header,
+        strict_raise=True,
+    )
+    return canonical_slots, duplicate_lineage
 
 
 def main():
@@ -679,17 +506,18 @@ def main():
 
     protocol_sha256 = compute_sha256(args.protocol) if args.protocol.is_file() else "UNKNOWN_PROTOCOL_SHA"
 
-    execution_identity = compute_execution_identity(
+    experiment_header = create_experiment_header(
+        manifest_path=args.manifest,
         protocol_version=PROTOCOL_VERSION,
         protocol_sha256=protocol_sha256,
-        manifest_sha256=manifest_sha256,
         source_commit=prov_meta.get("repo_commit") or "UNKNOWN_COMMIT",
-        source_dirty=prov_meta.get("dirty_state", "UNKNOWN"),
+        source_dirty_state=prov_meta.get("dirty_state", "UNKNOWN"),
         binary_sha256=bin_sha,
         effective_max_work=CANONICAL_MAX_WORK_CAP,
         effective_timeout=args.timeout,
-        effective_as_limit_mib=args.as_limit_mib,
+        effective_memory_limit_mib=args.as_limit_mib,
     )
+    execution_identity = experiment_header["execution_identity"]
     print(f"  Execution Identity: {execution_identity[:16]}... (Full: {execution_identity})")
 
     cases = manifest_data.get("cases", [])
@@ -705,7 +533,7 @@ def main():
     args.output.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        existing_ledger, duplicate_lineage = load_existing_ledger(args.ledger, expected_identity=execution_identity)
+        existing_ledger, duplicate_lineage = load_existing_ledger(args.ledger, expected_header=experiment_header)
     except CorruptedLedgerError as cle:
         print(f"ERROR: Fail-closed rejection of corrupted ledger: {cle}", file=sys.stderr)
         sys.exit(1)
@@ -783,19 +611,28 @@ def main():
                     as_limit_mib=args.as_limit_mib,
                 )
 
+                failure_stage = "NONE"
+                failure_category = "NONE"
+                m0_agreed = False
+                correctness_status = "NOT_CHECKED"
+                performance_admission_status = "REJECTED"
+                correctness_notes = ""
+
                 if warm_res["status"] != "COMPLETED":
-                    # Warm-up failed! Fail-closed: block measured replay for this slot (R2-F08)
+                    # Warm-up failed! Fail-closed: block measured replay for this slot (R2-F08, R3-F06)
                     print(
                         f"  [WARN] Warm-up failed for {slot_key} with status {warm_res['status']} "
                         f"(exit={warm_res['exit_code']})",
                         file=sys.stderr,
                     )
                     run_status = warm_res["status"] if warm_res["status"] in ("TIMEOUT", "WORK_LIMIT", "OOM_CENSORED", "SIGNAL_KILL_CENSORED") else "WARMUP_FAILED"
-                    correctness_status = f"WARMUP_{warm_res['status']}"
-                    correctness_notes = f"Disposable warm-up execution failed with status {warm_res['status']}"
+                    failure_stage = "WARMUP"
+                    failure_category = warm_res["status"]
+                    correctness_status = "NOT_CHECKED"
+                    correctness_notes = f"Disposable warm-up execution failed during stage WARMUP with status {warm_res['status']}"
                     performance_admission_status = "REJECTED"
-                    m0_agreed = False
                     run_res = warm_res
+                    out_data = warm_res.get("output_data") or {}
                     executed_slots += 1
                     slot_counters["warmup_failed_slots"] += 1
                 else:
@@ -809,67 +646,74 @@ def main():
                         as_limit_mib=args.as_limit_mib,
                     )
                     executed_slots += 1
+                    out_data = run_res.get("output_data") or {}
 
-                # Correctness & Admission Verification (P4A-F03)
-                m0_agreed = False
-                correctness_status = "UNVERIFIED"
-                performance_admission_status = "REJECTED"
-                correctness_notes = ""
-                out_data = run_res.get("output_data") or {}
-
-                if m0_ground_truth is None:
-                    correctness_status = "ORACLE_FAILED"
-                    correctness_notes = f"M0 Oracle error: {m0_error}"
-                    run_status = "ORACLE_FAILED"
-                elif warm_res["status"] != "COMPLETED":
-                    pass  # Already marked
-                elif run_res["status"] == "COMPLETED" and "steps" in out_data:
-                    steps = out_data["steps"]
-                    if len(steps) != len(m0_ground_truth):
-                        correctness_status = "STEP_COUNT_MISMATCH"
-                        correctness_notes = f"Step count mismatch: obs={len(steps)} vs exp={len(m0_ground_truth)}"
-                        run_status = "FAILED_CORRECTNESS"
-                    else:
-                        match_all = True
-                        for s_idx, (s_obs, s_exp) in enumerate(zip(steps, m0_ground_truth)):
-                            # Check raw duplicates before unique/set comparison (P4A-F03)
-                            obs_entered_raw = s_obs.get("entered_tuples", [])
-                            obs_entered_uniq = [list(t) for t in dict.fromkeys(tuple(x) for x in obs_entered_raw)]
-                            if len(obs_entered_raw) != len(obs_entered_uniq):
-                                match_all = False
-                                correctness_status = "DUPLICATE_EMISSION"
-                                correctness_notes = f"Step {s_idx} contains duplicate entered tuples"
-                                break
-
-                            obs_exited_raw = s_obs.get("exited_tuples", [])
-                            obs_exited_uniq = [list(t) for t in dict.fromkeys(tuple(x) for x in obs_exited_raw)]
-                            if len(obs_exited_raw) != len(obs_exited_uniq):
-                                match_all = False
-                                correctness_status = "DUPLICATE_EMISSION"
-                                correctness_notes = f"Step {s_idx} contains duplicate exited tuples"
-                                break
-
-                            if sorted(obs_entered_uniq) != s_exp["entered"]:
-                                match_all = False
-                                correctness_status = "TUPLE_MISMATCH"
-                                correctness_notes = f"Step {s_idx} entered tuples mismatch against M0"
-                                break
-                            if sorted(obs_exited_uniq) != s_exp["exited"]:
-                                match_all = False
-                                correctness_status = "TUPLE_MISMATCH"
-                                correctness_notes = f"Step {s_idx} exited tuples mismatch against M0"
-                                break
-
-                        if match_all:
-                            m0_agreed = True
-                            correctness_status = "M0_VERIFIED"
-                            performance_admission_status = "ACCEPTED"
-                            run_status = "COMPLETED_VERIFIED"
-                        else:
+                    # Correctness & Admission Verification (P4A-F03)
+                    if m0_ground_truth is None:
+                        failure_stage = "ORACLE"
+                        failure_category = "ORACLE_FAILED"
+                        correctness_status = "ORACLE_FAILED"
+                        correctness_notes = f"M0 Oracle error: {m0_error}"
+                        run_status = "ORACLE_FAILED"
+                    elif run_res["status"] == "COMPLETED" and "steps" in out_data:
+                        steps = out_data["steps"]
+                        if len(steps) != len(m0_ground_truth):
+                            failure_stage = "MEASURED_RUN"
+                            failure_category = "STEP_COUNT_MISMATCH"
+                            correctness_status = "STEP_COUNT_MISMATCH"
+                            correctness_notes = f"Step count mismatch: obs={len(steps)} vs exp={len(m0_ground_truth)}"
                             run_status = "FAILED_CORRECTNESS"
-                else:
-                    run_status = run_res["status"]
-                    correctness_notes = f"Subprocess terminated with status {run_res['status']}"
+                        else:
+                            match_all = True
+                            for s_idx, (s_obs, s_exp) in enumerate(zip(steps, m0_ground_truth)):
+                                # Check raw duplicates before unique/set comparison (P4A-F03)
+                                obs_entered_raw = s_obs.get("entered_tuples", [])
+                                obs_entered_uniq = [list(t) for t in dict.fromkeys(tuple(x) for x in obs_entered_raw)]
+                                if len(obs_entered_raw) != len(obs_entered_uniq):
+                                    match_all = False
+                                    failure_stage = "MEASURED_RUN"
+                                    failure_category = "DUPLICATE_EMISSION"
+                                    correctness_status = "DUPLICATE_EMISSION"
+                                    correctness_notes = f"Step {s_idx} contains duplicate entered tuples"
+                                    break
+
+                                obs_exited_raw = s_obs.get("exited_tuples", [])
+                                obs_exited_uniq = [list(t) for t in dict.fromkeys(tuple(x) for x in obs_exited_raw)]
+                                if len(obs_exited_raw) != len(obs_exited_uniq):
+                                    match_all = False
+                                    failure_stage = "MEASURED_RUN"
+                                    failure_category = "DUPLICATE_EMISSION"
+                                    correctness_status = "DUPLICATE_EMISSION"
+                                    correctness_notes = f"Step {s_idx} contains duplicate exited tuples"
+                                    break
+
+                                if sorted(obs_entered_uniq) != s_exp["entered"]:
+                                    match_all = False
+                                    failure_stage = "MEASURED_RUN"
+                                    failure_category = "TUPLE_MISMATCH"
+                                    correctness_status = "TUPLE_MISMATCH"
+                                    correctness_notes = f"Step {s_idx} entered tuples mismatch against M0"
+                                    break
+                                if sorted(obs_exited_uniq) != s_exp["exited"]:
+                                    match_all = False
+                                    failure_stage = "MEASURED_RUN"
+                                    failure_category = "TUPLE_MISMATCH"
+                                    correctness_status = "TUPLE_MISMATCH"
+                                    correctness_notes = f"Step {s_idx} exited tuples mismatch against M0"
+                                    break
+
+                            if match_all:
+                                m0_agreed = True
+                                correctness_status = "M0_VERIFIED"
+                                performance_admission_status = "ACCEPTED"
+                                run_status = "COMPLETED_VERIFIED"
+                            else:
+                                run_status = "FAILED_CORRECTNESS"
+                    else:
+                        run_status = run_res["status"]
+                        failure_stage = "MEASURED_RUN"
+                        failure_category = run_res["status"]
+                        correctness_notes = f"Subprocess terminated with status {run_res['status']}"
 
                 # Update slot counters (R2-F04)
                 if run_status == "COMPLETED_VERIFIED":
@@ -933,6 +777,8 @@ def main():
                     "order_position": pos,
                     "status": run_status,
                     "exit_code": run_res["exit_code"],
+                    "failure_stage": failure_stage,
+                    "failure_category": failure_category,
                     "outer_wall_ns": run_res["outer_wall_ns"],
                     "steps_count": len(out_data.get("steps", [])),
                     "correctness_status": correctness_status,
@@ -979,6 +825,7 @@ def main():
         "execution_identity": execution_identity,
         "protocol_version": PROTOCOL_VERSION,
         "protocol_sha256": protocol_sha256,
+        "experiment_header": experiment_header,
         "run_id": run_id,
         "timestamp": run_timestamp,
         "manifest_path": str(args.manifest),
