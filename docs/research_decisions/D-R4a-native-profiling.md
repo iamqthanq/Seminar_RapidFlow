@@ -63,6 +63,9 @@ Across 90 paired comparisons (30 canonical workloads $\times$ 3 repetitions $\ti
 | AuthoritativeGraph CSR Neighbor Optimization | **DEFER** | Deferred to Phase P4b; justified by neighbor retrieval occupying 22.8% of search time. | Pinpointed exact bottleneck without speculative changes. |
 | Raising Work Budget Cap | **STOP** | The canonical work cap `CANONICAL_MAX_WORK_CAP = 500000` must remain strictly enforced. | All workloads completed under budget; cap remains 500,000. |
 | Speculative P4b Speedup Claims | **STOP** | Disallow claiming unverified speedup numbers (e.g. "15-20% speedup") prior to implementation. | Replaced with grounded conditional hypotheses. |
+| Three-Level Integrity Architecture | **ADD** | Record-level (Level A), pair-level (Level B), and canonical completeness & raw artifact binding (Level C). | Enforces 180/180 slot completeness and exact raw artifact SHA-256 verification (Round 5). |
+| Production CLI Contract Recovery | **ADD** | Restored fail-closed CLI entrypoint with `--mode canonical` and `--mode scoped`. | Tested across 16 CLI end-to-end integration scenarios E2E-01..E2E-16 (Round 5). |
+| Alien Experiment Contamination Protection | **ADD** | Interleaved alien experiment records are quarantined in `rejected_conflicts`, failing ledger closed. | Tested in `test_44_e2e_10_mixed_experiments` (Round 5). |
 
 ---
 

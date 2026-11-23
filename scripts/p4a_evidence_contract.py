@@ -35,6 +35,9 @@ CANONICAL_REPETITIONS_CEILING = 10
 
 DEFAULT_MANIFEST_PATH = REPO_ROOT / "configs" / "rapidflow_apx_p4a_manifest.json"
 DEFAULT_PROTOCOL_PATH = REPO_ROOT / "docs" / "rapidflow_apx_p4a_protocol.md"
+DEFAULT_EVIDENCE_MANIFEST_PATH = REPO_ROOT / "docs" / "evidence" / "p4a_evidence_manifest.json"
+CANONICAL_REPETITIONS = 3
+CANONICAL_ENGINES = ("m1", "m2")
 
 
 class CorruptedLedgerError(Exception):
@@ -49,6 +52,16 @@ class IntegrityConflictError(CorruptedLedgerError):
 
 class AmbiguousSlotError(CorruptedLedgerError):
     """Raised when multiple verified attempts exist with conflicting runtimes and no deterministic lineage."""
+    pass
+
+
+class ArtifactIntegrityError(CorruptedLedgerError):
+    """Raised when raw ledger file does not match trusted evidence manifest checksum or size."""
+    pass
+
+
+class UntrustedExperimentContextError(CorruptedLedgerError):
+    """Raised when canonical certification is attempted without verified trusted experiment context."""
     pass
 
 
@@ -194,6 +207,165 @@ def create_experiment_header(
     }
 
 
+def verify_raw_artifact_integrity(
+    ledger_path: Union[str, Path],
+    trusted_artifact_meta: Dict[str, Any],
+) -> Tuple[bool, str]:
+    """
+    Verifies raw artifact integrity against trusted external reference metadata (R5-F02).
+    Checks:
+    - Path exists and is a regular file.
+    - Actual SHA-256 matches expected SHA-256.
+    - Actual byte size matches expected byte size (if provided).
+    - Actual line count matches expected line count (if provided).
+    Returns (is_valid, diagnostic_message).
+    """
+    p = Path(ledger_path)
+    if not p.exists():
+        return False, f"Raw artifact file does not exist: {p}"
+    if not p.is_file():
+        return False, f"Raw artifact path is not a file: {p}"
+
+    expected_sha = trusted_artifact_meta.get("sha256")
+    if not expected_sha or not is_valid_hex64(expected_sha):
+        return False, f"Invalid or missing trusted sha256 in artifact reference: {expected_sha}"
+
+    actual_sha = compute_sha256(p)
+    if actual_sha.lower() != expected_sha.lower():
+        return False, f"Raw artifact SHA-256 mismatch for {p}: actual {actual_sha} != expected {expected_sha}"
+
+    expected_size = trusted_artifact_meta.get("size_bytes")
+    if expected_size is not None:
+        actual_size = p.stat().st_size
+        if actual_size != expected_size:
+            return False, f"Raw artifact byte size mismatch for {p}: actual {actual_size} != expected {expected_size}"
+
+    expected_lines = trusted_artifact_meta.get("line_count")
+    if expected_lines is not None:
+        with open(p, "r", encoding="utf-8") as f:
+            actual_lines = sum(1 for line in f if line.strip())
+        if actual_lines != expected_lines:
+            return False, f"Raw artifact line count mismatch for {p}: actual {actual_lines} != expected {expected_lines}"
+
+    return True, ""
+
+
+def compute_expected_slot_matrix(
+    manifest_registry: Union[Dict[str, Any], Path, str],
+    repetitions: int = CANONICAL_REPETITIONS,
+    engines: Tuple[str, ...] = CANONICAL_ENGINES,
+) -> Dict[str, Any]:
+    """
+    Computes deterministic expected slot and pair matrix from manifest registry (R5-F01).
+    Returns:
+      - workload_ids: sorted list of case_ids
+      - repetitions: repetition count
+      - engines: engine tuple
+      - expected_slots: set of slot keys (e.g. 'P4A_WL_01_rep0_m1')
+      - expected_pairs: set of (workload_id, repetition) tuples
+      - total_expected_slots: int
+      - total_expected_pairs: int
+    """
+    if isinstance(manifest_registry, (str, Path)):
+        reg = get_frozen_manifest_registry(manifest_registry)
+        w_hashes = reg.get("workload_hashes", {})
+    elif isinstance(manifest_registry, dict):
+        if "workload_hashes" in manifest_registry:
+            w_hashes = manifest_registry["workload_hashes"]
+        elif "cases_by_id" in manifest_registry:
+            w_hashes = manifest_registry["cases_by_id"]
+        elif "cases" in manifest_registry and isinstance(manifest_registry["cases"], list):
+            w_hashes = {c["case_id"]: c for c in manifest_registry["cases"] if isinstance(c, dict) and "case_id" in c}
+        else:
+            w_hashes = manifest_registry
+    else:
+        raise ValueError(f"Invalid manifest_registry type: {type(manifest_registry)}")
+
+    workload_ids = sorted(w_hashes.keys())
+    expected_slots = {
+        f"{wid}_rep{r}_{e}"
+        for wid in workload_ids
+        for r in range(repetitions)
+        for e in engines
+    }
+    expected_pairs = {
+        (wid, r)
+        for wid in workload_ids
+        for r in range(repetitions)
+    }
+    return {
+        "workload_ids": workload_ids,
+        "repetitions": repetitions,
+        "engines": list(engines),
+        "expected_slots": expected_slots,
+        "expected_pairs": expected_pairs,
+        "total_expected_slots": len(expected_slots),
+        "total_expected_pairs": len(expected_pairs),
+    }
+
+
+def load_trusted_evidence_manifest(
+    manifest_path: Optional[Union[str, Path]] = None,
+) -> Dict[str, Any]:
+    """Loads and validates the trusted evidence manifest (R5-F02, R5-F04)."""
+    p = Path(manifest_path) if manifest_path is not None else DEFAULT_EVIDENCE_MANIFEST_PATH
+    if not p.is_file():
+        raise FileNotFoundError(f"Evidence manifest not found: {p}")
+    with open(p, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    if "execution_identity" not in data:
+        raise ValueError(f"Evidence manifest {p} missing execution_identity")
+    if "artifacts" not in data:
+        raise ValueError(f"Evidence manifest {p} missing artifacts registry")
+    return data
+
+
+def get_trusted_canonical_header(
+    evidence_manifest_path: Optional[Union[str, Path]] = None,
+    workload_manifest_path: Optional[Union[str, Path]] = None,
+    protocol_path: Optional[Union[str, Path]] = None,
+) -> Dict[str, Any]:
+    """
+    Constructs authoritative expected header for canonical certification (R5-F04).
+    Binds:
+    - execution_identity from trusted evidence manifest
+    - canonical_execution_commit from evidence manifest
+    - protocol_sha256 from protocol specification
+    - manifest_sha256 and workload_hashes from workload manifest
+    - raw artifact reference for raw ledger
+    """
+    ev_manifest = load_trusted_evidence_manifest(evidence_manifest_path)
+    reg = get_frozen_manifest_registry(workload_manifest_path)
+    proto_p = Path(protocol_path) if protocol_path is not None else DEFAULT_PROTOCOL_PATH
+    proto_sha = compute_sha256(proto_p) if proto_p.is_file() else "0" * 64
+
+    canon_exec_id = ev_manifest["execution_identity"]
+    canon_commit = ev_manifest.get("canonical_execution_commit", "")
+    historical_proto_sha = (
+        ev_manifest.get("protocol_version_distinction", {}).get("historical_measurement_protocol_sha256")
+        or proto_sha
+    )
+
+    raw_ledger_rel = "results/logs/rf36-p4a/p4a_raw_ledger.jsonl"
+    artifact_meta = ev_manifest.get("artifacts", {}).get(raw_ledger_rel, {})
+
+    return {
+        "execution_identity": canon_exec_id,
+        "protocol_version": PROTOCOL_MEASUREMENT_VERSION,
+        "protocol_sha256": historical_proto_sha,
+        "manifest_sha256": reg["manifest_sha256"],
+        "source_commit": canon_commit,
+        "source_dirty_state": "CLEAN",
+        "binary_sha256": "",
+        "effective_max_work": CANONICAL_MAX_WORK_CAP,
+        "effective_timeout": CANONICAL_TIMEOUT_CEILING,
+        "effective_memory_limit_mib": CANONICAL_AS_LIMIT_MIB,
+        "workload_hashes": reg["workload_hashes"],
+        "cases_count": reg["cases_count"],
+        "trusted_raw_artifact": artifact_meta,
+    }
+
+
 def validate_record_integrity(
     record: Dict[str, Any],
     expected_header: Optional[Union[str, Dict[str, Any]]] = None,
@@ -231,13 +403,15 @@ def validate_record_integrity(
         "execution_identity", "protocol_version", "protocol_sha256", "manifest_sha256",
         "source_commit", "source_dirty_state", "binary_sha256",
         "workload_id", "workload_sha256", "engine", "repetition",
-        "status", "exit_code", "slot_key"
+        "status", "exit_code", "slot_key", "attempt_id"
     ]
     for rf in required_fields:
         if rf not in record:
             return False, f"Missing required metadata field: {rf}"
 
     # String & hex type validation
+    if not isinstance(record["attempt_id"], str) or not record["attempt_id"]:
+        return False, "Invalid attempt_id: must be non-empty string"
     if not is_valid_hex64(record["execution_identity"]):
         return False, "Invalid execution_identity: must be 64-char hex string"
     if not is_valid_hex64(record["protocol_sha256"]):
@@ -277,7 +451,7 @@ def validate_record_integrity(
             return False, f"Status COMPLETED_VERIFIED requires performance_admission_status == 'ACCEPTED', got {perf_status}"
         if m0_agreed is not True:
             return False, f"Status COMPLETED_VERIFIED requires m0_agreed is True, got {m0_agreed}"
-        if corr_status is not None and corr_status != "M0_VERIFIED":
+        if corr_status != "M0_VERIFIED":
             return False, f"Status COMPLETED_VERIFIED requires correctness_status == 'M0_VERIFIED', got {corr_status}"
         if fail_stage not in (None, "", "NONE"):
             return False, f"Status COMPLETED_VERIFIED requires empty failure_stage, got {fail_stage}"
@@ -286,6 +460,8 @@ def validate_record_integrity(
     else:
         if perf_status == "ACCEPTED":
             return False, f"Non-verified status {st} cannot have performance_admission_status == 'ACCEPTED'"
+        if corr_status == "M0_VERIFIED":
+            return False, f"Non-verified status {st} cannot have correctness_status == 'M0_VERIFIED'"
 
     if ec != 0:
         if st == "COMPLETED_VERIFIED":
@@ -376,13 +552,13 @@ def validate_record_integrity(
             exp_id = expected_header.get("execution_identity")
             if exp_id and record["execution_identity"] != exp_id:
                 return False, f"Execution identity mismatch: record={record['execution_identity']} vs header={exp_id}"
-            if "binary_sha256" in expected_header and record["binary_sha256"] != expected_header["binary_sha256"]:
+            if expected_header.get("binary_sha256") and record["binary_sha256"] != expected_header["binary_sha256"]:
                 return False, f"Binary SHA-256 mismatch: record={record['binary_sha256']} vs header={expected_header['binary_sha256']}"
-            if "source_commit" in expected_header and record["source_commit"] != expected_header["source_commit"]:
+            if expected_header.get("source_commit") and record["source_commit"] != expected_header["source_commit"]:
                 return False, f"Source commit mismatch: record={record['source_commit']} vs header={expected_header['source_commit']}"
-            if "protocol_sha256" in expected_header and record["protocol_sha256"] != expected_header["protocol_sha256"]:
+            if expected_header.get("protocol_sha256") and record["protocol_sha256"] != expected_header["protocol_sha256"]:
                 return False, f"Protocol SHA-256 mismatch: record={record['protocol_sha256']} vs header={expected_header['protocol_sha256']}"
-            if "manifest_sha256" in expected_header and record["manifest_sha256"] != expected_header["manifest_sha256"]:
+            if expected_header.get("manifest_sha256") and record["manifest_sha256"] != expected_header["manifest_sha256"]:
                 return False, f"Manifest SHA-256 mismatch: record={record['manifest_sha256']} vs header={expected_header['manifest_sha256']}"
             if "workload_hashes" in expected_header:
                 whashes = expected_header["workload_hashes"]
@@ -433,16 +609,31 @@ def resolve_canonical_attempts(
     for idx, rec in enumerate(records):
         line_no = idx + 1
         rec_id = rec.get("execution_identity") if isinstance(rec, dict) else None
-        if exp_id and rec_id != exp_id:
-            # Slot belongs to a different experiment run; skip for this experiment
-            continue
-
         slot_key = (
             rec.get("slot_key")
             or f"{rec.get('workload_id')}_rep{rec.get('repetition')}_{rec.get('engine')}"
             if isinstance(rec, dict)
             else "UNKNOWN"
         )
+
+        if exp_id and rec_id != exp_id:
+            alien_reason = (
+                f"Alien experiment record detected at line {line_no} (slot {slot_key}): "
+                f"claimed execution_identity {rec_id} != expected {exp_id}"
+            )
+            conflict_info = {
+                "line": line_no,
+                "slot_key": slot_key,
+                "reason": alien_reason,
+                "claimed_execution_identity": rec_id,
+                "expected_execution_identity": exp_id,
+                "action_taken": "REJECT_AND_CONTAMINATE",
+                "record": rec,
+            }
+            rejected_conflicts.append(conflict_info)
+            if slot_key != "UNKNOWN":
+                quarantined_slots[slot_key] = alien_reason
+            continue
 
         is_ok, diag = validate_record_integrity(
             rec,

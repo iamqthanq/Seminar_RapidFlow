@@ -32,12 +32,22 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.p4a_evidence_contract import (
+    CANONICAL_ENGINES,
+    CANONICAL_REPETITIONS,
+    DEFAULT_EVIDENCE_MANIFEST_PATH,
+    DEFAULT_MANIFEST_PATH,
+    DEFAULT_PROTOCOL_PATH,
+    compute_expected_slot_matrix,
     compute_sha256,
     create_experiment_header,
     get_frozen_manifest_registry,
+    get_trusted_canonical_header,
+    is_valid_hex64,
+    load_trusted_evidence_manifest,
     resolve_canonical_attempts,
     validate_pair_compatibility,
     validate_record_integrity,
+    verify_raw_artifact_integrity,
 )
 DEFAULT_LEDGER = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
 DEFAULT_SUMMARY_JSON = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_summary_metrics.json"
@@ -112,21 +122,27 @@ def compute_safe_speedup(t_m1: Any, t_m2: Any) -> Tuple[Optional[float], str]:
     return ratio, "VALID"
 
 
-def load_ledger(ledger_path: Path) -> List[Dict[str, Any]]:
+def load_ledger(ledger_path: Union[str, Path]) -> List[Dict[str, Any]]:
     """Loads all records from JSONL ledger fail-closed on corrupted lines."""
+    p = Path(ledger_path)
+    if not p.exists():
+        raise FileNotFoundError(f"Ledger file not found: {p}")
+    if not p.is_file():
+        raise ValueError(f"Ledger path is not a file: {p}")
     records = []
-    if not ledger_path.is_file():
-        return records
     line_no = 0
-    with open(ledger_path, "r", encoding="utf-8") as f:
+    with open(p, "r", encoding="utf-8") as f:
         for line in f:
             line_no += 1
             line = line.strip()
             if line:
                 try:
-                    records.append(json.loads(line))
+                    rec = json.loads(line)
+                    if not isinstance(rec, dict):
+                        raise ValueError(f"Record at line {line_no} in {p} is not a JSON object (dict)")
+                    records.append(rec)
                 except json.JSONDecodeError as e:
-                    raise ValueError(f"Corrupted JSON in {ledger_path} at line {line_no}: {e}") from e
+                    raise ValueError(f"Corrupted JSON in {p} at line {line_no}: {e}") from e
     return records
 
 
@@ -134,6 +150,10 @@ def analyze_p4a_ledger(
     records: List[Dict[str, Any]],
     expected_header: Optional[Union[str, Dict[str, Any]]] = None,
     strict_provenance: bool = True,
+    mode: str = "canonical",
+    raw_ledger_path: Optional[Union[str, Path]] = None,
+    trusted_artifact_meta: Optional[Dict[str, Any]] = None,
+    expected_slot_matrix: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Processes ledger records into structured statistical metrics with strict identity checking."""
     # Experiment isolation check (R4-F03)
@@ -157,7 +177,7 @@ def analyze_p4a_ledger(
             f"{distinct_exec_ids}. Aggregating results across differing execution environments is strictly prohibited."
         )
 
-    # 1. Resolve canonical attempt per slot using unified evidence contract (R2-F02, R3-F01, R3-F02, R4-F02)
+    # 1. Resolve canonical attempt per slot using unified evidence contract (R2-F02, R3-F01, R3-F02, R4-F02, R5-F05)
     canonical_slots, duplicate_lineage, rejected_conflicts = resolve_canonical_attempts(
         records=records,
         expected_header=expected_header,
@@ -167,6 +187,56 @@ def analyze_p4a_ledger(
 
     if isolation_violation:
         rejected_conflicts.append({"reason": isolation_reason, "slot_key": "GLOBAL_EXPERIMENT_ISOLATION"})
+
+    # Check for alien record conflicts / cross-experiment contamination (R5-F05)
+    alien_conflicts = [
+        c for c in rejected_conflicts
+        if "claimed_execution_identity" in c
+        or "ALIEN" in str(c.get("reason", ""))
+        or "different execution_identity" in str(c.get("reason", ""))
+    ]
+    has_alien_contamination = (len(alien_conflicts) > 0)
+
+    # Raw artifact integrity verification (R5-F02)
+    art_ok = True
+    art_diag = ""
+    if mode == "canonical":
+        if raw_ledger_path is not None and trusted_artifact_meta is not None:
+            art_ok, art_diag = verify_raw_artifact_integrity(raw_ledger_path, trusted_artifact_meta)
+        elif raw_ledger_path is not None and trusted_artifact_meta is None:
+            art_ok = False
+            art_diag = f"Missing trusted artifact metadata reference for canonical ledger {raw_ledger_path}"
+        elif trusted_artifact_meta is not None and raw_ledger_path is None:
+            art_ok = False
+            art_diag = "Missing raw ledger path for canonical artifact verification"
+        else:
+            art_ok = True
+
+    # Trusted context check (R5-F04)
+    context_ok = True
+    context_diag = ""
+    if mode == "canonical" and expected_header is not None:
+        if isinstance(expected_header, dict):
+            if not expected_header.get("execution_identity") or not is_valid_hex64(expected_header["execution_identity"]):
+                context_ok = False
+                context_diag = "expected_header execution_identity is missing or not a valid hex64"
+        elif isinstance(expected_header, str):
+            if not is_valid_hex64(expected_header):
+                context_ok = False
+                context_diag = "expected_header string is not a valid hex64 execution identity"
+
+    # Expected slot matrix calculation (R5-F01)
+    if expected_slot_matrix is None and isinstance(expected_header, dict) and "workload_hashes" in expected_header:
+        expected_slot_matrix = compute_expected_slot_matrix(
+            expected_header, repetitions=CANONICAL_REPETITIONS, engines=CANONICAL_ENGINES
+        )
+
+    if expected_slot_matrix is not None:
+        exp_slots = set(expected_slot_matrix["expected_slots"])
+        exp_pairs = set(expected_slot_matrix["expected_pairs"])
+    else:
+        exp_slots = set()
+        exp_pairs = set()
 
     duplicate_slot_warnings = []
     conflicts_by_slot = {c["slot_key"]: c.get("reason") for c in rejected_conflicts if "slot_key" in c}
@@ -216,6 +286,7 @@ def analyze_p4a_ledger(
     m2_counters: Dict[str, List[int]] = defaultdict(list)
 
     pair_details = []
+    valid_slot_keys: Set[str] = set()
 
     # Detect all attempted (w_id, rep) pairs in the ledger
     all_attempted_pairs: Set[Tuple[str, int]] = set()
@@ -403,6 +474,12 @@ def analyze_p4a_ledger(
             cnt_dest["steps"].append(rec.get("steps_count", cnt_src.get("steps", 1)))
 
         valid_pairs.append((w_id, rep))
+        valid_slot_keys.add(f"{w_id}_rep{rep}_m1")
+        valid_slot_keys.add(f"{w_id}_rep{rep}_m2")
+
+    missing_slots = sorted(list(exp_slots - valid_slot_keys)) if exp_slots else []
+    unexpected_slots = sorted(list(valid_slot_keys - exp_slots)) if exp_slots else []
+    is_slots_complete = bool(exp_slots and len(missing_slots) == 0 and len(unexpected_slots) == 0 and len(valid_pairs) == len(exp_pairs))
 
     def summarize_pct_dict(d: Dict[str, List[float]]) -> Dict[str, Dict[str, float]]:
         res = {}
@@ -499,36 +576,80 @@ def analyze_p4a_ledger(
             "search_core_dominates_search_time": bool(sc_median_val >= 50.0),
         }
 
-    if isolation_violation:
-        overall_verdict = "CANONICAL_INCONCLUSIVE"
-        p4b_recommendation = f"RECOMMENDATION: R4A_INCONCLUSIVE_MIXED_EXECUTION_IDENTITIES. {isolation_reason}"
-    elif len(rejected_pairs) > 0 or len(duplicate_slot_warnings) > 0:
-        overall_verdict = "CANONICAL_PARTIAL_OR_FAILED"
-        p4b_recommendation = (
-            f"RECOMMENDATION: R4A_FIX_REQUIRED. "
-            f"{len(rejected_pairs)} pairs rejected due to contract/integrity violations. Review rejected_pairs for diagnostics."
-        )
-    elif len(valid_pairs) == 0:
-        overall_verdict = "CANONICAL_INCONCLUSIVE"
-        p4b_recommendation = (
-            "RECOMMENDATION: R4A_INCONCLUSIVE_NO_VALID_PAIRS. "
-            "Zero valid workload pairs admitted; empirical profiling data insufficient for P4b architectural evaluation."
-        )
+    if mode == "canonical":
+        if not context_ok:
+            overall_verdict = "CANONICAL_UNTRUSTED_CONTEXT"
+            p4b_recommendation = f"RECOMMENDATION: R4A_UNTRUSTED_CONTEXT. {context_diag}"
+        elif isolation_violation:
+            overall_verdict = "CANONICAL_INCONCLUSIVE"
+            p4b_recommendation = f"RECOMMENDATION: R4A_INCONCLUSIVE_MIXED_EXECUTION_IDENTITIES. {isolation_reason}"
+        elif has_alien_contamination:
+            overall_verdict = "CANONICAL_CONTAMINATED"
+            p4b_recommendation = (
+                f"RECOMMENDATION: R4A_EXPERIMENT_CONTAMINATION. "
+                f"Alien records claiming differing execution identities detected in canonical ledger."
+            )
+        elif not art_ok:
+            overall_verdict = "CANONICAL_INVALID_ARTIFACT"
+            p4b_recommendation = f"RECOMMENDATION: R4A_RAW_ARTIFACT_INTEGRITY_FAILURE. {art_diag}"
+        elif len(rejected_pairs) > 0 or len(duplicate_slot_warnings) > 0:
+            overall_verdict = "CANONICAL_PARTIAL_OR_FAILED"
+            p4b_recommendation = (
+                f"RECOMMENDATION: R4A_FIX_REQUIRED. "
+                f"{len(rejected_pairs)} pairs rejected due to contract/integrity violations. Review rejected_pairs for diagnostics."
+            )
+        elif len(valid_pairs) == 0:
+            overall_verdict = "CANONICAL_INCONCLUSIVE"
+            p4b_recommendation = (
+                "RECOMMENDATION: R4A_INCONCLUSIVE_NO_VALID_PAIRS. "
+                "Zero valid workload pairs admitted; empirical profiling data insufficient for P4b architectural evaluation."
+            )
+        elif exp_slots and not is_slots_complete:
+            overall_verdict = "CANONICAL_INCOMPLETE"
+            p4b_recommendation = (
+                f"RECOMMENDATION: R4A_INCOMPLETE_SLOTS. "
+                f"Admitted valid pairs {len(valid_pairs)} != expected pairs {len(exp_pairs)}; "
+                f"missing slots count: {len(missing_slots)}. Full canonical pilot completeness required."
+            )
+        else:
+            overall_verdict = "CANONICAL_PASS"
+            sc_val = bottleneck_diagnosis["m2_search_core_within_search_pct_median"] or 0.0
+            nr_val = bottleneck_diagnosis["m2_neighbor_retrieval_within_search_pct_median"] or 0.0
+            p4b_recommendation = (
+                "RECOMMENDATION: R4A_PROFILE_READY_FOR_P4B_REVIEW. "
+                f"Empirical data confirms that Search Core occupies {sc_val:.1f}% "
+                f"and Neighbor Retrieval occupies {nr_val:.1f}% of Bare M2 search time. "
+                "Both Relaxed NLF (Option A) and Authoritative Graph CSR neighbor retrieval optimization (Option B) "
+                "address measurable cost centers. Future isolated experiments in Phase P4b must quantify attainable "
+                "end-to-end speedups without premature locking of combined Option B+A."
+            )
+    elif mode == "scoped":
+        if isolation_violation or has_alien_contamination:
+            overall_verdict = "SCOPED_ANALYSIS_FAILED"
+            p4b_recommendation = "RECOMMENDATION: SCOPED_EXPERIMENT_CONTAMINATION."
+        elif len(rejected_pairs) > 0 or len(duplicate_slot_warnings) > 0:
+            overall_verdict = "SCOPED_ANALYSIS_FAILED"
+            p4b_recommendation = f"RECOMMENDATION: SCOPED_FIX_REQUIRED. {len(rejected_pairs)} pairs rejected due to contract violations."
+        elif len(valid_pairs) == 0:
+            overall_verdict = "SCOPED_ANALYSIS_INCONCLUSIVE"
+            p4b_recommendation = "RECOMMENDATION: SCOPED_INCONCLUSIVE_NO_VALID_PAIRS."
+        else:
+            overall_verdict = "SCOPED_ANALYSIS_VALID"
+            p4b_recommendation = f"RECOMMENDATION: SCOPED_PILOT_VALID. {len(valid_pairs)} valid pairs admitted in scoped exploratory analysis."
     else:
-        overall_verdict = "CANONICAL_PASS"
-        sc_val = bottleneck_diagnosis["m2_search_core_within_search_pct_median"] or 0.0
-        nr_val = bottleneck_diagnosis["m2_neighbor_retrieval_within_search_pct_median"] or 0.0
-        p4b_recommendation = (
-            "RECOMMENDATION: R4A_PROFILE_READY_FOR_P4B_REVIEW. "
-            f"Empirical data confirms that Search Core occupies {sc_val:.1f}% "
-            f"and Neighbor Retrieval occupies {nr_val:.1f}% of Bare M2 search time. "
-            "Both Relaxed NLF (Option A) and Authoritative Graph CSR neighbor retrieval optimization (Option B) "
-            "address measurable cost centers. Future isolated experiments in Phase P4b must quantify attainable "
-            "end-to-end speedups without premature locking of combined Option B+A."
-        )
+        raise ValueError(f"Unknown analysis mode: {mode}")
 
     ref_rec = pairs_map[valid_pairs[0]]["m1"] if valid_pairs else (records[0] if records else {})
     summary_metrics = {
+        "certification_mode": mode,
+        "experiment_completeness_status": (
+            "CANONICAL_COMPLETE"
+            if (mode == "canonical" and overall_verdict == "CANONICAL_PASS")
+            else ("SCOPED_VALID" if (mode == "scoped" and overall_verdict == "SCOPED_ANALYSIS_VALID") else "INCOMPLETE")
+        ),
+        "raw_artifact_integrity_status": (
+            "VERIFIED" if art_ok else ("NOT_CHECKED" if mode == "scoped" else "FAILED")
+        ),
         "execution_identity": ref_rec.get("execution_identity"),
         "protocol_version": ref_rec.get("protocol_version"),
         "protocol_sha256": ref_rec.get("protocol_sha256"),
@@ -537,6 +658,13 @@ def analyze_p4a_ledger(
         "binary_sha256": ref_rec.get("binary_sha256"),
         "overall_verdict": overall_verdict,
         "total_records_processed": len(records),
+        "total_expected_slots": len(exp_slots) if exp_slots else None,
+        "total_observed_slots": len(canonical_slots),
+        "total_valid_slots": len(valid_slot_keys),
+        "total_missing_slots": len(missing_slots),
+        "total_unexpected_slots": len(unexpected_slots),
+        "missing_slots": missing_slots,
+        "unexpected_slots": unexpected_slots,
         "total_valid_pairs": len(valid_pairs),
         "total_rejected_pairs": len(rejected_pairs),
         "rejected_pairs": rejected_pairs,
@@ -805,42 +933,106 @@ def generate_markdown_report(metrics: Dict[str, Any]) -> str:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="P4a Native Profiling Summarizer")
+    parser = argparse.ArgumentParser(description="P4a Native Profiling Summarizer & Evidence Certifier")
     parser.add_argument("--ledger", type=Path, default=DEFAULT_LEDGER, help="Path to raw ledger JSONL")
-    parser.add_argument("--manifest", type=Path, default=None, help="Optional workload manifest path for header binding")
+    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST_PATH, help="Workload manifest JSON path")
+    parser.add_argument("--evidence-manifest", type=Path, default=DEFAULT_EVIDENCE_MANIFEST_PATH, help="Evidence manifest JSON path")
+    parser.add_argument("--mode", choices=["canonical", "scoped"], default="canonical", help="Certification mode: 'canonical' (default) or 'scoped'")
     parser.add_argument("--output-json", type=Path, default=DEFAULT_SUMMARY_JSON, help="Path to summary metrics JSON")
     parser.add_argument("--output-md", type=Path, default=None, help="Path to output markdown report")
+    parser.add_argument("--strict-provenance", action="store_true", default=True, help="Enforce strict cryptographic provenance")
     args = parser.parse_args()
 
-    records = load_ledger(args.ledger)
+    try:
+        records = load_ledger(args.ledger)
+    except Exception as e:
+        print(f"Error loading ledger {args.ledger}: {e}", file=sys.stderr)
+        sys.exit(1)
+
     if not records:
-        print(f"Warning: No records found in {args.ledger}", file=sys.stderr)
+        print(f"Error: No records found in {args.ledger}", file=sys.stderr)
         sys.exit(1)
 
     print(f"Loaded {len(records)} records from {args.ledger}")
+
     expected_header = None
-    if args.manifest and args.manifest.is_file():
-        try:
-            expected_header = get_frozen_manifest_registry(args.manifest)
-        except Exception as e:
-            print(f"Warning: Failed to load manifest {args.manifest}: {e}", file=sys.stderr)
+    artifact_meta = None
 
-    metrics = analyze_p4a_ledger(records, expected_header=expected_header)
+    if args.mode == "canonical":
+        if args.evidence_manifest and args.evidence_manifest.is_file():
+            try:
+                ev_data = load_trusted_evidence_manifest(args.evidence_manifest)
+                target_rel = None
+                try:
+                    target_rel = str(args.ledger.resolve().relative_to(REPO_ROOT.resolve()))
+                except ValueError:
+                    target_rel = str(args.ledger)
 
-    args.output_json.parent.mkdir(parents=True, exist_ok=True)
-    with open(args.output_json, "w", encoding="utf-8") as f:
-        json.dump(metrics, f, indent=2)
-    print(f"Summary metrics saved to {args.output_json}")
+                if target_rel in ev_data.get("artifacts", {}):
+                    artifact_meta = ev_data["artifacts"][target_rel]
+                elif args.ledger.name == "p4a_raw_ledger.jsonl":
+                    for k, meta in ev_data.get("artifacts", {}).items():
+                        if Path(k).name == "p4a_raw_ledger.jsonl":
+                            artifact_meta = meta
+                            break
+                else:
+                    artifact_meta = None
+                expected_header = get_trusted_canonical_header(
+                    evidence_manifest_path=args.evidence_manifest,
+                    workload_manifest_path=args.manifest,
+                )
+            except Exception as e:
+                print(f"Warning: Failed to load canonical trusted header from {args.evidence_manifest}: {e}", file=sys.stderr)
+        else:
+            print(f"Warning: Evidence manifest not found: {args.evidence_manifest}", file=sys.stderr)
+    elif args.mode == "scoped":
+        if args.manifest and args.manifest.is_file():
+            try:
+                expected_header = get_frozen_manifest_registry(args.manifest)
+            except Exception as e:
+                print(f"Warning: Failed to load manifest {args.manifest}: {e}", file=sys.stderr)
+
+    metrics = analyze_p4a_ledger(
+        records=records,
+        expected_header=expected_header,
+        strict_provenance=args.strict_provenance,
+        mode=args.mode,
+        raw_ledger_path=args.ledger,
+        trusted_artifact_meta=artifact_meta,
+    )
+
+    try:
+        args.output_json.parent.mkdir(parents=True, exist_ok=True)
+        with open(args.output_json, "w", encoding="utf-8") as f:
+            json.dump(metrics, f, indent=2)
+        print(f"Summary metrics saved to {args.output_json}")
+    except Exception as e:
+        print(f"Error saving output JSON to {args.output_json}: {e}", file=sys.stderr)
+        sys.exit(1)
 
     md_report = generate_markdown_report(metrics)
     if args.output_md:
-        args.output_md.parent.mkdir(parents=True, exist_ok=True)
-        with open(args.output_md, "w", encoding="utf-8") as f:
-            f.write(md_report)
-        print(f"Markdown report saved to {args.output_md}")
+        try:
+            args.output_md.parent.mkdir(parents=True, exist_ok=True)
+            with open(args.output_md, "w", encoding="utf-8") as f:
+                f.write(md_report)
+            print(f"Markdown report saved to {args.output_md}")
+        except Exception as e:
+            print(f"Error saving markdown report to {args.output_md}: {e}", file=sys.stderr)
+            sys.exit(1)
     else:
         print("\n" + md_report)
 
-    if metrics.get("overall_verdict") != "CANONICAL_PASS" or metrics.get("total_valid_pairs", 0) == 0:
-        print(f"Warning: Summarizer verdict is {metrics.get('overall_verdict')}; total valid pairs: {metrics.get('total_valid_pairs')}", file=sys.stderr)
-        sys.exit(1)
+    verdict = metrics.get("overall_verdict")
+    if args.mode == "canonical":
+        if verdict != "CANONICAL_PASS" or metrics.get("total_valid_pairs", 0) == 0:
+            print(f"Canonical certification FAILED: verdict={verdict}; total valid pairs={metrics.get('total_valid_pairs')}", file=sys.stderr)
+            sys.exit(1)
+    elif args.mode == "scoped":
+        if verdict != "SCOPED_ANALYSIS_VALID" or metrics.get("total_valid_pairs", 0) == 0:
+            print(f"Scoped analysis FAILED: verdict={verdict}; total valid pairs={metrics.get('total_valid_pairs')}", file=sys.stderr)
+            sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

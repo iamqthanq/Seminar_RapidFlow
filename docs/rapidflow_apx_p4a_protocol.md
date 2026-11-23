@@ -1,13 +1,13 @@
 # Experimental Protocol: Phase P4a Native Profiling, Baseline Measurement & Evidence-Driven Pilot
 
 **Document ID:** `docs/rapidflow_apx_p4a_protocol.md`
-**Protocol Revision:** `1.3.0` (Updated for Round 2 Independent Review Remediation)
+**Protocol Revision:** `1.4.0` (Updated for Round 5 End-to-End Canonical Evidence Certification & CLI Contract Recovery)
 **Milestone:** Phase P4a
 **Parent Issue:** [Issue #36](https://github.com/iamqthanq/Seminar_RapidFlow/issues/36)
 **Target Integration Branch:** `QuangThang`
 **Pre-P4 Base Commit:** `b5a5fe44fe594f9c550dcc44f04b9f4fc9a54245`
 **Pinned Upstream RapidFlow:** `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` (Pristine: `true`)
-**Status:** ACTIVE PROTOCOL SPECIFICATION (REVISION 1.3.0)
+**Status:** ACTIVE PROTOCOL SPECIFICATION (REVISION 1.4.0)
 
 ---
 
@@ -159,19 +159,41 @@ To ensure rigorous provenance without retroactively rewriting historical experim
    - The measurement execution contract under which the 180 canonical pilot slots were executed at commit `cf97a7840dff0c0f2bf791834263f3911545110c`.
    - Binds historical protocol SHA-256: `dd3f39cae4325b3577adec8fa19ff5f52844e9338b1d97aa542d58b6c09d4ebd`.
    - Every canonical record in `results/logs/rf36-p4a/p4a_raw_ledger.jsonl` records `protocol_version = "1.2.0"` and `protocol_sha256 = "dd3f39ca..."`.
-2. **Evidence Analysis Version (`1.3.0`):**
+2. **Evidence Analysis Version (`1.4.0`):**
    - The analytical contract version implemented by `scripts/p4a_evidence_contract.py` and `scripts/summarize_rapidflow_apx_p4a.py`.
    - Enforces cryptographic self-consistency, duplicate attempt lineage resolution, and fail-closed pair compatibility gating.
-3. **Protocol Specification Revision (`1.3.0`):**
+3. **Protocol Specification Revision (`1.4.0`):**
    - The current documentation revision of this document (`docs/rapidflow_apx_p4a_protocol.md`), reflecting review remediations, observer invariance contracts, and evidence manifest specifications.
 
 **Historical Evidence Reuse Justification:**
-The 180 canonical records generated under commit `cf97a7840dff...` are verified to be 100% compatible and reusable under Evidence Analysis Version 1.3.0 without re-running:
+The 180 canonical records generated under commit `cf97a7840dff...` are verified to be 100% compatible and reusable under Evidence Analysis Version 1.4.0 without re-running:
 - **Binary Invariance:** Native harness binary SHA-256 is identically `6e4537d03a356dd9c603e452f86848cbdb1ea2cd0fcbdf31199d0e9afbf9b21b`.
 - **Manifest Invariance:** Workload manifest SHA-256 is identically `f82bdcc0c89ce794439eeff3fd67fe78de733196286503c27de70ed2df5d3b18`, with all 30 case hashes matching 100%.
 - **Environmental Parity:** Resource limits (`effective_max_work = 500000`, `timeout = 60.0`, `as_limit_mib = 512`) are identical.
 - **Oracle Verification:** All 180 slots achieved bit-for-bit M0 Oracle verification (`status = COMPLETED_VERIFIED`, `m0_agreed = True`, `performance_admission_status = ACCEPTED`).
 - Therefore, rewriting historical ledger logs to artificially alter `protocol_sha256` or `protocol_version` would violate research integrity. The ledger is preserved pristine, while the evidence contract verifies its self-consistency.
+
+### 4.15 Three-Level Integrity Architecture & Canonical Completeness Certification (R5-F01, R5-F02, R5-F04, R5-F05)
+To prevent certification leakage where partial or tampered experiment logs could claim canonical pass, Round 5 establishes a formal three-level integrity architecture:
+1. **Level A: Record Structural & Cryptographic Self-Consistency (`validate_record_integrity`):**
+   - Strictly validates internal record schema, required non-empty `attempt_id`, resource caps, and lowercase 64-hex hash formatting.
+   - Strictly enforces that records with `status == "COMPLETED_VERIFIED"` must have `correctness_status == "M0_VERIFIED"` (rejecting None, missing, or mismatched values).
+   - Recomputes cryptographic execution identity from record metadata to prevent forged provenance.
+2. **Level B: Workload Pair Compatibility & Invariant Alignment (`validate_pair_compatibility`):**
+   - Verifies slot key alignment between M1 and M2 runs across repetitions and workloads.
+   - Enforces exact ground truth event count equality ($E_{M1} == E_{M2}$) and stream step count equality.
+   - Validates non-negative wall clock and stage durations.
+3. **Level C: Experiment Completeness & Raw Artifact Binding (`analyze_p4a_ledger`):**
+   - Computes expected slot completeness matrix dynamically from the workload manifest ($W \times R \times 2 = 30 \times 3 \times 2 = 180$ slots).
+   - Binds and verifies raw ledger whole-file SHA-256 and byte size against trusted evidence manifest (`docs/evidence/p4a_evidence_manifest.json`) via `verify_raw_artifact_integrity()`.
+   - Detects alien records (`rec_id != exp_id`), logs them into `rejected_conflicts`, quarantines conflicting slots, and marks ledger `CANONICAL_CONTAMINATED` fail-closed.
+   - Distinguishes `SCOPED_ANALYSIS_VALID` from `CANONICAL_PASS` / `CANONICAL_COMPLETE`.
+
+### 4.16 Production CLI Contract Recovery & Mode Separation (R5-F03, R5-F06)
+- The canonical summarizer CLI `scripts/summarize_rapidflow_apx_p4a.py` provides a production-grade, fail-closed entrypoint:
+  - `--mode canonical`: Requires trusted evidence manifest binding, validates full raw artifact integrity, enforces slot matrix completeness (180/180 slots, 90/90 pairs), and emits `CANONICAL_PASS` (exit 0) only when all requirements are satisfied.
+  - `--mode scoped`: Supports exploratory or subset evaluation without claiming canonical completeness, emitting `SCOPED_ANALYSIS_VALID` (exit 0) when valid.
+  - Hardened observer verification checks that event coordinate tuples are non-negative integers matching query dimension, rejects duplicate embeddings, and accepts valid zero-event stream steps.
 
 ---
 

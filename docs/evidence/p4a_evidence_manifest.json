@@ -29,8 +29,8 @@
       "description": "Canonical summary JSON"
     },
     "results/logs/rf36-p4a/p4a_summary_metrics.json": {
-      "sha256": "439d833cdac02b8e7cab775cd2a89230368bd0545ac89b47d4e66385395ffe23",
-      "size_bytes": 64755,
+      "sha256": "c1f66eabfbf314d801c1e77215bb68648709f473f1b18823fa75cdcf5400026e",
+      "size_bytes": 65095,
       "line_count": null,
       "git_tracked": false,
       "accessibility_status": "LOCAL_WORKTREE_REPRODUCIBLE",
@@ -61,9 +61,9 @@
       "description": "Workload manifest"
     },
     "docs/rapidflow_apx_p4a_protocol.md": {
-      "sha256": "c211b3e9a98d78c8cbe4b3cfde4cbb8c148ab58a4413fbd18bcd7346b6140e9f",
-      "size_bytes": 16319,
-      "line_count": 192,
+      "sha256": "d0cdcae71bfc2c62a6ca11e72c8dc213eda4f34e96707fee5df8b31caca148ac",
+      "size_bytes": 18987,
+      "line_count": 214,
       "git_tracked": true,
       "accessibility_status": "TRACKED_IN_GIT",
       "description": "Protocol specification markdown"

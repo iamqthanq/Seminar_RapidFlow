@@ -46,13 +46,17 @@ DEFAULT_SUMMARY_OUTPUT = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_obse
 def verify_observer_output_invariance(
     out_off: Dict[str, Any],
     out_on: Dict[str, Any],
+    query_dimension: Optional[int] = None,
 ) -> Tuple[bool, str]:
     """
-    Verifies full functional and algorithmic counter invariance between PROFILE_OFF and PROFILE_ON (R3-F04, R4-F05).
+    Verifies full functional and algorithmic counter invariance between PROFILE_OFF and PROFILE_ON (R3-F04, R4-F05, R5-F06).
     Checks:
     1. Output dictionary structure and non-emptiness.
     2. Step count equality.
-    3. Step-by-step schema validation and raw duplicate rejection.
+    3. Step-by-step schema validation:
+       - Every tuple coordinate is a non-negative integer (not bool, not str, not float).
+       - Tuple length matches query_dimension (when provided) and is non-empty.
+       - Raw duplicate tuple rejection.
     4. Step-by-step set equality of entered_tuples and exited_tuples preserving tuple coordinate ordering [v0, v1, ...].
     5. Exact presence and equality of all 6 non-negative integer algorithmic counters:
        - candidate_evaluations
@@ -94,6 +98,22 @@ def verify_observer_output_invariance(
             return False, f"Step {s_idx} 'entered_tuples' must be a list"
         if not isinstance(s_off["exited_tuples"], list) or not isinstance(s_on["exited_tuples"], list):
             return False, f"Step {s_idx} 'exited_tuples' must be a list"
+
+        # Structural & coordinate validation (R5-F06)
+        for cname in ("entered_tuples", "exited_tuples"):
+            raw_off = s_off[cname]
+            raw_on = s_on[cname]
+            for side_name, raw_list in [("PROFILE_OFF", raw_off), ("PROFILE_ON", raw_on)]:
+                for t_idx, tup in enumerate(raw_list):
+                    if not isinstance(tup, (list, tuple)):
+                        return False, f"Step {s_idx} {cname} index {t_idx} in {side_name} is not a list or tuple: {type(tup)}"
+                    if len(tup) == 0:
+                        return False, f"Step {s_idx} {cname} index {t_idx} in {side_name} contains empty tuple"
+                    if query_dimension is not None and len(tup) != query_dimension:
+                        return False, f"Step {s_idx} {cname} index {t_idx} in {side_name} length {len(tup)} != query dimension {query_dimension}"
+                    for c_idx, coord in enumerate(tup):
+                        if isinstance(coord, bool) or not isinstance(coord, int) or coord < 0:
+                            return False, f"Step {s_idx} {cname} index {t_idx} coord {c_idx} in {side_name} is not a non-negative integer: {coord!r}"
 
         # Check raw duplicates
         raw_ent_off = s_off["entered_tuples"]
@@ -211,11 +231,12 @@ def measure_observer_overhead(
                 res_off = run_res["PROFILE_OFF"]
                 res_on = run_res["PROFILE_ON"]
 
-                # Verify full functional and counter output invariance (R3-F04)
+                # Verify full functional and counter output invariance (R3-F04, R5-F06)
                 out_off = res_off.get("output_data") or {}
                 out_on = res_on.get("output_data") or {}
 
-                is_invar, invar_diag = verify_observer_output_invariance(out_off, out_on)
+                q_vcount = len(wl.get("query", {}).get("vertices", [])) if isinstance(wl.get("query"), dict) else None
+                is_invar, invar_diag = verify_observer_output_invariance(out_off, out_on, query_dimension=q_vcount)
                 if not is_invar:
                     raise ValueError(
                         f"Observer functional invariance failure on {case_id} rep {rep}: {invar_diag}"

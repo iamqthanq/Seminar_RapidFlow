@@ -400,6 +400,7 @@ class TestRapidFlowApxP4a(unittest.TestCase):
                     repetition=0,
                     engine="m1",
                     status="COMPLETED_VERIFIED",
+                    correctness_status="M0_VERIFIED",
                     performance_admission_status="ACCEPTED",
                     m0_agreed=True,
                     attempt_id="ATTEMPT_1",
@@ -412,6 +413,7 @@ class TestRapidFlowApxP4a(unittest.TestCase):
                     repetition=0,
                     engine="m2",
                     status="COMPLETED_VERIFIED",
+                    correctness_status="M0_VERIFIED",
                     performance_admission_status="ACCEPTED",
                     m0_agreed=True,
                     attempt_id="ATTEMPT_2",
@@ -432,6 +434,7 @@ class TestRapidFlowApxP4a(unittest.TestCase):
                     repetition=1,
                     engine="m1",
                     status="FAILED_CORRECTNESS",
+                    correctness_status="ORACLE_MISMATCH",
                     performance_admission_status="REJECTED",
                     m0_agreed=False,
                     attempt_id="ATTEMPT_3",
@@ -552,6 +555,7 @@ class TestRapidFlowApxP4a(unittest.TestCase):
             "attempt_id": "ATT_01",
             "status": "COMPLETED_VERIFIED",
             "exit_code": 0,
+            "correctness_status": "M0_VERIFIED",
             "performance_admission_status": "ACCEPTED",
             "m0_agreed": True,
             "effective_max_work": CANONICAL_MAX_WORK_CAP,
@@ -1181,6 +1185,461 @@ class TestRapidFlowApxP4a(unittest.TestCase):
         md = generate_markdown_report(summary)
         self.assertIn("CANONICAL_INCONCLUSIVE", md)
         self.assertIn("Total Workload Pairs Analyzed:** 0", md)
+
+    def test_35_e2e_01_cli_help(self):
+        """E2E-01 / F03-T02: CLI --help executes successfully, exits 0, and prints non-empty usage."""
+        cmd = [sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"), "--help"]
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn("usage:", proc.stdout.lower())
+        self.assertIn("--ledger", proc.stdout)
+        self.assertIn("--mode", proc.stdout)
+
+    def test_36_e2e_02_valid_canonical_data(self):
+        """E2E-02: Valid canonical raw ledger executes to completion, exits 0, produces certified CANONICAL_PASS."""
+        raw_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
+        if not raw_ledger.is_file():
+            self.skipTest("Raw canonical ledger not present")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_json = Path(tmpdir) / "summary.json"
+            out_md = Path(tmpdir) / "report.md"
+            cmd = [
+                sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"),
+                "--ledger", str(raw_ledger),
+                "--output-json", str(out_json),
+                "--output-md", str(out_md),
+                "--mode", "canonical",
+            ]
+            proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertEqual(proc.returncode, 0, f"CLI canonical run failed: {proc.stderr}")
+            self.assertTrue(out_json.is_file())
+            self.assertTrue(out_md.is_file())
+
+            with open(out_json, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            self.assertEqual(data["overall_verdict"], "CANONICAL_PASS")
+            self.assertEqual(data["experiment_completeness_status"], "CANONICAL_COMPLETE")
+            self.assertEqual(data["raw_artifact_integrity_status"], "VERIFIED")
+            self.assertEqual(data["total_valid_pairs"], 90)
+            self.assertEqual(data["total_rejected_pairs"], 0)
+            self.assertEqual(data["total_expected_slots"], 180)
+            self.assertEqual(data["total_valid_slots"], 180)
+
+    def test_37_e2e_03_valid_scoped_data(self):
+        """E2E-03: Valid partial/scoped data in scoped mode exits 0, produces SCOPED_ANALYSIS_VALID."""
+        raw_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
+        if not raw_ledger.is_file():
+            self.skipTest("Raw canonical ledger not present")
+
+        with open(raw_ledger, "r", encoding="utf-8") as f:
+            lines = [f.readline(), f.readline()]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            scoped_ledger = Path(tmpdir) / "scoped.jsonl"
+            out_json = Path(tmpdir) / "scoped_summary.json"
+            out_md = Path(tmpdir) / "scoped_report.md"
+            with open(scoped_ledger, "w", encoding="utf-8") as f:
+                f.writelines(lines)
+
+            cmd = [
+                sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"),
+                "--ledger", str(scoped_ledger),
+                "--output-json", str(out_json),
+                "--output-md", str(out_md),
+                "--mode", "scoped",
+            ]
+            proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertEqual(proc.returncode, 0, f"Scoped run failed: {proc.stderr}")
+            self.assertTrue(out_json.is_file())
+
+            with open(out_json, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            self.assertEqual(data["overall_verdict"], "SCOPED_ANALYSIS_VALID")
+            self.assertEqual(data["experiment_completeness_status"], "SCOPED_VALID")
+            self.assertEqual(data["total_valid_pairs"], 1)
+
+    def test_38_e2e_04_missing_ledger(self):
+        """E2E-04: Non-existent ledger returns non-zero exit code without silent success."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            non_existent = Path(tmpdir) / "missing_file.jsonl"
+            out_json = Path(tmpdir) / "out.json"
+            cmd = [
+                sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"),
+                "--ledger", str(non_existent),
+                "--output-json", str(out_json),
+            ]
+            proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertFalse(out_json.is_file())
+
+    def test_39_e2e_05_malformed_jsonl(self):
+        """E2E-05: Malformed JSONL line returns non-zero exit code with diagnostic."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bad_ledger = Path(tmpdir) / "bad.jsonl"
+            out_json = Path(tmpdir) / "out.json"
+            with open(bad_ledger, "w", encoding="utf-8") as f:
+                f.write('{"valid": "json"}\n')
+                f.write('NOT_A_VALID_JSON_OBJECT\n')
+
+            cmd = [
+                sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"),
+                "--ledger", str(bad_ledger),
+                "--output-json", str(out_json),
+            ]
+            proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertIn("Corrupted JSON", proc.stderr)
+            self.assertFalse(out_json.is_file())
+
+    def test_40_e2e_06_modified_raw_artifact(self):
+        """E2E-06 / R5-F02: Modified measurement payload fails raw artifact integrity in canonical mode."""
+        raw_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
+        if not raw_ledger.is_file():
+            self.skipTest("Raw canonical ledger not present")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tampered_ledger = Path(tmpdir) / "p4a_raw_ledger.jsonl"
+            out_json = Path(tmpdir) / "out.json"
+
+            with open(raw_ledger, "r", encoding="utf-8") as f:
+                recs = [json.loads(line) for line in f]
+            recs[0]["outer_wall_ns"] = 1000
+            with open(tampered_ledger, "w", encoding="utf-8") as f:
+                for r in recs:
+                    f.write(json.dumps(r) + "\n")
+
+            cmd = [
+                sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"),
+                "--ledger", str(tampered_ledger),
+                "--output-json", str(out_json),
+                "--mode", "canonical",
+            ]
+            proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertIn("CANONICAL_INVALID_ARTIFACT", proc.stderr)
+
+    def test_41_e2e_07_missing_trusted_artifact_reference(self):
+        """E2E-07 / R5-F02: Unregistered ledger file cannot obtain canonical certification."""
+        raw_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
+        if not raw_ledger.is_file():
+            self.skipTest("Raw canonical ledger not present")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            unregistered_ledger = Path(tmpdir) / "unregistered_name.jsonl"
+            shutil.copy(raw_ledger, unregistered_ledger)
+            out_json = Path(tmpdir) / "out.json"
+
+            cmd = [
+                sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"),
+                "--ledger", str(unregistered_ledger),
+                "--output-json", str(out_json),
+                "--mode", "canonical",
+            ]
+            proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertIn("CANONICAL_INVALID_ARTIFACT", proc.stderr)
+
+    def test_42_e2e_08_forged_self_consistent_provenance(self):
+        """E2E-08 / R5-F04: Self-consistent forged execution identity rejected in canonical mode."""
+        raw_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
+        if not raw_ledger.is_file():
+            self.skipTest("Raw canonical ledger not present")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            forged_ledger = Path(tmpdir) / "p4a_raw_ledger.jsonl"
+            out_json = Path(tmpdir) / "out.json"
+
+            with open(raw_ledger, "r", encoding="utf-8") as f:
+                recs = [json.loads(line) for line in f]
+
+            for r in recs:
+                r["source_commit"] = "0" * 40
+                r["binary_sha256"] = "1" * 64
+                r["execution_identity"] = compute_execution_identity(
+                    protocol_version=r["protocol_version"],
+                    protocol_sha256=r["protocol_sha256"],
+                    manifest_sha256=r["manifest_sha256"],
+                    source_commit=r["source_commit"],
+                    source_dirty=r["source_dirty_state"],
+                    binary_sha256=r["binary_sha256"],
+                    effective_max_work=r["effective_max_work"],
+                    effective_timeout=r["effective_timeout"],
+                    effective_as_limit_mib=r["effective_memory_limit_mib"],
+                )
+            with open(forged_ledger, "w", encoding="utf-8") as f:
+                for r in recs:
+                    f.write(json.dumps(r) + "\n")
+
+            cmd = [
+                sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"),
+                "--ledger", str(forged_ledger),
+                "--output-json", str(out_json),
+                "--mode", "canonical",
+            ]
+            proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertNotEqual(proc.returncode, 0)
+
+    def test_43_e2e_09_incomplete_canonical_slots(self):
+        """E2E-09 / R5-F01: Partial dataset (1 pair) in canonical mode is rejected as CANONICAL_INCOMPLETE."""
+        raw_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
+        if not raw_ledger.is_file():
+            self.skipTest("Raw canonical ledger not present")
+
+        with open(raw_ledger, "r", encoding="utf-8") as f:
+            lines = [f.readline(), f.readline()]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            partial_ledger = Path(tmpdir) / "partial.jsonl"
+            out_json = Path(tmpdir) / "out.json"
+            with open(partial_ledger, "w", encoding="utf-8") as f:
+                f.writelines(lines)
+
+            cmd = [
+                sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"),
+                "--ledger", str(partial_ledger),
+                "--output-json", str(out_json),
+                "--mode", "canonical",
+            ]
+            proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertNotEqual(proc.returncode, 0)
+
+    def test_44_e2e_10_mixed_experiments(self):
+        """E2E-10 / R5-F05: Cross-experiment records contaminate ledger and fail certification."""
+        raw_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
+        if not raw_ledger.is_file():
+            self.skipTest("Raw canonical ledger not present")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mixed_ledger = Path(tmpdir) / "mixed.jsonl"
+            out_json = Path(tmpdir) / "out.json"
+            with open(raw_ledger, "r", encoding="utf-8") as f:
+                lines = [f.readline(), f.readline()]
+            alien = json.loads(lines[0])
+            alien["execution_identity"] = "e" * 64
+            with open(mixed_ledger, "w", encoding="utf-8") as f:
+                f.write(lines[0])
+                f.write(lines[1])
+                f.write(json.dumps(alien) + "\n")
+
+            cmd = [
+                sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"),
+                "--ledger", str(mixed_ledger),
+                "--output-json", str(out_json),
+                "--mode", "scoped",
+            ]
+            proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertNotEqual(proc.returncode, 0)
+
+    def test_45_e2e_11_corrupted_duplicate(self):
+        """E2E-11 / R4-F02: Corrupted duplicate attempt quarantines slot and fails certification."""
+        raw_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
+        if not raw_ledger.is_file():
+            self.skipTest("Raw canonical ledger not present")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dup_ledger = Path(tmpdir) / "dup.jsonl"
+            out_json = Path(tmpdir) / "out.json"
+            with open(raw_ledger, "r", encoding="utf-8") as f:
+                lines = [f.readline(), f.readline()]
+            corrupted = json.loads(lines[0])
+            corrupted["binary_sha256"] = "f" * 64
+            with open(dup_ledger, "w", encoding="utf-8") as f:
+                f.write(lines[0])
+                f.write(lines[1])
+                f.write(json.dumps(corrupted) + "\n")
+
+            cmd = [
+                sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"),
+                "--ledger", str(dup_ledger),
+                "--output-json", str(out_json),
+                "--mode", "scoped",
+            ]
+            proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertNotEqual(proc.returncode, 0)
+
+    def test_46_e2e_12_failed_exit_code(self):
+        """E2E-12 / R4-F04: Record claiming COMPLETED_VERIFIED with exit_code != 0 is rejected."""
+        raw_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
+        if not raw_ledger.is_file():
+            self.skipTest("Raw canonical ledger not present")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bad_ledger = Path(tmpdir) / "bad_ec.jsonl"
+            out_json = Path(tmpdir) / "out.json"
+            with open(raw_ledger, "r", encoding="utf-8") as f:
+                recs = [json.loads(f.readline()), json.loads(f.readline())]
+            recs[0]["exit_code"] = 1
+            with open(bad_ledger, "w", encoding="utf-8") as f:
+                for r in recs:
+                    f.write(json.dumps(r) + "\n")
+
+            cmd = [
+                sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"),
+                "--ledger", str(bad_ledger),
+                "--output-json", str(out_json),
+                "--mode", "scoped",
+            ]
+            proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertNotEqual(proc.returncode, 0)
+
+    def test_47_e2e_13_no_valid_pairs(self):
+        """E2E-13 / R4-F06: Zero valid pairs yields inconclusive verdict and non-zero exit."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            empty_ledger = Path(tmpdir) / "empty.jsonl"
+            empty_ledger.touch()
+            out_json = Path(tmpdir) / "out.json"
+
+            cmd = [
+                sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"),
+                "--ledger", str(empty_ledger),
+                "--output-json", str(out_json),
+                "--mode", "scoped",
+            ]
+            proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertNotEqual(proc.returncode, 0)
+
+    def test_48_e2e_14_output_directory_unavailable(self):
+        """E2E-14: Unwritable output directory returns non-zero exit code with error message."""
+        raw_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
+        if not raw_ledger.is_file():
+            self.skipTest("Raw canonical ledger not present")
+
+        cmd = [
+            sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"),
+            "--ledger", str(raw_ledger),
+            "--output-json", "/proc/unwritable_dir/summary.json",
+            "--mode", "canonical",
+        ]
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        self.assertNotEqual(proc.returncode, 0)
+
+    def test_49_e2e_15_output_file_creation_failure(self):
+        """E2E-15: Output path pointing to existing directory returns non-zero exit code."""
+        raw_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
+        if not raw_ledger.is_file():
+            self.skipTest("Raw canonical ledger not present")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cmd = [
+                sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"),
+                "--ledger", str(raw_ledger),
+                "--output-json", tmpdir,
+                "--mode", "canonical",
+            ]
+            proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertNotEqual(proc.returncode, 0)
+
+    def test_50_e2e_16_arg_parsing_failure(self):
+        """E2E-16: Unrecognized command line option causes argparse exit code 2."""
+        cmd = [
+            sys.executable, str(REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"),
+            "--non-existent-option-xyz",
+        ]
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        self.assertEqual(proc.returncode, 2)
+
+    def test_51_r5_f06_missing_correctness_status_rejected(self):
+        """R5-F06: Missing or invalid correctness_status rejected fail-closed for COMPLETED_VERIFIED records."""
+        prov_meta, _ = verify_git_provenance(allow_dirty=True)
+        commit = prov_meta.get("repo_commit") or "0" * 40
+        dirty = prov_meta.get("dirty_state", "CLEAN")
+        exec_id = compute_execution_identity(
+            protocol_version=PROTOCOL_VERSION,
+            protocol_sha256="a" * 64,
+            manifest_sha256="b" * 64,
+            source_commit=commit,
+            source_dirty=dirty,
+            binary_sha256=self.bin_sha,
+            effective_max_work=CANONICAL_MAX_WORK_CAP,
+            effective_timeout=60.0,
+            effective_as_limit_mib=512,
+        )
+        rec = {
+            "execution_identity": exec_id,
+            "protocol_version": PROTOCOL_VERSION,
+            "protocol_sha256": "a" * 64,
+            "manifest_sha256": "b" * 64,
+            "source_commit": commit,
+            "source_dirty_state": dirty,
+            "binary_sha256": self.bin_sha,
+            "workload_id": "P4A_WL_01",
+            "workload_sha256": "c" * 64,
+            "engine": "m1",
+            "repetition": 0,
+            "slot_key": "P4A_WL_01_rep0_m1",
+            "attempt_id": "ATT_01",
+            "status": "COMPLETED_VERIFIED",
+            "exit_code": 0,
+            "performance_admission_status": "ACCEPTED",
+            "m0_agreed": True,
+            "effective_max_work": CANONICAL_MAX_WORK_CAP,
+            "effective_timeout": 60.0,
+            "effective_memory_limit_mib": 512,
+        }
+        ok, diag = validate_record_integrity(rec, expected_header=exec_id)
+        self.assertFalse(ok)
+        self.assertIn("correctness_status", diag)
+
+        rec["correctness_status"] = "INVALID_STATUS"
+        ok2, diag2 = validate_record_integrity(rec, expected_header=exec_id)
+        self.assertFalse(ok2)
+        self.assertIn("correctness_status", diag2)
+
+        rec["correctness_status"] = "M0_VERIFIED"
+        ok3, _ = validate_record_integrity(rec, expected_header=exec_id)
+        self.assertTrue(ok3)
+
+    def test_52_r5_f06_observer_tuple_schema_hardening(self):
+        """R5-F06: Observer output invariance strictly validates tuple structure, coordinate types, and dimensions."""
+        base_out = {
+            "steps": [
+                {
+                    "entered_tuples": [[1, 2, 3, 4]],
+                    "exited_tuples": [],
+                }
+            ],
+            "counters": {
+                "candidate_evaluations": 10,
+                "committed_emissions": 1,
+                "dfs_states": 5,
+                "anchors_started": 1,
+                "edge_lookups": 20,
+                "vertex_label_checks": 15,
+            },
+        }
+
+        # 1. Valid matching outputs with query_dimension=4
+        ok, diag = verify_observer_output_invariance(base_out, copy.deepcopy(base_out), query_dimension=4)
+        self.assertTrue(ok, diag)
+
+        # 2. String coordinate in tuple rejected
+        str_out = copy.deepcopy(base_out)
+        str_out["steps"][0]["entered_tuples"] = [[1, "not-an-id", 3, 4]]
+        ok, diag = verify_observer_output_invariance(str_out, copy.deepcopy(str_out), query_dimension=4)
+        self.assertFalse(ok)
+        self.assertIn("not a non-negative integer", diag)
+
+        # 3. Boolean coordinate in tuple rejected
+        bool_out = copy.deepcopy(base_out)
+        bool_out["steps"][0]["entered_tuples"] = [[1, True, 3, 4]]
+        ok, diag = verify_observer_output_invariance(bool_out, copy.deepcopy(bool_out), query_dimension=4)
+        self.assertFalse(ok)
+        self.assertIn("not a non-negative integer", diag)
+
+        # 4. Dimension mismatch rejected (length 2 != query dimension 4)
+        dim_out = copy.deepcopy(base_out)
+        dim_out["steps"][0]["entered_tuples"] = [[1, 2]]
+        ok, diag = verify_observer_output_invariance(dim_out, copy.deepcopy(dim_out), query_dimension=4)
+        self.assertFalse(ok)
+        self.assertIn("query dimension", diag)
+
+        # 5. Valid zero-event step accepted
+        zero_out = copy.deepcopy(base_out)
+        zero_out["steps"][0]["entered_tuples"] = []
+        zero_out["steps"][0]["exited_tuples"] = []
+        ok, diag = verify_observer_output_invariance(zero_out, copy.deepcopy(zero_out), query_dimension=4)
+        self.assertTrue(ok, diag)
 
 
 if __name__ == "__main__":
