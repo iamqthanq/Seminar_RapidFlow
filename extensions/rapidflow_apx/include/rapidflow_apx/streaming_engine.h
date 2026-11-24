@@ -26,7 +26,7 @@ enum class EngineType {
 
 inline bool is_supported_neighbor_mode(EngineType engine, NlfMode nlf, NeighborMode mode) noexcept {
     return mode == NeighborMode::LEGACY
-        || (mode == NeighborMode::BUFFER && engine == EngineType::M2 && nlf == NlfMode::NONE);
+        || ((mode == NeighborMode::BUFFER || mode == NeighborMode::MERGE) && engine == EngineType::M2 && nlf == NlfMode::NONE);
 }
 
 struct StreamStepResult {

@@ -177,7 +177,7 @@ def check_git_provenance() -> Tuple[Dict[str, Any], bool]:
                     fpath.startswith("reports/rapidflow_apx_engines/")
                     or fpath.startswith("reports\\rapidflow_apx_engines\\")
                     or fpath == "docs/rapidflow_apx_native_engines_validation_report.md"
-                    or fpath == "docs/rapidflow_apx_p4b_1a_implementation_report.md"
+                    or fpath.startswith("docs/rapidflow_apx_p4b_")
                 ):
                     allowed = False
                     break
@@ -923,21 +923,46 @@ NEIGHBOR_COUNTER_FIELDS = (
     "neighbor_buffer_retrieval_calls", "neighbor_buffer_growth_calls",
     "neighbor_buffer_no_growth_calls",
 )
+NEIGHBOR_MERGE_COUNTER_FIELDS = (
+    "neighbor_merge_retrieval_calls", "neighbor_merge_linear_calls",
+    "neighbor_merge_fast_path_calls", "neighbor_merge_fallback_calls",
+)
+ALL_NEIGHBOR_COUNTER_FIELDS = NEIGHBOR_COUNTER_FIELDS + NEIGHBOR_MERGE_COUNTER_FIELDS
 
 
 def validate_neighbor_counters(counters: Dict[str, Any], result: Dict[str, Any]) -> str:
     if ("neighbor_configuration_version" not in result
-            and not any(field in counters for field in NEIGHBOR_COUNTER_FIELDS)):
+            and not any(field in counters for field in ALL_NEIGHBOR_COUNTER_FIELDS)):
         return ""
-    for field in NEIGHBOR_COUNTER_FIELDS:
+    for field in ALL_NEIGHBOR_COUNTER_FIELDS:
         value = counters.get(field)
-        if type(value) is not int or not 0 <= value <= 500000000000000:
-            return f"Invalid neighbor counter {field}: {value!r}"
-        if result.get("effective_neighbor_mode") != "buffer" and value:
-            return f"Nonzero buffer counter {field} outside effective buffer mode"
-    completed, growth, no_growth = (counters[field] for field in NEIGHBOR_COUNTER_FIELDS)
-    if completed != growth + no_growth:
-        return "Completed buffer retrievals differ from growth plus no-growth calls"
+        if value is not None:
+            if type(value) is not int or not 0 <= value <= 500000000000000:
+                return f"Invalid neighbor counter {field}: {value!r}"
+    eff_mode = result.get("effective_neighbor_mode")
+    if eff_mode not in ("buffer", "merge"):
+        for field in ALL_NEIGHBOR_COUNTER_FIELDS:
+            if counters.get(field):
+                return f"Nonzero neighbor counter {field} outside buffer/merge mode: {counters.get(field)}"
+    elif eff_mode == "buffer":
+        for field in NEIGHBOR_MERGE_COUNTER_FIELDS:
+            if counters.get(field):
+                return f"Nonzero merge counter {field} in buffer mode: {counters.get(field)}"
+        if all(field in counters for field in NEIGHBOR_COUNTER_FIELDS):
+            completed, growth, no_growth = (counters[field] for field in NEIGHBOR_COUNTER_FIELDS)
+            if completed != growth + no_growth:
+                return "Completed buffer retrievals differ from growth plus no-growth calls"
+    elif eff_mode == "merge":
+        if all(field in counters for field in NEIGHBOR_COUNTER_FIELDS):
+            completed, growth, no_growth = (counters[field] for field in NEIGHBOR_COUNTER_FIELDS)
+            if completed != growth + no_growth:
+                return "Completed buffer retrievals differ from growth plus no-growth calls in merge mode"
+        if all(field in counters for field in NEIGHBOR_MERGE_COUNTER_FIELDS):
+            retrieval, linear, fast, fallback = (counters[field] for field in NEIGHBOR_MERGE_COUNTER_FIELDS)
+            if retrieval != linear + fast + fallback:
+                return "Total merge retrievals differ from sum of linear, fast-path, and fallback calls"
+            if "neighbor_buffer_retrieval_calls" in counters and retrieval != counters["neighbor_buffer_retrieval_calls"]:
+                return "Merge retrievals differ from buffer retrieval calls"
     return ""
 
 
@@ -1629,14 +1654,14 @@ def validate_nlf_configuration(
         if native_result.get("engine") != requested_engine or native_result.get("engine_name") != requested_engine:
             return reject("Engine identity mismatch in initialized configuration")
         asked, effective = (native_result.get(field) for field in neighbor_fields)
-        if asked not in ("legacy", "buffer") or effective not in ("legacy", "buffer"):
+        if asked not in ("legacy", "buffer", "merge") or effective not in ("legacy", "buffer", "merge"):
             return reject("Missing or unknown requested/effective neighbor mode")
         if requested_neighbor_mode is not None and asked != requested_neighbor_mode:
             return reject(f"Requested neighbor mode mismatch: runner requested {requested_neighbor_mode!r}, native reported {asked!r}")
         if effective != asked:
             return reject(f"Neighbor mode {asked!r} requires effective {asked!r}, got {effective!r}")
-        if effective == "buffer" and (requested_engine != "m2" or native_req != "none" or native_eff != "none"):
-            return reject("Neighbor buffer mode requires M2 with NLF NONE")
+        if effective in ("buffer", "merge") and (requested_engine != "m2" or native_req != "none" or native_eff != "none"):
+            return reject(f"Neighbor {effective} mode requires M2 with NLF NONE")
         meta_info.update(requested_neighbor_mode=asked, effective_neighbor_mode=effective)
 
     if fallback is not None and not isinstance(fallback, str):
@@ -3262,7 +3287,7 @@ def main():
     parser.add_argument("--stage", choices=["provenance", "hand", "corpus", "stream", "all"], default="all", help="Target execution stage")
     parser.add_argument("--case", type=str, default=None, help="Diagnostic single case ID to run")
     parser.add_argument("--nlf-mode", choices=["none", "static", "residual"], default="none", help="NLF optimization mode (default: none)")
-    parser.add_argument("--neighbor-mode", choices=["legacy", "buffer"], default="legacy",
+    parser.add_argument("--neighbor-mode", choices=["legacy", "buffer", "merge"], default="legacy",
                         help="M2 neighbor storage mode (default: legacy)")
     parser.add_argument("--output", type=str, default=None, help="Output summary report path")
     args = parser.parse_args()
@@ -3273,8 +3298,8 @@ def main():
     output_path = Path(args.output) if args.output else (DIAGNOSTIC_SUMMARY_PATH if is_diagnostic else CANONICAL_SUMMARY_PATH)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    if args.neighbor_mode == "buffer" and (args.engine != "m2" or args.nlf_mode != "none"):
-        message = "Neighbor buffer mode requires --engine m2 --nlf-mode none"
+    if args.neighbor_mode in ("buffer", "merge") and (args.engine != "m2" or args.nlf_mode != "none"):
+        message = f"Neighbor {args.neighbor_mode} mode requires --engine m2 --nlf-mode none"
         print(f"ERROR: {message}", file=sys.stderr)
         atomic_write_json(output_path, {
             "runner_mode": "DIAGNOSTIC_SUBSET_RUN",

@@ -40,7 +40,7 @@ from scripts.run_rapidflow_apx_engines import (
     validate_nlf_configuration,
     validate_graph_state,
     validate_codec_state,
-    NEIGHBOR_COUNTER_FIELDS,
+    ALL_NEIGHBOR_COUNTER_FIELDS,
 )
 
 BINARY_PATH = REPO_ROOT / "build" / "rapidflow_apx_native"
@@ -346,7 +346,8 @@ class TestRapidFlowApxP4b1A(unittest.TestCase):
 
                         results = {}
                         for mode, neighbor in (("none", "legacy"), ("static", "legacy"),
-                                               ("residual", "legacy"), ("none", "buffer")):
+                                               ("residual", "legacy"), ("none", "buffer"),
+                                               ("none", "merge")):
                             result, _, ok = run_workload_on_binary(
                                 BINARY_PATH, "m2", workload, nlf_mode=mode, neighbor_mode=neighbor
                             )
@@ -357,12 +358,22 @@ class TestRapidFlowApxP4b1A(unittest.TestCase):
                             self.assertEqual(result["effective_neighbor_mode"], neighbor)
                             self.assertTrue(result["eligible_for_requested_variant"])
                             self.assertEqual(len(result["steps"]), len(stream_updates))
-                            results[mode if neighbor == "legacy" else "buffer"] = result
+                            results[neighbor if neighbor in ("buffer", "merge") else mode] = result
 
                         def controls(counters):
-                            return {key: value for key, value in counters.items() if key not in NEIGHBOR_COUNTER_FIELDS}
+                            return {key: value for key, value in counters.items() if key not in ALL_NEIGHBOR_COUNTER_FIELDS}
 
                         self.assertEqual(controls(results["none"]["counters"]), controls(results["buffer"]["counters"]))
+                        self.assertEqual(controls(results["none"]["counters"]), controls(results["merge"]["counters"]))
+                        self.assertEqual(
+                            results["buffer"]["counters"]["neighbor_buffer_retrieval_calls"],
+                            results["merge"]["counters"]["neighbor_merge_retrieval_calls"]
+                        )
+                        mc = results["merge"]["counters"]
+                        self.assertEqual(
+                            mc["neighbor_merge_retrieval_calls"],
+                            mc["neighbor_merge_linear_calls"] + mc["neighbor_merge_fast_path_calls"] + mc["neighbor_merge_fallback_calls"]
+                        )
                         buffer_retrievals += results["buffer"]["counters"]["neighbor_buffer_retrieval_calls"]
                         buffer_growth += results["buffer"]["counters"]["neighbor_buffer_growth_calls"]
 
@@ -372,9 +383,12 @@ class TestRapidFlowApxP4b1A(unittest.TestCase):
                             stream_events += len(entered) + len(exited)
                             bare_step = results["none"]["steps"][idx]
                             buffer_step = results["buffer"]["steps"][idx]
+                            merge_step = results["merge"]["steps"][idx]
                             self.assertEqual(controls(bare_step["step_counters"]), controls(buffer_step["step_counters"]))
+                            self.assertEqual(controls(bare_step["step_counters"]), controls(merge_step["step_counters"]))
                             for field in ("entered_tuples", "exited_tuples"):
                                 self.assertEqual(bare_step[field], buffer_step[field])
+                                self.assertEqual(bare_step[field], merge_step[field])
                             for mode, result in results.items():
                                 step = result["steps"][idx]
                                 where = (workload["case_id"], mode, idx)

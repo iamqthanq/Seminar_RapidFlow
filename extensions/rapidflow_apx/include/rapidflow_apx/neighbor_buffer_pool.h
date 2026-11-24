@@ -14,7 +14,7 @@ public:
     using InvariantViolationException::InvariantViolationException;
 };
 
-enum class NeighborMode : uint8_t { LEGACY, BUFFER };
+enum class NeighborMode : uint8_t { LEGACY, BUFFER, MERGE };
 
 // A search owns this pool across its anchors. The outer vector is sized once
 // so recursive frames may safely hold references to distinct inner vectors.

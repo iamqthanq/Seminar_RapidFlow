@@ -15,7 +15,7 @@ from scripts import run_rapidflow_apx_engines as runner
 
 FIXTURES = runner.REPO_ROOT / "tests/fixtures/rapidflow_apx_foundation_audit"
 MODES = (("m1", "none", "legacy"), ("m2", "none", "legacy"), ("m2", "static", "legacy"),
-         ("m2", "residual", "legacy"), ("m2", "none", "buffer"))
+         ("m2", "residual", "legacy"), ("m2", "none", "buffer"), ("m2", "none", "merge"))
 
 
 def vertex(id_, label):

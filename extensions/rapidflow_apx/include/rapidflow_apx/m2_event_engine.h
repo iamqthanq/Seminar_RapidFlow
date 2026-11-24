@@ -153,7 +153,8 @@ private:
         const ApxQuerySignatures* signatures,
         ApxResidualMissingState* residual,
         ApxNeighborBufferPool* pool,
-        size_t depth
+        size_t depth,
+        NeighborMode neighbor_mode = NeighborMode::LEGACY
     );
 };
 

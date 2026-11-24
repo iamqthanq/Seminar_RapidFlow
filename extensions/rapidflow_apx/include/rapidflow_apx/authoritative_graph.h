@@ -17,6 +17,8 @@
 
 namespace rapidflow_apx {
 
+struct EngineCounters;
+
 struct EdgeLookupResult {
     bool exists{false};
     uint32_t label{0};
@@ -63,6 +65,26 @@ public:
     // Replace out with the sorted unique effective neighbor IDs, retaining
     // its capacity. On allocation failure the partial output must be discarded.
     void get_neighbors_into(uint32_t u, std::vector<uint32_t>& out) const;
+
+    // Replace out with the sorted unique effective neighbor IDs using a linear
+    // 2-way sorted merge of base and overlay adjacencies, with safe fast paths
+    // and guarded fallback to collect/sort/unique upon ordering violations.
+    void get_neighbors_merged_into(
+        uint32_t u,
+        std::vector<uint32_t>& out,
+        EngineCounters* counters = nullptr
+    ) const;
+
+    // Helper for linear sorted neighbor merging, accessible for direct testing.
+    void merge_neighbor_ranges(
+        uint32_t u,
+        const uint32_t* base_nbrs,
+        uint32_t base_count,
+        const uint32_t* overlay_nbrs,
+        uint32_t overlay_count,
+        std::vector<uint32_t>& out,
+        EngineCounters* counters = nullptr
+    ) const;
     uint32_t get_degree(uint32_t u) const;
     uint32_t get_vertices_count() const;
     uint32_t get_edges_count() const;

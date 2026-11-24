@@ -132,8 +132,8 @@ uint64_t ApxM2EventEngine::search_event(
     const ApxQuerySignatures* signatures,
     NeighborMode neighbor_mode
 ) {
-    if (neighbor_mode == NeighborMode::BUFFER && nlf_mode != NlfMode::NONE) {
-        throw EngineException("Neighbor BUFFER requires NLF NONE");
+    if ((neighbor_mode == NeighborMode::BUFFER || neighbor_mode == NeighborMode::MERGE) && nlf_mode != NlfMode::NONE) {
+        throw EngineException("Neighbor BUFFER/MERGE requires NLF NONE");
     }
     uint32_t num_q = query_plan.get_vertices_count();
     uint32_t num_m = query_plan.get_edges_count();
@@ -160,7 +160,7 @@ uint64_t ApxM2EventEngine::search_event(
     auto* residual = residual_storage ? &*residual_storage : nullptr;
     std::optional<ApxNeighborBufferPool> pool_storage;
     ApxNeighborBufferPool* pool = nullptr;
-    if (neighbor_mode == NeighborMode::BUFFER) {
+    if (neighbor_mode == NeighborMode::BUFFER || neighbor_mode == NeighborMode::MERGE) {
         APX_TRACE_NEIGHBOR(BEFORE_POOL, 0, 0, 0, UNASSIGNED, UNASSIGNED, nullptr, 0);
         pool = &pool_storage.emplace(num_q, query_plan.get_k());
     }
@@ -235,7 +235,8 @@ uint64_t ApxM2EventEngine::search_event(
                 signatures,
                 residual,
                 pool,
-                0
+                0,
+                neighbor_mode
             );
 
             // Undo anchor state
@@ -268,7 +269,8 @@ void ApxM2EventEngine::dfs_m2(
     const ApxQuerySignatures* signatures,
     ApxResidualMissingState* residual,
     ApxNeighborBufferPool* pool,
-    size_t depth
+    size_t depth,
+    NeighborMode neighbor_mode
 ) {
     auto* slot = pool ? &pool->at(depth) : nullptr;
     APX_TRACE_NEIGHBOR(DFS, depth, assigned_count, missing_count, UNASSIGNED, UNASSIGNED, slot, 0);
@@ -336,7 +338,9 @@ void ApxM2EventEngine::dfs_m2(
     const size_t capacity_before = slot ? slot->capacity() : 0;
     APX_TRACE_NEIGHBOR(BEFORE_FILL, depth, assigned_count, missing_count, e, u_data, slot, capacity_before);
     auto retrieve = [&] {
-        if (slot) {
+        if (neighbor_mode == NeighborMode::MERGE) {
+            snapshot.get_neighbors_merged_into(u_data, *slot, &counters);
+        } else if (neighbor_mode == NeighborMode::BUFFER) {
             snapshot.get_neighbors_into(u_data, *slot);
         } else {
             cand_storage = snapshot.get_neighbors(u_data);
@@ -479,7 +483,8 @@ void ApxM2EventEngine::dfs_m2(
                 signatures,
                 residual,
                 pool,
-                depth + 1
+                depth + 1,
+                neighbor_mode
             );
             APX_TRACE_NEIGHBOR(PRESENT_RETURN, depth, assigned_count, missing_count, e, cand, &candidates, 0);
             APX_TRACE_RESIDUAL(CHILD_RETURN, missing_count, e, v_q, cand, true);
@@ -536,7 +541,8 @@ void ApxM2EventEngine::dfs_m2(
             signatures,
             residual,
             pool,
-            depth + 1
+            depth + 1,
+            neighbor_mode
         );
         APX_TRACE_NEIGHBOR(MISSING_RETURN, depth, assigned_count, new_missing_count, e, UNASSIGNED, &candidates, 0);
     }

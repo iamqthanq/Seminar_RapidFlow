@@ -88,6 +88,12 @@ struct EngineCounters {
     uint64_t neighbor_buffer_growth_calls{0};
     uint64_t neighbor_buffer_no_growth_calls{0};
 
+    // MERGE mode retrieval diagnostics (P4b-2B)
+    uint64_t neighbor_merge_retrieval_calls{0};
+    uint64_t neighbor_merge_linear_calls{0};
+    uint64_t neighbor_merge_fast_path_calls{0};
+    uint64_t neighbor_merge_fallback_calls{0};
+
     // Work limit
     uint64_t work_units{0};
     uint64_t max_work{500000};
@@ -149,6 +155,10 @@ struct EngineCounters {
         neighbor_buffer_retrieval_calls = 0;
         neighbor_buffer_growth_calls = 0;
         neighbor_buffer_no_growth_calls = 0;
+        neighbor_merge_retrieval_calls = 0;
+        neighbor_merge_linear_calls = 0;
+        neighbor_merge_fast_path_calls = 0;
+        neighbor_merge_fallback_calls = 0;
         work_units = 0;
     }
 
@@ -188,6 +198,10 @@ struct EngineCounters {
         neighbor_buffer_retrieval_calls += other.neighbor_buffer_retrieval_calls;
         neighbor_buffer_growth_calls += other.neighbor_buffer_growth_calls;
         neighbor_buffer_no_growth_calls += other.neighbor_buffer_no_growth_calls;
+        neighbor_merge_retrieval_calls += other.neighbor_merge_retrieval_calls;
+        neighbor_merge_linear_calls += other.neighbor_merge_linear_calls;
+        neighbor_merge_fast_path_calls += other.neighbor_merge_fast_path_calls;
+        neighbor_merge_fallback_calls += other.neighbor_merge_fallback_calls;
         work_units += other.work_units;
     }
 };

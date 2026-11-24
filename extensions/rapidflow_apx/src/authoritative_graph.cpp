@@ -1,4 +1,5 @@
 #include "rapidflow_apx/authoritative_graph.h"
+#include "rapidflow_apx/engine_counters.h"
 #include "rapidflow_apx/typed_codec.h"
 #include <iostream>
 
@@ -190,6 +191,204 @@ void ApxAuthoritativeGraph::get_neighbors_into(uint32_t u, std::vector<uint32_t>
     }
     std::sort(out.begin(), out.end());
     out.erase(std::unique(out.begin(), out.end()), out.end());
+}
+
+void ApxAuthoritativeGraph::get_neighbors_merged_into(
+    uint32_t u,
+    std::vector<uint32_t>& out,
+    EngineCounters* counters
+) const {
+    out.clear();
+    if (!has_vertex(u)) {
+        return;
+    }
+
+    ui base_count = 0;
+    const VertexID* base_nbrs = nullptr;
+    if (base_graph_) {
+        base_nbrs = base_graph_->getVertexNeighbors(u, base_count);
+    }
+    if (base_count > 0 && base_nbrs == nullptr) {
+        throw InvariantViolationException("Corrupt base CSR: positive count with null pointer");
+    }
+
+    auto* self = const_cast<ApxAuthoritativeGraph*>(this);
+    uint32_t overlay_count = 0;
+    const uint32_t* overlay_nbrs = self->fwd_overlay_.get_neighbor(u, overlay_count);
+    if (overlay_count > 0 && overlay_nbrs == nullptr) {
+        throw InvariantViolationException("Corrupt overlay: positive count with null pointer");
+    }
+
+    merge_neighbor_ranges(u, base_nbrs, base_count, overlay_nbrs, overlay_count, out, counters);
+}
+
+void ApxAuthoritativeGraph::merge_neighbor_ranges(
+    uint32_t u,
+    const uint32_t* base_nbrs,
+    uint32_t base_count,
+    const uint32_t* overlay_nbrs,
+    uint32_t overlay_count,
+    std::vector<uint32_t>& out,
+    EngineCounters* counters
+) const {
+    out.clear();
+
+    if (base_count > 0 && base_nbrs == nullptr) {
+        throw InvariantViolationException("merge_neighbor_ranges: base_count > 0 with null pointer");
+    }
+    if (overlay_count > 0 && overlay_nbrs == nullptr) {
+        throw InvariantViolationException("merge_neighbor_ranges: overlay_count > 0 with null pointer");
+    }
+
+    // Fast Path 1: Both empty
+    if (base_count == 0 && overlay_count == 0) {
+        if (counters) {
+            ++counters->neighbor_merge_retrieval_calls;
+            ++counters->neighbor_merge_fast_path_calls;
+        }
+        return;
+    }
+
+    // Fast Path 2: Empty base, nonempty overlay
+    if (base_count == 0 && overlay_count > 0) {
+        bool overlay_sorted = true;
+        for (uint32_t k = 1; k < overlay_count; ++k) {
+            if (overlay_nbrs[k] <= overlay_nbrs[k - 1]) {
+                overlay_sorted = false;
+                break;
+            }
+        }
+        if (overlay_sorted) {
+            out.assign(overlay_nbrs, overlay_nbrs + overlay_count);
+            if (counters) {
+                ++counters->neighbor_merge_retrieval_calls;
+                ++counters->neighbor_merge_fast_path_calls;
+            }
+            return;
+        } else {
+            goto do_fallback;
+        }
+    }
+
+    // Fast Path 3: Nonempty base, empty overlay, no tombstones and no overlay labels
+    if (base_count > 0 && overlay_count == 0 && tombstones_.empty() && overlay_labels_.empty()) {
+        bool base_sorted = true;
+        for (uint32_t k = 1; k < base_count; ++k) {
+            if (base_nbrs[k] <= base_nbrs[k - 1]) {
+                base_sorted = false;
+                break;
+            }
+        }
+        if (base_sorted) {
+            out.assign(base_nbrs, base_nbrs + base_count);
+            if (counters) {
+                ++counters->neighbor_merge_retrieval_calls;
+                ++counters->neighbor_merge_fast_path_calls;
+            }
+            return;
+        } else {
+            goto do_fallback;
+        }
+    }
+
+    // Linear 2-way sorted merge with Strategy B fused validation
+    {
+        for (uint32_t k = 1; k < overlay_count; ++k) {
+            if (overlay_nbrs[k] <= overlay_nbrs[k - 1]) {
+                goto do_fallback;
+            }
+        }
+
+        uint32_t i = 0; // index in base_nbrs
+        uint32_t j = 0; // index in overlay_nbrs
+
+        // Advance base index i to next eligible base neighbor while verifying raw base sortedness
+        auto advance_base = [&]() -> bool {
+            while (i < base_count) {
+                if (i > 0 && base_nbrs[i] <= base_nbrs[i - 1]) {
+                    return false; // raw base not strictly ascending
+                }
+                uint32_t b = base_nbrs[i];
+                uint64_t key = make_edge_key(u, b);
+                if (tombstones_.find(key) == tombstones_.end() &&
+                    overlay_labels_.find(key) == overlay_labels_.end()) {
+                    return true;
+                }
+                ++i;
+            }
+            return true;
+        };
+
+        if (!advance_base()) goto do_fallback;
+
+        while (i < base_count && j < overlay_count) {
+            uint32_t b = base_nbrs[i];
+            uint32_t o = overlay_nbrs[j];
+
+            if (b < o) {
+                if (!out.empty() && b <= out.back()) goto do_fallback;
+                out.push_back(b);
+                ++i;
+                if (!advance_base()) goto do_fallback;
+            } else if (o < b) {
+                if (!out.empty() && o <= out.back()) goto do_fallback;
+                out.push_back(o);
+                ++j;
+            } else { // b == o: defensive equality handling
+                if (!out.empty() && o <= out.back()) goto do_fallback;
+                out.push_back(o);
+                ++i;
+                ++j;
+                if (!advance_base()) goto do_fallback;
+            }
+        }
+
+        while (i < base_count) {
+            uint32_t b = base_nbrs[i];
+            if (!out.empty() && b <= out.back()) goto do_fallback;
+            out.push_back(b);
+            ++i;
+            if (!advance_base()) goto do_fallback;
+        }
+
+        while (j < overlay_count) {
+            uint32_t o = overlay_nbrs[j];
+            if (!out.empty() && o <= out.back()) goto do_fallback;
+            out.push_back(o);
+            ++j;
+        }
+
+        if (counters) {
+            ++counters->neighbor_merge_retrieval_calls;
+            ++counters->neighbor_merge_linear_calls;
+        }
+        return;
+    }
+
+do_fallback:
+    out.clear();
+    if (base_nbrs) {
+        for (uint32_t k = 0; k < base_count; ++k) {
+            uint32_t v = base_nbrs[k];
+            uint64_t key = make_edge_key(u, v);
+            if (tombstones_.find(key) != tombstones_.end() ||
+                overlay_labels_.find(key) != overlay_labels_.end()) {
+                continue;
+            }
+            out.push_back(v);
+        }
+    }
+    if (overlay_nbrs) {
+        for (uint32_t k = 0; k < overlay_count; ++k) {
+            out.push_back(overlay_nbrs[k]);
+        }
+    }
+    std::sort(out.begin(), out.end());
+    out.erase(std::unique(out.begin(), out.end()), out.end());
+    if (counters) {
+        ++counters->neighbor_merge_retrieval_calls;
+        ++counters->neighbor_merge_fallback_calls;
+    }
 }
 
 uint32_t ApxAuthoritativeGraph::get_degree(uint32_t u) const {

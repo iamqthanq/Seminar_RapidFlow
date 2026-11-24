@@ -62,7 +62,14 @@ void verify_snapshot(const ApxAuthoritativeGraph& graph, const EdgeMap& ref,
         }
         const auto capacity = out.capacity();
         graph.get_neighbors_into(u, out);
+        std::vector<uint32_t> merged;
+        EngineCounters mc;
+        graph.get_neighbors_merged_into(u, merged, &mc);
         require(out == expected && graph.get_neighbors(u) == expected, "Ordered neighbor output differs");
+        require(merged == expected, "Merged neighbor output differs");
+        require(mc.neighbor_merge_retrieval_calls == 1, "Merge retrieval count differs");
+        require(mc.neighbor_merge_linear_calls + mc.neighbor_merge_fast_path_calls + mc.neighbor_merge_fallback_calls == 1,
+                "Exclusive merge path count differs");
         require(graph.get_degree(u) == expected.size(), "Degree differs");
         ++counts.comparisons;
         counts.nonempty_reuse += !out.empty() && out.capacity() == capacity;
@@ -288,8 +295,11 @@ void run_trace(const std::string& name, uint32_t q, const std::vector<QueryEdge>
                const std::vector<Edge>& initial, std::ostream* saved_trace, uint64_t work = 500000) {
     std::vector<std::string> legacy_path;
     StreamStepResult legacy;
-    for (const auto mode : {NeighborMode::LEGACY, NeighborMode::BUFFER}) {
-        const bool buffer = mode == NeighborMode::BUFFER;
+    std::vector<std::string> buffer_path;
+    std::vector<std::string> merge_path;
+
+    for (const auto mode : {NeighborMode::LEGACY, NeighborMode::BUFFER, NeighborMode::MERGE}) {
+        const bool uses_pool = (mode == NeighborMode::BUFFER || mode == NeighborMode::MERGE);
         SearchFixture f(q, edges, k, n, initial);
         ApxStreamingEngine engine(f.graph, f.codec, f.sink, f.plan, EngineType::M2, work, NlfMode::NONE, 0, mode);
         TraceCounts c;
@@ -300,7 +310,7 @@ void run_trace(const std::string& name, uint32_t q, const std::vector<QueryEdge>
         std::vector<LiveParent> parents;
         bool next_child = false;
         unsigned seen_search = 0;
-        std::vector<std::string> buffer_path;
+        std::vector<std::string> current_path;
         engine.set_neighbor_observer([&](const NeighborTrace& t) {
             if (t.point == Point::BEFORE_POOL) {
                 ++c.initialized;
@@ -313,7 +323,7 @@ void run_trace(const std::string& name, uint32_t q, const std::vector<QueryEdge>
             }
             if (t.point == Point::BEFORE_FILL) return;
             require(t.depth < frames, "Traced depth exceeds proof bound");
-            require(t.pool_frames == (buffer ? frames : 0), "Incorrect pool size or disabled allocation");
+            require(t.pool_frames == (uses_pool ? frames : 0), "Incorrect pool size or disabled allocation");
             std::ostringstream row;
             row << static_cast<int>(t.point) << ' ' << t.depth << ' ' << t.assigned_count << ' '
                 << t.missing_count << ' ' << t.edge << ' ' << t.candidate << ' ';
@@ -323,7 +333,7 @@ void run_trace(const std::string& name, uint32_t q, const std::vector<QueryEdge>
                 row << " neighbors=";
                 append(row, *t.neighbors);
             }
-            (buffer ? buffer_path : legacy_path).push_back(row.str());
+            current_path.push_back(row.str());
 
             if (t.point == Point::ANCHOR) ++c.anchors;
             if (t.point == Point::CANDIDATE) ++c.candidates;
@@ -334,7 +344,7 @@ void run_trace(const std::string& name, uint32_t q, const std::vector<QueryEdge>
                 if (t.depth == 0) {
                     require(t.assigned_count == 2 && t.missing_count == 0, "Invalid anchor root");
                 }
-                if (buffer) {
+                if (uses_pool) {
                     require(slots[t.depth] == nullptr || slots[t.depth] == t.neighbors, "Outer pool relocated");
                     slots[t.depth] = t.neighbors;
                     for (const auto& p : parents) require(p.slot != t.neighbors, "Live parent-child slot alias");
@@ -345,7 +355,7 @@ void run_trace(const std::string& name, uint32_t q, const std::vector<QueryEdge>
                     require(t.depth == p.depth + 1, "Child depth did not increase");
                     require(t.assigned_count == p.assigned + !missing, "Incorrect child assignment count");
                     require(t.missing_count == p.missing + missing, "Incorrect child missing count");
-                    if (buffer && missing && !p.contents.empty() && c.missing == 1) {
+                    if (uses_pool && missing && !p.contents.empty() && c.missing == 1) {
                         std::ostringstream witness;
                         witness << "deferred parent_depth=" << p.depth << " child_depth=" << t.depth
                                 << " assigned=" << p.assigned << ',' << t.assigned_count
@@ -359,7 +369,7 @@ void run_trace(const std::string& name, uint32_t q, const std::vector<QueryEdge>
             }
             if (t.point == Point::FILLED) {
                 ++c.fills;
-                if (buffer) {
+                if (uses_pool) {
                     require(t.neighbors == slots[t.depth], "Fill used the wrong slot");
                     const auto previous = t.previous_capacity;
                     const auto capacity = t.neighbors->capacity();
@@ -414,14 +424,28 @@ void run_trace(const std::string& name, uint32_t q, const std::vector<QueryEdge>
             }
         });
         const auto step = engine.execute_step({UpdateOp::INSERT,0,1,TypedLabel::from_int(0)}, 0);
-        if (!buffer) {
+        if (mode == NeighborMode::LEGACY) {
             require(step.step_counters.neighbor_buffer_retrieval_calls == 0 && seen_search == 0, "Legacy buffer operations");
             legacy = step;
+            legacy_path = current_path;
             continue;
+        } else if (mode == NeighborMode::BUFFER) {
+            buffer_path = current_path;
+            require(buffer_path == legacy_path, "Ordered DFS trace changed between legacy and buffer");
+            require(step.step_counters.neighbor_merge_retrieval_calls == 0, "Nonzero merge counter in buffer mode");
+        } else { // MERGE
+            merge_path = current_path;
+            require(merge_path == legacy_path, "Ordered DFS trace changed between legacy and merge");
+            require(step.step_counters.neighbor_merge_retrieval_calls == step.step_counters.neighbor_buffer_retrieval_calls,
+                    "Merge retrievals match buffer retrievals");
+            require(step.step_counters.neighbor_merge_retrieval_calls ==
+                    step.step_counters.neighbor_merge_linear_calls +
+                    step.step_counters.neighbor_merge_fast_path_calls +
+                    step.step_counters.neighbor_merge_fallback_calls,
+                    "Exclusive merge path accounting in trace");
         }
-        require(buffer_path == legacy_path, "Ordered DFS trace changed");
-        if (saved_trace) {
-            for (const auto& [label, path] : {std::pair{"LEGACY", &legacy_path}, std::pair{"BUFFER", &buffer_path}}) {
+        if (saved_trace && mode == NeighborMode::MERGE) {
+            for (const auto& [label, path] : {std::pair{"LEGACY", &legacy_path}, std::pair{"BUFFER", &buffer_path}, std::pair{"MERGE", &merge_path}}) {
                 *saved_trace << "case " << name << ' ' << label << '\n';
                 for (const auto& row : *path) *saved_trace << row << '\n';
             }
@@ -468,14 +492,15 @@ void run_trace(const std::string& name, uint32_t q, const std::vector<QueryEdge>
 
 void injected_failures() {
     const std::vector<QueryEdge> c4{{0,1,0},{0,2,0},{1,3,0},{2,3,0}};
-    for (auto op : {UpdateOp::INSERT, UpdateOp::DELETE}) {
-        const bool insert = op == UpdateOp::INSERT;
-        for (int fault = 0; fault < 5; ++fault) {
-            std::vector<Edge> start{{1,3,0},{2,3,0}};
-            if (!insert) start.emplace_back(0,1,0);
-            SearchFixture f(4, c4, 1, 4, start);
-            ApxStreamingEngine engine(f.graph, f.codec, f.sink, f.plan, EngineType::M2, 500000,
-                                      NlfMode::NONE, 0, NeighborMode::BUFFER);
+    for (auto test_mode : {NeighborMode::BUFFER, NeighborMode::MERGE}) {
+        for (auto op : {UpdateOp::INSERT, UpdateOp::DELETE}) {
+            const bool insert = op == UpdateOp::INSERT;
+            for (int fault = 0; fault < 5; ++fault) {
+                std::vector<Edge> start{{1,3,0},{2,3,0}};
+                if (!insert) start.emplace_back(0,1,0);
+                SearchFixture f(4, c4, 1, 4, start);
+                ApxStreamingEngine engine(f.graph, f.codec, f.sink, f.plan, EngineType::M2, 500000,
+                                          NlfMode::NONE, 0, test_mode);
             bool reached = false;
             unsigned emissions = 0;
             engine.set_neighbor_observer([&](const NeighborTrace& t) {
@@ -525,10 +550,12 @@ void injected_failures() {
                 require(!fresh && !next.committed && next.status == StepStatus::INVARIANT_VIOLATION,
                         "Poisoned session resumed");
             }
-            std::cout << "injected op=" << (insert ? "INSERT" : "DELETE") << " seam=" << fault
+            std::cout << "injected mode=" << (test_mode == NeighborMode::BUFFER ? "BUFFER" : "MERGE")
+                      << " op=" << (insert ? "INSERT" : "DELETE") << " seam=" << fault
                       << " emissions_before_abort=" << emissions << " discarded=" << failed.step_counters.discarded_emissions
                       << " restored=true fresh_retry=" << fresh << " poisoned=" << poison << '\n';
         }
+    }
     }
 }
 
@@ -558,6 +585,565 @@ void trace_test() {
 }
 #endif
 
+void merge_direct_and_fallback_tests() {
+    // -------------------------------------------------------------------------
+    // Direct MG-G01 to MG-G24 scenarios on ApxAuthoritativeGraph
+    // -------------------------------------------------------------------------
+
+    // MG-G01: Invalid vertex with populated output (clears output, returns empty)
+    {
+        ApxAuthoritativeGraph g;
+        g.load_baseline({{0, 0}, {1, 0}}, {{0, 1, 0}});
+        std::vector<uint32_t> out{42, 99};
+        g.get_neighbors_merged_into(999, out);
+        require(out.empty(), "MG-G01: Invalid vertex returns empty");
+    }
+
+    // MG-G02: Isolated valid vertex (returns empty)
+    {
+        ApxAuthoritativeGraph g;
+        g.load_baseline({{0, 0}, {1, 0}}, {});
+        std::vector<uint32_t> out{10};
+        EngineCounters mc;
+        g.get_neighbors_merged_into(0, out, &mc);
+        require(out.empty(), "MG-G02: Isolated vertex returns empty");
+        require(mc.neighbor_merge_fast_path_calls == 1, "MG-G02: Fast path empty");
+    }
+
+    // MG-G03: Both ranges empty
+    {
+        ApxAuthoritativeGraph g;
+        g.load_baseline({{0, 0}}, {});
+        std::vector<uint32_t> out;
+        EngineCounters mc;
+        g.get_neighbors_merged_into(0, out, &mc);
+        require(out.empty(), "MG-G03: Both ranges empty");
+        require(mc.neighbor_merge_fast_path_calls == 1, "MG-G03: Fast path empty");
+    }
+
+    // MG-G04: Base-only clean graph (Fast path 3)
+    {
+        ApxAuthoritativeGraph g;
+        g.load_baseline({{0, 0}, {1, 0}, {2, 0}, {3, 0}}, {{0, 1, 0}, {0, 2, 0}, {0, 3, 0}});
+        std::vector<uint32_t> out;
+        EngineCounters mc;
+        g.get_neighbors_merged_into(0, out, &mc);
+        require(out == (std::vector<uint32_t>{1, 2, 3}), "MG-G04: Base-only clean graph");
+        require(mc.neighbor_merge_fast_path_calls == 1, "MG-G04: Fast path base-only");
+    }
+
+    // MG-G05: Overlay-only adjacency (Fast path 2)
+    {
+        ApxAuthoritativeGraph g;
+        g.load_baseline({{0, 0}, {1, 0}, {2, 0}}, {});
+        g.begin_transaction();
+        g.apply_insert(0, 1, 0);
+        g.commit_transaction();
+        g.begin_transaction();
+        g.apply_insert(0, 2, 0);
+        g.commit_transaction();
+        std::vector<uint32_t> out;
+        EngineCounters mc;
+        g.get_neighbors_merged_into(0, out, &mc);
+        require(out == (std::vector<uint32_t>{1, 2}), "MG-G05: Overlay-only adjacency");
+        require(mc.neighbor_merge_fast_path_calls == 1, "MG-G05: Fast path overlay-only");
+    }
+
+    // MG-G06: Base plus overlay (Linear merge)
+    {
+        ApxAuthoritativeGraph g;
+        g.load_baseline({{0, 0}, {1, 0}, {2, 0}, {3, 0}}, {{0, 1, 0}});
+        g.begin_transaction();
+        g.apply_insert(0, 2, 0);
+        g.commit_transaction();
+        std::vector<uint32_t> out;
+        EngineCounters mc;
+        g.get_neighbors_merged_into(0, out, &mc);
+        require(out == (std::vector<uint32_t>{1, 2}), "MG-G06: Base plus overlay");
+        require(mc.neighbor_merge_linear_calls == 1, "MG-G06: Linear merge path");
+    }
+
+    // MG-G07: Interleaved base and overlay
+    {
+        ApxAuthoritativeGraph g;
+        g.load_baseline({{0, 0}, {1, 0}, {2, 0}, {3, 0}, {4, 0}, {5, 0}}, {{0, 1, 0}, {0, 3, 0}, {0, 5, 0}});
+        g.begin_transaction();
+        g.apply_insert(0, 2, 0);
+        g.commit_transaction();
+        g.begin_transaction();
+        g.apply_insert(0, 4, 0);
+        g.commit_transaction();
+        std::vector<uint32_t> out;
+        EngineCounters mc;
+        g.get_neighbors_merged_into(0, out, &mc);
+        require(out == (std::vector<uint32_t>{1, 2, 3, 4, 5}), "MG-G07: Interleaved base and overlay");
+        require(mc.neighbor_merge_linear_calls == 1, "MG-G07: Linear merge");
+    }
+
+    // MG-G08: All base values precede overlay
+    {
+        ApxAuthoritativeGraph g;
+        g.load_baseline({{0, 0}, {1, 0}, {2, 0}, {3, 0}, {4, 0}}, {{0, 1, 0}, {0, 2, 0}});
+        g.begin_transaction();
+        g.apply_insert(0, 3, 0);
+        g.commit_transaction();
+        g.begin_transaction();
+        g.apply_insert(0, 4, 0);
+        g.commit_transaction();
+        std::vector<uint32_t> out;
+        EngineCounters mc;
+        g.get_neighbors_merged_into(0, out, &mc);
+        require(out == (std::vector<uint32_t>{1, 2, 3, 4}), "MG-G08: Base precedes overlay");
+        require(mc.neighbor_merge_linear_calls == 1, "MG-G08: Linear merge");
+    }
+
+    // MG-G09: All overlay values precede base
+    {
+        ApxAuthoritativeGraph g;
+        g.load_baseline({{0, 0}, {1, 0}, {2, 0}, {3, 0}, {4, 0}}, {{0, 3, 0}, {0, 4, 0}});
+        g.begin_transaction();
+        g.apply_insert(0, 1, 0);
+        g.commit_transaction();
+        g.begin_transaction();
+        g.apply_insert(0, 2, 0);
+        g.commit_transaction();
+        std::vector<uint32_t> out;
+        EngineCounters mc;
+        g.get_neighbors_merged_into(0, out, &mc);
+        require(out == (std::vector<uint32_t>{1, 2, 3, 4}), "MG-G09: Overlay precedes base");
+        require(mc.neighbor_merge_linear_calls == 1, "MG-G09: Linear merge");
+    }
+
+    // MG-G10: Base exhausted before overlay
+    {
+        ApxAuthoritativeGraph g;
+        g.load_baseline({{0, 0}, {1, 0}, {2, 0}, {3, 0}}, {{0, 1, 0}});
+        g.begin_transaction();
+        g.apply_insert(0, 2, 0);
+        g.commit_transaction();
+        g.begin_transaction();
+        g.apply_insert(0, 3, 0);
+        g.commit_transaction();
+        std::vector<uint32_t> out;
+        EngineCounters mc;
+        g.get_neighbors_merged_into(0, out, &mc);
+        require(out == (std::vector<uint32_t>{1, 2, 3}), "MG-G10: Base exhausted first");
+        require(mc.neighbor_merge_linear_calls == 1, "MG-G10: Linear merge");
+    }
+
+    // MG-G11: Overlay exhausted before base
+    {
+        ApxAuthoritativeGraph g;
+        g.load_baseline({{0, 0}, {1, 0}, {2, 0}, {3, 0}}, {{0, 2, 0}, {0, 3, 0}});
+        g.begin_transaction();
+        g.apply_insert(0, 1, 0);
+        g.commit_transaction();
+        std::vector<uint32_t> out;
+        EngineCounters mc;
+        g.get_neighbors_merged_into(0, out, &mc);
+        require(out == (std::vector<uint32_t>{1, 2, 3}), "MG-G11: Overlay exhausted first");
+        require(mc.neighbor_merge_linear_calls == 1, "MG-G11: Linear merge");
+    }
+
+    // MG-G12: Tombstone at first base element
+    {
+        ApxAuthoritativeGraph g;
+        g.load_baseline({{0, 0}, {1, 0}, {2, 0}, {3, 0}}, {{0, 1, 0}, {0, 3, 0}});
+        g.begin_transaction();
+        g.apply_delete(0, 1, 0);
+        g.commit_transaction();
+        g.begin_transaction();
+        g.apply_insert(0, 2, 0);
+        g.commit_transaction();
+        std::vector<uint32_t> out;
+        EngineCounters mc;
+        g.get_neighbors_merged_into(0, out, &mc);
+        require(out == (std::vector<uint32_t>{2, 3}), "MG-G12: First base tombstoned");
+    }
+
+    // MG-G13: Tombstone at last base element
+    {
+        ApxAuthoritativeGraph g;
+        g.load_baseline({{0, 0}, {1, 0}, {2, 0}, {3, 0}}, {{0, 1, 0}, {0, 3, 0}});
+        g.begin_transaction();
+        g.apply_delete(0, 3, 0);
+        g.commit_transaction();
+        g.begin_transaction();
+        g.apply_insert(0, 2, 0);
+        g.commit_transaction();
+        std::vector<uint32_t> out;
+        EngineCounters mc;
+        g.get_neighbors_merged_into(0, out, &mc);
+        require(out == (std::vector<uint32_t>{1, 2}), "MG-G13: Last base tombstoned");
+    }
+
+    // MG-G14: Consecutive tombstones
+    {
+        ApxAuthoritativeGraph g;
+        g.load_baseline({{0, 0}, {1, 0}, {2, 0}, {3, 0}, {4, 0}}, {{0, 1, 0}, {0, 2, 0}, {0, 3, 0}, {0, 4, 0}});
+        g.begin_transaction();
+        g.apply_delete(0, 2, 0);
+        g.commit_transaction();
+        g.begin_transaction();
+        g.apply_delete(0, 3, 0);
+        g.commit_transaction();
+        std::vector<uint32_t> out;
+        EngineCounters mc;
+        g.get_neighbors_merged_into(0, out, &mc);
+        require(out == (std::vector<uint32_t>{1, 4}), "MG-G14: Consecutive tombstones");
+    }
+
+    // MG-G15: Every base neighbor tombstoned
+    {
+        ApxAuthoritativeGraph g;
+        g.load_baseline({{0, 0}, {1, 0}, {2, 0}, {3, 0}}, {{0, 1, 0}, {0, 2, 0}});
+        g.begin_transaction();
+        g.apply_delete(0, 1, 0);
+        g.commit_transaction();
+        g.begin_transaction();
+        g.apply_delete(0, 2, 0);
+        g.commit_transaction();
+        g.begin_transaction();
+        g.apply_insert(0, 3, 0);
+        g.commit_transaction();
+        std::vector<uint32_t> out;
+        EngineCounters mc;
+        g.get_neighbors_merged_into(0, out, &mc);
+        require(out == (std::vector<uint32_t>{3}), "MG-G15: Every base neighbor tombstoned");
+    }
+
+    // MG-G16: Overlay replaces base neighbor
+    {
+        ApxAuthoritativeGraph g;
+        g.load_baseline({{0, 0}, {1, 0}, {2, 0}}, {{0, 1, 0}, {0, 2, 0}});
+        g.begin_transaction();
+        g.apply_delete(0, 2, 0);
+        g.commit_transaction();
+        g.begin_transaction();
+        g.apply_insert(0, 2, 9);
+        g.commit_transaction();
+        std::vector<uint32_t> out;
+        EngineCounters mc;
+        g.get_neighbors_merged_into(0, out, &mc);
+        require(out == (std::vector<uint32_t>{1, 2}), "MG-G16: Neighbor 2 appears exactly once");
+        require(g.get_edge_label(0, 2).label == 9, "MG-G16: Label comes from overlay");
+    }
+
+    // MG-G17: Delete/reinsert with same label
+    {
+        ApxAuthoritativeGraph g;
+        g.load_baseline({{0, 0}, {1, 0}}, {{0, 1, 4}});
+        g.begin_transaction();
+        g.apply_delete(0, 1, 4);
+        g.commit_transaction();
+        require(!g.has_edge(0, 1), "MG-G17: Edge deleted");
+        g.begin_transaction();
+        g.apply_insert(0, 1, 4);
+        g.commit_transaction();
+        std::vector<uint32_t> out;
+        g.get_neighbors_merged_into(0, out);
+        require(out == (std::vector<uint32_t>{1}), "MG-G17: Neighbor reinserted");
+        require(g.get_edge_label(0, 1).label == 4, "MG-G17: Label 4 preserved");
+    }
+
+    // MG-G18: Delete/reinsert with different label
+    {
+        ApxAuthoritativeGraph g;
+        g.load_baseline({{0, 0}, {1, 0}}, {{0, 1, 4}});
+        g.begin_transaction();
+        g.apply_delete(0, 1, 4);
+        g.commit_transaction();
+        g.begin_transaction();
+        g.apply_insert(0, 1, 8);
+        g.commit_transaction();
+        std::vector<uint32_t> out;
+        g.get_neighbors_merged_into(0, out);
+        require(out == (std::vector<uint32_t>{1}), "MG-G18: Neighbor reinserted");
+        require(g.get_edge_label(0, 1).label == 8, "MG-G18: New label 8");
+    }
+
+    // MG-G19: Critical Tentative INSERT with retained tombstone (Section XXI)
+    {
+        ApxAuthoritativeGraph g;
+        g.load_baseline({{0, 0}, {1, 0}}, {{0, 1, 10}});
+        g.begin_transaction();
+        g.apply_delete(0, 1, 10);
+        g.commit_transaction();
+        require(g.is_in_tombstones(0, 1), "MG-G19: Tombstone active before insert");
+
+        // Tentative uncommitted reinsert
+        g.begin_transaction();
+        g.apply_insert(0, 1, 20);
+
+        require(g.is_in_tombstones(0, 1), "MG-G19: Tombstone retained during tentative insert");
+        require(g.is_in_overlay(0, 1), "MG-G19: Overlay active during tentative insert");
+        require(g.has_edge(0, 1), "MG-G19: has_edge is true");
+        require(g.get_edge_label(0, 1).label == 20, "MG-G19: Edge label is 20");
+
+        std::vector<uint32_t> legacy = g.get_neighbors(0);
+        std::vector<uint32_t> buffer;
+        g.get_neighbors_into(0, buffer);
+        std::vector<uint32_t> merged;
+        g.get_neighbors_merged_into(0, merged);
+
+        require(legacy == (std::vector<uint32_t>{1}), "MG-G19: Legacy sees reinserted edge");
+        require(buffer == (std::vector<uint32_t>{1}), "MG-G19: Buffer sees reinserted edge");
+        require(merged == (std::vector<uint32_t>{1}), "MG-G19: Merge sees reinserted edge");
+
+        // Rollback tentative insert
+        g.rollback_transaction();
+        require(!g.has_edge(0, 1), "MG-G19: Edge absent after rollback");
+        std::vector<uint32_t> post_rollback;
+        g.get_neighbors_merged_into(0, post_rollback);
+        require(post_rollback.empty(), "MG-G19: Post-rollback neighbors empty");
+    }
+
+    // MG-G20: Rollback-restored snapshot equivalence
+    {
+        ApxAuthoritativeGraph g;
+        g.load_baseline({{0, 0}, {1, 0}, {2, 0}}, {{0, 1, 0}});
+        g.begin_transaction();
+        g.apply_insert(0, 2, 0);
+        g.rollback_transaction();
+        std::vector<uint32_t> leg = g.get_neighbors(0);
+        std::vector<uint32_t> buf;
+        g.get_neighbors_into(0, buf);
+        std::vector<uint32_t> mrg;
+        g.get_neighbors_merged_into(0, mrg);
+        require(leg == (std::vector<uint32_t>{1}), "MG-G20: Legacy 1");
+        require(buf == (std::vector<uint32_t>{1}), "MG-G20: Buffer 1");
+        require(mrg == (std::vector<uint32_t>{1}), "MG-G20: Merge 1");
+    }
+
+    // MG-G21: Repeated output reuse with varying capacities
+    {
+        ApxAuthoritativeGraph g;
+        g.load_baseline({{0, 0}, {1, 0}, {2, 0}, {3, 0}, {4, 0}}, {{0, 1, 0}, {0, 2, 0}, {0, 3, 0}, {0, 4, 0}});
+        std::vector<uint32_t> out;
+        g.get_neighbors_merged_into(0, out);
+        require(out.size() == 4, "MG-G21: 4 neighbors");
+        const size_t cap = out.capacity();
+        g.get_neighbors_merged_into(1, out);
+        require(out.size() == 1 && out[0] == 0, "MG-G21: 1 neighbor");
+        require(out.capacity() == cap, "MG-G21: Capacity retained across reuse");
+    }
+
+    // MG-G22: High-degree adjacency (1024 base + 1024 overlay interleaved = 2048)
+    {
+        ApxAuthoritativeGraph g;
+        std::vector<Vertex> verts;
+        std::vector<Edge> base_edges;
+        verts.emplace_back(0, 0);
+        for (uint32_t i = 1; i <= 2048; ++i) {
+            verts.emplace_back(i, 0);
+            if (i % 2 == 1) { // odd IDs in base
+                base_edges.emplace_back(0, i, 0);
+            }
+        }
+        g.load_baseline(verts, base_edges);
+        for (uint32_t i = 1; i <= 2048; ++i) {
+            if (i % 2 == 0) { // even IDs in overlay
+                g.begin_transaction();
+                g.apply_insert(0, i, 0);
+                g.commit_transaction();
+            }
+        }
+        std::vector<uint32_t> out;
+        EngineCounters mc;
+        g.get_neighbors_merged_into(0, out, &mc);
+        require(out.size() == 2048, "MG-G22: High degree count matches 2048");
+        for (uint32_t i = 0; i < 2048; ++i) {
+            require(out[i] == i + 1, "MG-G22: High degree strictly sorted");
+        }
+        require(mc.neighbor_merge_linear_calls == 1, "MG-G22: Linear merge called for interleaved high degree");
+    }
+
+    // MG-G23: Sparse external IDs
+    {
+        ApxTypedCodec codec;
+        std::vector<Vertex> verts;
+        for (int64_t ext : {-9999, -50, 0, 100, 500000}) {
+            verts.emplace_back(codec.intern_data_vertex(ext), 0);
+        }
+        ApxAuthoritativeGraph g;
+        g.load_baseline(verts, {{0, 1, 0}, {0, 3, 0}});
+        std::vector<uint32_t> out;
+        g.get_neighbors_merged_into(0, out);
+        require(out == (std::vector<uint32_t>{1, 3}), "MG-G23: Sparse external IDs");
+    }
+
+    // MG-G24: Typed and Unicode edge labels
+    {
+        ApxTypedCodec codec;
+        const auto l_str = codec.intern_edge_label(TypedLabel::from_string(u8"đường"));
+        const auto l_int = codec.intern_edge_label(TypedLabel::from_int(0));
+        require(l_str != l_int, "MG-G24: Typed labels distinct");
+        ApxAuthoritativeGraph g;
+        g.load_baseline({{0, 0}, {1, 0}, {2, 0}}, {{0, 1, l_str}, {0, 2, l_int}});
+        std::vector<uint32_t> out;
+        g.get_neighbors_merged_into(0, out);
+        require(out == (std::vector<uint32_t>{1, 2}), "MG-G24: Unicode and typed neighbors");
+        require(g.get_edge_label(0, 1).label == l_str, "MG-G24: Unicode label preserved");
+    }
+
+    // -------------------------------------------------------------------------
+    // Fallback and Prerequisite Violations (Section XXII)
+    // -------------------------------------------------------------------------
+
+    // 1. Unsorted base: [5, 1, 3] and sorted overlay: [2, 4]
+    {
+        ApxAuthoritativeGraph g;
+        g.load_baseline({{0, 0}, {1, 0}, {2, 0}, {3, 0}, {4, 0}, {5, 0}}, {});
+        uint32_t base[3] = {5, 1, 3};
+        uint32_t overlay[2] = {2, 4};
+        std::vector<uint32_t> out;
+        EngineCounters mc;
+        g.merge_neighbor_ranges(0, base, 3, overlay, 2, out, &mc);
+        require(out == (std::vector<uint32_t>{1, 2, 3, 4, 5}), "Fallback unsorted base");
+        require(mc.neighbor_merge_fallback_calls == 1, "Fallback counted for unsorted base");
+    }
+
+    // 2. Sorted base: [1, 3, 5] and unsorted overlay: [6, 2, 4]
+    {
+        ApxAuthoritativeGraph g;
+        g.load_baseline({{0, 0}, {1, 0}, {2, 0}, {3, 0}, {4, 0}, {5, 0}, {6, 0}}, {});
+        uint32_t base[3] = {1, 3, 5};
+        uint32_t overlay[3] = {6, 2, 4};
+        std::vector<uint32_t> out;
+        EngineCounters mc;
+        g.merge_neighbor_ranges(0, base, 3, overlay, 3, out, &mc);
+        require(out == (std::vector<uint32_t>{1, 2, 3, 4, 5, 6}), "Fallback unsorted overlay");
+        require(mc.neighbor_merge_fallback_calls == 1, "Fallback counted for unsorted overlay");
+    }
+
+    // 3. Both ranges unsorted: base [5, 1], overlay [4, 2]
+    {
+        ApxAuthoritativeGraph g;
+        g.load_baseline({{0, 0}, {1, 0}, {2, 0}, {3, 0}, {4, 0}, {5, 0}}, {});
+        uint32_t base[2] = {5, 1};
+        uint32_t overlay[2] = {4, 2};
+        std::vector<uint32_t> out;
+        EngineCounters mc;
+        g.merge_neighbor_ranges(0, base, 2, overlay, 2, out, &mc);
+        require(out == (std::vector<uint32_t>{1, 2, 4, 5}), "Fallback both unsorted");
+        require(mc.neighbor_merge_fallback_calls == 1, "Fallback counted for both unsorted");
+    }
+
+    // 4. Duplicate within base: [1, 2, 2, 3]
+    {
+        ApxAuthoritativeGraph g;
+        g.load_baseline({{0, 0}, {1, 0}, {2, 0}, {3, 0}}, {});
+        uint32_t base[4] = {1, 2, 2, 3};
+        std::vector<uint32_t> out;
+        EngineCounters mc;
+        g.merge_neighbor_ranges(0, base, 4, nullptr, 0, out, &mc);
+        require(out == (std::vector<uint32_t>{1, 2, 3}), "Fallback duplicate base");
+        require(mc.neighbor_merge_fallback_calls == 1, "Fallback counted for duplicate base");
+    }
+
+    // 5. Duplicate within overlay: [2, 3, 3, 4]
+    {
+        ApxAuthoritativeGraph g;
+        g.load_baseline({{0, 0}, {1, 0}, {2, 0}, {3, 0}, {4, 0}}, {});
+        uint32_t overlay[4] = {2, 3, 3, 4};
+        std::vector<uint32_t> out;
+        EngineCounters mc;
+        g.merge_neighbor_ranges(0, nullptr, 0, overlay, 4, out, &mc);
+        require(out == (std::vector<uint32_t>{2, 3, 4}), "Fallback duplicate overlay");
+        require(mc.neighbor_merge_fallback_calls == 1, "Fallback counted for duplicate overlay");
+    }
+
+    // 6. Fused guard late violation: base [1, 5, 3], overlay [2, 4]
+    {
+        ApxAuthoritativeGraph g;
+        g.load_baseline({{0, 0}, {1, 0}, {2, 0}, {3, 0}, {4, 0}, {5, 0}}, {});
+        uint32_t base[3] = {1, 5, 3};
+        uint32_t overlay[2] = {2, 4};
+        std::vector<uint32_t> out;
+        EngineCounters mc;
+        g.merge_neighbor_ranges(0, base, 3, overlay, 2, out, &mc);
+        require(out == (std::vector<uint32_t>{1, 2, 3, 4, 5}), "Fused guard late violation fallback");
+        require(mc.neighbor_merge_fallback_calls == 1, "Late violation counted as fallback");
+    }
+
+    // 7. Filtered element violation: base [10, 5, 20] with 10 tombstoned
+    {
+        ApxAuthoritativeGraph g;
+        std::vector<Vertex> verts;
+        for (uint32_t i = 0; i <= 20; ++i) verts.emplace_back(i, 0);
+        g.load_baseline(verts, {{0, 10, 0}});
+        g.begin_transaction();
+        g.apply_delete(0, 10, 0);
+        g.commit_transaction();
+        require(g.is_in_tombstones(0, 10), "10 is tombstoned");
+        uint32_t base[3] = {10, 5, 20};
+        std::vector<uint32_t> out;
+        EngineCounters mc;
+        g.merge_neighbor_ranges(0, base, 3, nullptr, 0, out, &mc);
+        require(out == (std::vector<uint32_t>{5, 20}), "Filtered element violation fallback");
+        require(mc.neighbor_merge_fallback_calls == 1, "Filtered element violation counted as fallback");
+    }
+
+    // 8. Fast-path prerequisite failure: base [3, 1], overlay=0, no tombstones
+    {
+        ApxAuthoritativeGraph g;
+        std::vector<Vertex> verts;
+        for (uint32_t i = 0; i <= 3; ++i) verts.emplace_back(i, 0);
+        g.load_baseline(verts, {});
+        uint32_t base[2] = {3, 1};
+        std::vector<uint32_t> out;
+        EngineCounters mc;
+        g.merge_neighbor_ranges(0, base, 2, nullptr, 0, out, &mc);
+        require(out == (std::vector<uint32_t>{1, 3}), "Fast path prerequisite fallback");
+        require(mc.neighbor_merge_fallback_calls == 1, "Fast path unsorted counted as fallback");
+    }
+
+    // 9. Defensive equality handling: base [1, 3, 5], overlay [3, 7]
+    {
+        ApxAuthoritativeGraph g;
+        std::vector<Vertex> verts;
+        for (uint32_t i = 0; i <= 7; ++i) verts.emplace_back(i, 0);
+        g.load_baseline(verts, {});
+        uint32_t base[3] = {1, 3, 5};
+        uint32_t overlay[2] = {3, 7};
+        std::vector<uint32_t> out;
+        EngineCounters mc;
+        g.merge_neighbor_ranges(0, base, 3, overlay, 2, out, &mc);
+        require(out == (std::vector<uint32_t>{1, 3, 5, 7}), "Equality deduplication");
+        require(mc.neighbor_merge_linear_calls == 1, "Linear merge with equality");
+    }
+
+    // 10. Structural fail-closed: base_count > 0 with null pointer
+    {
+        ApxAuthoritativeGraph g;
+        g.load_baseline({{0, 0}}, {});
+        std::vector<uint32_t> out;
+        bool caught = false;
+        try {
+            g.merge_neighbor_ranges(0, nullptr, 5, nullptr, 0, out);
+        } catch (const InvariantViolationException&) {
+            caught = true;
+        }
+        require(caught, "Structural null pointer base threw InvariantViolationException");
+    }
+
+    // 11. Structural fail-closed: overlay_count > 0 with null pointer
+    {
+        ApxAuthoritativeGraph g;
+        g.load_baseline({{0, 0}}, {});
+        std::vector<uint32_t> out;
+        bool caught = false;
+        try {
+            g.merge_neighbor_ranges(0, nullptr, 0, nullptr, 3, out);
+        } catch (const InvariantViolationException&) {
+            caught = true;
+        }
+        require(caught, "Structural null pointer overlay threw InvariantViolationException");
+    }
+
+    std::cout << "merge_direct_and_fallback_tests passed. All MG-G01..G24 scenarios, tentative insert, and fallback guards verified.\n";
+}
+
 } // namespace
 
 int run_neighbor_buffer_tests(const char* suite_name) {
@@ -569,6 +1155,11 @@ int run_neighbor_buffer_tests(const char* suite_name) {
         }
         if (suite == "graph") {
             graph_test();
+            merge_direct_and_fallback_tests();
+            return 0;
+        }
+        if (suite == "merge") {
+            merge_direct_and_fallback_tests();
             return 0;
         }
 #ifdef APX_NEIGHBOR_TEST_TRACE
@@ -577,6 +1168,15 @@ int run_neighbor_buffer_tests(const char* suite_name) {
             return 0;
         }
 #endif
+        if (suite == "all") {
+            pool_test();
+            graph_test();
+            merge_direct_and_fallback_tests();
+#ifdef APX_NEIGHBOR_TEST_TRACE
+            trace_test();
+#endif
+            return 0;
+        }
         std::cerr << "Unsupported neighbor buffer suite: " << suite << '\n';
     } catch (const std::exception& ex) {
         std::cerr << "Neighbor buffer verification failed: " << ex.what() << '\n';

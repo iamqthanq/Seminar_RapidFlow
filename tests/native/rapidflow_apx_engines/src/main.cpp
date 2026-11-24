@@ -361,13 +361,22 @@ static bool parse_nlf_mode(const std::string& text, NlfMode& mode) {
 }
 
 static const char* neighbor_mode_name(NeighborMode mode) noexcept {
-    return mode == NeighborMode::BUFFER ? "buffer" : "legacy";
+    switch (mode) {
+        case NeighborMode::BUFFER: return "buffer";
+        case NeighborMode::MERGE: return "merge";
+        case NeighborMode::LEGACY:
+        default: return "legacy";
+    }
 }
 
 static void add_neighbor_counters(json::Value& out, const EngineCounters& counters) {
     out["neighbor_buffer_retrieval_calls"] = json::Value(counters.neighbor_buffer_retrieval_calls);
     out["neighbor_buffer_growth_calls"] = json::Value(counters.neighbor_buffer_growth_calls);
     out["neighbor_buffer_no_growth_calls"] = json::Value(counters.neighbor_buffer_no_growth_calls);
+    out["neighbor_merge_retrieval_calls"] = json::Value(counters.neighbor_merge_retrieval_calls);
+    out["neighbor_merge_linear_calls"] = json::Value(counters.neighbor_merge_linear_calls);
+    out["neighbor_merge_fast_path_calls"] = json::Value(counters.neighbor_merge_fast_path_calls);
+    out["neighbor_merge_fallback_calls"] = json::Value(counters.neighbor_merge_fallback_calls);
 }
 
 static void add_residual_counters(json::Value& out, const EngineCounters& counters) {
@@ -478,8 +487,12 @@ int main(int argc, char* argv[]) {
             const std::string mode = argv[++i];
             if (mode == "buffer") {
                 neighbor_mode = NeighborMode::BUFFER;
-            } else if (mode != "legacy") {
-                std::cerr << "Error: Invalid --neighbor-mode '" << mode << "'. Must be 'legacy' or 'buffer'.\n";
+            } else if (mode == "merge") {
+                neighbor_mode = NeighborMode::MERGE;
+            } else if (mode == "legacy") {
+                neighbor_mode = NeighborMode::LEGACY;
+            } else {
+                std::cerr << "Error: Invalid --neighbor-mode '" << mode << "'. Must be 'legacy', 'buffer', or 'merge'.\n";
                 return static_cast<int>(ExitCode::CLI_ARG_ERROR);
             }
         } else if (arg == "--nlf-mode") {
@@ -533,7 +546,7 @@ int main(int argc, char* argv[]) {
             profile_output_path = argv[++i];
             profiling_enabled = true;
         } else if (arg == "--help" || arg == "-h") {
-            std::cout << "Usage: rapidflow_apx_native --engine <m1|m2> --workload <INPUT.json> --output <OUTPUT.json> [--max-work <N>] [--continue-on-error] [--nlf-mode <none|static|residual>] [--neighbor-mode <legacy|buffer>] [--max-nlf-memory-mib <MiB>] [--profile] [--profile-output <FILE>]\n";
+            std::cout << "Usage: rapidflow_apx_native --engine <m1|m2> --workload <INPUT.json> --output <OUTPUT.json> [--max-work <N>] [--continue-on-error] [--nlf-mode <none|static|residual>] [--neighbor-mode <legacy|buffer|merge>] [--max-nlf-memory-mib <MiB>] [--profile] [--profile-output <FILE>]\n";
             return static_cast<int>(ExitCode::SUCCESS);
         } else {
             std::cerr << "Error: Unknown or unsupported option: " << arg << "\n";
@@ -567,7 +580,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (!is_supported_neighbor_mode(engine_type, nlf_mode, neighbor_mode)) {
-        std::cerr << "Error: Neighbor buffer mode requires M2 with NLF NONE.\n";
+        std::cerr << "Error: Neighbor buffer/merge mode requires M2 with NLF NONE.\n";
         return static_cast<int>(ExitCode::CLI_ARG_ERROR);
     }
 
@@ -1081,7 +1094,7 @@ int main(int argc, char* argv[]) {
             if (failed) ++failed_steps;
             else ++completed_steps;
 
-            const bool poisoned_optimized = (nlf_mode == NlfMode::RESIDUAL || neighbor_mode == NeighborMode::BUFFER)
+            const bool poisoned_optimized = (nlf_mode == NlfMode::RESIDUAL || neighbor_mode == NeighborMode::BUFFER || neighbor_mode == NeighborMode::MERGE)
                 && streaming_engine.get_tx_manager().is_session_poisoned();
             if (delivery_failed || (failed && !continue_on_error) || poisoned_optimized) {
                 for (size_t rem = step_idx + 1; rem < total_steps; ++rem) {

@@ -8,6 +8,8 @@ import unittest
 from unittest.mock import patch
 
 from scripts import run_rapidflow_apx_engines as runner
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from test_rapidflow_apx_foundation_audit import edge, independent_snapshots, update
 
 
@@ -15,7 +17,7 @@ ROOT = runner.REPO_ROOT
 BINARY = ROOT / "tests/native/rapidflow_apx_engines/build/rapidflow_apx_native"
 C4 = ROOT / "tests/fixtures/rapidflow_apx_p4b_residual/residual-deferred.json"
 FAR = ROOT / "tests/fixtures/rapidflow_apx_foundation_audit"
-ADDITIONS = set(runner.NEIGHBOR_COUNTER_FIELDS) | {
+ADDITIONS = set(runner.NEIGHBOR_COUNTER_FIELDS) | set(runner.NEIGHBOR_MERGE_COUNTER_FIELDS) | {
     "neighbor_configuration_version", "requested_neighbor_mode", "effective_neighbor_mode",
 }
 
@@ -49,7 +51,8 @@ class TestNeighborBuffer(unittest.TestCase):
 
     def test_native_graph_and_pool(self):
         for suite, expected in (("graph", "vector_discrepancies=0 duplicate_discrepancies=0"),
-                                ("pool", "1000 lifetimes passed")):
+                                ("pool", "1000 lifetimes passed"),
+                                ("merge", "All MG-G01..G24 scenarios, tentative insert, and fallback guards verified.")):
             with self.subTest(suite=suite):
                 result = subprocess.run([str(BINARY), "--test-p4b-neighbor", suite], capture_output=True,
                                         text=True, timeout=30, check=False)
@@ -58,29 +61,35 @@ class TestNeighborBuffer(unittest.TestCase):
 
     def test_cli_matrix(self):
         native_args = ("--workload", str(C4), "--output", "/dev/null")
-        for extra in (
-            ("--engine", "m1"), ("--nlf-mode", "static"), ("--nlf-mode", "residual"),
-            ("--neighbor-mode", "legacy"),
-        ):
-            args = [str(BINARY), *native_args, "--neighbor-mode", "buffer", *extra]
-            result = subprocess.run(args, capture_output=True, text=True, timeout=20, check=False)
-            self.assertEqual(result.returncode, 1, (args, result.stderr))
-        result = subprocess.run([str(BINARY), *native_args, "--neighbor-mode", "Buffer"], capture_output=True)
-        self.assertEqual(result.returncode, 1)
+        for mode in ("buffer", "merge"):
+            for extra in (
+                ("--engine", "m1"), ("--nlf-mode", "static"), ("--nlf-mode", "residual"),
+                ("--neighbor-mode", "legacy"),
+            ):
+                args = [str(BINARY), *native_args, "--neighbor-mode", mode, *extra]
+                result = subprocess.run(args, capture_output=True, text=True, timeout=20, check=False)
+                self.assertEqual(result.returncode, 1, (args, result.stderr))
+            result = subprocess.run([str(BINARY), *native_args, "--neighbor-mode", mode.capitalize()], capture_output=True)
+            self.assertEqual(result.returncode, 1)
         with tempfile.TemporaryDirectory() as tmp:
             summary = Path(tmp) / "out.json"
-            for engine, nlf in (("all", "none"), ("m1", "none"), ("m2", "static"), ("m2", "residual")):
-                result = subprocess.run(
-                    [sys.executable, str(ROOT / "scripts/run_rapidflow_apx_engines.py"), "--engine", engine,
-                     "--nlf-mode", nlf, "--neighbor-mode", "buffer", "--output", str(summary)], capture_output=True,
-                    timeout=20, check=False,
-                )
-                self.assertEqual(result.returncode, 1, result.stderr)
-                self.assertEqual(json.loads(summary.read_text())["overall_status"], "UNSUPPORTED_CONFIGURATION")
+            for mode in ("buffer", "merge"):
+                for engine, nlf in (("all", "none"), ("m1", "none"), ("m2", "static"), ("m2", "residual")):
+                    result = subprocess.run(
+                        [sys.executable, str(ROOT / "scripts/run_rapidflow_apx_engines.py"), "--engine", engine,
+                         "--nlf-mode", nlf, "--neighbor-mode", mode, "--output", str(summary)], capture_output=True,
+                        timeout=20, check=False,
+                    )
+                    self.assertEqual(result.returncode, 1, result.stderr)
+                    self.assertEqual(json.loads(summary.read_text())["overall_status"], "UNSUPPORTED_CONFIGURATION")
 
     def test_actual_mode_substitution_and_negative_identity(self):
         real = runner.execute_contained_subprocess
-        for requested, actual in (("buffer", "legacy"), ("legacy", "buffer")):
+        for requested, actual in (
+            ("buffer", "legacy"), ("legacy", "buffer"),
+            ("merge", "legacy"), ("legacy", "merge"),
+            ("merge", "buffer"), ("buffer", "merge"),
+        ):
             for negative in (False, True):
                 with self.subTest(requested=requested, actual=actual, negative=negative):
                     w = self.workload()
@@ -132,9 +141,14 @@ class TestNeighborBuffer(unittest.TestCase):
         early = {"status": "FAIL", "configuration_initialized": False, "neighbor_configuration_version": 1,
                  "error_category": "DOMAIN_ERROR", "exit_code": 3}
         self.assertTrue(runner.validate_nlf_configuration("m2", "none", early, False, "buffer")[0])
+        self.assertTrue(runner.validate_nlf_configuration("m2", "none", early, False, "merge")[0])
         historical = {k: v for k, v in base.items() if k not in ADDITIONS}
         self.assertTrue(runner.validate_nlf_configuration("m2", "none", historical, True)[0])
         self.assertFalse(runner.validate_nlf_configuration("m2", "none", historical, True, "legacy")[0])
+        for mode in ("buffer", "merge"):
+            base_m = {**base, "requested_neighbor_mode": mode, "effective_neighbor_mode": mode}
+            self.assertTrue(runner.validate_nlf_configuration("m2", "none", base_m, True, mode)[0])
+            self.assertFalse(runner.validate_nlf_configuration("m2", "none", {**base_m, "effective_neighbor_mode": "legacy"}, True, mode)[0])
 
     def test_real_missing_current_metadata_rejected(self):
         actual = runner.execute_contained_subprocess
@@ -147,7 +161,7 @@ class TestNeighborBuffer(unittest.TestCase):
             out.write_text(json.dumps(body))
             return result
 
-        for mode in ("legacy", "buffer"):
+        for mode in ("legacy", "buffer", "merge"):
             with patch.object(runner, "execute_contained_subprocess", side_effect=remove_identity):
                 result, _, accepted = runner.run_workload_on_binary(BINARY, "m2", self.workload(), neighbor_mode=mode)
             self.assertFalse(accepted)
@@ -157,20 +171,30 @@ class TestNeighborBuffer(unittest.TestCase):
         w = self.workload()
         for limit in (1, 3, 9, 27, 1000):
             with self.subTest(cap=limit):
-                a, before = self.native(w, "legacy", "--max-work", str(limit))
-                b, after = self.native(w, "buffer", "--max-work", str(limit))
+                a, legacy_out = self.native(w, "legacy", "--max-work", str(limit))
+                b, buffer_out = self.native(w, "buffer", "--max-work", str(limit))
+                c, merge_out = self.native(w, "merge", "--max-work", str(limit))
                 self.assertEqual(a, b)
-                self.assertEqual(unchanged_output(before), unchanged_output(after))
-                steps = after["steps"]
+                self.assertEqual(b, c)
+                self.assertEqual(unchanged_output(legacy_out), unchanged_output(buffer_out))
+                self.assertEqual(unchanged_output(buffer_out), unchanged_output(merge_out))
+                steps = merge_out["steps"]
                 if limit < 1000:
-                    self.assertEqual(after["error_category"], "WORK_BUDGET_EXCEEDED")
+                    self.assertEqual(merge_out["error_category"], "WORK_BUDGET_EXCEEDED")
                     self.assertEqual(steps[0]["commit_status"], "NOT_COMMITTED")
                     self.assertEqual(steps[0]["step_counters"]["work_units"], limit + 1)
                 else:
                     self.assertEqual(a, 0)
                     self.assertEqual(steps[0]["commit_status"], "COMMITTED")
                     self.assertEqual(len(steps[0]["entered_tuples"]), 8)
-                    self.assertGreater(after["counters"]["neighbor_buffer_no_growth_calls"], 0)
+                    mc = merge_out["counters"]
+                    bc = buffer_out["counters"]
+                    self.assertGreater(bc["neighbor_buffer_no_growth_calls"], 0)
+                    self.assertEqual(mc["neighbor_merge_retrieval_calls"], bc["neighbor_buffer_retrieval_calls"])
+                    self.assertEqual(
+                        mc["neighbor_merge_retrieval_calls"],
+                        mc["neighbor_merge_linear_calls"] + mc["neighbor_merge_fast_path_calls"] + mc["neighbor_merge_fallback_calls"],
+                    )
 
     def test_search_and_graph_fault_recovery(self):
         for op in ("+", "-"):
@@ -182,32 +206,35 @@ class TestNeighborBuffer(unittest.TestCase):
             if op == "+":
                 faults.append("BETWEEN_FORWARD_REVERSE_MUTATION")
             delta = independent_snapshots(w["query"], w["initial_graph"], [update(op,0,1,0)], w["k"])[0]
-            for fault in faults:
-                with self.subTest(op=op, fault=fault):
-                    w["updates"] = [update(op,0,1,0,fault=fault), update(op,0,1,0)]
-                    code, result = self.native(w, "buffer", "--continue-on-error")
-                    self.assertEqual(code, 6)
-                    first, later = result["steps"]
-                    self.assertEqual(first["status"], "FAULT_INJECTED")
-                    self.assertEqual(first["commit_status"], "NOT_COMMITTED")
-                    self.assertEqual(first["entered_tuples"] + first["exited_tuples"], [])
-                    self.assertEqual(first["graph_state"]["edges_count"], 2 + (op == "-"))
-                    self.assertEqual(later["commit_status"], "COMMITTED")
-                    self.assertEqual(first["codec_state"], later["codec_state"])
-                    self.assertEqual([sorted(later["entered_tuples"]), sorted(later["exited_tuples"])], delta)
+            for mode in ("buffer", "merge"):
+                for fault in faults:
+                    with self.subTest(op=op, fault=fault, mode=mode):
+                        w["updates"] = [update(op,0,1,0,fault=fault), update(op,0,1,0)]
+                        code, result = self.native(w, mode, "--continue-on-error")
+                        self.assertEqual(code, 6)
+                        first, later = result["steps"]
+                        self.assertEqual(first["status"], "FAULT_INJECTED")
+                        self.assertEqual(first["commit_status"], "NOT_COMMITTED")
+                        self.assertEqual(first["entered_tuples"] + first["exited_tuples"], [])
+                        self.assertEqual(first["graph_state"]["edges_count"], 2 + (op == "-"))
+                        self.assertEqual(later["commit_status"], "COMMITTED")
+                        self.assertEqual(first["codec_state"], later["codec_state"])
+                        self.assertEqual([sorted(later["entered_tuples"]), sorted(later["exited_tuples"])], delta)
 
     def test_new_label_codec_checkpoint(self):
         w = self.workload()
         w["updates"] = [update("+", 0, 3, "new-label", fault="BEFORE_PUBLISH"),
                         update("+", 0, 1, 0), update("+", 0, 3, "new-label")]
-        code, result = self.native(w, "buffer", "--continue-on-error")
-        self.assertEqual(code, 6)
-        first, search, last = result["steps"]
-        self.assertEqual(first["commit_status"], "NOT_COMMITTED")
-        self.assertEqual(search["commit_status"], "COMMITTED")
-        self.assertEqual(len(search["entered_tuples"]), 8)
-        self.assertEqual(last["commit_status"], "COMMITTED")
-        self.assertEqual([s["codec_state"]["edge_labels_count"] for s in result["steps"]], [1, 1, 2])
+        for mode in ("buffer", "merge"):
+            with self.subTest(mode=mode):
+                code, result = self.native(w, mode, "--continue-on-error")
+                self.assertEqual(code, 6)
+                first, search, last = result["steps"]
+                self.assertEqual(first["commit_status"], "NOT_COMMITTED")
+                self.assertEqual(search["commit_status"], "COMMITTED")
+                self.assertEqual(len(search["entered_tuples"]), 8)
+                self.assertEqual(last["commit_status"], "COMMITTED")
+                self.assertEqual([s["codec_state"]["edge_labels_count"] for s in result["steps"]], [1, 1, 2])
 
     def test_original_malformed_suffix_preserved(self):
         code, result = self.native((FAR / "unattempted-malformed-suffix.json").read_bytes())
