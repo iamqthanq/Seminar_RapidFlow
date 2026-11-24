@@ -3,7 +3,7 @@ tests/test_rapidflow_apx_p4b.py — Comprehensive Python verification suite for 
 
 Verifies:
 1. Native P4b-1A Test Suite: Invokes rapidflow_apx_native --test-p4b (SIG, NUM, HD, INIT, TX, CNT, A1-A7).
-2. Property-Based Differential Verification: Seeds 1, 7, 42 comparing M0, Bare M2, and A-static step-by-step
+2. Property-Based Differential Verification: Seeds 1, 7, 42 comparing M0, Bare M2, A-static, and A-residual step-by-step
    across K2, Triangle, C4, Diamond, K4, Triangular Prism, with mixed typed labels and zero-event churn.
 3. Configuration Integrity (Finding P4B-1A-F01): Requested vs effective matching, subprocess substitution rejection.
 4. Numeric Safety & Memory Limits (Finding P4B-1A-F02): 256 MiB default, overflow rejection, duplicate flag rejection.
@@ -38,6 +38,8 @@ from scripts.run_rapidflow_apx_engines import (
     run_workload_on_binary,
     build_hand_workloads,
     validate_nlf_configuration,
+    validate_graph_state,
+    validate_codec_state,
 )
 
 BINARY_PATH = REPO_ROOT / "build" / "rapidflow_apx_native"
@@ -185,7 +187,7 @@ class TestRapidFlowApxP4b1A(unittest.TestCase):
             "updates": [{"op": "+", "u": 2, "v": 3, "label": 0}]
         }
 
-        # Compare M0, Bare M2, and A-static
+        # Compare M0, Bare M2, A-static, and A-residual
         Q_m0 = DStarGraph()
         for v in w_k4["query"]["vertices"]: Q_m0.add_vertex(v["id"], v["label"])
         for e in w_k4["query"]["edges"]: Q_m0.add_edge(e["u"], e["v"], e["label"])
@@ -211,11 +213,12 @@ class TestRapidFlowApxP4b1A(unittest.TestCase):
         Covers 13 topological configurations x 2 variants x 3 seeds = 78 streams, 780 updates.
         Topologies: K2 (k=0), Triangle (k=0,1), C4 (k=0,1), Diamond (k=0,1), K4 (k=0,1,2), Prism (k=0,1,2).
         Includes mixed typed labels (int and str) and zero-event churn updates.
-        100% agreement between M0, Bare M2, and A-static.
+        100% agreement between M0, Bare M2, A-static, and A-residual.
         """
         seeds = [1, 7, 42]
         total_streams = 0
         total_steps = 0
+        event_streams = truth_events = residual_checks = residual_prunes = 0
 
         # Query topologies with lambda > k
         # 1. K2: lambda=1, k=0
@@ -325,34 +328,61 @@ class TestRapidFlowApxP4b1A(unittest.TestCase):
                         for e in workload["initial_graph"]["edges"]: G_m0.add_edge(e["u"], e["v"], e["label"])
 
                         oracle = DStarDynamicOracle(Q_m0, G_m0, k=k)
-                        m0_entered = []
-                        m0_exited = []
+                        truth = []
+                        seen_edge_labels = {e["label"] for e in workload["query"]["edges"] + workload["initial_graph"]["edges"]}
                         for upd in stream_updates:
                             delta = oracle.apply_update(DStarUpdate("INSERT" if upd["op"] == "+" else "DELETE", upd["u"], upd["v"], upd["label"]))
-                            m0_entered.append(sorted([list(t) for t in delta.entered]))
-                            m0_exited.append(sorted([list(t) for t in delta.exited]))
+                            seen_edge_labels.add(upd["label"])
+                            codec_state = {
+                                "query_vertices_count": num_q,
+                                "data_vertices_count": num_d,
+                                "vertex_labels_count": len(set(q_vlabels + d_vlabels)),
+                                "edge_labels_count": len(seen_edge_labels),
+                            }
+                            truth.append((sorted(map(list, delta.entered)), sorted(map(list, delta.exited)),
+                                          oracle.G, codec_state))
 
-                        res_bare, _, ok_b = run_workload_on_binary(BINARY_PATH, "m2", workload, nlf_mode="none")
-                        res_stat, _, ok_s = run_workload_on_binary(BINARY_PATH, "m2", workload, nlf_mode="static")
+                        results = {}
+                        for mode in ("none", "static", "residual"):
+                            result, _, ok = run_workload_on_binary(BINARY_PATH, "m2", workload, nlf_mode=mode)
+                            self.assertTrue(ok, (workload["case_id"], mode, result.get("error_message")))
+                            self.assertEqual(result["requested_nlf_mode"], mode)
+                            self.assertEqual(result["effective_nlf_mode"], mode)
+                            self.assertTrue(result["eligible_for_requested_variant"])
+                            self.assertEqual(len(result["steps"]), len(stream_updates))
+                            results[mode] = result
 
-                        self.assertTrue(ok_b, f"Bare M2 failed on {workload['case_id']}: {res_bare.get('error_message')}")
-                        self.assertTrue(ok_s, f"A-static failed on {workload['case_id']}: {res_stat.get('error_message')}")
-
-                        for step_idx in range(len(stream_updates)):
+                        stream_events = 0
+                        for idx, (entered, exited, graph_state, codec_state) in enumerate(truth):
                             total_steps += 1
-                            bare_ent = sorted(res_bare["steps"][step_idx].get("entered_tuples", []))
-                            bare_ext = sorted(res_bare["steps"][step_idx].get("exited_tuples", []))
-                            stat_ent = sorted(res_stat["steps"][step_idx].get("entered_tuples", []))
-                            stat_ext = sorted(res_stat["steps"][step_idx].get("exited_tuples", []))
+                            stream_events += len(entered) + len(exited)
+                            for mode, result in results.items():
+                                step = result["steps"][idx]
+                                where = (workload["case_id"], mode, idx)
+                                self.assertEqual(step["commit_status"], "COMMITTED", where)
+                                self.assertEqual(sorted(step["entered_tuples"]), entered, where)
+                                self.assertEqual(sorted(step["exited_tuples"]), exited, where)
+                                self.assertEqual(step["step_counters"]["discarded_emissions"], 0, where)
+                                for validate, name, expected in (
+                                    (validate_graph_state, "graph_state", graph_state),
+                                    (validate_codec_state, "codec_state", codec_state),
+                                ):
+                                    agreed, reason = validate(step[name], expected, case_id=workload["case_id"],
+                                                              engine=mode, step_index=idx)
+                                    self.assertTrue(agreed, reason)
+                        truth_events += stream_events
+                        event_streams += stream_events > 0
+                        counters = results["residual"]["counters"]
+                        residual_checks += counters["nlf_residual_checks"]
+                        residual_prunes += counters["nlf_residual_pruned"]
 
-                            self.assertEqual(stat_ent, m0_entered[step_idx], f"PBT entered mismatch with M0 at step {step_idx} in {workload['case_id']}")
-                            self.assertEqual(stat_ext, m0_exited[step_idx], f"PBT exited mismatch with M0 at step {step_idx} in {workload['case_id']}")
-                            self.assertEqual(stat_ent, bare_ent, f"PBT entered mismatch between A-static and Bare M2 at step {step_idx} in {workload['case_id']}")
-                            self.assertEqual(stat_ext, bare_ext, f"PBT exited mismatch between A-static and Bare M2 at step {step_idx} in {workload['case_id']}")
-
-        print(f"  [PBT] Successfully verified {total_streams} generated streams ({total_steps} stream updates) across seeds {seeds}!")
-        self.assertGreaterEqual(total_streams, 60, "Must verify at least 60 streams")
-        self.assertGreaterEqual(total_steps, 720, "Must verify at least 720 stream updates")
+        print(f"  [PBT] {total_streams} streams {total_steps} updates seeds={seeds} "
+              f"event_streams={event_streams} zero_event={total_streams - event_streams} "
+              f"truth_events={truth_events} residual_checks={residual_checks} residual_prunes={residual_prunes} "
+              f"tuple_duplicate_graph_codec_discrepancies=0")
+        self.assertEqual(total_streams, 78)
+        self.assertEqual(total_steps, 780)
+        self.assertGreater(event_streams, 0)
 
     def test_07_configuration_integrity(self):
         """

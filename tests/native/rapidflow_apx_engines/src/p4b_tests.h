@@ -13,6 +13,7 @@ bool verify_index_reconstruction(
     const ApxNlfIndex& index
 );
 
+int run_residual_native_tests(const char* suite_name);
 int run_p4b_native_tests(const char* suite_name = "all");
 
 } // namespace rapidflow_apx

@@ -890,6 +890,35 @@ def validate_step_counters(
     return True, ""
 
 
+RESIDUAL_COUNTER_FIELDS = (
+    "nlf_residual_checks", "nlf_residual_pruned", "nlf_residual_anchor_checks",
+    "nlf_residual_anchor_pruned", "nlf_residual_signature_lookups",
+    "nlf_residual_missing_commits", "nlf_residual_missing_undos",
+)
+
+
+def validate_residual_counters(counters: Dict[str, Any], mode: str, completed: bool) -> str:
+    """Validate additive diagnostics while retaining the historical schema."""
+    if mode != "residual" and not any(field in counters for field in RESIDUAL_COUNTER_FIELDS):
+        return ""
+    for field in RESIDUAL_COUNTER_FIELDS:
+        value = counters.get(field)
+        if type(value) is not int or not 0 <= value <= 500000000000000:
+            return f"Invalid residual counter {field}: {value!r}"
+        if mode != "residual" and value:
+            return f"Nonzero residual counter {field} in effective {mode!r}"
+    for subset, total in (
+        ("pruned", "checks"), ("anchor_checks", "checks"),
+        ("anchor_pruned", "anchor_checks"), ("anchor_pruned", "pruned"),
+        ("missing_undos", "missing_commits"),
+    ):
+        if counters[f"nlf_residual_{subset}"] > counters[f"nlf_residual_{total}"]:
+            return f"Residual {subset} exceeds {total}"
+    if completed and counters["nlf_residual_missing_commits"] != counters["nlf_residual_missing_undos"]:
+        return "Completed residual search did not balance commitments and undo"
+    return ""
+
+
 def validate_native_output_schema(
     res_data: Dict[str, Any],
     expected_engine: str,
@@ -1145,6 +1174,9 @@ def validate_native_output_schema(
             )
             if not val_sc_ok:
                 return False, val_sc_diag
+            residual_error = validate_residual_counters(sc, res_data.get("effective_nlf_mode"), step_stat == "SUCCESS")
+            if residual_error:
+                return False, f"Step {s_idx}: {residual_error}"
 
             if step_stat == "SUCCESS":
                 exp_step_tuples = len(step.get("entered_tuples", [])) + len(step.get("exited_tuples", []))
@@ -1411,6 +1443,9 @@ def validate_native_output_schema(
         cnt = res_data["counters"]
         if not isinstance(cnt, dict):
             return False, "'counters' in native output is not an object"
+        residual_error = validate_residual_counters(cnt, res_data.get("effective_nlf_mode"), is_success)
+        if residual_error:
+            return False, residual_error
         mandatory_root_fields = [
             "raw_emissions", "unique_emissions", "committed_emissions", "discarded_emissions",
             "work_units", "max_work", "anchors_started", "dfs_states",
@@ -1456,6 +1491,7 @@ def validate_native_output_schema(
         elif expected_engine == "m2":
             reconciliation_fields.extend(["edge_decisions", "missing_branches", "commitment_checks", "commitment_rejections"])
 
+        reconciliation_fields.extend(field for field in RESIDUAL_COUNTER_FIELDS if field in cnt)
         for rf in reconciliation_fields:
             step_sum = sum(s.get("step_counters", {}).get(rf, 0) for s in steps if s.get("status") != "UNATTEMPTED" and "step_counters" in s)
             if cnt[rf] != step_sum:
@@ -1541,7 +1577,7 @@ def validate_nlf_configuration(
     native_eff = native_result["effective_nlf_mode"]
     config_status = native_result["configuration_status"]
     fallback = native_result.get("fallback_reason")
-    if native_req not in ("none", "static") or native_eff not in ("none", "static"):
+    if native_req not in ("none", "static", "residual") or native_eff not in ("none", "static", "residual"):
         return reject("Unknown requested or effective NLF mode")
     if native_req != requested_nlf_mode:
         return reject(f"Requested mode mismatch: runner requested '{requested_nlf_mode}', native reported '{native_req}'")
@@ -1556,12 +1592,12 @@ def validate_nlf_configuration(
         if native_eff != native_req:
             return reject(f"SUCCESS requires effective mode '{native_req}', got '{native_eff}'")
     elif config_status == "REQUESTED_CONFIGURATION_UNAVAILABLE":
-        if native_req != "static":
+        if native_req == "none":
             return reject("Requested 'none' cannot report unavailable", "CONFIG_UNAVAILABLE")
         if native_eff != "none":
-            return reject("Unavailable static configuration must use effective 'none'", "CONFIG_CONTRADICTION")
+            return reject(f"Unavailable {native_req} configuration must use effective 'none'", "CONFIG_CONTRADICTION")
         if fallback not in ("NLF_INDEX_MEMORY_LIMIT", "NLF_INDEX_ALLOCATION_FAILED"):
-            return reject(f"Unavailable static configuration has invalid fallback_reason {fallback!r}", "CONFIG_INVALID_METADATA")
+            return reject(f"Unavailable {native_req} configuration has invalid fallback_reason {fallback!r}", "CONFIG_INVALID_METADATA")
     else:
         return reject(f"Unknown configuration status '{config_status}'")
 
@@ -1573,11 +1609,11 @@ def validate_nlf_configuration(
         return reject(f"Logical bytes for effective 'none' must be 0, got {logical}")
     if type(limit) is not int or limit <= 0:
         return reject("nlf_memory_limit_bytes must be a positive integer")
-    if native_eff == "static" and logical > limit:
+    if native_eff != "none" and logical > limit:
         return reject(f"Index logical bytes {logical} exceeds limit {limit}")
 
     if config_status == "REQUESTED_CONFIGURATION_UNAVAILABLE":
-        return reject(f"Requested static optimization unavailable (fallback_reason: {fallback})", "CONFIG_UNAVAILABLE")
+        return reject(f"Requested {native_req} optimization unavailable (fallback_reason: {fallback})", "CONFIG_UNAVAILABLE")
     meta_info["eligible_for_requested_variant"] = is_success_run
     return True, "", meta_info
 
@@ -3162,7 +3198,7 @@ def main():
     parser.add_argument("--engine", choices=["m1", "m2", "all"], default="all", help="Target engine")
     parser.add_argument("--stage", choices=["provenance", "hand", "corpus", "stream", "all"], default="all", help="Target execution stage")
     parser.add_argument("--case", type=str, default=None, help="Diagnostic single case ID to run")
-    parser.add_argument("--nlf-mode", choices=["none", "static"], default="none", help="NLF optimization mode (default: none)")
+    parser.add_argument("--nlf-mode", choices=["none", "static", "residual"], default="none", help="NLF optimization mode (default: none)")
     parser.add_argument("--output", type=str, default=None, help="Output summary report path")
     args = parser.parse_args()
 

@@ -14,7 +14,7 @@ from scripts import run_rapidflow_apx_engines as runner
 
 
 FIXTURES = runner.REPO_ROOT / "tests/fixtures/rapidflow_apx_foundation_audit"
-MODES = (("m1", "none"), ("m2", "none"), ("m2", "static"))
+MODES = (("m1", "none"), ("m2", "none"), ("m2", "static"), ("m2", "residual"))
 
 
 def vertex(id_, label):
@@ -240,7 +240,7 @@ class FoundationAuditRemediation(unittest.TestCase):
                             event_type = "entered_tuples" if op == "+" else "exited_tuples"
                             self.assertEqual(sorted(second[event_type]), [[0, 1], [1, 0]])
                             self.assertEqual(result["execution"]["delivered_steps"], 2)
-                            if mode == "static":
+                            if mode != "none":
                                 self.assertIs(first["nlf_full_cell_reconstruction"], True)
                         else:
                             self.assertEqual(proc.returncode, 9)
@@ -257,7 +257,7 @@ class FoundationAuditRemediation(unittest.TestCase):
                                 "committed_steps": 1, "failed_steps": 1, "delivered_steps": 0,
                                 "unattempted_steps": 1,
                             })
-                            if mode == "static":
+                            if mode != "none":
                                 self.assertIs(first["nlf_full_cell_reconstruction"], True)
                         self.assertEqual(result["execution"]["committed_steps"], 1)
                         self.assertEqual(first["entered_tuples"], [])

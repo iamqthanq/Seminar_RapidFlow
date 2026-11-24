@@ -70,6 +70,12 @@ public:
     ApxTransactionManager& get_tx_manager() noexcept { return tx_manager_; }
     void set_m2_fault_hook(M2FaultHook hook) noexcept { m2_engine_.set_fault_hook(hook); }
 
+#ifdef APX_RESIDUAL_TEST_TRACE
+    void set_residual_observer(ApxM2EventEngine::ResidualObserver observer) {
+        m2_engine_.set_residual_observer(std::move(observer));
+    }
+#endif
+
     void set_profiling_enabled(bool enabled) noexcept {
         profiling_enabled_ = enabled;
         tx_manager_.set_profiling_enabled(enabled);

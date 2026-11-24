@@ -33,7 +33,7 @@ ApxStreamingEngine::ApxStreamingEngine(
         }
         effective_nlf_mode_ = NlfMode::NONE;
     } else {
-        if (requested_nlf_mode_ == NlfMode::STATIC) {
+        if (requested_nlf_mode_ == NlfMode::STATIC || requested_nlf_mode_ == NlfMode::RESIDUAL) {
             if (max_nlf_memory_bytes_ == 0) {
                 max_nlf_memory_bytes_ = DEFAULT_NLF_MEMORY_BYTES;
             }
@@ -43,7 +43,7 @@ ApxStreamingEngine::ApxStreamingEngine(
                 idx->initialize(graph_, query_signatures_, max_nlf_memory_bytes_);
                 nlf_index_ = std::move(idx);
                 tx_manager_.set_nlf_context(nlf_index_.get(), &query_signatures_);
-                effective_nlf_mode_ = NlfMode::STATIC;
+                effective_nlf_mode_ = requested_nlf_mode_;
                 configuration_status_ = "SUCCESS";
                 cumulative_counters_.nlf_index_initialization_cells = nlf_index_->total_cells();
             } catch (const NlfMemoryLimitException&) {

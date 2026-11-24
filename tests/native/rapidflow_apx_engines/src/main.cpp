@@ -341,9 +341,38 @@ int run_native_empty_frontier_test() {
     }
 }
 
+static const char* nlf_mode_name(NlfMode mode) {
+    switch (mode) {
+        case NlfMode::NONE: return "none";
+        case NlfMode::STATIC: return "static";
+        case NlfMode::RESIDUAL: return "residual";
+    }
+    throw std::logic_error("Unknown native NLF mode");
+}
+
+static bool parse_nlf_mode(const std::string& text, NlfMode& mode) {
+    for (auto candidate : {NlfMode::NONE, NlfMode::STATIC, NlfMode::RESIDUAL}) {
+        if (text == nlf_mode_name(candidate)) {
+            mode = candidate;
+            return true;
+        }
+    }
+    return false;
+}
+
+static void add_residual_counters(json::Value& out, const EngineCounters& counters) {
+    out["nlf_residual_checks"] = json::Value(counters.nlf_residual_checks);
+    out["nlf_residual_pruned"] = json::Value(counters.nlf_residual_pruned);
+    out["nlf_residual_anchor_checks"] = json::Value(counters.nlf_residual_anchor_checks);
+    out["nlf_residual_anchor_pruned"] = json::Value(counters.nlf_residual_anchor_pruned);
+    out["nlf_residual_signature_lookups"] = json::Value(counters.nlf_residual_signature_lookups);
+    out["nlf_residual_missing_commits"] = json::Value(counters.nlf_residual_missing_commits);
+    out["nlf_residual_missing_undos"] = json::Value(counters.nlf_residual_missing_undos);
+}
+
 int main(int argc, char* argv[]) {
     std::string engine_str = "m2";
-    std::string nlf_mode_str = "none";
+    NlfMode nlf_mode = NlfMode::NONE;
     uint64_t max_nlf_memory_mib = DEFAULT_NLF_MEMORY_MIB; // 256 MiB default
     bool cli_max_nlf_memory_mib_set = false;
     std::string workload_path = "";
@@ -367,6 +396,8 @@ int main(int argc, char* argv[]) {
         std::string arg = argv[i];
         if (arg == "--test-empty-frontier") {
             return run_native_empty_frontier_test();
+        } else if (arg == "--test-p4b-residual") {
+            return run_residual_native_tests(i + 1 < argc ? argv[i + 1] : "numeric");
         } else if (arg == "--test-p4b") {
             std::string suite = "all";
             if (i + 1 < argc && argv[i + 1][0] != '-') {
@@ -434,9 +465,9 @@ int main(int argc, char* argv[]) {
                 std::cerr << "Error: Missing argument for --nlf-mode\n";
                 return static_cast<int>(ExitCode::CLI_ARG_ERROR);
             }
-            nlf_mode_str = argv[++i];
-            if (nlf_mode_str != "none" && nlf_mode_str != "static") {
-                std::cerr << "Error: Invalid --nlf-mode '" << nlf_mode_str << "'. Must be 'none' or 'static'.\n";
+            const std::string mode_text = argv[++i];
+            if (!parse_nlf_mode(mode_text, nlf_mode)) {
+                std::cerr << "Error: Invalid --nlf-mode '" << mode_text << "'. Must be 'none', 'static' or 'residual'.\n";
                 return static_cast<int>(ExitCode::CLI_ARG_ERROR);
             }
         } else if (arg == "--max-nlf-memory-mib") {
@@ -475,7 +506,7 @@ int main(int argc, char* argv[]) {
             profile_output_path = argv[++i];
             profiling_enabled = true;
         } else if (arg == "--help" || arg == "-h") {
-            std::cout << "Usage: rapidflow_apx_native --engine <m1|m2> --workload <INPUT.json> --output <OUTPUT.json> [--max-work <N>] [--continue-on-error] [--profile] [--profile-output <FILE>]\n";
+            std::cout << "Usage: rapidflow_apx_native --engine <m1|m2> --workload <INPUT.json> --output <OUTPUT.json> [--max-work <N>] [--continue-on-error] [--nlf-mode <none|static|residual>] [--max-nlf-memory-mib <MiB>] [--profile] [--profile-output <FILE>]\n";
             return static_cast<int>(ExitCode::SUCCESS);
         } else {
             std::cerr << "Error: Unknown or unsupported option: " << arg << "\n";
@@ -503,7 +534,6 @@ int main(int argc, char* argv[]) {
         return static_cast<int>(ExitCode::CLI_ARG_ERROR);
     }
 
-    NlfMode nlf_mode = (nlf_mode_str == "static") ? NlfMode::STATIC : NlfMode::NONE;
     if (engine_type == EngineType::M1 && nlf_mode != NlfMode::NONE) {
         std::cerr << "Error: NLF optimization is not supported for M1 engine.\n";
         return static_cast<int>(ExitCode::CLI_ARG_ERROR);
@@ -754,21 +784,20 @@ int main(int argc, char* argv[]) {
         run_profiling.query_prep_ns = std::chrono::duration_cast<ProfilingNanoseconds>(qp_t1 - qp_t0).count();
 
         // 4. Initialize Sink and Streaming Engine
-        NlfMode nlf_mode = (nlf_mode_str == "static") ? NlfMode::STATIC : NlfMode::NONE;
         size_t max_nlf_memory_bytes = static_cast<size_t>(max_nlf_memory_mib) * BYTES_PER_MIB;
         ApxTupleSink sink(codec, canonical_order);
         ApxStreamingEngine streaming_engine(graph, codec, sink, query_plan, engine_type, max_work, nlf_mode, max_nlf_memory_bytes);
         streaming_engine.set_profiling_enabled(profiling_enabled);
 
         root_out["configuration_initialized"] = json::Value(true);
-        root_out["requested_nlf_mode"] = json::Value(nlf_mode_str);
-        root_out["effective_nlf_mode"] = json::Value(streaming_engine.get_effective_nlf_mode() == NlfMode::STATIC ? "static" : "none");
+        root_out["requested_nlf_mode"] = json::Value(nlf_mode_name(streaming_engine.get_requested_nlf_mode()));
+        root_out["effective_nlf_mode"] = json::Value(nlf_mode_name(streaming_engine.get_effective_nlf_mode()));
         root_out["configuration_status"] = json::Value(streaming_engine.get_configuration_status());
         if (!streaming_engine.get_fallback_reason().empty()) {
             root_out["fallback_reason"] = json::Value(streaming_engine.get_fallback_reason());
         }
         root_out["nlf_memory_limit_bytes"] = json::Value(static_cast<int64_t>(max_nlf_memory_bytes));
-        if (streaming_engine.get_effective_nlf_mode() == NlfMode::STATIC && streaming_engine.get_nlf_index()) {
+        if (streaming_engine.get_nlf_index()) {
             root_out["nlf_index_logical_bytes"] = json::Value(static_cast<int64_t>(streaming_engine.get_nlf_index()->logical_bytes()));
         } else {
             root_out["nlf_index_logical_bytes"] = json::Value(static_cast<int64_t>(0));
@@ -858,6 +887,9 @@ int main(int argc, char* argv[]) {
                 else if (fault == "ALLOCATION_FAILURE_MUTATION") tx_fault = FaultPoint::ALLOCATION_FAILURE_MUTATION;
                 else if (fault == "AFTER_MUTATION") tx_fault = FaultPoint::AFTER_MUTATION;
                 else if (fault == "DURING_CALLBACK") tx_fault = FaultPoint::DURING_CALLBACK;
+                else if (fault == "AFTER_NLF_PREPARE") tx_fault = FaultPoint::AFTER_NLF_PREPARE;
+                else if (fault == "AFTER_GRAPH_BEFORE_NLF") tx_fault = FaultPoint::AFTER_GRAPH_BEFORE_NLF;
+                else if (fault == "AFTER_FIRST_NLF_CELL") tx_fault = FaultPoint::AFTER_FIRST_NLF_CELL;
                 else if (fault == "BEFORE_PUBLISH") tx_fault = FaultPoint::BEFORE_PUBLISH;
                 else if (fault == "AFTER_MISSING_COMMITMENT") m2_fault = M2FaultHook::AFTER_MISSING_COMMITMENT;
                 else if (fault == "AFTER_VERTEX_ASSIGNMENT") m2_fault = M2FaultHook::AFTER_VERTEX_ASSIGNMENT;
@@ -924,6 +956,7 @@ int main(int argc, char* argv[]) {
                     step_cnt["commitment_checks"] = json::Value(step_res.step_counters.commitment_checks);
                     step_cnt["commitment_rejections"] = json::Value(step_res.step_counters.commitment_rejections);
                 }
+                add_residual_counters(step_cnt, step_res.step_counters);
                 step_cnt["nlf_static_checks"] = json::Value(step_res.step_counters.nlf_static_checks);
                 step_cnt["nlf_static_pruned"] = json::Value(step_res.step_counters.nlf_static_pruned);
                 step_cnt["nlf_signature_lookups"] = json::Value(step_res.step_counters.nlf_signature_lookups);
@@ -946,7 +979,9 @@ int main(int argc, char* argv[]) {
                 delivery_stage = "GRAPH_DIAGNOSTICS";
                 if (fault == "REPORT_GRAPH_DIAGNOSTICS") throw std::bad_alloc();
                 step_json["graph_state"] = build_graph_state_json(graph, codec);
-                if (tx_fault != FaultPoint::NONE) {
+                if (tx_fault != FaultPoint::NONE || m2_fault != M2FaultHook::NONE
+                    || (nlf_mode == NlfMode::RESIDUAL && step_res.status == StepStatus::CALLBACK_ABORTED
+                        && step_res.error_message.find("Work budget exceeded") != std::string::npos)) {
                     if (const auto* index = streaming_engine.get_nlf_index()) {
                         step_json["nlf_full_cell_reconstruction"] = json::Value(
                             verify_index_reconstruction(graph, streaming_engine.get_query_signatures(), *index));
@@ -1009,7 +1044,9 @@ int main(int argc, char* argv[]) {
             if (failed) ++failed_steps;
             else ++completed_steps;
 
-            if (delivery_failed || (failed && !continue_on_error)) {
+            const bool poisoned_residual = nlf_mode == NlfMode::RESIDUAL
+                && streaming_engine.get_tx_manager().is_session_poisoned();
+            if (delivery_failed || (failed && !continue_on_error) || poisoned_residual) {
                 for (size_t rem = step_idx + 1; rem < total_steps; ++rem) {
                     steps_arr.arr.push_back(unattempted_update(rem, upd_arr[rem]));
                 }
@@ -1057,6 +1094,7 @@ int main(int argc, char* argv[]) {
             cnt_json["commitment_checks"] = json::Value(counters.commitment_checks);
             cnt_json["commitment_rejections"] = json::Value(counters.commitment_rejections);
         }
+        add_residual_counters(cnt_json, counters);
         cnt_json["nlf_static_checks"] = json::Value(counters.nlf_static_checks);
         cnt_json["nlf_static_pruned"] = json::Value(counters.nlf_static_pruned);
         cnt_json["nlf_signature_lookups"] = json::Value(counters.nlf_signature_lookups);

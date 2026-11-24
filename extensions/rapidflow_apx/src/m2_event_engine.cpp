@@ -1,5 +1,6 @@
 #include "rapidflow_apx/m2_event_engine.h"
-#include <algorithm>
+#include "rapidflow_apx/residual_nlf_state.h"
+#include <optional>
 
 namespace rapidflow_apx {
 
@@ -28,7 +29,44 @@ inline bool static_nlf_allows(
     }
     return true; // KEEP
 }
+bool residual_candidate_allows(
+    const ApxResidualMissingState& residual,
+    const ApxQuerySignatures& signatures,
+    const ApxNlfIndex& index,
+    uint32_t query_vertex,
+    uint32_t data_vertex,
+    uint32_t k,
+    uint32_t missing_count,
+    EngineCounters& counters,
+    bool is_anchor
+) {
+    ++counters.nlf_residual_checks;
+    if (is_anchor) {
+        ++counters.nlf_anchor_checks;
+        ++counters.nlf_residual_anchor_checks;
+    }
+    const bool allowed = residual.allows(signatures, index, query_vertex, data_vertex, k, missing_count, counters);
+    if (!allowed) {
+        ++counters.nlf_residual_pruned;
+        if (is_anchor) {
+            ++counters.nlf_anchor_pruned;
+            ++counters.nlf_residual_anchor_pruned;
+        }
+    }
+    return allowed;
+}
 } // namespace
+
+#ifdef APX_RESIDUAL_TEST_TRACE
+#define APX_TRACE_RESIDUAL(point, count, edge, q, d, allowed) \
+    do { \
+        if (residual && residual_observer_) { \
+            residual_observer_({ResidualTracePoint::point, mapping, used_data, status, *residual, count, edge, q, d, allowed}); \
+        } \
+    } while (false)
+#else
+#define APX_TRACE_RESIDUAL(point, count, edge, q, d, allowed) ((void)0)
+#endif
 
 int ApxM2EventEngine::find_frontier_edge(
     const std::vector<uint32_t>& mapping,
@@ -96,6 +134,14 @@ uint64_t ApxM2EventEngine::search_event(
     std::vector<uint32_t> mapping(num_q, UNASSIGNED);
     std::vector<bool> used_data(num_d, false);
     std::vector<EdgeCommitment> status(num_m, EdgeCommitment::UNKNOWN);
+    std::optional<ApxResidualMissingState> residual_storage;
+    if (nlf_mode == NlfMode::RESIDUAL) {
+        if (!nlf_index || !signatures) {
+            throw ResidualInvariantViolation("RESIDUAL requires the initialized NLF index and signatures");
+        }
+        residual_storage.emplace(query_plan, *signatures);
+    }
+    auto* residual = residual_storage ? &*residual_storage : nullptr;
     uint64_t initial_emissions = sink.raw_emissions();
 
     for (uint32_t edge_idx : candidate_edges) {
@@ -131,6 +177,12 @@ uint64_t ApxM2EventEngine::search_event(
                     counters.nlf_anchor_pruned++;
                     continue;
                 }
+            } else if (residual) {
+                const uint32_t k = query_plan.get_k();
+                if (!residual_candidate_allows(*residual, *signatures, *nlf_index, qa, pa, k, 0, counters, true)
+                    || !residual_candidate_allows(*residual, *signatures, *nlf_index, qb, pb, k, 0, counters, true)) {
+                    continue;
+                }
             }
 
             counters.anchors_started++;
@@ -142,6 +194,7 @@ uint64_t ApxM2EventEngine::search_event(
             used_data[pa] = true;
             used_data[pb] = true;
             status[edge_idx] = EdgeCommitment::PRESENT;
+            APX_TRACE_RESIDUAL(ANCHOR, 0, edge_idx, qa, pa, true);
 
             dfs_m2(
                 mapping,
@@ -156,7 +209,8 @@ uint64_t ApxM2EventEngine::search_event(
                 profiler,
                 nlf_mode,
                 nlf_index,
-                signatures
+                signatures,
+                residual
             );
 
             // Undo anchor state
@@ -165,6 +219,7 @@ uint64_t ApxM2EventEngine::search_event(
             used_data[pb] = false;
             mapping[qa] = UNASSIGNED;
             mapping[qb] = UNASSIGNED;
+            APX_TRACE_RESIDUAL(ANCHOR_RESTORED, 0, edge_idx, qa, pa, true);
         }
     }
 
@@ -184,8 +239,10 @@ void ApxM2EventEngine::dfs_m2(
     StepProfiling* profiler,
     NlfMode nlf_mode,
     const ApxNlfIndex* nlf_index,
-    const ApxQuerySignatures* signatures
+    const ApxQuerySignatures* signatures,
+    ApxResidualMissingState* residual
 ) {
+    APX_TRACE_RESIDUAL(DFS_ENTRY, missing_count, UNASSIGNED, UNASSIGNED, UNASSIGNED, true);
     counters.dfs_states++;
     uint32_t k = query_plan.get_k();
     if (missing_count > k) {
@@ -280,6 +337,14 @@ void ApxM2EventEngine::dfs_m2(
                 counters.nlf_static_pruned++;
                 continue;
             }
+        } else if (residual) {
+            const bool allowed = residual_candidate_allows(
+                *residual, *signatures, *nlf_index, v_q, cand, k, missing_count, counters, false
+            );
+            APX_TRACE_RESIDUAL(CANDIDATE, missing_count, e, v_q, cand, allowed);
+            if (!allowed) {
+                continue;
+            }
         }
 
         counters.candidate_extensions++;
@@ -328,8 +393,13 @@ void ApxM2EventEngine::dfs_m2(
                         status[inc_j] = EdgeCommitment::PRESENT;
                     } else {
                         status_undo.emplace_back(inc_j, EdgeCommitment::UNKNOWN);
+                        if (residual) {
+                            residual->commit_missing(inc_j);
+                            ++counters.nlf_residual_missing_commits;
+                        }
                         status[inc_j] = EdgeCommitment::MISSING;
                         missing_count++;
+                        APX_TRACE_RESIDUAL(RESOLVED_MISSING, missing_count, inc_j, v_q, cand, true);
                         if (missing_count > k) {
                             ok = false;
                             break;
@@ -339,6 +409,7 @@ void ApxM2EventEngine::dfs_m2(
             }
         }
 
+        APX_TRACE_RESIDUAL(RESOLVED_INCIDENT, missing_count, e, v_q, cand, ok);
         if (ok) {
             dfs_m2(
                 mapping,
@@ -353,25 +424,39 @@ void ApxM2EventEngine::dfs_m2(
                 profiler,
                 nlf_mode,
                 nlf_index,
-                signatures
+                signatures,
+                residual
             );
+            APX_TRACE_RESIDUAL(CHILD_RETURN, missing_count, e, v_q, cand, true);
         }
 
         // Rollback PRESENT branch
         for (auto it = status_undo.rbegin(); it != status_undo.rend(); ++it) {
+            if (residual && status[it->first] == EdgeCommitment::MISSING) {
+                residual->undo_missing(it->first);
+                ++counters.nlf_residual_missing_undos;
+            }
             status[it->first] = it->second;
         }
         missing_count = old_missing_count;
         used_data[cand] = false;
         mapping[v_q] = UNASSIGNED;
+        APX_TRACE_RESIDUAL(CANDIDATE_RESTORED, missing_count, e, v_q, cand, ok);
     }
 
     // --- MISSING Branch ---
     counters.missing_branches++;
     counters.charge_work();
 
+    // Keep the transient out-of-budget commitment visible to the existing fault hook.
+    // No candidate filter runs until a child within the budget is entered.
+    if (residual) {
+        residual->commit_missing(e);
+        ++counters.nlf_residual_missing_commits;
+    }
     status[e] = EdgeCommitment::MISSING;
     uint32_t new_missing_count = missing_count + 1;
+    APX_TRACE_RESIDUAL(DEFERRED_MISSING, new_missing_count, e, v_q, UNASSIGNED, true);
 
     if (fault_hook_ == M2FaultHook::AFTER_MISSING_COMMITMENT) {
         throw FaultInjectedException("Simulated fault injected AFTER_MISSING_COMMITMENT in M2 DFS");
@@ -392,12 +477,20 @@ void ApxM2EventEngine::dfs_m2(
             profiler,
             nlf_mode,
             nlf_index,
-            signatures
+            signatures,
+            residual
         );
     }
 
-    // Rollback MISSING branch
+    // Rollback MISSING branch. Its global count was local to the child.
+    if (residual) {
+        residual->undo_missing(e);
+        ++counters.nlf_residual_missing_undos;
+    }
     status[e] = EdgeCommitment::UNKNOWN;
+    APX_TRACE_RESIDUAL(DEFERRED_RESTORED, missing_count, e, v_q, UNASSIGNED, true);
 }
+
+#undef APX_TRACE_RESIDUAL
 
 } // namespace rapidflow_apx

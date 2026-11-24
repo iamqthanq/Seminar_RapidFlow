@@ -685,11 +685,17 @@ A-static canonical verification:
 python3 scripts/run_rapidflow_apx_engines.py --engine m2 --nlf-mode static --stage all
 ```
 
-A-residual and Option B verification commands are planned for their implementation phases.
+A-residual canonical workload verification:
+
+```bash
+python3 scripts/run_rapidflow_apx_engines.py --engine m2 --nlf-mode residual --stage all
+```
+
+Option B verification commands are planned for its implementation phase.
 
 ### 8.3. Correctness contract and evidence hierarchy
 
-For completed valid workloads, M1, Bare M2, A-static and the planned A-residual and B variants must agree on exact ordered tuple sets, with correct graph and codec state and explicit duplicate detection. A pruning variant must preserve legacy counter definitions. Its counter values and work-budget outcomes may differ with legitimate pruning. A resource-censored run cannot earn completed-workload parity. Option B must preserve ordered neighbors, traversal and legacy counters wherever the search and accounting are held fixed.
+For completed valid workloads, M1, Bare M2, A-static, A-residual and the planned B variant must agree on exact ordered tuple sets, with correct graph and codec state and explicit duplicate detection. A pruning variant must preserve legacy counter definitions. Its counter values and work-budget outcomes may differ with legitimate pruning. A resource-censored run cannot earn completed-workload parity. Option B must preserve ordered neighbors, traversal and legacy counters wherever the search and accounting are held fixed.
 
 1. **Independent exhaustive oracle.** Compare exact tuples against the independent Python M0 within its registered bounds.
 2. **Analytical witness.** Compare with explicitly derived expected tuples and graph states.

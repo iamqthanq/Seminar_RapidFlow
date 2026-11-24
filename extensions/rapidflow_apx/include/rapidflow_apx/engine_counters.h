@@ -74,6 +74,15 @@ struct EngineCounters {
     uint64_t nlf_index_rollback_cells{0};
     uint64_t nlf_index_initialization_cells{0};
 
+    // DFS-local residual NLF operations and actual frequency reads.
+    uint64_t nlf_residual_checks{0};
+    uint64_t nlf_residual_pruned{0};
+    uint64_t nlf_residual_anchor_checks{0};
+    uint64_t nlf_residual_anchor_pruned{0};
+    uint64_t nlf_residual_signature_lookups{0};
+    uint64_t nlf_residual_missing_commits{0};
+    uint64_t nlf_residual_missing_undos{0};
+
     // Work limit
     uint64_t work_units{0};
     uint64_t max_work{500000};
@@ -125,6 +134,13 @@ struct EngineCounters {
         nlf_index_cell_updates = 0;
         nlf_index_rollback_cells = 0;
         nlf_index_initialization_cells = 0;
+        nlf_residual_checks = 0;
+        nlf_residual_pruned = 0;
+        nlf_residual_anchor_checks = 0;
+        nlf_residual_anchor_pruned = 0;
+        nlf_residual_signature_lookups = 0;
+        nlf_residual_missing_commits = 0;
+        nlf_residual_missing_undos = 0;
         work_units = 0;
     }
 
@@ -154,6 +170,13 @@ struct EngineCounters {
         nlf_index_cell_updates += other.nlf_index_cell_updates;
         nlf_index_rollback_cells += other.nlf_index_rollback_cells;
         nlf_index_initialization_cells += other.nlf_index_initialization_cells;
+        nlf_residual_checks += other.nlf_residual_checks;
+        nlf_residual_pruned += other.nlf_residual_pruned;
+        nlf_residual_anchor_checks += other.nlf_residual_anchor_checks;
+        nlf_residual_anchor_pruned += other.nlf_residual_anchor_pruned;
+        nlf_residual_signature_lookups += other.nlf_residual_signature_lookups;
+        nlf_residual_missing_commits += other.nlf_residual_missing_commits;
+        nlf_residual_missing_undos += other.nlf_residual_missing_undos;
         work_units += other.work_units;
     }
 };
