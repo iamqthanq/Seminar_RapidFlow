@@ -52,7 +52,7 @@ class TestNeighborBuffer(unittest.TestCase):
     def test_native_graph_and_pool(self):
         for suite, expected in (("graph", "vector_discrepancies=0 duplicate_discrepancies=0"),
                                 ("pool", "1000 lifetimes passed"),
-                                ("merge", "All MG-G01..G24 scenarios, tentative insert, and fallback guards verified.")):
+                                ("merge", "All MG-G01..G25 scenarios, tentative insert, and fallback guards verified.")):
             with self.subTest(suite=suite):
                 result = subprocess.run([str(BINARY), "--test-p4b-neighbor", suite], capture_output=True,
                                         text=True, timeout=30, check=False)
@@ -121,7 +121,7 @@ class TestNeighborBuffer(unittest.TestCase):
         base = {
             "engine": "m2", "engine_name": "m2", "configuration_initialized": True,
             "configuration_status": "SUCCESS", "nlf_memory_limit_bytes": 1024, "nlf_index_logical_bytes": 0,
-            "requested_nlf_mode": "none", "effective_nlf_mode": "none", "neighbor_configuration_version": 1,
+            "requested_nlf_mode": "none", "effective_nlf_mode": "none", "neighbor_configuration_version": 2,
             "requested_neighbor_mode": "buffer", "effective_neighbor_mode": "buffer",
         }
         for positive in (False, True):
@@ -130,7 +130,8 @@ class TestNeighborBuffer(unittest.TestCase):
                     return runner.validate_nlf_configuration(engine, nlf, d, positive, asked)[0]
                 self.assertTrue(check(base))
                 for field, value in (("effective_neighbor_mode", "legacy"), ("requested_neighbor_mode", "legacy"),
-                                     ("effective_neighbor_mode", "bogus"), ("neighbor_configuration_version", True)):
+                                     ("effective_neighbor_mode", "bogus"), ("neighbor_configuration_version", True),
+                                     ("neighbor_configuration_version", 1)):
                     self.assertFalse(check({**base, field: value}))
                 for field in ("neighbor_configuration_version", "requested_neighbor_mode", "effective_neighbor_mode"):
                     self.assertFalse(check({k: v for k, v in base.items() if k != field}))
@@ -138,13 +139,17 @@ class TestNeighborBuffer(unittest.TestCase):
                     self.assertFalse(check({**base, "requested_nlf_mode": nlf, "effective_nlf_mode": nlf}, nlf=nlf))
                 self.assertFalse(check({**base, "engine": "m1", "engine_name": "m1"}, engine="m1"))
                 self.assertFalse(check({**base, "requested_neighbor_mode": "legacy"}, asked="legacy"))
-        early = {"status": "FAIL", "configuration_initialized": False, "neighbor_configuration_version": 1,
+        early = {"status": "FAIL", "configuration_initialized": False, "neighbor_configuration_version": 2,
                  "error_category": "DOMAIN_ERROR", "exit_code": 3}
         self.assertTrue(runner.validate_nlf_configuration("m2", "none", early, False, "buffer")[0])
         self.assertTrue(runner.validate_nlf_configuration("m2", "none", early, False, "merge")[0])
         historical = {k: v for k, v in base.items() if k not in ADDITIONS}
         self.assertTrue(runner.validate_nlf_configuration("m2", "none", historical, True)[0])
         self.assertFalse(runner.validate_nlf_configuration("m2", "none", historical, True, "legacy")[0])
+        # Historical mode accepts version 1 when requested_neighbor_mode is not supplied:
+        self.assertTrue(runner.validate_nlf_configuration("m2", "none", {**base, "neighbor_configuration_version": 1}, True)[0])
+        # Live mode rejects version 1:
+        self.assertFalse(runner.validate_nlf_configuration("m2", "none", {**base, "neighbor_configuration_version": 1}, True, "buffer")[0])
         for mode in ("buffer", "merge"):
             base_m = {**base, "requested_neighbor_mode": mode, "effective_neighbor_mode": mode}
             self.assertTrue(runner.validate_nlf_configuration("m2", "none", base_m, True, mode)[0])
@@ -243,3 +248,146 @@ class TestNeighborBuffer(unittest.TestCase):
         self.assertEqual(result["error_category"], "PREVALIDATION_ERROR")
         self.assertEqual([s["status"] for s in result["steps"]], ["PREVALIDATION_FAILED", "UNATTEMPTED"])
         self.assertEqual(result["execution"]["committed_steps"], 0)
+
+    def test_strict_neighbor_counters_schema_helpers(self):
+        # 1. Valid merge mode counters under version 2
+        c = {f: 0 for f in runner.ALL_NEIGHBOR_COUNTER_FIELDS}
+        c["neighbor_buffer_retrieval_calls"] = 10
+        c["neighbor_buffer_growth_calls"] = 3
+        c["neighbor_buffer_no_growth_calls"] = 7
+        c["neighbor_merge_retrieval_calls"] = 10
+        c["neighbor_merge_linear_calls"] = 6
+        c["neighbor_merge_fast_path_calls"] = 4
+        c["neighbor_merge_fallback_calls"] = 0
+        res = {"neighbor_configuration_version": 2, "effective_neighbor_mode": "merge"}
+        self.assertEqual(runner.validate_neighbor_counters(c, res), "")
+
+        # 2. Missing field under version 2
+        for f in runner.ALL_NEIGHBOR_COUNTER_FIELDS:
+            bad = {k: v for k, v in c.items() if k != f}
+            err = runner.validate_neighbor_counters(bad, res)
+            self.assertIn("Missing required neighbor counter", err)
+
+        # 3. Bad types / bounds under version 2
+        for f in runner.ALL_NEIGHBOR_COUNTER_FIELDS:
+            for bad_val in (None, True, False, 1.5, "10", -1, 500000000000001):
+                err = runner.validate_neighbor_counters({**c, f: bad_val}, res)
+                self.assertIn(f"Invalid neighbor counter {f}", err)
+
+        # 4. Partition validation for buffer mode
+        res_b = {"neighbor_configuration_version": 2, "effective_neighbor_mode": "buffer"}
+        cb = {f: 0 for f in runner.ALL_NEIGHBOR_COUNTER_FIELDS}
+        cb["neighbor_buffer_retrieval_calls"] = 10
+        cb["neighbor_buffer_growth_calls"] = 4
+        cb["neighbor_buffer_no_growth_calls"] = 6
+        self.assertEqual(runner.validate_neighbor_counters(cb, res_b), "")
+        for mf in runner.NEIGHBOR_MERGE_COUNTER_FIELDS:
+            self.assertIn("Nonzero merge counter", runner.validate_neighbor_counters({**cb, mf: 1}, res_b))
+        self.assertIn("differ from growth plus no-growth",
+                      runner.validate_neighbor_counters({**cb, "neighbor_buffer_growth_calls": 3}, res_b))
+
+        # 5. Partition validation for merge mode
+        self.assertIn("differ from sum of linear, fast-path, and fallback",
+                      runner.validate_neighbor_counters({**c, "neighbor_merge_linear_calls": 5}, res))
+        self.assertIn("differ from buffer retrieval calls",
+                      runner.validate_neighbor_counters({**c, "neighbor_merge_retrieval_calls": 11, "neighbor_merge_linear_calls": 7}, res))
+        self.assertIn("differ from growth plus no-growth calls in merge mode",
+                      runner.validate_neighbor_counters({**c, "neighbor_buffer_growth_calls": 2}, res))
+
+        # 6. Legacy mode partition validation
+        res_l = {"neighbor_configuration_version": 2, "effective_neighbor_mode": "legacy"}
+        cl = {f: 0 for f in runner.ALL_NEIGHBOR_COUNTER_FIELDS}
+        self.assertEqual(runner.validate_neighbor_counters(cl, res_l), "")
+        for f in runner.ALL_NEIGHBOR_COUNTER_FIELDS:
+            self.assertIn("Nonzero neighbor counter", runner.validate_neighbor_counters({**cl, f: 1}, res_l))
+
+    def test_subprocess_counter_mutations_and_reconciliation(self):
+        actual = runner.execute_contained_subprocess
+
+        # Mutation 1: Remove all 7 counters from output
+        def remove_all_counters(cmd, **kwargs):
+            res = actual(cmd, **kwargs)
+            out = Path(cmd[cmd.index("--output") + 1])
+            body = json.loads(out.read_text())
+            for f in runner.ALL_NEIGHBOR_COUNTER_FIELDS:
+                body.get("counters", {}).pop(f, None)
+            out.write_text(json.dumps(body))
+            return res
+
+        def get_diag(res_dict):
+            return res_dict.get("schema_error") or res_dict.get("configuration_error") or res_dict.get("error_message") or ""
+
+        with patch.object(runner, "execute_contained_subprocess", side_effect=remove_all_counters):
+            result, _, accepted = runner.run_workload_on_binary(BINARY, "m2", self.workload(), neighbor_mode="merge")
+        self.assertFalse(accepted)
+        self.assertIn("Missing required neighbor counter", get_diag(result))
+        self.assertEqual(result["native_reported_outcome"]["status"], "SUCCESS")
+
+        # Mutation 2: Remove 1 counter (neighbor_merge_linear_calls)
+        def remove_one_counter(cmd, **kwargs):
+            res = actual(cmd, **kwargs)
+            out = Path(cmd[cmd.index("--output") + 1])
+            body = json.loads(out.read_text())
+            body.get("counters", {}).pop("neighbor_merge_linear_calls", None)
+            out.write_text(json.dumps(body))
+            return res
+
+        with patch.object(runner, "execute_contained_subprocess", side_effect=remove_one_counter):
+            result, _, accepted = runner.run_workload_on_binary(BINARY, "m2", self.workload(), neighbor_mode="merge")
+        self.assertFalse(accepted)
+        self.assertIn("Missing required neighbor counter 'neighbor_merge_linear_calls'", get_diag(result))
+        self.assertEqual(result["native_reported_outcome"]["status"], "SUCCESS")
+
+        # Mutation 3: Set counter to string
+        def string_counter(cmd, **kwargs):
+            res = actual(cmd, **kwargs)
+            out = Path(cmd[cmd.index("--output") + 1])
+            body = json.loads(out.read_text())
+            body["counters"]["neighbor_merge_linear_calls"] = "10"
+            out.write_text(json.dumps(body))
+            return res
+
+        with patch.object(runner, "execute_contained_subprocess", side_effect=string_counter):
+            result, _, accepted = runner.run_workload_on_binary(BINARY, "m2", self.workload(), neighbor_mode="merge")
+        self.assertFalse(accepted)
+        self.assertIn("Invalid neighbor counter neighbor_merge_linear_calls", get_diag(result))
+        self.assertEqual(result["native_reported_outcome"]["status"], "SUCCESS")
+
+        # Mutation 4: Cumulative reconciliation violation (RB-01..RB-12 root linear/fast redistribution)
+        def redistribute_root_counters(cmd, **kwargs):
+            res = actual(cmd, **kwargs)
+            out = Path(cmd[cmd.index("--output") + 1])
+            body = json.loads(out.read_text())
+            cnt = body["counters"]
+            if cnt["neighbor_merge_linear_calls"] > 0:
+                cnt["neighbor_merge_linear_calls"] -= 1
+                cnt["neighbor_merge_fast_path_calls"] += 1
+            out.write_text(json.dumps(body))
+            return res
+
+        with patch.object(runner, "execute_contained_subprocess", side_effect=redistribute_root_counters):
+            result, _, accepted = runner.run_workload_on_binary(BINARY, "m2", self.workload(), neighbor_mode="merge")
+        self.assertFalse(accepted)
+        self.assertIn("mismatch with sum of step counters", get_diag(result))
+        self.assertEqual(result["native_reported_outcome"]["status"], "SUCCESS")
+
+    def test_historical_p4b2a_baseline_compatibility(self):
+        baseline_bin = Path("/tmp/rapidflow-p4b2b-r1-ot7fz8/binaries/p4b2a-baseline-native")
+        if not baseline_bin.is_file():
+            self.skipTest("Historical baseline binary not found")
+        # Run workload directly on historical baseline binary
+        with tempfile.TemporaryDirectory() as tmp:
+            inp, out = Path(tmp) / "in.json", Path(tmp) / "out.json"
+            inp.write_text(json.dumps(self.workload()))
+            res = subprocess.run([str(baseline_bin), "--engine", "m2", "--neighbor-mode", "buffer",
+                                  "--workload", str(inp), "--output", str(out)], capture_output=True, text=True)
+            self.assertEqual(res.returncode, 0, res.stderr)
+            hist_out = json.loads(out.read_text())
+            self.assertEqual(hist_out.get("neighbor_configuration_version"), 1)
+            # Historical validation without requested_neighbor_mode accepts version 1
+            ok, diag, meta = runner.validate_nlf_configuration("m2", "none", hist_out, True)
+            self.assertTrue(ok, diag)
+            # Live validation with requested_neighbor_mode strictly rejects version 1 (downgrade protection)
+            ok_live, diag_live, _ = runner.validate_nlf_configuration("m2", "none", hist_out, True, "buffer")
+            self.assertFalse(ok_live)
+            self.assertIn("Missing initialized current neighbor configuration identity", diag_live)

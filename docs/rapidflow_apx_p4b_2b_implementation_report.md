@@ -1,5 +1,15 @@
 # RapidFlow-APX P4b-2B Implementation and Verification Report
 
+> [!WARNING]
+> **Independent Review Correction Notice (P4b-2B R1 Gate Closure):**
+> Following independent technical lead review, this report is superseded in targeted areas by `docs/rapidflow_apx_p4b_2b_r1_implementation_report.md`. Specifically:
+> 1. **Schema Version & Counters (P4B2B-F01):** Active neighbor schema is version 2 requiring all 7 counter fields strictly typed in $[0, 5\times 10^{14}]$.
+> 2. **Cumulative Counter Reconciliation (P4B2B-F02):** Resolved reconciliation omission in `run_rapidflow_apx_engines.py:1562` for `ALL_NEIGHBOR_COUNTER_FIELDS`.
+> 3. **Structural Fail-Closed Guards (P4B2B-F03):** Internal helper `merge_neighbor_ranges` is private (accessed via `ApxAuthoritativeGraphTestAccess`); rejects self-loops ($v == u$) and out-of-universe IDs fail-closed with atomic `out.clear()`.
+> 4. **Gate Traceability (P4B2B-F04):** Restored original 64-gate acceptance matrix (`MB-A01`..`MB-F08`), prerequisite register (`SORT-P01`..`SORT-P09`), and verification register (`V-MB-01`..`V-MB-41`).
+> 5. **Evidence Accounting (P4B2B-F05):** Corrected frozen control comparison inventory to 379 total cases (359 successful + 20 expected negative outcomes); 921 parity ledger captured in `canonical-replays-r1.jsonl.gz`.
+> 6. **Research Claims & Metrics (P4B2B-F06):** Corrected trace table to 8,541 total rows across 8 fixtures; clarified single-event frame buffer lifecycle without unconditional heap allocations; disclosed upstream RapidFlow `Graph::buildEdgeIndex()` leak limitation under AddressSanitizer.
+
 **Proposed Handoff Verdict:** `P4B_2B_READY_FOR_INDEPENDENT_REVIEW`
 
 This report records the complete implementation, correctness proofs, and verification evidence for **Phase P4b-2B — Native Linear Sorted Neighbor Merge**, the final implementation phase of Option B for [Issue #38](https://github.com/iamqthanq/Seminar_RapidFlow/issues/38) and [Draft PR #39](https://github.com/iamqthanq/Seminar_RapidFlow/pull/39).

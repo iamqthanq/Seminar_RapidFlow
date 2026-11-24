@@ -612,7 +612,7 @@ int main(int argc, char* argv[]) {
     root_out["case_id"] = json::Value("UNKNOWN");
     root_out["status"] = json::Value("FAIL");
     root_out["configuration_initialized"] = json::Value(false);
-    root_out["neighbor_configuration_version"] = json::Value(1);
+    root_out["neighbor_configuration_version"] = json::Value(2);
     root_out["error_category"] = json::Value("NONE");
     root_out["error_message"] = json::Value("");
     root_out["steps"] = json::Value::make_array();

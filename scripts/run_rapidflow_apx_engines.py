@@ -931,22 +931,37 @@ ALL_NEIGHBOR_COUNTER_FIELDS = NEIGHBOR_COUNTER_FIELDS + NEIGHBOR_MERGE_COUNTER_F
 
 
 def validate_neighbor_counters(counters: Dict[str, Any], result: Dict[str, Any]) -> str:
-    if ("neighbor_configuration_version" not in result
-            and not any(field in counters for field in ALL_NEIGHBOR_COUNTER_FIELDS)):
-        return ""
-    for field in ALL_NEIGHBOR_COUNTER_FIELDS:
-        value = counters.get(field)
-        if value is not None:
-            if type(value) is not int or not 0 <= value <= 500000000000000:
+    version = result.get("neighbor_configuration_version")
+    if version == 2:
+        for field in ALL_NEIGHBOR_COUNTER_FIELDS:
+            if field not in counters:
+                return f"Missing required neighbor counter '{field}'"
+            value = counters[field]
+            if value is None or type(value) is not int or isinstance(value, bool) or not 0 <= value <= 500000000000000:
                 return f"Invalid neighbor counter {field}: {value!r}"
+    elif version == 1:
+        for field in ALL_NEIGHBOR_COUNTER_FIELDS:
+            value = counters.get(field)
+            if value is not None:
+                if type(value) is not int or isinstance(value, bool) or not 0 <= value <= 500000000000000:
+                    return f"Invalid neighbor counter {field}: {value!r}"
+    else:
+        if not any(field in counters for field in ALL_NEIGHBOR_COUNTER_FIELDS):
+            return ""
+        for field in ALL_NEIGHBOR_COUNTER_FIELDS:
+            value = counters.get(field)
+            if value is not None:
+                if type(value) is not int or isinstance(value, bool) or not 0 <= value <= 500000000000000:
+                    return f"Invalid neighbor counter {field}: {value!r}"
+
     eff_mode = result.get("effective_neighbor_mode")
     if eff_mode not in ("buffer", "merge"):
         for field in ALL_NEIGHBOR_COUNTER_FIELDS:
-            if counters.get(field):
+            if counters.get(field, 0) != 0:
                 return f"Nonzero neighbor counter {field} outside buffer/merge mode: {counters.get(field)}"
     elif eff_mode == "buffer":
         for field in NEIGHBOR_MERGE_COUNTER_FIELDS:
-            if counters.get(field):
+            if counters.get(field, 0) != 0:
                 return f"Nonzero merge counter {field} in buffer mode: {counters.get(field)}"
         if all(field in counters for field in NEIGHBOR_COUNTER_FIELDS):
             completed, growth, no_growth = (counters[field] for field in NEIGHBOR_COUNTER_FIELDS)
@@ -1544,7 +1559,7 @@ def validate_native_output_schema(
         elif expected_engine == "m2":
             reconciliation_fields.extend(["edge_decisions", "missing_branches", "commitment_checks", "commitment_rejections"])
 
-        reconciliation_fields.extend(field for field in RESIDUAL_COUNTER_FIELDS + NEIGHBOR_COUNTER_FIELDS if field in cnt)
+        reconciliation_fields.extend(field for field in RESIDUAL_COUNTER_FIELDS + ALL_NEIGHBOR_COUNTER_FIELDS if field in cnt)
         for rf in reconciliation_fields:
             step_sum = sum(s.get("step_counters", {}).get(rf, 0) for s in steps if s.get("status") != "UNATTEMPTED" and "step_counters" in s)
             if cnt[rf] != step_sum:
@@ -1604,7 +1619,7 @@ def validate_nlf_configuration(
         return reject("configuration_initialized must be a boolean")
 
     version = native_result.get("neighbor_configuration_version")
-    if "neighbor_configuration_version" in native_result and (type(version) is not int or version != 1):
+    if "neighbor_configuration_version" in native_result and (type(version) is not int or version not in (1, 2)):
         return reject("Unknown neighbor configuration version")
 
     # Require a startup failure category and zero execution evidence before
@@ -1649,8 +1664,12 @@ def validate_nlf_configuration(
     if requested_neighbor_mode is not None or version is not None or any(
         field in native_result for field in neighbor_fields
     ):
-        if version != 1 or marker is not True:
-            return reject("Missing initialized current neighbor configuration identity")
+        if requested_neighbor_mode is not None:
+            if version != 2 or marker is not True:
+                return reject("Missing initialized current neighbor configuration identity")
+        else:
+            if version not in (1, 2) or marker is not True:
+                return reject("Missing initialized current neighbor configuration identity")
         if native_result.get("engine") != requested_engine or native_result.get("engine_name") != requested_engine:
             return reject("Engine identity mismatch in initialized configuration")
         asked, effective = (native_result.get(field) for field in neighbor_fields)

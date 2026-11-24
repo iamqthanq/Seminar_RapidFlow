@@ -9,6 +9,8 @@ from unittest.mock import patch
 
 from scripts import run_rapidflow_apx_engines as runner
 from scripts.dstar_oracle import DStarDynamicOracle, DStarGraph, DStarUpdate
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from test_rapidflow_apx_foundation_audit import independent_snapshots, edge, update, vertex
 
 

@@ -33,8 +33,25 @@ struct GraphOverlayCheckpoint {
     uint32_t current_edges_count{0};
 };
 
+#ifdef APX_NEIGHBOR_TEST_TRACE
+enum class MergeFaultHook {
+    NONE,
+    FAIL_AFTER_FIRST_EMISSION,
+    FAIL_DURING_FALLBACK,
+    FAIL_DURING_FAST_PATH
+};
+#endif
+
+struct ApxAuthoritativeGraphTestAccess;
+
 class ApxAuthoritativeGraph {
 public:
+    friend struct ApxAuthoritativeGraphTestAccess;
+
+#ifdef APX_NEIGHBOR_TEST_TRACE
+    static void set_merge_fault_hook(MergeFaultHook hook);
+    static MergeFaultHook get_merge_fault_hook();
+#endif
     ApxAuthoritativeGraph();
     ~ApxAuthoritativeGraph();
 
@@ -75,16 +92,6 @@ public:
         EngineCounters* counters = nullptr
     ) const;
 
-    // Helper for linear sorted neighbor merging, accessible for direct testing.
-    void merge_neighbor_ranges(
-        uint32_t u,
-        const uint32_t* base_nbrs,
-        uint32_t base_count,
-        const uint32_t* overlay_nbrs,
-        uint32_t overlay_count,
-        std::vector<uint32_t>& out,
-        EngineCounters* counters = nullptr
-    ) const;
     uint32_t get_degree(uint32_t u) const;
     uint32_t get_vertices_count() const;
     uint32_t get_edges_count() const;
@@ -124,6 +131,17 @@ public:
     }
 
 private:
+    // Helper for linear sorted neighbor merging, accessible for direct testing via ApxAuthoritativeGraphTestAccess.
+    void merge_neighbor_ranges(
+        uint32_t u,
+        const uint32_t* base_nbrs,
+        uint32_t base_count,
+        const uint32_t* overlay_nbrs,
+        uint32_t overlay_count,
+        std::vector<uint32_t>& out,
+        EngineCounters* counters = nullptr
+    ) const;
+
     enum class TxOpType { NONE, INSERT, DELETE };
     struct TxRecord {
         TxOpType op{TxOpType::NONE};
@@ -156,6 +174,21 @@ private:
     // Active transaction state
     bool in_tx_{false};
     TxRecord tx_record_{};
+};
+
+struct ApxAuthoritativeGraphTestAccess {
+    static void merge_neighbor_ranges(
+        const ApxAuthoritativeGraph& graph,
+        uint32_t u,
+        const uint32_t* base_nbrs,
+        uint32_t base_count,
+        const uint32_t* overlay_nbrs,
+        uint32_t overlay_count,
+        std::vector<uint32_t>& out,
+        EngineCounters* counters = nullptr
+    ) {
+        graph.merge_neighbor_ranges(u, base_nbrs, base_count, overlay_nbrs, overlay_count, out, counters);
+    }
 };
 
 } // namespace rapidflow_apx

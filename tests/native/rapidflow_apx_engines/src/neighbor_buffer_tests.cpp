@@ -885,17 +885,23 @@ void merge_direct_and_fallback_tests() {
         g.get_neighbors_into(0, buffer);
         std::vector<uint32_t> merged;
         g.get_neighbors_merged_into(0, merged);
+        std::vector<uint32_t> merged1;
+        g.get_neighbors_merged_into(1, merged1);
 
         require(legacy == (std::vector<uint32_t>{1}), "MG-G19: Legacy sees reinserted edge");
         require(buffer == (std::vector<uint32_t>{1}), "MG-G19: Buffer sees reinserted edge");
-        require(merged == (std::vector<uint32_t>{1}), "MG-G19: Merge sees reinserted edge");
+        require(merged == (std::vector<uint32_t>{1}), "MG-G19: Merge sees reinserted edge on endpoint 0");
+        require(merged1 == (std::vector<uint32_t>{0}), "MG-G19: Merge sees reinserted edge on endpoint 1");
 
         // Rollback tentative insert
         g.rollback_transaction();
         require(!g.has_edge(0, 1), "MG-G19: Edge absent after rollback");
         std::vector<uint32_t> post_rollback;
         g.get_neighbors_merged_into(0, post_rollback);
-        require(post_rollback.empty(), "MG-G19: Post-rollback neighbors empty");
+        require(post_rollback.empty(), "MG-G19: Post-rollback neighbors 0 empty");
+        std::vector<uint32_t> post_rollback1;
+        g.get_neighbors_merged_into(1, post_rollback1);
+        require(post_rollback1.empty(), "MG-G19: Post-rollback neighbors 1 empty");
     }
 
     // MG-G20: Rollback-restored snapshot equivalence
@@ -998,7 +1004,7 @@ void merge_direct_and_fallback_tests() {
         uint32_t overlay[2] = {2, 4};
         std::vector<uint32_t> out;
         EngineCounters mc;
-        g.merge_neighbor_ranges(0, base, 3, overlay, 2, out, &mc);
+        ApxAuthoritativeGraphTestAccess::merge_neighbor_ranges(g, 0, base, 3, overlay, 2, out, &mc);
         require(out == (std::vector<uint32_t>{1, 2, 3, 4, 5}), "Fallback unsorted base");
         require(mc.neighbor_merge_fallback_calls == 1, "Fallback counted for unsorted base");
     }
@@ -1011,7 +1017,7 @@ void merge_direct_and_fallback_tests() {
         uint32_t overlay[3] = {6, 2, 4};
         std::vector<uint32_t> out;
         EngineCounters mc;
-        g.merge_neighbor_ranges(0, base, 3, overlay, 3, out, &mc);
+        ApxAuthoritativeGraphTestAccess::merge_neighbor_ranges(g, 0, base, 3, overlay, 3, out, &mc);
         require(out == (std::vector<uint32_t>{1, 2, 3, 4, 5, 6}), "Fallback unsorted overlay");
         require(mc.neighbor_merge_fallback_calls == 1, "Fallback counted for unsorted overlay");
     }
@@ -1024,7 +1030,7 @@ void merge_direct_and_fallback_tests() {
         uint32_t overlay[2] = {4, 2};
         std::vector<uint32_t> out;
         EngineCounters mc;
-        g.merge_neighbor_ranges(0, base, 2, overlay, 2, out, &mc);
+        ApxAuthoritativeGraphTestAccess::merge_neighbor_ranges(g, 0, base, 2, overlay, 2, out, &mc);
         require(out == (std::vector<uint32_t>{1, 2, 4, 5}), "Fallback both unsorted");
         require(mc.neighbor_merge_fallback_calls == 1, "Fallback counted for both unsorted");
     }
@@ -1036,7 +1042,7 @@ void merge_direct_and_fallback_tests() {
         uint32_t base[4] = {1, 2, 2, 3};
         std::vector<uint32_t> out;
         EngineCounters mc;
-        g.merge_neighbor_ranges(0, base, 4, nullptr, 0, out, &mc);
+        ApxAuthoritativeGraphTestAccess::merge_neighbor_ranges(g, 0, base, 4, nullptr, 0, out, &mc);
         require(out == (std::vector<uint32_t>{1, 2, 3}), "Fallback duplicate base");
         require(mc.neighbor_merge_fallback_calls == 1, "Fallback counted for duplicate base");
     }
@@ -1048,7 +1054,7 @@ void merge_direct_and_fallback_tests() {
         uint32_t overlay[4] = {2, 3, 3, 4};
         std::vector<uint32_t> out;
         EngineCounters mc;
-        g.merge_neighbor_ranges(0, nullptr, 0, overlay, 4, out, &mc);
+        ApxAuthoritativeGraphTestAccess::merge_neighbor_ranges(g, 0, nullptr, 0, overlay, 4, out, &mc);
         require(out == (std::vector<uint32_t>{2, 3, 4}), "Fallback duplicate overlay");
         require(mc.neighbor_merge_fallback_calls == 1, "Fallback counted for duplicate overlay");
     }
@@ -1061,7 +1067,7 @@ void merge_direct_and_fallback_tests() {
         uint32_t overlay[2] = {2, 4};
         std::vector<uint32_t> out;
         EngineCounters mc;
-        g.merge_neighbor_ranges(0, base, 3, overlay, 2, out, &mc);
+        ApxAuthoritativeGraphTestAccess::merge_neighbor_ranges(g, 0, base, 3, overlay, 2, out, &mc);
         require(out == (std::vector<uint32_t>{1, 2, 3, 4, 5}), "Fused guard late violation fallback");
         require(mc.neighbor_merge_fallback_calls == 1, "Late violation counted as fallback");
     }
@@ -1079,7 +1085,7 @@ void merge_direct_and_fallback_tests() {
         uint32_t base[3] = {10, 5, 20};
         std::vector<uint32_t> out;
         EngineCounters mc;
-        g.merge_neighbor_ranges(0, base, 3, nullptr, 0, out, &mc);
+        ApxAuthoritativeGraphTestAccess::merge_neighbor_ranges(g, 0, base, 3, nullptr, 0, out, &mc);
         require(out == (std::vector<uint32_t>{5, 20}), "Filtered element violation fallback");
         require(mc.neighbor_merge_fallback_calls == 1, "Filtered element violation counted as fallback");
     }
@@ -1093,7 +1099,7 @@ void merge_direct_and_fallback_tests() {
         uint32_t base[2] = {3, 1};
         std::vector<uint32_t> out;
         EngineCounters mc;
-        g.merge_neighbor_ranges(0, base, 2, nullptr, 0, out, &mc);
+        ApxAuthoritativeGraphTestAccess::merge_neighbor_ranges(g, 0, base, 2, nullptr, 0, out, &mc);
         require(out == (std::vector<uint32_t>{1, 3}), "Fast path prerequisite fallback");
         require(mc.neighbor_merge_fallback_calls == 1, "Fast path unsorted counted as fallback");
     }
@@ -1108,7 +1114,7 @@ void merge_direct_and_fallback_tests() {
         uint32_t overlay[2] = {3, 7};
         std::vector<uint32_t> out;
         EngineCounters mc;
-        g.merge_neighbor_ranges(0, base, 3, overlay, 2, out, &mc);
+        ApxAuthoritativeGraphTestAccess::merge_neighbor_ranges(g, 0, base, 3, overlay, 2, out, &mc);
         require(out == (std::vector<uint32_t>{1, 3, 5, 7}), "Equality deduplication");
         require(mc.neighbor_merge_linear_calls == 1, "Linear merge with equality");
     }
@@ -1120,7 +1126,7 @@ void merge_direct_and_fallback_tests() {
         std::vector<uint32_t> out;
         bool caught = false;
         try {
-            g.merge_neighbor_ranges(0, nullptr, 5, nullptr, 0, out);
+            ApxAuthoritativeGraphTestAccess::merge_neighbor_ranges(g, 0, nullptr, 5, nullptr, 0, out);
         } catch (const InvariantViolationException&) {
             caught = true;
         }
@@ -1134,14 +1140,305 @@ void merge_direct_and_fallback_tests() {
         std::vector<uint32_t> out;
         bool caught = false;
         try {
-            g.merge_neighbor_ranges(0, nullptr, 0, nullptr, 3, out);
+            ApxAuthoritativeGraphTestAccess::merge_neighbor_ranges(g, 0, nullptr, 0, nullptr, 3, out);
         } catch (const InvariantViolationException&) {
             caught = true;
         }
         require(caught, "Structural null pointer overlay threw InvariantViolationException");
     }
 
-    std::cout << "merge_direct_and_fallback_tests passed. All MG-G01..G24 scenarios, tentative insert, and fallback guards verified.\n";
+    // -------------------------------------------------------------------------
+    // MG-G19B: Event-bearing tentative INSERT witness & query event execution
+    // -------------------------------------------------------------------------
+    {
+        ApxAuthoritativeGraph g;
+        ApxTypedCodec codec;
+        codec.intern_vertex_label(TypedLabel::from_int(0));
+        codec.intern_edge_label(TypedLabel::from_int(0));
+        std::vector<Vertex> verts;
+        for (uint32_t i = 0; i < 4; ++i) {
+            verts.emplace_back(codec.intern_data_vertex(i), 0);
+        }
+        g.load_baseline(verts, {{1, 3, 0}, {2, 3, 0}});
+        const std::vector<QueryEdge> c4{{0, 1, 0}, {0, 2, 0}, {1, 3, 0}, {2, 3, 0}};
+        std::vector<uint32_t> qorder = {0, 1, 2, 3};
+        ApxQueryPlan plan;
+        plan.build(4, std::vector<uint32_t>(4, 0), c4, qorder, 1);
+
+        ApxTupleSink sink(codec, qorder);
+        ApxStreamingEngine engine(g, codec, sink, plan, EngineType::M2, 500000, NlfMode::NONE, 0, NeighborMode::MERGE);
+
+        // Tentative uncommitted insert
+        g.begin_transaction();
+        g.apply_insert(0, 1, 0);
+
+        // Verify BOTH endpoints see tentative neighbor in merged view
+        std::vector<uint32_t> nbrs0, nbrs1;
+        g.get_neighbors_merged_into(0, nbrs0);
+        g.get_neighbors_merged_into(1, nbrs1);
+        require(std::find(nbrs0.begin(), nbrs0.end(), 1) != nbrs0.end(), "MG-G19B: Endpoint 0 sees tentative neighbor 1");
+        require(std::find(nbrs1.begin(), nbrs1.end(), 0) != nbrs1.end(), "MG-G19B: Endpoint 1 sees tentative neighbor 0");
+
+        // Rollback transaction
+        g.rollback_transaction();
+
+        // Verify BOTH endpoints no longer see tentative edge
+        nbrs0.clear();
+        nbrs1.clear();
+        g.get_neighbors_merged_into(0, nbrs0);
+        g.get_neighbors_merged_into(1, nbrs1);
+        require(std::find(nbrs0.begin(), nbrs0.end(), 1) == nbrs0.end(), "MG-G19B: Endpoint 0 does not see 1 after rollback");
+        require(std::find(nbrs1.begin(), nbrs1.end(), 0) == nbrs1.end(), "MG-G19B: Endpoint 1 does not see 0 after rollback");
+
+        // Execute query event through engine
+        const auto step = engine.execute_step({UpdateOp::INSERT, 0, 1, TypedLabel::from_int(0)}, 0);
+        require(step.status == StepStatus::SUCCESS, "MG-G19B: Event processing succeeds");
+        require(step.committed, "MG-G19B: Event committed");
+        require(!step.entered_tuples.empty(), "MG-G19B: Event produces matches");
+    }
+
+    // -------------------------------------------------------------------------
+    // MG-G25: 65,536-neighbor MERGE witness & capacity reuse sequence
+    // -------------------------------------------------------------------------
+    {
+        ApxAuthoritativeGraph g;
+        const uint32_t N = 65538;
+        std::vector<Vertex> verts;
+        verts.reserve(N);
+        for (uint32_t i = 0; i < N; ++i) {
+            verts.emplace_back(i, 0);
+        }
+        std::vector<Edge> base_edges;
+        base_edges.reserve(32768);
+        for (uint32_t i = 1; i <= 32768; ++i) {
+            base_edges.push_back({0, 2 * i, 0});
+        }
+        g.load_baseline(verts, base_edges);
+
+        g.begin_transaction();
+        for (uint32_t i = 0; i < 32768; ++i) {
+            g.apply_insert(0, 2 * i + 1, 0);
+        }
+        g.commit_transaction();
+
+        std::vector<uint32_t> reusable_buf;
+        EngineCounters mc;
+        g.get_neighbors_merged_into(0, reusable_buf, &mc);
+        require(reusable_buf.size() == 65536, "MG-G25: 65,536 neighbors merged");
+        require(mc.neighbor_merge_linear_calls == 1, "MG-G25: Linear merge called for 65536 neighbors");
+        for (uint32_t i = 0; i < 65536; ++i) {
+            require(reusable_buf[i] == i + 1, "MG-G25: Strictly sorted order preserved");
+        }
+        size_t cap = reusable_buf.capacity();
+        require(cap >= 65536, "MG-G25: Buffer capacity >= 65536");
+
+        // Capacity reuse on small vertex (vertex 1 has degree 1: neighbor 0)
+        g.get_neighbors_merged_into(1, reusable_buf, &mc);
+        require(reusable_buf.size() == 1, "MG-G25: Small vertex size 1");
+        require(reusable_buf[0] == 0, "MG-G25: Small vertex neighbor 0");
+        require(reusable_buf.capacity() == cap, "MG-G25: Capacity preserved on small retrieval");
+
+        // Capacity reuse on empty vertex: vertex 65537 is completely isolated
+        g.get_neighbors_merged_into(65537, reusable_buf, &mc);
+        require(reusable_buf.empty(), "MG-G25: Empty vertex size 0");
+        require(reusable_buf.capacity() == cap, "MG-G25: Capacity preserved on empty retrieval");
+
+        // Capacity reuse on large vertex again
+        g.get_neighbors_merged_into(0, reusable_buf, &mc);
+        require(reusable_buf.size() == 65536, "MG-G25: Large vertex retrieved again");
+        require(reusable_buf.capacity() == cap, "MG-G25: Capacity unchanged without realloc");
+    }
+
+    // -------------------------------------------------------------------------
+    // SC-01..SC-20: Structural Fail-Closed Witness Matrix (Section XII)
+    // -------------------------------------------------------------------------
+    {
+        ApxAuthoritativeGraph g;
+        g.load_baseline({{0, 0}, {1, 0}, {2, 0}}, {});
+
+        auto assert_invariant_violation = [&](const char* label, auto&& fn) {
+            std::vector<uint32_t> out;
+            out.push_back(12345); // sentinel to verify clear on fail
+            EngineCounters c;
+            bool caught = false;
+            try {
+                fn(out, c);
+            } catch (const InvariantViolationException&) {
+                caught = true;
+            }
+            require(caught, label);
+            require(out.empty(), "Atomic clear: out vector cleared on exception");
+            require(c.neighbor_merge_retrieval_calls == 0, "No counter update on exception");
+        };
+
+        // SC-01: Invalid u (not in graph)
+        assert_invariant_violation("SC-01: Invalid u rejected", [&](auto& out, auto& c) {
+            ApxAuthoritativeGraphTestAccess::merge_neighbor_ranges(g, 9999, nullptr, 0, nullptr, 0, out, &c);
+        });
+
+        // SC-02: base_count > 0 with null pointer
+        assert_invariant_violation("SC-02: Base count > 0 with null ptr rejected", [&](auto& out, auto& c) {
+            ApxAuthoritativeGraphTestAccess::merge_neighbor_ranges(g, 0, nullptr, 5, nullptr, 0, out, &c);
+        });
+
+        // SC-03: overlay_count > 0 with null pointer
+        assert_invariant_violation("SC-03: Overlay count > 0 with null ptr rejected", [&](auto& out, auto& c) {
+            ApxAuthoritativeGraphTestAccess::merge_neighbor_ranges(g, 0, nullptr, 0, nullptr, 3, out, &c);
+        });
+
+        // SC-04: Fast Path 2: self-loop in overlay (v == u)
+        uint32_t self_loop[1] = {0};
+        assert_invariant_violation("SC-04: Fast Path 2 self-loop rejected", [&](auto& out, auto& c) {
+            ApxAuthoritativeGraphTestAccess::merge_neighbor_ranges(g, 0, nullptr, 0, self_loop, 1, out, &c);
+        });
+
+        // SC-05: Fast Path 2: out-of-universe in overlay (v >= 3)
+        uint32_t oou[1] = {99};
+        assert_invariant_violation("SC-05: Fast Path 2 out-of-universe rejected", [&](auto& out, auto& c) {
+            ApxAuthoritativeGraphTestAccess::merge_neighbor_ranges(g, 0, nullptr, 0, oou, 1, out, &c);
+        });
+
+        // SC-06: Fast Path 2: UINT32_MAX in overlay
+        uint32_t sent[1] = {UINT32_MAX};
+        assert_invariant_violation("SC-06: Fast Path 2 UINT32_MAX rejected", [&](auto& out, auto& c) {
+            ApxAuthoritativeGraphTestAccess::merge_neighbor_ranges(g, 0, nullptr, 0, sent, 1, out, &c);
+        });
+
+        // SC-07: Fast Path 3: self-loop in base (v == u)
+        assert_invariant_violation("SC-07: Fast Path 3 self-loop rejected", [&](auto& out, auto& c) {
+            ApxAuthoritativeGraphTestAccess::merge_neighbor_ranges(g, 0, self_loop, 1, nullptr, 0, out, &c);
+        });
+
+        // SC-08: Fast Path 3: out-of-universe in base
+        assert_invariant_violation("SC-08: Fast Path 3 out-of-universe rejected", [&](auto& out, auto& c) {
+            ApxAuthoritativeGraphTestAccess::merge_neighbor_ranges(g, 0, oou, 1, nullptr, 0, out, &c);
+        });
+
+        // SC-09: Fast Path 3: UINT32_MAX in base
+        assert_invariant_violation("SC-09: Fast Path 3 UINT32_MAX rejected", [&](auto& out, auto& c) {
+            ApxAuthoritativeGraphTestAccess::merge_neighbor_ranges(g, 0, sent, 1, nullptr, 0, out, &c);
+        });
+
+        // SC-10: Linear merge: self-loop in base
+        uint32_t base_self[2] = {0, 2};
+        uint32_t over_valid[1] = {1};
+        assert_invariant_violation("SC-10: Linear merge self-loop in base rejected", [&](auto& out, auto& c) {
+            ApxAuthoritativeGraphTestAccess::merge_neighbor_ranges(g, 0, base_self, 2, over_valid, 1, out, &c);
+        });
+
+        // SC-11: Linear merge: self-loop in overlay
+        uint32_t base_valid[1] = {1};
+        uint32_t over_self[2] = {0, 2};
+        assert_invariant_violation("SC-11: Linear merge self-loop in overlay rejected", [&](auto& out, auto& c) {
+            ApxAuthoritativeGraphTestAccess::merge_neighbor_ranges(g, 0, base_valid, 1, over_self, 2, out, &c);
+        });
+
+        // SC-12: Linear merge: out-of-universe in base
+        uint32_t base_oou[2] = {1, 99};
+        assert_invariant_violation("SC-12: Linear merge out-of-universe in base rejected", [&](auto& out, auto& c) {
+            ApxAuthoritativeGraphTestAccess::merge_neighbor_ranges(g, 0, base_oou, 2, over_valid, 1, out, &c);
+        });
+
+        // SC-13: Linear merge: out-of-universe in overlay
+        uint32_t over_oou[2] = {1, 99};
+        assert_invariant_violation("SC-13: Linear merge out-of-universe in overlay rejected", [&](auto& out, auto& c) {
+            ApxAuthoritativeGraphTestAccess::merge_neighbor_ranges(g, 0, base_valid, 1, over_oou, 2, out, &c);
+        });
+
+        // SC-14: Linear merge: UINT32_MAX in base
+        uint32_t base_sent[2] = {1, UINT32_MAX};
+        assert_invariant_violation("SC-14: Linear merge UINT32_MAX in base rejected", [&](auto& out, auto& c) {
+            ApxAuthoritativeGraphTestAccess::merge_neighbor_ranges(g, 0, base_sent, 2, over_valid, 1, out, &c);
+        });
+
+        // SC-15: Linear merge: UINT32_MAX in overlay
+        uint32_t over_sent[2] = {1, UINT32_MAX};
+        assert_invariant_violation("SC-15: Linear merge UINT32_MAX in overlay rejected", [&](auto& out, auto& c) {
+            ApxAuthoritativeGraphTestAccess::merge_neighbor_ranges(g, 0, base_valid, 1, over_sent, 2, out, &c);
+        });
+
+        // SC-16: Fallback: invalid ID in fallback base (unsorted + invalid)
+        uint32_t fb_base_inv[2] = {99, 1};
+        assert_invariant_violation("SC-16: Fallback invalid base rejected", [&](auto& out, auto& c) {
+            ApxAuthoritativeGraphTestAccess::merge_neighbor_ranges(g, 0, fb_base_inv, 2, nullptr, 0, out, &c);
+        });
+
+        // SC-17: Fallback: invalid ID in fallback overlay (unsorted + invalid)
+        uint32_t fb_over_inv[2] = {99, 1};
+        assert_invariant_violation("SC-17: Fallback invalid overlay rejected", [&](auto& out, auto& c) {
+            ApxAuthoritativeGraphTestAccess::merge_neighbor_ranges(g, 0, nullptr, 0, fb_over_inv, 2, out, &c);
+        });
+
+        // SC-18: Fallback: UINT32_MAX in fallback (unsorted + UINT32_MAX)
+        uint32_t fb_sent[2] = {UINT32_MAX, 1};
+        assert_invariant_violation("SC-18: Fallback UINT32_MAX rejected", [&](auto& out, auto& c) {
+            ApxAuthoritativeGraphTestAccess::merge_neighbor_ranges(g, 0, nullptr, 0, fb_sent, 2, out, &c);
+        });
+
+        // SC-19: Tail element invalid ID in base
+        uint32_t tail_base_inv[2] = {1, 99};
+        assert_invariant_violation("SC-19: Tail base invalid rejected", [&](auto& out, auto& c) {
+            ApxAuthoritativeGraphTestAccess::merge_neighbor_ranges(g, 0, tail_base_inv, 2, nullptr, 0, out, &c);
+        });
+
+        // SC-20: Tail element invalid ID in overlay
+        uint32_t tail_over_inv[2] = {1, 99};
+        assert_invariant_violation("SC-20: Tail overlay invalid rejected", [&](auto& out, auto& c) {
+            ApxAuthoritativeGraphTestAccess::merge_neighbor_ranges(g, 0, nullptr, 0, tail_over_inv, 2, out, &c);
+        });
+    }
+
+#ifdef APX_NEIGHBOR_TEST_TRACE
+    // -------------------------------------------------------------------------
+    // Section XVI: Partial merge and fallback failure test seams
+    // -------------------------------------------------------------------------
+    {
+        ApxAuthoritativeGraph g;
+        g.load_baseline({{0, 0}, {1, 0}, {2, 0}, {3, 0}}, {});
+        uint32_t base[2] = {1, 3};
+        uint32_t overlay[1] = {2};
+        std::vector<uint32_t> out;
+
+        // 1. Fail after first emission in linear merge
+        ApxAuthoritativeGraph::set_merge_fault_hook(MergeFaultHook::FAIL_AFTER_FIRST_EMISSION);
+        bool caught1 = false;
+        try {
+            ApxAuthoritativeGraphTestAccess::merge_neighbor_ranges(g, 0, base, 2, overlay, 1, out);
+        } catch (const std::runtime_error&) {
+            caught1 = true;
+        }
+        require(caught1, "FAIL_AFTER_FIRST_EMISSION threw runtime_error");
+        require(out.empty(), "FAIL_AFTER_FIRST_EMISSION out vector is cleared");
+
+        // 2. Fail during fast path
+        ApxAuthoritativeGraph::set_merge_fault_hook(MergeFaultHook::FAIL_DURING_FAST_PATH);
+        bool caught2 = false;
+        try {
+            ApxAuthoritativeGraphTestAccess::merge_neighbor_ranges(g, 0, nullptr, 0, overlay, 1, out);
+        } catch (const std::runtime_error&) {
+            caught2 = true;
+        }
+        require(caught2, "FAIL_DURING_FAST_PATH threw runtime_error");
+        require(out.empty(), "FAIL_DURING_FAST_PATH out vector is cleared");
+
+        // 3. Fail during fallback
+        ApxAuthoritativeGraph::set_merge_fault_hook(MergeFaultHook::FAIL_DURING_FALLBACK);
+        uint32_t unsorted[2] = {3, 1};
+        bool caught3 = false;
+        try {
+            ApxAuthoritativeGraphTestAccess::merge_neighbor_ranges(g, 0, unsorted, 2, nullptr, 0, out);
+        } catch (const std::runtime_error&) {
+            caught3 = true;
+        }
+        require(caught3, "FAIL_DURING_FALLBACK threw runtime_error");
+        require(out.empty(), "FAIL_DURING_FALLBACK out vector is cleared");
+
+        // Reset hook
+        ApxAuthoritativeGraph::set_merge_fault_hook(MergeFaultHook::NONE);
+    }
+#endif
+
+    std::cout << "merge_direct_and_fallback_tests passed. All MG-G01..G25 scenarios, tentative insert, and fallback guards verified.\n";
 }
 
 } // namespace
