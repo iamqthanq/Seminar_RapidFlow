@@ -3662,6 +3662,242 @@ class TestRapidFlowApxP4a(unittest.TestCase):
         self.assertEqual(counters["m2"]["total_candidates_evaluated"], 245055)
         self.assertAlmostEqual(counters["relative_candidate_eval_reduction_m2_vs_m1_pct"], 46.16, places=2)
 
+    def test_72_r10_1_residual_01_exclusive_temporary_resource_ownership(self):
+        """Remediation Round 10.1: Tests R10-Residual-01 exclusive resource ownership lifecycle (R10.1-A01..A12)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            td = Path(tmpdir)
+            target1 = td / "out1.json"
+            target2 = td / "out2.md"
+            target1.write_text("DEST1_INITIAL_CONTENT\n")
+            target2.write_text("DEST2_INITIAL_CONTENT\n")
+            sha1_init = compute_sha256(target1)
+            sha2_init = compute_sha256(target2)
+
+            # R10.1-A01 & A02 & A03: Pre-existing foreign stage file must NOT be truncated or deleted
+            foreign_stage = td / ".out1.json.stage.foreign_transaction_id.xyz.tmp"
+            foreign_stage.write_text("FOREIGN_STAGE_DATA_MUST_NOT_BE_TOUCHED\n")
+            foreign_stage_sha = compute_sha256(foreign_stage)
+
+            # Injected failure in stage hook before write
+            def failing_hook(t, s):
+                if t.name == "out1.json":
+                    raise OSError("Injected hook failure on stage 1")
+
+            with self.assertRaises(PublicationError) as cm_hook:
+                publish_certified_artifacts_staged(
+                    [ArtifactTarget(target1, "NEW_1"), ArtifactTarget(target2, "NEW_2")],
+                    _stage_write_hook=failing_hook,
+                )
+            self.assertEqual(cm_hook.exception.status, PublicationStatus.STAGING_FAILED)
+            # Verify foreign stage file is PRESERVED, untouched, and has identical SHA
+            self.assertTrue(foreign_stage.exists(), "Foreign stage file must NOT be deleted by cleanup")
+            self.assertEqual(compute_sha256(foreign_stage), foreign_stage_sha)
+            self.assertEqual(compute_sha256(target1), sha1_init)
+
+            # R10.1-A04: Pre-existing foreign recovery backup must NOT be deleted or overwritten
+            foreign_backup = td / ".out1.json.orig_backup.prior_tx_id.123.tmp"
+            foreign_backup.write_text("PRIOR_TX_RECOVERY_BACKUP_DATA\n")
+            foreign_backup_sha = compute_sha256(foreign_backup)
+
+            # Run a successful publication
+            res_pub = publish_certified_artifacts_staged(
+                [ArtifactTarget(target1, "NEW_CONTENT_SUCCESS_1\n"), ArtifactTarget(target2, "NEW_CONTENT_SUCCESS_2\n")]
+            )
+            self.assertEqual(res_pub["status"], PublicationStatus.PUBLISHED)
+            # Foreign backup must remain completely intact
+            self.assertTrue(foreign_backup.exists(), "Prior recovery backup must NOT be deleted by subsequent transaction")
+            self.assertEqual(compute_sha256(foreign_backup), foreign_backup_sha)
+            self.assertTrue(foreign_stage.exists(), "Foreign stage file must remain intact across successful publication")
+
+            # R10.1-A05 & A10: Restoration allocation failure retains verified recovery backup and leaves foreign resources untouched
+            foreign_restore = td / ".out1.json.restore_stage.foreign_tx.999.tmp"
+            foreign_restore.write_text("FOREIGN_RESTORE_STAGE_DATA\n")
+            foreign_restore_sha = compute_sha256(foreign_restore)
+
+            cur_t1_sha = compute_sha256(target1)
+            calls = [0]
+            real_mkstemp = tempfile.mkstemp
+            def fail_mkstemp_on_restore(dir=None, prefix="", suffix=""):
+                if "restore_stage" in prefix:
+                    raise OSError("Injected mkstemp failure during restoration allocation")
+                return real_mkstemp(dir=dir, prefix=prefix, suffix=suffix)
+
+            def fail_second_replace(src, dst):
+                calls[0] += 1
+                if calls[0] == 2:
+                    raise OSError("Second replacement fails")
+                return os.replace(src, dst)
+
+            tempfile.mkstemp = fail_mkstemp_on_restore
+            try:
+                with self.assertRaises(PublicationError) as cm_rb_alloc:
+                    publish_certified_artifacts_staged(
+                        [ArtifactTarget(target1, "WILL_FAIL_RESTORE_1\n"), ArtifactTarget(target2, "WILL_FAIL_RESTORE_2\n")],
+                        _replace_fn=fail_second_replace,
+                    )
+                self.assertEqual(cm_rb_alloc.exception.status, PublicationStatus.PUBLICATION_INCONSISTENT)
+                # Recovery backup for target1 must be retained and verified
+                retained = cm_rb_alloc.exception.details.get("retained_recovery_backups", [])
+                self.assertEqual(len(retained), 1)
+                self.assertEqual(retained[0]["original_sha256"], cur_t1_sha)
+                self.assertTrue(Path(retained[0]["backup_path"]).exists())
+                # Foreign resources must be completely untouched
+                self.assertTrue(foreign_restore.exists())
+                self.assertEqual(compute_sha256(foreign_restore), foreign_restore_sha)
+                self.assertTrue(foreign_backup.exists())
+                self.assertEqual(compute_sha256(foreign_backup), foreign_backup_sha)
+            finally:
+                tempfile.mkstemp = real_mkstemp
+
+            # Clean retained backup for next check
+            for bp in retained:
+                Path(bp["backup_path"]).unlink()
+
+            # R10.1-A06: Allocation failure before ownership claims no resources
+            def fail_stage_alloc(dir=None, prefix="", suffix=""):
+                if "stage" in prefix and "out2.md" in prefix:
+                    raise OSError("Injected stage 2 allocation failure")
+                return real_mkstemp(dir=dir, prefix=prefix, suffix=suffix)
+
+            tempfile.mkstemp = fail_stage_alloc
+            try:
+                with self.assertRaises(PublicationError) as cm_alloc:
+                    publish_certified_artifacts_staged(
+                        [ArtifactTarget(target1, "ALLOC_FAIL_1"), ArtifactTarget(target2, "ALLOC_FAIL_2")]
+                    )
+                self.assertEqual(cm_alloc.exception.status, PublicationStatus.STAGING_FAILED)
+                # Stage 1 was allocated and must be cleaned up
+                current_stages = [p for p in td.glob(".*") if "stage" in p.name and p != foreign_stage and p != foreign_restore]
+                self.assertEqual(len(current_stages), 0, "All transaction stages must be cleaned")
+                self.assertTrue(foreign_stage.exists())
+            finally:
+                tempfile.mkstemp = real_mkstemp
+
+            # R10.1-A07 & A08 & A09: Write failure after ownership cleans owned files cleanly
+            fsync_count = [0]
+            real_fsync = os.fsync
+            def fail_fsync_stage2(fd):
+                fsync_count[0] += 1
+                if fsync_count[0] == 2:
+                    raise OSError("Injected fsync failure on stage 2")
+                return real_fsync(fd)
+
+            os.fsync = fail_fsync_stage2
+            try:
+                with self.assertRaises(PublicationError) as cm_fsync:
+                    publish_certified_artifacts_staged(
+                        [ArtifactTarget(target1, "FSYNC_1"), ArtifactTarget(target2, "FSYNC_2")]
+                    )
+                self.assertEqual(cm_fsync.exception.status, PublicationStatus.STAGING_FAILED)
+                current_stages = [p for p in td.glob(".*") if "stage" in p.name and p != foreign_stage and p != foreign_restore]
+                self.assertEqual(len(current_stages), 0)
+            finally:
+                os.fsync = real_fsync
+
+            # R10.1-A11 & A12: Verified rollback & successful publication lifecycle
+            calls[0] = 0
+            with self.assertRaises(PublicationError) as cm_rb_ok:
+                publish_certified_artifacts_staged(
+                    [ArtifactTarget(target1, "RB_OK_1\n"), ArtifactTarget(target2, "RB_OK_2\n")],
+                    _replace_fn=fail_second_replace,
+                )
+            self.assertEqual(cm_rb_ok.exception.status, PublicationStatus.PUBLICATION_FAILED_ROLLED_BACK)
+            self.assertTrue(foreign_stage.exists())
+            self.assertTrue(foreign_backup.exists())
+
+    def test_73_r10_1_residual_02_transparent_cleanup_failure_reporting(self):
+        """Remediation Round 10.1: Tests R10-Residual-02 transparent cleanup diagnostics (R10.1-B01..B10)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            td = Path(tmpdir)
+            target1 = td / "t1.json"
+            target2 = td / "t2.md"
+            target1.write_text("TARGET1_OLD\n")
+            target2.write_text("TARGET2_OLD\n")
+
+            # R10.1-B01 & B02 & B04: Successful publication with backup unlink failure
+            real_unlink = Path.unlink
+            def fail_unlink_one_backup(self, *args, **kwargs):
+                if "t1.json.orig_backup" in self.name:
+                    raise PermissionError("Injected permission error unlinking backup 1")
+                return real_unlink(self, *args, **kwargs)
+
+            Path.unlink = fail_unlink_one_backup
+            try:
+                res = publish_certified_artifacts_staged([
+                    ArtifactTarget(target1, "TARGET1_NEW\n"),
+                    ArtifactTarget(target2, "TARGET2_NEW\n"),
+                ])
+                # Publication must succeed
+                self.assertEqual(res["status"], PublicationStatus.PUBLISHED)
+                self.assertFalse(res["cleanup_complete"])
+                self.assertEqual(len(res["cleanup_errors"]), 1)
+                self.assertEqual(len(res["retained_temp_paths"]), 1)
+
+                err_entry = res["cleanup_errors"][0]
+                self.assertEqual(err_entry["resource_type"], "backup")
+                self.assertEqual(err_entry["operation"], "unlink")
+                self.assertEqual(err_entry["error_type"], "PermissionError")
+                self.assertIn("Injected permission error", err_entry["message"])
+
+                # R10.1-B02: Verify reported retained path actually exists on disk
+                retained_path = Path(res["retained_temp_paths"][0])
+                self.assertTrue(retained_path.exists(), "Reported retained backup must exist on disk")
+                self.assertEqual(err_entry["path"], str(retained_path))
+
+                # R10.1-B03: Other backup (for t2.md) WAS successfully unlinked
+                t2_backups = [p for p in td.glob(".*") if "t2.md.orig_backup" in p.name]
+                self.assertEqual(len(t2_backups), 0, "Non-failing backup must be cleanly unlinked")
+
+                # R10.1-B04: Output destinations contain expected new content
+                self.assertEqual(target1.read_text(), "TARGET1_NEW\n")
+                self.assertEqual(target2.read_text(), "TARGET2_NEW\n")
+            finally:
+                Path.unlink = real_unlink
+
+            # R10.1-B05: Clean publication has cleanup_complete=True and zero errors
+            res_clean = publish_certified_artifacts_staged([
+                ArtifactTarget(target1, "TARGET1_CLEAN\n"),
+                ArtifactTarget(target2, "TARGET2_CLEAN\n"),
+            ])
+            self.assertEqual(res_clean["status"], PublicationStatus.PUBLISHED)
+            self.assertTrue(res_clean["cleanup_complete"])
+            self.assertEqual(len(res_clean["cleanup_errors"]), 0)
+            self.assertEqual(len(res_clean["retained_temp_paths"]), 0)
+
+            # R10.1-B07: Failed staging cleanup warning in PublicationError details
+            def fail_unlink_stage(self, *args, **kwargs):
+                if "stage" in self.name:
+                    raise OSError("Injected unlink error during stage failure cleanup")
+                return real_unlink(self, *args, **kwargs)
+
+            Path.unlink = fail_unlink_stage
+            try:
+                with self.assertRaises(PublicationError) as cm_stage_err:
+                    publish_certified_artifacts_staged(
+                        [ArtifactTarget(target1, "NEW")],
+                        _stage_write_hook=lambda t, s: (_ for _ in ()).throw(OSError("Hook fail")),
+                    )
+                self.assertEqual(cm_stage_err.exception.status, PublicationStatus.STAGING_FAILED)
+                cleanup_errs = cm_stage_err.exception.details.get("cleanup_errors", [])
+                self.assertGreaterEqual(len(cleanup_errs), 1)
+                self.assertEqual(cleanup_errs[0]["resource_type"], "stage")
+            finally:
+                Path.unlink = real_unlink
+
+            # R10.1-B10: Retry in same directory does not delete or overwrite previously retained resources
+            # Leave a retained dummy backup file
+            dummy_retained = td / ".t1.json.orig_backup.previous_session.tmp"
+            dummy_retained.write_text("PREVIOUS_RETAINED_DATA\n")
+            dummy_sha = compute_sha256(dummy_retained)
+
+            res_retry = publish_certified_artifacts_staged([
+                ArtifactTarget(target1, "TARGET1_RETRY\n"),
+                ArtifactTarget(target2, "TARGET2_RETRY\n"),
+            ])
+            self.assertEqual(res_retry["status"], PublicationStatus.PUBLISHED)
+            self.assertTrue(dummy_retained.exists(), "Subsequent retry must NOT touch previous retained backup")
+            self.assertEqual(compute_sha256(dummy_retained), dummy_sha)
+
 
 
 if __name__ == "__main__":

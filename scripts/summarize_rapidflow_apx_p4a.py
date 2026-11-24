@@ -27,6 +27,7 @@ import math
 import os
 import shutil
 import sys
+import tempfile
 import uuid
 from collections import defaultdict
 from dataclasses import dataclass
@@ -1134,37 +1135,91 @@ class ArtifactTarget:
     is_binary: bool = False
 
 
+def _create_exclusive_temp_file(
+    parent: Path,
+    prefix: str,
+    suffix: str = ".tmp",
+    owned_tracker: Optional[List[Path]] = None,
+) -> Tuple[int, Path]:
+    """Exclusively creates a temporary file in parent directory using tempfile.mkstemp (R10-Residual-01).
+
+    Guarantees:
+    - Exclusive creation via O_CREAT | O_EXCL in the destination filesystem.
+    - Path is registered into owned_tracker ONLY upon successful creation.
+    - If allocation fails, no resource ownership is claimed.
+    - Returns open file descriptor (fd) and Path object.
+    """
+    parent.mkdir(parents=True, exist_ok=True)
+    fd, raw_path = tempfile.mkstemp(dir=str(parent), prefix=prefix, suffix=suffix)
+    path = Path(raw_path)
+    if owned_tracker is not None:
+        owned_tracker.append(path)
+    return fd, path
+
+
+def _safe_unlink_resources(
+    paths: List[Path],
+    resource_type: str,
+    cleanup_errors: List[Dict[str, Any]],
+    retained_paths: Optional[List[str]] = None,
+) -> None:
+    """Safely unlinks owned temporary resources and collects detailed cleanup diagnostics (R10-Residual-02)."""
+    for p in paths:
+        if p.exists():
+            try:
+                p.unlink()
+            except OSError as ue:
+                err_dict = {
+                    "path": str(p),
+                    "resource_type": resource_type,
+                    "operation": "unlink",
+                    "error_type": type(ue).__name__,
+                    "message": str(ue),
+                }
+                cleanup_errors.append(err_dict)
+                if retained_paths is not None:
+                    retained_paths.append(str(p))
+
+
 def publish_certified_artifacts_staged(
     artifacts: List[ArtifactTarget],
     *,
     _replace_fn: Any = os.replace,
     _stage_write_hook: Any = None,
 ) -> Dict[str, Any]:
-    """Atomically publishes multiple certified artifacts with staging and compensating rollback (R9-F02, R10-F01..F03).
+    """Atomically publishes multiple certified artifacts with exclusive staging and compensating rollback (R9-F02, R10-F01..F03, R10-Residual-01..02).
     
     Guarantees:
-    1. Phase A (Prepare & Stage): Allocates and immediately registers staging paths before any I/O.
-       Writes content to unique staging files (.{target.name}.stage.{uuid}.tmp) with full fsync.
-       If any staging fails, unlinks all registered staging files. No destination is modified.
-    2. Phase B (Prepare & Verify Backups): Allocates and immediately registers backup paths before writing.
-       Copies pre-existing targets to (.{target.name}.orig_backup.{uuid}.tmp) with fsync.
-       Verifies backup integrity against original SHA and size. If any backup fails, unlinks all registered
+    1. Phase A (Prepare & Stage): Exclusively creates temporary staging files (O_CREAT | O_EXCL)
+       in the destination directory. Ownership is registered only upon successful creation.
+       Writes content with full fsync and zero descriptor leak.
+       If any staging fails, unlinks all owned staging files. No destination is modified.
+    2. Phase B (Prepare & Verify Backups): Exclusively creates temporary backup files.
+       Ownership registered upon creation. Copies pre-existing targets with full fsync.
+       Verifies backup integrity against original SHA and size. If any backup fails, unlinks all owned
        temporary staging and backup files. No destination is modified.
     3. Phase C (Publish Replacements with Compensating Rollback and Backup Preservation):
        - Atomically replaces each destination via _replace_fn.
        - If ANY replacement fails:
          - Initiates compensating rollback without consuming the recovery backup:
-           copies backup to temporary restoration staging, then restores via _replace_fn.
+           exclusively creates temporary restoration staging, then restores via _replace_fn.
            Verifies restored destination against original SHA and size. Newly created files are unlinked.
          - If rollback succeeds: unlinks backup files and raises PublicationError with PUBLICATION_FAILED_ROLLED_BACK.
          - If rollback fails: PRESERVES recovery backups for all unrestored destinations, verifies backup
            integrity, populates retained_recovery_backups diagnostic, and raises PublicationError with
            PUBLICATION_INCONSISTENT.
        - If all replacements succeed:
-         - Unlinks all backup files and returns status PUBLISHED.
+         - Unlinks all backup and staging files, collecting transparent cleanup diagnostics.
+         - Returns status PUBLISHED with cleanup_complete, cleanup_errors, and retained_temp_paths.
     """
     if not artifacts:
-        return {"status": PublicationStatus.PUBLISHED, "published_paths": []}
+        return {
+            "status": PublicationStatus.PUBLISHED,
+            "published_paths": [],
+            "cleanup_complete": True,
+            "cleanup_errors": [],
+            "retained_temp_paths": [],
+        }
 
     run_id = uuid.uuid4().hex
     allocated_stage_paths: List[Path] = []
@@ -1172,25 +1227,34 @@ def publish_certified_artifacts_staged(
     allocated_restore_stage_paths: List[Path] = []
     staging_records: List[Dict[str, Any]] = []
 
-    # Phase A: Prepare and Stage (R10-F02: immediate resource ownership tracking)
+    # Phase A: Prepare and Stage (R10-Residual-01: exclusive creation and ownership tracking)
     try:
         for art in artifacts:
             target_path = Path(art.target_path)
-            target_path.parent.mkdir(parents=True, exist_ok=True)
-            stage_path = target_path.with_name(f".{target_path.name}.stage.{run_id}.tmp")
-
-            # Track allocation BEFORE any fallible filesystem write/flush/fsync
-            allocated_stage_paths.append(stage_path)
-
-            if _stage_write_hook:
-                _stage_write_hook(target_path, stage_path)
-
             mode = "wb" if art.is_binary else "w"
             encoding = None if art.is_binary else "utf-8"
-            with open(stage_path, mode, encoding=encoding) as f:
-                f.write(art.content)
-                f.flush()
-                os.fsync(f.fileno())
+
+            fd, stage_path = _create_exclusive_temp_file(
+                parent=target_path.parent,
+                prefix=f".{target_path.name}.stage.{run_id}.",
+                suffix=".tmp",
+                owned_tracker=allocated_stage_paths,
+            )
+            try:
+                if _stage_write_hook:
+                    _stage_write_hook(target_path, stage_path)
+
+                with os.fdopen(fd, mode, encoding=encoding) as f:
+                    fd = -1  # fd ownership transferred to os.fdopen
+                    f.write(art.content)
+                    f.flush()
+                    os.fsync(f.fileno())
+            finally:
+                if fd >= 0:
+                    try:
+                        os.close(fd)
+                    except OSError:
+                        pass
 
             if not stage_path.exists():
                 raise OSError(f"Staged file {stage_path} failed to persist.")
@@ -1201,20 +1265,15 @@ def publish_certified_artifacts_staged(
                 "content": art.content,
             })
     except Exception as e:
-        cleanup_errors = []
-        for sp in allocated_stage_paths:
-            if sp.exists():
-                try:
-                    sp.unlink()
-                except OSError as ue:
-                    cleanup_errors.append(f"Failed to unlink staging file {sp}: {ue}")
+        cleanup_errors: List[Dict[str, Any]] = []
+        _safe_unlink_resources(allocated_stage_paths, "stage", cleanup_errors)
         raise PublicationError(
             f"Staging failed before any destination was modified: {e}",
             status=PublicationStatus.STAGING_FAILED,
             details={"error": str(e), "cleanup_errors": cleanup_errors},
         )
 
-    # Phase B: Prepare and Verify Backups for Rollback (R10-F03: immediate resource tracking)
+    # Phase B: Prepare and Verify Backups for Rollback (R10-Residual-01: exclusive backup creation)
     dest_records: List[Dict[str, Any]] = []
     try:
         for rec in staging_records:
@@ -1230,14 +1289,24 @@ def publish_certified_artifacts_staged(
                     orig_sha = hashlib.sha256(data).hexdigest()
                     orig_size = len(data)
 
-                backup_path = t_path.with_name(f".{t_path.name}.orig_backup.{run_id}.tmp")
-                # Track allocation BEFORE any fallible filesystem write/flush/fsync
-                allocated_backup_paths.append(backup_path)
-
-                with open(backup_path, "wb") as bf:
-                    bf.write(data)
-                    bf.flush()
-                    os.fsync(bf.fileno())
+                fd, backup_path = _create_exclusive_temp_file(
+                    parent=t_path.parent,
+                    prefix=f".{t_path.name}.orig_backup.{run_id}.",
+                    suffix=".tmp",
+                    owned_tracker=allocated_backup_paths,
+                )
+                try:
+                    with os.fdopen(fd, "wb") as bf:
+                        fd = -1  # fd ownership transferred
+                        bf.write(data)
+                        bf.flush()
+                        os.fsync(bf.fileno())
+                finally:
+                    if fd >= 0:
+                        try:
+                            os.close(fd)
+                        except OSError:
+                            pass
 
                 # Verify backup integrity before allowing publication to proceed
                 with open(backup_path, "rb") as bf:
@@ -1261,25 +1330,15 @@ def publish_certified_artifacts_staged(
             })
     except Exception as e:
         cleanup_errors = []
-        for sp in allocated_stage_paths:
-            if sp.exists():
-                try:
-                    sp.unlink()
-                except OSError as ue:
-                    cleanup_errors.append(f"Failed to unlink staging file {sp}: {ue}")
-        for bp in allocated_backup_paths:
-            if bp.exists():
-                try:
-                    bp.unlink()
-                except OSError as ue:
-                    cleanup_errors.append(f"Failed to unlink backup file {bp}: {ue}")
+        _safe_unlink_resources(allocated_stage_paths, "stage", cleanup_errors)
+        _safe_unlink_resources(allocated_backup_paths, "backup", cleanup_errors)
         raise PublicationError(
             f"Failed to prepare backup before publication: {e}",
             status=PublicationStatus.STAGING_FAILED,
             details={"error": str(e), "cleanup_errors": cleanup_errors},
         )
 
-    # Phase C: Publish Replacements with Compensating Rollback and Backup Preservation (R10-F01)
+    # Phase C: Publish Replacements with Compensating Rollback and Backup Preservation (R10-F01, R10-Residual-01)
     committed_records: List[Dict[str, Any]] = []
     try:
         for d_rec in dest_records:
@@ -1295,15 +1354,27 @@ def publish_certified_artifacts_staged(
             c_target = c_rec["target_path"]
             if c_rec["existed"]:
                 # Restoration strategy (R10-F01): Do NOT consume the recovery backup directly!
-                # Copy backup to a temporary restoration staging file, then replace into destination.
-                restore_stage = c_target.with_name(f".{c_target.name}.restore_stage.{run_id}.tmp")
-                allocated_restore_stage_paths.append(restore_stage)
+                # Copy backup to a temporary restoration staging file via exclusive creation, then replace into destination.
                 try:
-                    with open(c_rec["backup_path"], "rb") as bf, open(restore_stage, "wb") as rf:
-                        b_data = bf.read()
-                        rf.write(b_data)
-                        rf.flush()
-                        os.fsync(rf.fileno())
+                    fd, restore_stage = _create_exclusive_temp_file(
+                        parent=c_target.parent,
+                        prefix=f".{c_target.name}.restore_stage.{run_id}.",
+                        suffix=".tmp",
+                        owned_tracker=allocated_restore_stage_paths,
+                    )
+                    try:
+                        with open(c_rec["backup_path"], "rb") as bf, os.fdopen(fd, "wb") as rf:
+                            fd = -1
+                            b_data = bf.read()
+                            rf.write(b_data)
+                            rf.flush()
+                            os.fsync(rf.fileno())
+                    finally:
+                        if fd >= 0:
+                            try:
+                                os.close(fd)
+                            except OSError:
+                                pass
 
                     _replace_fn(restore_stage, c_target)
 
@@ -1339,30 +1410,15 @@ def publish_certified_artifacts_staged(
 
         # Cleanup uncommitted staging files and temporary restore staging files
         cleanup_errors = []
-        for sp in allocated_stage_paths:
-            if sp.exists():
-                try:
-                    sp.unlink()
-                except OSError as ue:
-                    cleanup_errors.append(f"Failed to unlink staging file {sp}: {ue}")
-        for rsp in allocated_restore_stage_paths:
-            if rsp.exists():
-                try:
-                    rsp.unlink()
-                except OSError as ue:
-                    cleanup_errors.append(f"Failed to unlink restore stage file {rsp}: {ue}")
+        _safe_unlink_resources(allocated_stage_paths, "stage", cleanup_errors)
+        _safe_unlink_resources(allocated_restore_stage_paths, "restore_stage", cleanup_errors)
 
-        # CRITICAL BACKUP PRESERVATION (R10-F01):
+        # CRITICAL BACKUP PRESERVATION (R10-F01, R10-Residual-01):
         # If rollback succeeded: all modified destinations are verified restored, safe to clean backups.
         # If rollback FAILED: PRESERVE recovery backups for all unrestored destinations!
         retained_recovery_backups: List[Dict[str, Any]] = []
         if rollback_success:
-            for bp in allocated_backup_paths:
-                if bp.exists():
-                    try:
-                        bp.unlink()
-                    except OSError as ue:
-                        cleanup_errors.append(f"Failed to unlink backup file {bp}: {ue}")
+            _safe_unlink_resources(allocated_backup_paths, "backup", cleanup_errors)
             raise PublicationError(
                 f"Publication failed during atomic replacement ({commit_exc}); "
                 f"all modified destinations have been safely rolled back to pre-execution state.",
@@ -1404,10 +1460,7 @@ def publish_certified_artifacts_staged(
                                 "error": str(b_err),
                             })
                     else:
-                        try:
-                            bp.unlink()
-                        except OSError as ue:
-                            cleanup_errors.append(f"Failed to unlink backup file {bp}: {ue}")
+                        _safe_unlink_resources([bp], "backup", cleanup_errors)
 
             raise PublicationError(
                 f"Publication failed during atomic replacement ({commit_exc}) "
@@ -1427,38 +1480,49 @@ def publish_certified_artifacts_staged(
                 },
             )
 
-    # Success: Cleanup all backups
-    for bp in allocated_backup_paths:
-        if bp.exists():
-            try:
-                bp.unlink()
-            except OSError:
-                pass
+    # Success: Cleanup all backups (R10-Residual-02: transparent cleanup reporting)
+    cleanup_errors = []
+    retained_temp_paths: List[str] = []
+    _safe_unlink_resources(allocated_backup_paths, "backup", cleanup_errors, retained_temp_paths)
+    _safe_unlink_resources(allocated_stage_paths, "stage", cleanup_errors, retained_temp_paths)
+
+    cleanup_complete = (len(cleanup_errors) == 0)
 
     return {
         "status": PublicationStatus.PUBLISHED,
         "published_paths": [d["target_path"] for d in dest_records],
+        "cleanup_complete": cleanup_complete,
+        "cleanup_errors": cleanup_errors,
+        "retained_temp_paths": retained_temp_paths,
     }
 
 
 def publish_json_atomic(data: Any, target_path: Union[str, Path]) -> None:
-    """Atomically writes JSON to target_path using staged publication (R8-F04, R9-F02)."""
+    """Atomically writes JSON to target_path using staged publication (R8-F04, R9-F02, R10-Residual-02)."""
     target_path = Path(target_path)
     res = publish_certified_artifacts_staged([
         ArtifactTarget(target_path=target_path, content=json.dumps(data, indent=2))
     ])
     if res["status"] != PublicationStatus.PUBLISHED:
         raise OSError(f"Failed to publish JSON to {target_path}: status={res['status']}")
+    if not res.get("cleanup_complete", True):
+        for ce in res.get("cleanup_errors", []):
+            msg = ce.get("message", ce) if isinstance(ce, dict) else ce
+            print(f"Warning: Cleanup failure during publish_json_atomic: {msg}", file=sys.stderr)
 
 
 def publish_text_atomic(content: str, target_path: Union[str, Path]) -> None:
-    """Atomically writes text to target_path using staged publication (R8-F04, R9-F02)."""
+    """Atomically writes text to target_path using staged publication (R8-F04, R9-F02, R10-Residual-02)."""
     target_path = Path(target_path)
     res = publish_certified_artifacts_staged([
         ArtifactTarget(target_path=target_path, content=content)
     ])
     if res["status"] != PublicationStatus.PUBLISHED:
         raise OSError(f"Failed to publish text to {target_path}: status={res['status']}")
+    if not res.get("cleanup_complete", True):
+        for ce in res.get("cleanup_errors", []):
+            msg = ce.get("message", ce) if isinstance(ce, dict) else ce
+            print(f"Warning: Cleanup failure during publish_text_atomic: {msg}", file=sys.stderr)
 
 
 def validate_output_destinations(args: argparse.Namespace) -> None:
@@ -1695,6 +1759,14 @@ def main():
                 ])
                 if diag_res["status"] == PublicationStatus.PUBLISHED:
                     print(f"Diagnostic failure metrics saved to {args.diagnostic_json}", file=sys.stderr)
+                    if not diag_res.get("cleanup_complete", True):
+                        print(
+                            "Warning: Diagnostic publication succeeded, but cleanup could not remove one or more temporary resources.",
+                            file=sys.stderr,
+                        )
+                        for ce in diag_res.get("cleanup_errors", []):
+                            print(f"  Retained temporary file: {ce.get('path')}", file=sys.stderr)
+                            print(f"  Cleanup error ({ce.get('error_type')}): {ce.get('message')}", file=sys.stderr)
                 else:
                     print(f"Error saving diagnostic JSON to {args.diagnostic_json}: status={diag_res['status']}", file=sys.stderr)
             except Exception as e:
@@ -1732,6 +1804,11 @@ def main():
                 print(f"Affected destination: {rec.get('destination')}", file=sys.stderr)
                 print(f"Recovery backup preserved at: {rec.get('backup_path')}", file=sys.stderr)
                 print(f"Expected original SHA-256: {rec.get('original_sha256')}", file=sys.stderr)
+        for ce in pe.details.get("cleanup_errors", []):
+            if isinstance(ce, dict):
+                print(f"Warning: Cleanup failure on {ce.get('resource_type')} {ce.get('path')}: {ce.get('message')}", file=sys.stderr)
+            else:
+                print(f"Warning: Cleanup failure: {ce}", file=sys.stderr)
         print(f"Publication failed: {pe} (status={pe.status})", file=sys.stderr)
         sys.exit(1)
     except Exception as e:
@@ -1747,6 +1824,15 @@ def main():
         print(f"Markdown report saved to {args.output_md}")
     else:
         print("\n" + md_report)
+
+    if not pub_result.get("cleanup_complete", True):
+        print(
+            "Warning: Publication succeeded, but cleanup could not remove one or more temporary resources.",
+            file=sys.stderr,
+        )
+        for ce in pub_result.get("cleanup_errors", []):
+            print(f"  Retained temporary file: {ce.get('path')}", file=sys.stderr)
+            print(f"  Cleanup error ({ce.get('error_type')}): {ce.get('message')}", file=sys.stderr)
 
     if args.diagnostic_json:
         # Documented policy (R9-A14): Diagnostic is only generated on certification failure.
