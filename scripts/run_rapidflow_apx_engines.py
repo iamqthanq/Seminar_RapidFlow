@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+from dataclasses import dataclass
 import hashlib
 import itertools
 import json
@@ -930,6 +931,37 @@ NEIGHBOR_MERGE_COUNTER_FIELDS = (
 ALL_NEIGHBOR_COUNTER_FIELDS = NEIGHBOR_COUNTER_FIELDS + NEIGHBOR_MERGE_COUNTER_FIELDS
 
 
+@dataclass(frozen=True)
+class VerifiedHistoricalArtifact:
+    """Explicit provenance authorization required for historical schema version 1 artifacts (RV04)."""
+    binary_sha256: str
+    commit_sha: str
+    historical_profile: str  # "buffer", "merge", or "legacy"
+    schema_version: int = 1
+    artifact_id: Optional[str] = None
+    manifest_id: Optional[str] = None
+
+
+AUTHORIZED_HISTORICAL_BINARIES: Dict[str, Dict[str, Any]] = {
+    "d21575c1c70d1f7bc2380d8172ae4044dacfc3f6ec464d06884555c284d36b84": {
+        "description": "Accepted P4b-2A baseline binary",
+        "commit_sha": "d21575c1c70d1f7bc2380d8172ae4044dacfc3f",
+        "allowed_profiles": ("buffer", "legacy"),
+        "allowed_schema_versions": (1,),
+        "allowed_neighbor_modes": ("buffer", "legacy"),
+        "allowed_engines": ("m1", "m2"),
+    },
+    "260e5627799b624bf010c4631011db8874ebf769bf4b4cdd62831f1ad25a9608": {
+        "description": "Starting P4b-2B release binary",
+        "commit_sha": "bdb1fd26c92d56d11f71477708eb107e371a5330",
+        "allowed_profiles": ("merge", "buffer", "legacy"),
+        "allowed_schema_versions": (1,),
+        "allowed_neighbor_modes": ("merge", "buffer", "legacy"),
+        "allowed_engines": ("m1", "m2"),
+    },
+}
+
+
 def validate_neighbor_counters(counters: Dict[str, Any], result: Dict[str, Any]) -> str:
     version = result.get("neighbor_configuration_version")
     eff_mode = result.get("effective_neighbor_mode")
@@ -1610,12 +1642,13 @@ def validate_nlf_configuration(
     native_result: Dict[str, Any],
     is_success_run: bool,
     requested_neighbor_mode: Optional[str] = None,
-    allow_historical_version: bool = False,
+    historical_auth: Optional[VerifiedHistoricalArtifact] = None,
 ) -> Tuple[bool, str, Dict[str, Any]]:
     """Validate actual configuration, including on initialized failures.
 
-    A live runner always supplies the requested neighbor mode. Historical
-    validation callers may omit it for pre-P4b-2A records or set allow_historical_version=True.
+    A live runner always supplies the requested neighbor mode and strictly requires schema version 2.
+    Historical evidence artifacts with schema version 1 are ONLY permitted through an explicit,
+    cryptographically verified VerifiedHistoricalArtifact authorization (RV04).
     """
     fields = (
         "requested_nlf_mode", "effective_nlf_mode", "configuration_status",
@@ -1637,6 +1670,19 @@ def validate_nlf_configuration(
         meta_info["configuration_valid"] = False
         meta_info["configuration_error"] = diagnostic
         return False, diagnostic, meta_info
+
+    if historical_auth is not None:
+        if isinstance(historical_auth, bool) or not isinstance(historical_auth, VerifiedHistoricalArtifact):
+            return reject("historical_auth must be a VerifiedHistoricalArtifact instance, boolean bypass rejected")
+        if historical_auth.binary_sha256 not in AUTHORIZED_HISTORICAL_BINARIES:
+            return reject(f"Unauthorized historical binary SHA-256: {historical_auth.binary_sha256}")
+        auth_entry = AUTHORIZED_HISTORICAL_BINARIES[historical_auth.binary_sha256]
+        if historical_auth.commit_sha != auth_entry["commit_sha"]:
+            return reject(f"Historical commit SHA mismatch: expected {auth_entry['commit_sha']}, got {historical_auth.commit_sha}")
+        if historical_auth.schema_version not in auth_entry["allowed_schema_versions"]:
+            return reject(f"Unauthorized historical schema version {historical_auth.schema_version}")
+        if historical_auth.historical_profile not in auth_entry["allowed_profiles"]:
+            return reject(f"Profile {historical_auth.historical_profile} not permitted for binary {historical_auth.binary_sha256}")
 
     marker = native_result.get("configuration_initialized")
     if "configuration_initialized" in native_result and type(marker) is not bool:
@@ -1688,12 +1734,22 @@ def validate_nlf_configuration(
     if requested_neighbor_mode is not None or version is not None or any(
         field in native_result for field in neighbor_fields
     ):
-        if requested_neighbor_mode is not None and not allow_historical_version:
-            if version != 2 or marker is not True:
-                return reject("Missing initialized current neighbor configuration identity")
+        if historical_auth is not None:
+            if version != historical_auth.schema_version:
+                return reject(f"Artifact version {version} does not match authorized historical version {historical_auth.schema_version}")
+            if marker is not True:
+                return reject("Historical artifact missing configuration_initialized=true")
         else:
-            if version not in (1, 2) or marker is not True:
-                return reject("Missing initialized current neighbor configuration identity")
+            # LIVE EXECUTION PATH: strictly requires current version 2 with configuration_initialized=true
+            if requested_neighbor_mode is not None:
+                if version != 2 or marker is not True:
+                    return reject("Missing initialized current neighbor configuration identity (live execution strictly requires version 2 with configuration_initialized=true, downgrade rejected)")
+            else:
+                if version is not None and version != 2:
+                    return reject("Unversioned caller encountered historical schema version without authorization")
+                if marker is not True:
+                    return reject("Missing initialized configuration identity")
+
         if native_result.get("engine") != requested_engine or native_result.get("engine_name") != requested_engine:
             return reject("Engine identity mismatch in initialized configuration")
         asked, effective = (native_result.get(field) for field in neighbor_fields)
@@ -1703,6 +1759,8 @@ def validate_nlf_configuration(
             return reject(f"Requested neighbor mode mismatch: runner requested {requested_neighbor_mode!r}, native reported {asked!r}")
         if effective != asked:
             return reject(f"Neighbor mode {asked!r} requires effective {asked!r}, got {effective!r}")
+        if historical_auth is not None and effective != historical_auth.historical_profile:
+            return reject(f"Effective neighbor mode {effective!r} does not match historical authorization profile {historical_auth.historical_profile!r}")
         if effective in ("buffer", "merge") and (requested_engine != "m2" or native_req != "none" or native_eff != "none"):
             return reject(f"Neighbor {effective} mode requires M2 with NLF NONE")
         meta_info.update(requested_neighbor_mode=asked, effective_neighbor_mode=effective)
@@ -1742,6 +1800,25 @@ def validate_nlf_configuration(
     return True, "", meta_info
 
 
+def validate_historical_artifact_configuration(
+    native_result: Dict[str, Any],
+    historical_auth: VerifiedHistoricalArtifact,
+    requested_engine: str = "m2",
+    requested_nlf_mode: str = "none",
+    requested_neighbor_mode: Optional[str] = None,
+    is_success_run: bool = True,
+) -> Tuple[bool, str, Dict[str, Any]]:
+    """Dedicated validation path for historical evidence artifacts with required provenance authorization (RV04)."""
+    return validate_nlf_configuration(
+        requested_engine=requested_engine,
+        requested_nlf_mode=requested_nlf_mode,
+        native_result=native_result,
+        is_success_run=is_success_run,
+        requested_neighbor_mode=requested_neighbor_mode or historical_auth.historical_profile,
+        historical_auth=historical_auth,
+    )
+
+
 def run_workload_on_binary(
     binary_path: Path,
     engine: str,
@@ -1751,7 +1828,7 @@ def run_workload_on_binary(
     address_space_mib: int = 512,
     nlf_mode: str = "none",
     neighbor_mode: str = "legacy",
-    allow_historical_version: bool = False,
+    historical_auth: Optional[VerifiedHistoricalArtifact] = None,
 ) -> Tuple[Dict[str, Any], float, bool]:
     """Runs a single workload JSON through rapidflow_apx_native with micro-containment and strict schema validation."""
     # Preflight micro-workload containment check (P3-R3-F08)
@@ -1763,6 +1840,23 @@ def run_workload_on_binary(
             "error_message": bound_diag,
             "exit_code": -1,
         }, 0.0, False
+
+    if historical_auth is not None:
+        if isinstance(historical_auth, bool) or not isinstance(historical_auth, VerifiedHistoricalArtifact):
+            return {
+                "status": "AUTHORIZATION_ERROR",
+                "error_category": "HISTORICAL_AUTHORIZATION_ERROR",
+                "error_message": "historical_auth must be a VerifiedHistoricalArtifact instance, boolean bypass rejected",
+                "exit_code": -1,
+            }, 0.0, False
+        actual_bin_sha = compute_sha256(binary_path)
+        if actual_bin_sha != historical_auth.binary_sha256:
+            return {
+                "status": "AUTHORIZATION_ERROR",
+                "error_category": "HISTORICAL_AUTHORIZATION_ERROR",
+                "error_message": f"Binary on disk SHA {actual_bin_sha} does not match historical authorization SHA {historical_auth.binary_sha256}",
+                "exit_code": -1,
+            }, 0.0, False
 
     with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as wf, \
          tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as of:
@@ -1843,7 +1937,7 @@ def run_workload_on_binary(
             native_result=res_data,
             is_success_run=is_success_run,
             requested_neighbor_mode=neighbor_mode,
-            allow_historical_version=allow_historical_version,
+            historical_auth=historical_auth,
         )
         res_data["configuration_valid"] = config_ok
         if not schema_ok or not config_ok:

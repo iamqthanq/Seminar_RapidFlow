@@ -146,8 +146,15 @@ class TestNeighborBuffer(unittest.TestCase):
         historical = {k: v for k, v in base.items() if k not in ADDITIONS}
         self.assertTrue(runner.validate_nlf_configuration("m2", "none", historical, True)[0])
         self.assertFalse(runner.validate_nlf_configuration("m2", "none", historical, True, "legacy")[0])
-        # Historical mode accepts version 1 when requested_neighbor_mode is not supplied:
-        self.assertTrue(runner.validate_nlf_configuration("m2", "none", {**base, "neighbor_configuration_version": 1}, True)[0])
+        # Historical mode with version 1 requires explicit historical_auth authorization:
+        self.assertFalse(runner.validate_nlf_configuration("m2", "none", {**base, "neighbor_configuration_version": 1}, True)[0])
+        auth_buf = runner.VerifiedHistoricalArtifact(
+            binary_sha256="d21575c1c70d1f7bc2380d8172ae4044dacfc3f6ec464d06884555c284d36b84",
+            commit_sha="d21575c1c70d1f7bc2380d8172ae4044dacfc3f",
+            historical_profile="buffer",
+            schema_version=1,
+        )
+        self.assertTrue(runner.validate_nlf_configuration("m2", "none", {**base, "neighbor_configuration_version": 1}, True, historical_auth=auth_buf)[0])
         # Live mode rejects version 1:
         self.assertFalse(runner.validate_nlf_configuration("m2", "none", {**base, "neighbor_configuration_version": 1}, True, "buffer")[0])
         for mode in ("buffer", "merge"):
@@ -407,24 +414,14 @@ class TestNeighborBuffer(unittest.TestCase):
             return res
 
         with patch.object(runner, "execute_contained_subprocess", side_effect=downgrade_version):
-            result, _, accepted = runner.run_workload_on_binary(BINARY, "m2", self.workload(), neighbor_mode="merge", allow_historical_version=False)
+            result, _, accepted = runner.run_workload_on_binary(BINARY, "m2", self.workload(), neighbor_mode="merge", historical_auth=None)
         self.assertFalse(accepted)
         self.assertIn("Missing initialized current neighbor configuration identity", get_diag(result))
 
-        # Mutation 6: Historical version 1 under allow_historical_version=True with missing mandatory counter rejected (R1-RV04)
-        def hist_missing_counter(cmd, **kwargs):
-            res = actual(cmd, **kwargs)
-            out = Path(cmd[cmd.index("--output") + 1])
-            body = json.loads(out.read_text())
-            body["neighbor_configuration_version"] = 1
-            body.get("counters", {}).pop("neighbor_merge_linear_calls", None)
-            out.write_text(json.dumps(body))
-            return res
-
-        with patch.object(runner, "execute_contained_subprocess", side_effect=hist_missing_counter):
-            result, _, accepted = runner.run_workload_on_binary(BINARY, "m2", self.workload(), neighbor_mode="merge", allow_historical_version=True)
+        # Mutation 6: Live run with boolean bypass rejected (R1-RV04)
+        result, _, accepted = runner.run_workload_on_binary(BINARY, "m2", self.workload(), neighbor_mode="merge", historical_auth=True)
         self.assertFalse(accepted)
-        self.assertIn("Missing required neighbor counter 'neighbor_merge_linear_calls' in historical merge profile", get_diag(result))
+        self.assertIn("boolean bypass rejected", get_diag(result))
 
     def test_historical_p4b2a_baseline_compatibility(self):
         candidates = [
@@ -443,17 +440,241 @@ class TestNeighborBuffer(unittest.TestCase):
             self.assertEqual(res.returncode, 0, res.stderr)
             hist_out = json.loads(out.read_text())
             self.assertEqual(hist_out.get("neighbor_configuration_version"), 1)
-            # Historical validation without requested_neighbor_mode accepts version 1
-            ok, diag, meta = runner.validate_nlf_configuration("m2", "none", hist_out, True)
-            self.assertTrue(ok, diag)
             # Live validation with requested_neighbor_mode strictly rejects version 1 (downgrade protection)
             ok_live, diag_live, _ = runner.validate_nlf_configuration("m2", "none", hist_out, True, "buffer")
             self.assertFalse(ok_live)
             self.assertIn("Missing initialized current neighbor configuration identity", diag_live)
-            # Historical validation with allow_historical_version=True accepts version 1
-            ok_hist, diag_hist, _ = runner.validate_nlf_configuration("m2", "none", hist_out, True, "buffer", allow_historical_version=True)
+
+            # Historical validation with VerifiedHistoricalArtifact accepts version 1
+            auth = runner.VerifiedHistoricalArtifact(
+                binary_sha256="d21575c1c70d1f7bc2380d8172ae4044dacfc3f6ec464d06884555c284d36b84",
+                commit_sha="d21575c1c70d1f7bc2380d8172ae4044dacfc3f",
+                historical_profile="buffer",
+                schema_version=1,
+            )
+            ok_hist, diag_hist, _ = runner.validate_historical_artifact_configuration(hist_out, auth, "m2", "none", "buffer")
             self.assertTrue(ok_hist, diag_hist)
 
-            # Also verify run_workload_on_binary with allow_historical_version=True
-            res_dict, _, acc = runner.run_workload_on_binary(baseline_bin, "m2", self.workload(), neighbor_mode="buffer", allow_historical_version=True)
+            # Also verify run_workload_on_binary with historical_auth=auth
+            res_dict, _, acc = runner.run_workload_on_binary(baseline_bin, "m2", self.workload(), neighbor_mode="buffer", historical_auth=auth)
             self.assertTrue(acc, res_dict.get("error_message"))
+
+
+class TestHistoricalSchemaAuthorizationMatrix(unittest.TestCase):
+    """Exhaustive test suite for RV04-T01 through RV04-T19."""
+
+    def setUp(self):
+        self.p4b2a_sha = "d21575c1c70d1f7bc2380d8172ae4044dacfc3f6ec464d06884555c284d36b84"
+        self.p4b2a_commit = "d21575c1c70d1f7bc2380d8172ae4044dacfc3f"
+        self.p4b2b_sha = "260e5627799b624bf010c4631011db8874ebf769bf4b4cdd62831f1ad25a9608"
+        self.p4b2b_commit = "bdb1fd26c92d56d11f71477708eb107e371a5330"
+
+    def make_v2_result(self, mode="merge"):
+        return {
+            "status": "SUCCESS",
+            "engine": "m2",
+            "engine_name": "m2",
+            "requested_nlf_mode": "none",
+            "effective_nlf_mode": "none",
+            "configuration_status": "SUCCESS",
+            "nlf_memory_limit_bytes": 1048576,
+            "nlf_index_logical_bytes": 0,
+            "configuration_initialized": True,
+            "neighbor_configuration_version": 2,
+            "requested_neighbor_mode": mode,
+            "effective_neighbor_mode": mode,
+            "counters": {
+                "raw_emissions": 0,
+                "unique_emissions": 0,
+                "committed_emissions": 0,
+                "discarded_emissions": 0,
+                "work_units": 0,
+                "max_work": 1000000,
+                "anchors_started": 0,
+                "dfs_states": 0,
+                "candidate_evaluations": 0,
+                "candidate_extensions": 0,
+                "edge_lookups": 0,
+                "vertex_label_checks": 0,
+                "edge_decisions": 0,
+                "missing_branches": 0,
+                "commitment_checks": 0,
+                "commitment_rejections": 0,
+                "neighbor_buffer_retrieval_calls": 10,
+                "neighbor_buffer_growth_calls": 2,
+                "neighbor_buffer_no_growth_calls": 8,
+                "neighbor_merge_retrieval_calls": 10,
+                "neighbor_merge_linear_calls": 6,
+                "neighbor_merge_fast_path_calls": 4,
+                "neighbor_merge_fallback_calls": 0,
+            },
+        }
+
+    def make_v1_result(self, mode="buffer"):
+        res = self.make_v2_result(mode)
+        res["neighbor_configuration_version"] = 1
+        if mode == "buffer":
+            for k in runner.NEIGHBOR_MERGE_COUNTER_FIELDS:
+                res["counters"][k] = 0
+        return res
+
+    def test_rv04_t01_live_v2_valid_passes(self):
+        res = self.make_v2_result("merge")
+        ok, diag, meta = runner.validate_nlf_configuration("m2", "none", res, True, "merge")
+        self.assertTrue(ok, diag)
+
+    def test_rv04_t02_live_v1_without_auth_fails_downgrade(self):
+        res = self.make_v1_result("merge")
+        ok, diag, meta = runner.validate_nlf_configuration("m2", "none", res, True, "merge")
+        self.assertFalse(ok)
+        self.assertIn("downgrade rejected", diag)
+
+    def test_rv04_t03_live_missing_configuration_initialized_fails(self):
+        res = self.make_v2_result("merge")
+        del res["configuration_initialized"]
+        ok, diag, meta = runner.validate_nlf_configuration("m2", "none", res, True, "merge")
+        self.assertFalse(ok)
+        self.assertIn("Missing initialized current neighbor configuration identity", diag)
+
+    def test_rv04_t04_live_marker_false_fails(self):
+        res = self.make_v2_result("merge")
+        res["configuration_initialized"] = False
+        ok, diag, meta = runner.validate_nlf_configuration("m2", "none", res, True, "merge")
+        self.assertFalse(ok)
+        self.assertIn("Uninitialized configuration contradicts native execution evidence", diag)
+
+    def test_rv04_t05_version1_without_provenance_fails(self):
+        res = self.make_v1_result("buffer")
+        ok, diag, meta = runner.validate_nlf_configuration("m2", "none", res, True, "buffer", historical_auth=None)
+        self.assertFalse(ok)
+        self.assertIn("downgrade rejected", diag)
+
+    def test_rv04_t06_unauthorized_binary_sha_fails(self):
+        bad_auth = runner.VerifiedHistoricalArtifact(
+            binary_sha256="0123456789abcdef" * 4,
+            commit_sha="abcdef0123456789",
+            historical_profile="buffer",
+            schema_version=1,
+        )
+        res = self.make_v1_result("buffer")
+        ok, diag, meta = runner.validate_nlf_configuration("m2", "none", res, True, "buffer", historical_auth=bad_auth)
+        self.assertFalse(ok)
+        self.assertIn("Unauthorized historical binary SHA-256", diag)
+
+    def test_rv04_t07_profile_mismatch_fails(self):
+        # P4b-2A baseline is only allowed 'buffer' and 'legacy', not 'merge'
+        auth = runner.VerifiedHistoricalArtifact(
+            binary_sha256=self.p4b2a_sha,
+            commit_sha=self.p4b2a_commit,
+            historical_profile="merge",
+            schema_version=1,
+        )
+        res = self.make_v1_result("merge")
+        ok, diag, meta = runner.validate_nlf_configuration("m2", "none", res, True, "merge", historical_auth=auth)
+        self.assertFalse(ok)
+        self.assertIn("not permitted for binary", diag)
+
+    def test_rv04_t08_commit_sha_mismatch_fails(self):
+        auth = runner.VerifiedHistoricalArtifact(
+            binary_sha256=self.p4b2a_sha,
+            commit_sha="0000000000000000000000000000000000000000",
+            historical_profile="buffer",
+            schema_version=1,
+        )
+        res = self.make_v1_result("buffer")
+        ok, diag, meta = runner.validate_nlf_configuration("m2", "none", res, True, "buffer", historical_auth=auth)
+        self.assertFalse(ok)
+        self.assertIn("Historical commit SHA mismatch", diag)
+
+    def test_rv04_t09_v1_buffer_historical_valid_passes(self):
+        auth = runner.VerifiedHistoricalArtifact(
+            binary_sha256=self.p4b2a_sha,
+            commit_sha=self.p4b2a_commit,
+            historical_profile="buffer",
+            schema_version=1,
+        )
+        res = self.make_v1_result("buffer")
+        ok, diag, meta = runner.validate_historical_artifact_configuration(res, auth, "m2", "none", "buffer")
+        self.assertTrue(ok, diag)
+
+    def test_rv04_t10_v1_merge_historical_valid_passes(self):
+        auth = runner.VerifiedHistoricalArtifact(
+            binary_sha256=self.p4b2b_sha,
+            commit_sha=self.p4b2b_commit,
+            historical_profile="merge",
+            schema_version=1,
+        )
+        res = self.make_v1_result("merge")
+        ok, diag, meta = runner.validate_historical_artifact_configuration(res, auth, "m2", "none", "merge")
+        self.assertTrue(ok, diag)
+
+    def test_rv04_t11_v1_legacy_historical_valid_passes(self):
+        auth = runner.VerifiedHistoricalArtifact(
+            binary_sha256=self.p4b2a_sha,
+            commit_sha=self.p4b2a_commit,
+            historical_profile="legacy",
+            schema_version=1,
+        )
+        res = self.make_v1_result("legacy")
+        for k in runner.ALL_NEIGHBOR_COUNTER_FIELDS:
+            res["counters"][k] = 0
+        ok, diag, meta = runner.validate_historical_artifact_configuration(res, auth, "m2", "none", "legacy")
+        self.assertTrue(ok, diag)
+
+    def test_rv04_t12_v2_null_counter_fails(self):
+        res = self.make_v2_result("merge")
+        res["counters"]["neighbor_merge_linear_calls"] = None
+        err = runner.validate_neighbor_counters(res["counters"], res)
+        self.assertIn("Invalid neighbor counter neighbor_merge_linear_calls", err)
+
+    def test_rv04_t13_v2_bool_counter_fails(self):
+        res = self.make_v2_result("merge")
+        res["counters"]["neighbor_merge_linear_calls"] = True
+        err = runner.validate_neighbor_counters(res["counters"], res)
+        self.assertIn("Invalid neighbor counter neighbor_merge_linear_calls", err)
+
+    def test_rv04_t14_mode_mismatch_fails(self):
+        res = self.make_v2_result("merge")
+        res["effective_neighbor_mode"] = "buffer"
+        ok, diag, meta = runner.validate_nlf_configuration("m2", "none", res, True, "merge")
+        self.assertFalse(ok)
+        self.assertIn("requires effective 'merge'", diag)
+
+    def test_rv04_t15_boolean_historical_auth_fails(self):
+        res = self.make_v2_result("merge")
+        ok, diag, meta = runner.validate_nlf_configuration("m2", "none", res, True, "merge", historical_auth=True)
+        self.assertFalse(ok)
+        self.assertIn("boolean bypass rejected", diag)
+
+    def test_rv04_t16_candidate_binary_historical_auth_sha_mismatch(self):
+        auth = runner.VerifiedHistoricalArtifact(
+            binary_sha256=self.p4b2a_sha,
+            commit_sha=self.p4b2a_commit,
+            historical_profile="buffer",
+            schema_version=1,
+        )
+        w = json.loads(C4.read_bytes())
+        w["case_id"] = "buffer_deferred"
+        res, _, acc = runner.run_workload_on_binary(BINARY, "m2", w, neighbor_mode="buffer", historical_auth=auth)
+        self.assertFalse(acc)
+        self.assertEqual(res.get("status"), "AUTHORIZATION_ERROR")
+        self.assertIn("does not match historical authorization SHA", res.get("error_message", ""))
+
+    def test_rv04_t17_historical_missing_buffer_counter_fails(self):
+        res = self.make_v1_result("buffer")
+        del res["counters"]["neighbor_buffer_retrieval_calls"]
+        err = runner.validate_neighbor_counters(res["counters"], res)
+        self.assertIn("Missing required neighbor counter 'neighbor_buffer_retrieval_calls' in historical buffer profile", err)
+
+    def test_rv04_t18_historical_buffer_nonzero_merge_counter_fails(self):
+        res = self.make_v1_result("buffer")
+        res["counters"]["neighbor_merge_linear_calls"] = 5
+        err = runner.validate_neighbor_counters(res["counters"], res)
+        self.assertIn("Nonzero or invalid merge counter 'neighbor_merge_linear_calls' in historical buffer profile", err)
+
+    def test_rv04_t19_historical_merge_partition_violation_fails(self):
+        res = self.make_v1_result("merge")
+        # linear + fast + fallback != retrieval
+        res["counters"]["neighbor_merge_linear_calls"] += 1
+        err = runner.validate_neighbor_counters(res["counters"], res)
+        self.assertIn("Total merge retrievals differ from sum of linear, fast-path, and fallback calls", err)

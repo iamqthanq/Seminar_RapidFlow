@@ -42,15 +42,13 @@ enum class MergeFaultHook {
 };
 #endif
 
-#ifdef APX_TEST_ACCESS
+// Forward declaration of test access adapter (unconditional for C++ ODR consistency)
 struct ApxAuthoritativeGraphTestAccess;
-#endif
 
 class ApxAuthoritativeGraph {
 public:
-#ifdef APX_TEST_ACCESS
+    // Friend declaration (unconditional: guarantees identical class definition across all TUs)
     friend struct ApxAuthoritativeGraphTestAccess;
-#endif
 
 #ifdef APX_NEIGHBOR_TEST_TRACE
     static void set_merge_fault_hook(MergeFaultHook hook);
