@@ -61,9 +61,9 @@
       "description": "Workload manifest"
     },
     "docs/rapidflow_apx_p4a_protocol.md": {
-      "sha256": "479b9ab4d7abed66fc42ec904a978744e6f6a1ab2bf62fdbffbe0201079589d2",
-      "size_bytes": 27839,
-      "line_count": 268,
+      "sha256": "7d52c5d95e97c11cc788085e875a6c8a1c88ec3fc318e09051a3b093075c817d",
+      "size_bytes": 29959,
+      "line_count": 281,
       "git_tracked": true,
       "accessibility_status": "TRACKED_IN_GIT",
       "description": "Protocol specification markdown"

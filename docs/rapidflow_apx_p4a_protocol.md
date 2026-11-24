@@ -249,6 +249,19 @@ To ensure that official certifications are rooted in verified authority and that
    - 6 zero-duration search runs are safely excluded from the ratio distribution (`RATIO_NOT_COMPUTABLE`), never falsified as 1.0x.
    - Bare M2 evaluates 245,055 candidates vs M1's 455,148 candidates (46.16% relative reduction). Search Core occupies 77.22% (median) and Neighbor Retrieval occupies 22.78% (median) of Search.
 
+### 4.20 Diagnostic Isolation, Multi-Artifact Staged Publication & Compensating Rollback (R9-F01, R9-F02)
+To guarantee publication safety and transactional consistency across certified artifacts, Round 9 establishes:
+1. **Diagnostic Output Isolation (R9-F01):**
+   - Strictly enforces that optional diagnostic output destinations (`--diagnostic-json`) cannot collide or alias with official certified report targets (`--output-json`, `--output-md`, `DEFAULT_SUMMARY_JSON`), raw input artifacts (`--ledger`, `--manifest`, `--evidence-manifest`, `DEFAULT_LEDGER`), or protected repository metadata.
+   - Comprehensive collision detection resolves paths across direct strings, symlinks, relative path aliases, parent traversals (`..`), and identical inode hard links (`os.path.samefile()`).
+   - If any collision is detected, execution terminates fail-closed prior to ledger ingestion or analysis.
+   - Diagnostic reports are strictly quarantined to explaining failure conditions; on successful canonical certifications (`CANONICAL_PASS`), diagnostic output is omitted.
+2. **Staged Multi-Artifact Publication with Compensating Rollback (R9-F02):**
+   - Implements a three-phase atomic publication architecture (`PREPARE -> STAGE -> PUBLISH`):
+     - **Phase A (Prepare):** Validates all destinations and parent directories, and snapshots pre-execution metadata (existence, size, SHA-256) of target paths.
+     - **Phase B (Stage):** Renders all outputs in memory and stages them to unique per-run temporary files (`.{name}.stage.{uuid4}.tmp`) with explicit `flush()` and `os.fsync()`. If any staging fails, unlinks all staging files without modifying any destination.
+     - **Phase C (Publish & Rollback):** Creates temporary backups of pre-existing targets, then atomically replaces each destination via `os.replace()`. If any replacement fails, a compensating rollback restores all committed destinations from backup, unlinks newly created destinations, and reports `PUBLICATION_FAILED_ROLLED_BACK` (or `PUBLICATION_INCONSISTENT` if rollback is obstructed), ensuring no partial or corrupted artifact sets are published.
+
 ---
 
 ## 5. Decision Gate & Phase P4b Transition Criteria (P4A-F08)

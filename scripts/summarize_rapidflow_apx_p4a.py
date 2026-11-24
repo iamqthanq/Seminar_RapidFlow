@@ -21,11 +21,16 @@ Enforces:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
+import shutil
 import sys
+import uuid
 from collections import defaultdict
+from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
@@ -1060,114 +1065,402 @@ def generate_markdown_report(metrics: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def publish_json_atomic(data: Any, target_path: Union[str, Path]) -> None:
-    """Atomically writes JSON to target_path using an isolated temporary file (R8-F04)."""
-    target_path = Path(target_path)
-    target_path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = target_path.with_name(f".{target_path.name}.tmp.{os.getpid()}")
+def paths_collide(p1: Union[str, Path, None], p2: Union[str, Path, None]) -> bool:
+    """Checks if two paths refer or would resolve to the same filesystem location (R9-F01)."""
+    if p1 is None or p2 is None:
+        return False
+    path1 = Path(p1)
+    path2 = Path(p2)
+
+    # 1. Direct string equality
+    if str(path1) == str(path2):
+        return True
+
+    # 2. Existing file samefile check (handles hard links and active symlinks)
     try:
-        with open(temp_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(temp_path, target_path)
-    finally:
-        if temp_path.exists():
+        if path1.exists() and path2.exists():
+            if os.path.samefile(path1, path2):
+                return True
+    except OSError:
+        pass
+
+    # 3. Path.resolve() equality (resolves symlinks and normalizes ..)
+    try:
+        if path1.resolve() == path2.resolve():
+            return True
+    except Exception:
+        pass
+
+    # 4. os.path.realpath / abspath equality
+    try:
+        r1 = os.path.abspath(os.path.realpath(str(path1)))
+        r2 = os.path.abspath(os.path.realpath(str(path2)))
+        if r1 == r2:
+            return True
+    except Exception:
+        pass
+
+    # 5. Pre-creation check: if neither exists or one exists, resolve parents and compare filename
+    try:
+        p1_parent = path1.parent.resolve()
+        p2_parent = path2.parent.resolve()
+        if p1_parent == p2_parent and path1.name == path2.name:
+            return True
+    except Exception:
+        pass
+
+    return False
+
+
+class PublicationStatus(str, Enum):
+    NOT_ATTEMPTED = "NOT_ATTEMPTED"
+    STAGING_FAILED = "STAGING_FAILED"
+    PUBLISHED = "PUBLISHED"
+    PUBLICATION_FAILED_ROLLED_BACK = "PUBLICATION_FAILED_ROLLED_BACK"
+    PUBLICATION_INCONSISTENT = "PUBLICATION_INCONSISTENT"
+
+
+class PublicationError(Exception):
+    def __init__(self, message: str, status: PublicationStatus, details: Optional[Dict[str, Any]] = None):
+        super().__init__(message)
+        self.status = status
+        self.details = details or {}
+
+
+@dataclass
+class ArtifactTarget:
+    target_path: Path
+    content: Union[str, bytes]
+    is_binary: bool = False
+
+
+def publish_certified_artifacts_staged(
+    artifacts: List[ArtifactTarget],
+    *,
+    _replace_fn: Any = os.replace,
+    _stage_write_hook: Any = None,
+) -> Dict[str, Any]:
+    """Atomically publishes multiple certified artifacts with staging and compensating rollback (R9-F02).
+    
+    Guarantees:
+    1. Phase A (Prepare): Verifies all targets, computes SHA/size of existing files.
+    2. Phase B (Stage): Writes content to unique staging files (.{target.name}.stage.{uuid}.tmp)
+       with full fsync. If any staging fails, unlinks all staging files. No destination is modified.
+    3. Phase C (Publish & Rollback):
+       - Backs up pre-existing targets to (.{target.name}.orig_backup.{uuid}.tmp)
+       - Replaces each target via _replace_fn
+       - If ANY replacement fails:
+         - Initiates compensating rollback:
+           - Pre-existing files restored from backup via _replace_fn
+           - Newly created files unlinked
+         - If rollback succeeds: raises PublicationError with status PUBLICATION_FAILED_ROLLED_BACK
+         - If rollback fails: raises PublicationError with status PUBLICATION_INCONSISTENT
+       - If all replacements succeed:
+         - Removes backups and staging files
+         - Returns status PUBLISHED
+    """
+    if not artifacts:
+        return {"status": PublicationStatus.PUBLISHED, "published_paths": []}
+
+    run_id = uuid.uuid4().hex
+    staging_records: List[Dict[str, Any]] = []
+
+    # Phase A: Prepare and Stage
+    try:
+        for art in artifacts:
+            target_path = Path(art.target_path)
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            stage_path = target_path.with_name(f".{target_path.name}.stage.{run_id}.tmp")
+
+            if _stage_write_hook:
+                _stage_write_hook(target_path, stage_path)
+
+            mode = "wb" if art.is_binary else "w"
+            encoding = None if art.is_binary else "utf-8"
+            with open(stage_path, mode, encoding=encoding) as f:
+                f.write(art.content)
+                f.flush()
+                os.fsync(f.fileno())
+
+            if not stage_path.exists():
+                raise OSError(f"Staged file {stage_path} failed to persist.")
+
+            staging_records.append({
+                "target_path": target_path,
+                "stage_path": stage_path,
+                "content": art.content,
+            })
+    except Exception as e:
+        for rec in staging_records:
+            sp = rec.get("stage_path")
+            if sp and sp.exists():
+                try:
+                    sp.unlink()
+                except OSError:
+                    pass
+        raise PublicationError(
+            f"Staging failed before any destination was modified: {e}",
+            status=PublicationStatus.STAGING_FAILED,
+            details={"error": str(e)},
+        )
+
+    # Phase B: Prepare Backup Information for Rollback
+    dest_records: List[Dict[str, Any]] = []
+    for rec in staging_records:
+        t_path = rec["target_path"]
+        existed = t_path.exists()
+        backup_path = None
+        orig_sha = None
+        orig_size = None
+
+        if existed:
             try:
-                temp_path.unlink()
+                with open(t_path, "rb") as bf:
+                    data = bf.read()
+                    orig_sha = hashlib.sha256(data).hexdigest()
+                    orig_size = len(data)
+                backup_path = t_path.with_name(f".{t_path.name}.orig_backup.{run_id}.tmp")
+                with open(backup_path, "wb") as bf:
+                    bf.write(data)
+                    bf.flush()
+                    os.fsync(bf.fileno())
+            except Exception as e:
+                for s_rec in staging_records:
+                    if s_rec["stage_path"].exists():
+                        try:
+                            s_rec["stage_path"].unlink()
+                        except OSError:
+                            pass
+                for d_rec in dest_records:
+                    bp = d_rec.get("backup_path")
+                    if bp and bp.exists():
+                        try:
+                            bp.unlink()
+                        except OSError:
+                            pass
+                raise PublicationError(
+                    f"Failed to prepare backup before publication: {e}",
+                    status=PublicationStatus.STAGING_FAILED,
+                    details={"error": str(e)},
+                )
+
+        dest_records.append({
+            "target_path": t_path,
+            "stage_path": rec["stage_path"],
+            "existed": existed,
+            "orig_sha": orig_sha,
+            "orig_size": orig_size,
+            "backup_path": backup_path,
+        })
+
+    # Phase C: Publish Replacements with Compensating Rollback
+    committed_records: List[Dict[str, Any]] = []
+    try:
+        for d_rec in dest_records:
+            _replace_fn(d_rec["stage_path"], d_rec["target_path"])
+            committed_records.append(d_rec)
+    except Exception as commit_exc:
+        rollback_success = True
+        rollback_errors = []
+
+        for c_rec in reversed(committed_records):
+            c_target = c_rec["target_path"]
+            if c_rec["existed"]:
+                try:
+                    _replace_fn(c_rec["backup_path"], c_target)
+                    with open(c_target, "rb") as rf:
+                        restored_data = rf.read()
+                        restored_sha = hashlib.sha256(restored_data).hexdigest()
+                    if restored_sha != c_rec["orig_sha"]:
+                        rollback_success = False
+                        rollback_errors.append(f"Restored file {c_target} SHA mismatch")
+                except Exception as rb_e:
+                    rollback_success = False
+                    rollback_errors.append(f"Failed to restore {c_target} from backup: {rb_e}")
+            else:
+                try:
+                    if c_target.exists():
+                        c_target.unlink()
+                except Exception as rb_e:
+                    rollback_success = False
+                    rollback_errors.append(f"Failed to unlink newly created file {c_target}: {rb_e}")
+
+        # Cleanup uncommitted staging files
+        for d_rec in dest_records:
+            sp = d_rec.get("stage_path")
+            if sp and sp.exists():
+                try:
+                    sp.unlink()
+                except OSError:
+                    pass
+
+        # Cleanup remaining backups
+        for d_rec in dest_records:
+            bp = d_rec.get("backup_path")
+            if bp and bp.exists():
+                try:
+                    bp.unlink()
+                except OSError:
+                    pass
+
+        if rollback_success:
+            raise PublicationError(
+                f"Publication failed during atomic replacement ({commit_exc}); "
+                f"all modified destinations have been safely rolled back to pre-execution state.",
+                status=PublicationStatus.PUBLICATION_FAILED_ROLLED_BACK,
+                details={"error": str(commit_exc)},
+            )
+        else:
+            raise PublicationError(
+                f"Publication failed during atomic replacement ({commit_exc}) "
+                f"AND compensating rollback failed: {'; '.join(rollback_errors)}. "
+                f"Output destination state is inconsistent.",
+                status=PublicationStatus.PUBLICATION_INCONSISTENT,
+                details={"commit_error": str(commit_exc), "rollback_errors": rollback_errors},
+            )
+
+    # Success: Cleanup all backups
+    for d_rec in dest_records:
+        bp = d_rec.get("backup_path")
+        if bp and bp.exists():
+            try:
+                bp.unlink()
             except OSError:
                 pass
+
+    return {
+        "status": PublicationStatus.PUBLISHED,
+        "published_paths": [d["target_path"] for d in dest_records],
+    }
+
+
+def publish_json_atomic(data: Any, target_path: Union[str, Path]) -> None:
+    """Atomically writes JSON to target_path using staged publication (R8-F04, R9-F02)."""
+    target_path = Path(target_path)
+    res = publish_certified_artifacts_staged([
+        ArtifactTarget(target_path=target_path, content=json.dumps(data, indent=2))
+    ])
+    if res["status"] != PublicationStatus.PUBLISHED:
+        raise OSError(f"Failed to publish JSON to {target_path}: status={res['status']}")
 
 
 def publish_text_atomic(content: str, target_path: Union[str, Path]) -> None:
-    """Atomically writes text to target_path using an isolated temporary file (R8-F04)."""
+    """Atomically writes text to target_path using staged publication (R8-F04, R9-F02)."""
     target_path = Path(target_path)
-    target_path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = target_path.with_name(f".{target_path.name}.tmp.{os.getpid()}")
-    try:
-        with open(temp_path, "w", encoding="utf-8") as f:
-            f.write(content)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(temp_path, target_path)
-    finally:
-        if temp_path.exists():
-            try:
-                temp_path.unlink()
-            except OSError:
-                pass
+    res = publish_certified_artifacts_staged([
+        ArtifactTarget(target_path=target_path, content=content)
+    ])
+    if res["status"] != PublicationStatus.PUBLISHED:
+        raise OSError(f"Failed to publish text to {target_path}: status={res['status']}")
 
 
 def validate_output_destinations(args: argparse.Namespace) -> None:
-    """Validates output file paths against collisions, existing directories, and protected paths (R8-F04)."""
-    all_inputs = []
-    if args.ledger:
-        all_inputs.append(("ledger", Path(args.ledger)))
-    if args.manifest:
-        all_inputs.append(("manifest", Path(args.manifest)))
-    if args.evidence_manifest:
-        all_inputs.append(("evidence-manifest", Path(args.evidence_manifest)))
+    """Validates output file paths against collisions, existing directories, and protected paths (R8-F04, R9-F01)."""
+    protected_inputs = []
+    if getattr(args, "ledger", None):
+        protected_inputs.append(("ledger", Path(args.ledger)))
+    if getattr(args, "manifest", None):
+        protected_inputs.append(("manifest", Path(args.manifest)))
+    if getattr(args, "evidence_manifest", None):
+        protected_inputs.append(("evidence-manifest", Path(args.evidence_manifest)))
 
-    outputs = [("output-json", Path(args.output_json))]
-    if args.output_md:
-        outputs.append(("output-md", Path(args.output_md)))
-    if getattr(args, "diagnostic_json", None):
-        outputs.append(("diagnostic-json", Path(args.diagnostic_json)))
+    protected_canonical_defaults = [
+        ("default-ledger", DEFAULT_LEDGER),
+        ("default-manifest", DEFAULT_MANIFEST_PATH),
+        ("default-evidence-manifest", DEFAULT_EVIDENCE_MANIFEST_PATH),
+        ("default-protocol", DEFAULT_PROTOCOL_PATH),
+    ]
 
-    # 1. Directory check
-    for out_name, out_path in outputs:
+    out_json = Path(args.output_json) if getattr(args, "output_json", None) else None
+    out_md = Path(args.output_md) if getattr(args, "output_md", None) else None
+    diag_json = Path(args.diagnostic_json) if getattr(args, "diagnostic_json", None) else None
+
+    all_outputs = []
+    if out_json:
+        all_outputs.append(("output-json", out_json))
+    if out_md:
+        all_outputs.append(("output-md", out_md))
+    if diag_json:
+        all_outputs.append(("diagnostic-json", diag_json))
+
+    # 1. Directory and non-directory parent check
+    for out_name, out_path in all_outputs:
         if out_path.is_dir():
             print(f"Error: Output path '{out_path}' for --{out_name} is an existing directory.", file=sys.stderr)
             sys.exit(1)
-
-    # 2. Collision with input files
-    for out_name, out_path in outputs:
-        try:
-            res_out = out_path.resolve()
-        except Exception:
-            res_out = out_path
-        for inp_name, inp_path in all_inputs:
-            if inp_path.exists():
-                try:
-                    res_inp = inp_path.resolve()
-                except Exception:
-                    res_inp = inp_path
-                if res_out == res_inp:
-                    print(
-                        f"Error: Output path collision: --{out_name} '{out_path}' collides with input --{inp_name} '{inp_path}'.",
-                        file=sys.stderr,
-                    )
-                    sys.exit(1)
-
-    # 3. Collision between output-json and output-md
-    if args.output_md:
-        try:
-            if Path(args.output_json).resolve() == Path(args.output_md).resolve():
+        curr = out_path.parent
+        while curr != curr.parent:
+            if curr.exists() and not curr.is_dir():
                 print(
-                    f"Error: Output path collision: --output-json and --output-md specify the same file: '{args.output_json}'.",
+                    f"Error: Parent path '{curr}' for --{out_name} '{out_path}' is an existing non-directory file.",
                     file=sys.stderr,
                 )
                 sys.exit(1)
-        except Exception:
-            if str(args.output_json) == str(args.output_md):
+            curr = curr.parent
+
+    # 2. Collision between certified outputs: output-json vs output-md
+    if out_json and out_md:
+        if paths_collide(out_json, out_md):
+            print(
+                f"Error: Output path collision: --output-json and --output-md specify the same file: '{out_json}'.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+    # 3. Diagnostic output isolation (R9-F01)
+    if diag_json:
+        if out_json and paths_collide(diag_json, out_json):
+            print(
+                f"Error: Output path collision: --diagnostic-json '{diag_json}' collides with --output-json '{out_json}'.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        if out_md and paths_collide(diag_json, out_md):
+            print(
+                f"Error: Output path collision: --diagnostic-json '{diag_json}' collides with --output-md '{out_md}'.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        if paths_collide(diag_json, DEFAULT_SUMMARY_JSON):
+            print(
+                f"Error: Output path collision: --diagnostic-json '{diag_json}' collides with official canonical summary '{DEFAULT_SUMMARY_JSON}'.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+    # 4. Collision with input files and protected repository anchors
+    for out_name, out_path in all_outputs:
+        for inp_name, inp_path in protected_inputs:
+            if paths_collide(out_path, inp_path):
                 print(
-                    f"Error: Output path collision: --output-json and --output-md specify the same file: '{args.output_json}'.",
+                    f"Error: Output path collision: --{out_name} '{out_path}' collides with input --{inp_name} '{inp_path}'.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+        for def_name, def_path in protected_canonical_defaults:
+            if paths_collide(out_path, def_path):
+                print(
+                    f"Error: Output path collision: --{out_name} '{out_path}' collides with protected file '{def_path}' ({def_name}).",
                     file=sys.stderr,
                 )
                 sys.exit(1)
 
-    # 4. Scoped mode protection against default canonical output
-    if args.mode == "scoped":
-        try:
-            if Path(args.output_json).resolve() == DEFAULT_SUMMARY_JSON.resolve():
-                print(
-                    f"Error: Refusing to overwrite official canonical summary path '{DEFAULT_SUMMARY_JSON}' "
-                    f"in scoped analysis mode. Please specify a separate --output-json.",
-                    file=sys.stderr,
-                )
-                sys.exit(1)
-        except Exception:
-            pass
+    # 5. Scoped mode protection against default canonical summary
+    if getattr(args, "mode", None) == "scoped":
+        if out_json and paths_collide(out_json, DEFAULT_SUMMARY_JSON):
+            print(
+                f"Error: Refusing to overwrite official canonical summary path '{DEFAULT_SUMMARY_JSON}' "
+                f"in scoped analysis mode. Please specify a separate --output-json.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        if out_md and paths_collide(out_md, DEFAULT_SUMMARY_JSON):
+            print(
+                f"Error: Refusing to overwrite official canonical summary path '{DEFAULT_SUMMARY_JSON}' "
+                f"in scoped analysis mode. Please specify a separate --output-md.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
 
 def main():
@@ -1286,12 +1579,17 @@ def main():
         if verdict == "SCOPED_ANALYSIS_VALID" and metrics.get("total_valid_pairs", 0) > 0:
             is_success = True
 
-    # Safe Publication Gate: Non-PASS certification NEVER overwrites official summary outputs (R8-F04)
+    # Safe Publication Gate: Non-PASS certification NEVER overwrites official summary outputs (R8-F04, R9-F01)
     if not is_success:
         if args.diagnostic_json:
             try:
-                publish_json_atomic(metrics, args.diagnostic_json)
-                print(f"Diagnostic failure metrics saved to {args.diagnostic_json}", file=sys.stderr)
+                diag_res = publish_certified_artifacts_staged([
+                    ArtifactTarget(target_path=args.diagnostic_json, content=json.dumps(metrics, indent=2))
+                ])
+                if diag_res["status"] == PublicationStatus.PUBLISHED:
+                    print(f"Diagnostic failure metrics saved to {args.diagnostic_json}", file=sys.stderr)
+                else:
+                    print(f"Error saving diagnostic JSON to {args.diagnostic_json}: status={diag_res['status']}", file=sys.stderr)
             except Exception as e:
                 print(f"Error saving diagnostic JSON to {args.diagnostic_json}: {e}", file=sys.stderr)
 
@@ -1307,30 +1605,38 @@ def main():
             )
         sys.exit(1)
 
-    # Success: Atomic publication of certified outputs
-    try:
-        publish_json_atomic(metrics, args.output_json)
-        print(f"Summary metrics saved to {args.output_json}")
-    except Exception as e:
-        print(f"Error saving output JSON to {args.output_json}: {e}", file=sys.stderr)
-        sys.exit(1)
-
+    # Success: Multi-artifact staged publication with compensating rollback (R9-F02)
+    artifacts_to_publish = [
+        ArtifactTarget(target_path=args.output_json, content=json.dumps(metrics, indent=2))
+    ]
     md_report = generate_markdown_report(metrics)
     if args.output_md:
-        try:
-            publish_text_atomic(md_report, args.output_md)
-            print(f"Markdown report saved to {args.output_md}")
-        except Exception as e:
-            print(f"Error saving markdown report to {args.output_md}: {e}", file=sys.stderr)
-            sys.exit(1)
+        artifacts_to_publish.append(
+            ArtifactTarget(target_path=args.output_md, content=md_report)
+        )
+
+    try:
+        pub_result = publish_certified_artifacts_staged(artifacts_to_publish)
+    except PublicationError as pe:
+        print(f"Publication failed: {pe} (status={pe.status})", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"Unexpected publication error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    if pub_result["status"] != PublicationStatus.PUBLISHED:
+        print(f"Publication incomplete: status={pub_result['status']}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"Summary metrics saved to {args.output_json}")
+    if args.output_md:
+        print(f"Markdown report saved to {args.output_md}")
     else:
         print("\n" + md_report)
 
     if args.diagnostic_json:
-        try:
-            publish_json_atomic(metrics, args.diagnostic_json)
-        except Exception:
-            pass
+        # Documented policy (R9-A14): Diagnostic is only generated on certification failure.
+        print("Note: --diagnostic-json omitted because certification PASSED.", file=sys.stderr)
 
     sys.exit(0)
 

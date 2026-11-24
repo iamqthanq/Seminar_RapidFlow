@@ -79,10 +79,16 @@ from scripts.p4a_evidence_contract import (
 )
 from scripts.summarize_rapidflow_apx_p4a import (
     DEFAULT_SUMMARY_JSON,
+    ArtifactTarget,
+    PublicationError,
+    PublicationStatus,
     analyze_p4a_ledger,
     compute_distribution_stats,
     compute_safe_speedup,
     generate_markdown_report,
+    paths_collide,
+    publish_certified_artifacts_staged,
+    validate_output_destinations,
 )
 from scripts.measure_observer_overhead_p4a import (
     measure_observer_overhead,
@@ -3050,6 +3056,347 @@ class TestRapidFlowApxP4a(unittest.TestCase):
             proc_d17 = subprocess.run(cmd_d17, capture_output=True, text=True)
             self.assertEqual(proc_d17.returncode, 0)
             self.assertIn("usage:", proc_d17.stdout.lower())
+
+    def test_66_r9_f01_diagnostic_isolation(self):
+        """Remediation Round 9: Tests R9-F01 diagnostic output isolation (T01..T11)."""
+        summarize_script = REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"
+        raw_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            td = Path(tmpdir)
+            target_json = td / "target_certified.json"
+            target_json.write_text("PREEXISTING_CERTIFIED_JSON_123\n")
+            initial_sha = compute_sha256(target_json)
+
+            target_md = td / "target_certified.md"
+            target_md.write_text("PREEXISTING_CERTIFIED_MD_123\n")
+            initial_md_sha = compute_sha256(target_md)
+
+            # T01: Diagnostic collides with output-json
+            cmd_t01 = [
+                sys.executable, str(summarize_script),
+                "--ledger", str(raw_ledger),
+                "--output-json", str(target_json),
+                "--diagnostic-json", str(target_json),
+                "--mode", "canonical",
+            ]
+            p_t01 = subprocess.run(cmd_t01, capture_output=True, text=True)
+            self.assertNotEqual(p_t01.returncode, 0)
+            self.assertIn("collision", p_t01.stderr.lower())
+            self.assertEqual(compute_sha256(target_json), initial_sha)
+
+            # T02: Diagnostic collides with output-md
+            cmd_t02 = [
+                sys.executable, str(summarize_script),
+                "--ledger", str(raw_ledger),
+                "--output-json", str(target_json),
+                "--output-md", str(target_md),
+                "--diagnostic-json", str(target_md),
+                "--mode", "canonical",
+            ]
+            p_t02 = subprocess.run(cmd_t02, capture_output=True, text=True)
+            self.assertNotEqual(p_t02.returncode, 0)
+            self.assertIn("collision", p_t02.stderr.lower())
+            self.assertEqual(compute_sha256(target_md), initial_md_sha)
+
+            # T03: Diagnostic collides with official canonical summary (DEFAULT_SUMMARY_JSON)
+            cmd_t03 = [
+                sys.executable, str(summarize_script),
+                "--ledger", str(raw_ledger),
+                "--output-json", str(target_json),
+                "--diagnostic-json", str(DEFAULT_SUMMARY_JSON),
+                "--mode", "canonical",
+            ]
+            p_t03 = subprocess.run(cmd_t03, capture_output=True, text=True)
+            self.assertNotEqual(p_t03.returncode, 0)
+            self.assertIn("collision", p_t03.stderr.lower())
+
+            # T04: Diagnostic points to output-json via symlink
+            symlink_diag = td / "symlink_to_target.json"
+            try:
+                symlink_diag.symlink_to(target_json)
+                cmd_t04 = [
+                    sys.executable, str(summarize_script),
+                    "--ledger", str(raw_ledger),
+                    "--output-json", str(target_json),
+                    "--diagnostic-json", str(symlink_diag),
+                    "--mode", "canonical",
+                ]
+                p_t04 = subprocess.run(cmd_t04, capture_output=True, text=True)
+                self.assertNotEqual(p_t04.returncode, 0)
+                self.assertIn("collision", p_t04.stderr.lower())
+                self.assertEqual(compute_sha256(target_json), initial_sha)
+            except OSError:
+                pass
+
+            # T05: Diagnostic points to output-json via relative path alias
+            rel_target = os.path.relpath(target_json, start=os.getcwd())
+            cmd_t05 = [
+                sys.executable, str(summarize_script),
+                "--ledger", str(raw_ledger),
+                "--output-json", str(target_json.resolve()),
+                "--diagnostic-json", str(rel_target),
+                "--mode", "canonical",
+            ]
+            p_t05 = subprocess.run(cmd_t05, capture_output=True, text=True)
+            self.assertNotEqual(p_t05.returncode, 0)
+            self.assertIn("collision", p_t05.stderr.lower())
+
+            # T06: Diagnostic points to output-json via parent traversal (..)
+            sub_dir = td / "sub"
+            sub_dir.mkdir(exist_ok=True)
+            traversal_path = sub_dir / ".." / target_json.name
+            cmd_t06 = [
+                sys.executable, str(summarize_script),
+                "--ledger", str(raw_ledger),
+                "--output-json", str(target_json),
+                "--diagnostic-json", str(traversal_path),
+                "--mode", "canonical",
+            ]
+            p_t06 = subprocess.run(cmd_t06, capture_output=True, text=True)
+            self.assertNotEqual(p_t06.returncode, 0)
+            self.assertIn("collision", p_t06.stderr.lower())
+
+            # T07: Diagnostic points to output-json via hard-link (same inode)
+            hardlink_diag = td / "hardlink_to_target.json"
+            try:
+                os.link(str(target_json), str(hardlink_diag))
+                cmd_t07 = [
+                    sys.executable, str(summarize_script),
+                    "--ledger", str(raw_ledger),
+                    "--output-json", str(target_json),
+                    "--diagnostic-json", str(hardlink_diag),
+                    "--mode", "canonical",
+                ]
+                p_t07 = subprocess.run(cmd_t07, capture_output=True, text=True)
+                self.assertNotEqual(p_t07.returncode, 0)
+                self.assertIn("collision", p_t07.stderr.lower())
+                self.assertEqual(compute_sha256(target_json), initial_sha)
+            except OSError:
+                pass
+
+            # T08: Diagnostic collides with input ledger
+            cmd_t08 = [
+                sys.executable, str(summarize_script),
+                "--ledger", str(raw_ledger),
+                "--output-json", str(target_json),
+                "--diagnostic-json", str(raw_ledger),
+                "--mode", "canonical",
+            ]
+            p_t08 = subprocess.run(cmd_t08, capture_output=True, text=True)
+            self.assertNotEqual(p_t08.returncode, 0)
+            self.assertIn("collision", p_t08.stderr.lower())
+
+            # T09: Diagnostic collides with manifest or evidence manifest
+            cmd_t09 = [
+                sys.executable, str(summarize_script),
+                "--ledger", str(raw_ledger),
+                "--output-json", str(target_json),
+                "--diagnostic-json", str(DEFAULT_MANIFEST_PATH),
+                "--mode", "canonical",
+            ]
+            p_t09 = subprocess.run(cmd_t09, capture_output=True, text=True)
+            self.assertNotEqual(p_t09.returncode, 0)
+            self.assertIn("collision", p_t09.stderr.lower())
+
+            # T10: Diagnostic at safe separate path is allowed on certification failure
+            tampered_ledger = td / "tampered.jsonl"
+            with open(raw_ledger, "r") as rf, open(tampered_ledger, "w") as wf:
+                line = rf.readline()
+                wf.write(line.replace("6e4537d03a356dd9c603e452f86848cbdb1ea2cd0fcbdf31199d0e9afbf9b21b", "0" * 64))
+            safe_diag = td / "safe_diag.json"
+            cmd_t10 = [
+                sys.executable, str(summarize_script),
+                "--ledger", str(tampered_ledger),
+                "--output-json", str(target_json),
+                "--diagnostic-json", str(safe_diag),
+                "--mode", "canonical",
+            ]
+            p_t10 = subprocess.run(cmd_t10, capture_output=True, text=True)
+            self.assertNotEqual(p_t10.returncode, 0)
+            self.assertTrue(safe_diag.is_file(), "Safe diagnostic file should be created")
+            # T11: Invalid run preserves pre-existing certified output SHA
+            self.assertEqual(compute_sha256(target_json), initial_sha, "Certified output must remain unmodified")
+
+    def test_67_r9_f02_multi_artifact_staged_publication(self):
+        """Remediation Round 9: Tests R9-F02 staged multi-artifact publication and compensating rollback (T12..T24)."""
+        summarize_script = REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"
+        raw_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            td = Path(tmpdir)
+
+            # T12: Valid single JSON publication (PASS)
+            out_json = td / "out.json"
+            res_t12 = publish_certified_artifacts_staged([
+                ArtifactTarget(target_path=out_json, content='{"metric": 1.23}')
+            ])
+            self.assertEqual(res_t12["status"], PublicationStatus.PUBLISHED)
+            self.assertTrue(out_json.is_file())
+            self.assertEqual(json.loads(out_json.read_text())["metric"], 1.23)
+
+            # T13: Valid JSON + Markdown publication (PASS)
+            out_md = td / "out.md"
+            res_t13 = publish_certified_artifacts_staged([
+                ArtifactTarget(target_path=out_json, content='{"metric": 2.34}'),
+                ArtifactTarget(target_path=out_md, content="# Report\nMetric is 2.34\n"),
+            ])
+            self.assertEqual(res_t13["status"], PublicationStatus.PUBLISHED)
+            self.assertEqual(json.loads(out_json.read_text())["metric"], 2.34)
+            self.assertIn("Metric is 2.34", out_md.read_text())
+
+            # T14: Markdown staging failure -> NO OUTPUT MODIFICATION
+            sha_json_before = compute_sha256(out_json)
+            sha_md_before = compute_sha256(out_md)
+            def fail_md_staging(target, stage):
+                if target.suffix == ".md":
+                    raise OSError("Injected markdown staging failure")
+            with self.assertRaises(PublicationError) as cm_t14:
+                publish_certified_artifacts_staged(
+                    [
+                        ArtifactTarget(target_path=out_json, content='{"metric": 9.99}'),
+                        ArtifactTarget(target_path=out_md, content="# Corrupted Report\n"),
+                    ],
+                    _stage_write_hook=fail_md_staging,
+                )
+            self.assertEqual(cm_t14.exception.status, PublicationStatus.STAGING_FAILED)
+            self.assertEqual(compute_sha256(out_json), sha_json_before)
+            self.assertEqual(compute_sha256(out_md), sha_md_before)
+
+            # T15: JSON staging failure -> NO OUTPUT MODIFICATION
+            def fail_json_staging(target, stage):
+                if target.suffix == ".json":
+                    raise OSError("Injected json staging failure")
+            with self.assertRaises(PublicationError) as cm_t15:
+                publish_certified_artifacts_staged(
+                    [
+                        ArtifactTarget(target_path=out_json, content='{"metric": 9.99}'),
+                        ArtifactTarget(target_path=out_md, content="# Corrupted Report\n"),
+                    ],
+                    _stage_write_hook=fail_json_staging,
+                )
+            self.assertEqual(cm_t15.exception.status, PublicationStatus.STAGING_FAILED)
+            self.assertEqual(compute_sha256(out_json), sha_json_before)
+            self.assertEqual(compute_sha256(out_md), sha_md_before)
+
+            # T16: First replacement failure -> NO PARTIAL PUBLICATION
+            def fail_first_replace(src, dst):
+                raise OSError("Injected first replacement failure")
+            with self.assertRaises(PublicationError) as cm_t16:
+                publish_certified_artifacts_staged(
+                    [
+                        ArtifactTarget(target_path=out_json, content='{"metric": 5.55}'),
+                        ArtifactTarget(target_path=out_md, content="# Report 5.55\n"),
+                    ],
+                    _replace_fn=fail_first_replace,
+                )
+            self.assertEqual(cm_t16.exception.status, PublicationStatus.PUBLICATION_FAILED_ROLLED_BACK)
+            self.assertEqual(compute_sha256(out_json), sha_json_before)
+            self.assertEqual(compute_sha256(out_md), sha_md_before)
+
+            # T17 & T18: Second replacement failure -> ROLLBACK ATTEMPTED & ORIGINAL SHAs RESTORED
+            calls = [0]
+            def fail_second_replace(src, dst):
+                calls[0] += 1
+                if calls[0] == 2:
+                    raise OSError("Injected second replacement failure")
+                os.replace(src, dst)
+            with self.assertRaises(PublicationError) as cm_t17:
+                publish_certified_artifacts_staged(
+                    [
+                        ArtifactTarget(target_path=out_json, content='{"metric": 6.66}'),
+                        ArtifactTarget(target_path=out_md, content="# Report 6.66\n"),
+                    ],
+                    _replace_fn=fail_second_replace,
+                )
+            self.assertEqual(cm_t17.exception.status, PublicationStatus.PUBLICATION_FAILED_ROLLED_BACK)
+            self.assertEqual(compute_sha256(out_json), sha_json_before)
+            self.assertEqual(compute_sha256(out_md), sha_md_before)
+
+            # T19: Rollback fails -> EXPLICIT FAILURE (PUBLICATION_INCONSISTENT)
+            def fail_replace_and_rollback(src, dst):
+                calls[0] += 1
+                if calls[0] >= 2:
+                    raise OSError("Injected replacement and rollback failure")
+                os.replace(src, dst)
+            calls[0] = 0
+            with self.assertRaises(PublicationError) as cm_t19:
+                publish_certified_artifacts_staged(
+                    [
+                        ArtifactTarget(target_path=out_json, content='{"metric": 7.77}'),
+                        ArtifactTarget(target_path=out_md, content="# Report 7.77\n"),
+                    ],
+                    _replace_fn=fail_replace_and_rollback,
+                )
+            self.assertEqual(cm_t19.exception.status, PublicationStatus.PUBLICATION_INCONSISTENT)
+
+            # T20: New output creation then failure -> NO FALSE CERTIFIED SET (new files unlinked)
+            new_json = td / "new_dir" / "new.json"
+            new_md = td / "new_dir" / "new.md"
+            calls[0] = 0
+            with self.assertRaises(PublicationError) as cm_t20:
+                publish_certified_artifacts_staged(
+                    [
+                        ArtifactTarget(target_path=new_json, content='{"metric": 8.88}'),
+                        ArtifactTarget(target_path=new_md, content="# New MD\n"),
+                    ],
+                    _replace_fn=fail_second_replace,
+                )
+            self.assertEqual(cm_t20.exception.status, PublicationStatus.PUBLICATION_FAILED_ROLLED_BACK)
+            self.assertFalse(new_json.exists(), "Newly created destination 1 must be unlinked on rollback")
+            self.assertFalse(new_md.exists(), "Destination 2 was never replaced")
+
+            # T21: Existing JSON, new Markdown -> JSON restored, Markdown not created
+            new_json.write_text('{"initial": "json"}')
+            new_json_sha = compute_sha256(new_json)
+            calls[0] = 0
+            with self.assertRaises(PublicationError) as cm_t21:
+                publish_certified_artifacts_staged(
+                    [
+                        ArtifactTarget(target_path=new_json, content='{"updated": "json"}'),
+                        ArtifactTarget(target_path=new_md, content="# New MD\n"),
+                    ],
+                    _replace_fn=fail_second_replace,
+                )
+            self.assertEqual(cm_t21.exception.status, PublicationStatus.PUBLICATION_FAILED_ROLLED_BACK)
+            self.assertEqual(compute_sha256(new_json), new_json_sha)
+            self.assertFalse(new_md.exists())
+
+            # T22: New JSON, existing Markdown -> JSON unlinked, Markdown restored
+            brand_new_json = td / "brand_new.json"
+            assert not brand_new_json.exists()
+            calls[0] = 0
+            with self.assertRaises(PublicationError) as cm_t22:
+                publish_certified_artifacts_staged(
+                    [
+                        ArtifactTarget(target_path=brand_new_json, content='{"new": "json"}'),
+                        ArtifactTarget(target_path=new_json, content='{"tampered": "json"}'),
+                    ],
+                    _replace_fn=fail_second_replace,
+                )
+            self.assertEqual(cm_t22.exception.status, PublicationStatus.PUBLICATION_FAILED_ROLLED_BACK)
+            self.assertFalse(brand_new_json.exists())
+            self.assertEqual(compute_sha256(new_json), new_json_sha)
+
+            # T23: Protected artifact collision (e.g. CLI rejects output-json against default protocol)
+            cmd_t23 = [
+                sys.executable, str(summarize_script),
+                "--ledger", str(raw_ledger),
+                "--output-json", str(DEFAULT_PROTOCOL_PATH),
+                "--mode", "canonical",
+            ]
+            p_t23 = subprocess.run(cmd_t23, capture_output=True, text=True)
+            self.assertNotEqual(p_t23.returncode, 0)
+            self.assertIn("collision", p_t23.stderr.lower())
+
+            # T24: Retry after failure -> Successful publication with valid destinations
+            retry_json = td / "retry.json"
+            retry_md = td / "retry.md"
+            res_t24 = publish_certified_artifacts_staged([
+                ArtifactTarget(target_path=retry_json, content='{"status": "recovered"}'),
+                ArtifactTarget(target_path=retry_md, content="# Recovered Report\n"),
+            ])
+            self.assertEqual(res_t24["status"], PublicationStatus.PUBLISHED)
+            self.assertTrue(retry_json.is_file())
+            self.assertTrue(retry_md.is_file())
 
 
 

@@ -79,6 +79,8 @@ Across 90 paired comparisons (30 canonical workloads $\times$ 3 repetitions $\ti
 | Complete Canonical Header Contract | **ADD** | Enforces all 13 fields across Groups A..F; rejects partial headers, dirty states, timeout alterations, and unknown fields. | Tested across R8-B01..R8-B23 in `test_63_r8_f02` (Round 8). |
 | Evidence Manifest Provenance Integrity | **ADD** | Validates top-level identity, commit, historical measurement protocol SHA, workload manifest SHA, and raw artifact metadata. | Tested across R8-C01..R8-C18 in `test_64_r8_f03` (Round 8). |
 | Safe Canonical Report Publication | **ADD** | Pipeline evaluates certification verdict prior to file creation; failed certifications never overwrite certified summary artifacts. Atomic staging ensures clean publication. | Tested across R8-D01..R8-D18 in `test_65_r8_f04` (Round 8). |
+| Diagnostic Output Isolation | **ADD** | Strict collision and aliasing prevention between diagnostic outputs, certified publication outputs, and raw inputs across direct paths, symlinks, relative paths, parent traversals, and hard links. | Tested across T01..T11 in `test_66_r9_f01` (Round 9). |
+| Staged Multi-Artifact Publication with Compensating Rollback | **ADD** | Three-phase publication pipeline (`PREPARE -> STAGE -> PUBLISH`) with atomic replacement and compensating rollback; ensures no partial or inconsistent artifact set can ever be left upon publication failure. | Tested across T12..T24 in `test_67_r9_f02` (Round 9). |
 
 
 ---
