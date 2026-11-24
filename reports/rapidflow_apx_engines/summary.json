@@ -1,30 +1,31 @@
 {
   "runner_mode": "CANONICAL_FULL_RUN",
   "overall_status": "P3_ENGINES_VERIFIED",
-  "timestamp_utc": "2026-11-23T08:47:24.321924+00:00",
+  "timestamp_utc": "2026-11-24T08:52:07.409428+00:00",
   "manifest_path": "configs/rapidflow_apx_engines_cases.json",
   "manifest_sha256": "6f224fbb477697af0c9f7d9f438c3e85b6cfd349dda99614bcc4f2f763d6c41d",
   "binary_path": "tests/native/rapidflow_apx_engines/build/rapidflow_apx_native",
-  "binary_sha256": "6e4537d03a356dd9c603e452f86848cbdb1ea2cd0fcbdf31199d0e9afbf9b21b",
+  "binary_sha256": "251024643a457bb03df659a5c6e3e61cfc168645d1582696244746492119fbbc",
   "selected_engine": "all",
   "selected_stage": "all",
   "selected_case": null,
+  "selected_nlf_mode": "none",
   "provenance": {
-    "repo_commit": "c0cdfdf9ab628e6f93da62f7add7be28dd518238",
+    "repo_commit": "dcba19e6e694fed19ae8cbce19dd4a39f3fdb56b",
     "repo_clean": true,
     "dirty_state": "CLEAN",
     "upstream_commit": "2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1",
     "upstream_pristine": true
   },
   "system_resources": {
-    "mem_available_gib": 4.939693450927734,
-    "free_disk_gib": 108.64705276489258,
+    "mem_available_gib": 2.8809356689453125,
+    "free_disk_gib": 107.46284484863281,
     "preflight_passed": true
   },
   "build_provenance": {
-    "clean_build": true,
+    "clean_build": false,
     "configure_command": [
-      "/home/iamqthanq/Desktop/Seminar_RapidFlow_D_INT03/external/tools/cmake-3.28.3-linux-x86_64/bin/cmake",
+      "/home/iamqthanq/Desktop/Seminar_RapidFlow_D_INT04B/external/tools/cmake-3.28.3-linux-x86_64/bin/cmake",
       ".."
     ],
     "configure_exit_code": 0,
@@ -33,7 +34,7 @@
       "-j2"
     ],
     "build_exit_code": 0,
-    "duration_ms": 14510.038884000096
+    "duration_ms": 78.1695839978056
   },
   "stages": {
     "hand_cases": {
@@ -48,8 +49,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 6.970391994400416,
-          "duration_ms_m2": 7.049078994896263
+          "duration_ms_m1": 5.967762001091614,
+          "duration_ms_m2": 5.8097760047530755
         },
         {
           "case_id": "CASE_HAND_02",
@@ -58,8 +59,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 6.174400004965719,
-          "duration_ms_m2": 6.148994994873647
+          "duration_ms_m1": 5.486552996444516,
+          "duration_ms_m2": 6.071105002774857
         },
         {
           "case_id": "CASE_HAND_03",
@@ -68,8 +69,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 6.141022997326218,
-          "duration_ms_m2": 5.721581997931935
+          "duration_ms_m1": 6.098507990827784,
+          "duration_ms_m2": 5.851306996191852
         },
         {
           "case_id": "CASE_HAND_04",
@@ -78,8 +79,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 5.722390000300948,
-          "duration_ms_m2": 5.627327998809051
+          "duration_ms_m1": 7.351438005571254,
+          "duration_ms_m2": 6.512323001516052
         },
         {
           "case_id": "CASE_HAND_05",
@@ -88,8 +89,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 5.86751100490801,
-          "duration_ms_m2": 5.588254993199371
+          "duration_ms_m1": 7.486736998544075,
+          "duration_ms_m2": 6.439924996811897
         },
         {
           "case_id": "CASE_HAND_06_STEP1",
@@ -98,8 +99,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 5.74202899588272,
-          "duration_ms_m2": 5.725239003368188
+          "duration_ms_m1": 6.0424690018408,
+          "duration_ms_m2": 6.824312993558124
         },
         {
           "case_id": "CASE_HAND_06_STEP2",
@@ -108,8 +109,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 6.024674999935087,
-          "duration_ms_m2": 6.592071003979072
+          "duration_ms_m1": 5.848738001077436,
+          "duration_ms_m2": 5.945259996224195
         },
         {
           "case_id": "CASE_HAND_07",
@@ -118,8 +119,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 5.541072001506109,
-          "duration_ms_m2": 5.597609997494146
+          "duration_ms_m1": 6.184092999319546,
+          "duration_ms_m2": 5.936154004302807
         },
         {
           "case_id": "CASE_HAND_08",
@@ -128,8 +129,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 5.660184004227631,
-          "duration_ms_m2": 5.9324199974071234
+          "duration_ms_m1": 6.91603499581106,
+          "duration_ms_m2": 6.004916998790577
         },
         {
           "case_id": "CASE_HAND_09",
@@ -138,8 +139,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 6.241559000045527,
-          "duration_ms_m2": 6.014648002746981
+          "duration_ms_m1": 6.513636995805427,
+          "duration_ms_m2": 6.209930012119003
         },
         {
           "case_id": "CASE_HAND_10",
@@ -148,8 +149,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 6.096620003518183,
-          "duration_ms_m2": 5.794877004518639
+          "duration_ms_m1": 7.44408299215138,
+          "duration_ms_m2": 6.408068002201617
         },
         {
           "case_id": "CASE_HAND_11",
@@ -158,8 +159,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 5.693842002074234,
-          "duration_ms_m2": 5.585097998846322
+          "duration_ms_m1": 6.7046749900327995,
+          "duration_ms_m2": 6.588546995772049
         },
         {
           "case_id": "CASE_HAND_12",
@@ -168,8 +169,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 5.797034995339345,
-          "duration_ms_m2": 5.541540005651768
+          "duration_ms_m1": 6.85129698831588,
+          "duration_ms_m2": 6.25803301227279
         },
         {
           "case_id": "CASE_HAND_13",
@@ -178,8 +179,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 5.892975001188461,
-          "duration_ms_m2": 6.260523005039431
+          "duration_ms_m1": 6.430495006497949,
+          "duration_ms_m2": 6.785414996556938
         },
         {
           "case_id": "CASE_HAND_14",
@@ -188,8 +189,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 5.9541229929891415,
-          "duration_ms_m2": 5.490362003911287
+          "duration_ms_m1": 6.408702000044286,
+          "duration_ms_m2": 6.635622994508594
         },
         {
           "case_id": "CASE_HAND_15",
@@ -198,8 +199,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 5.461770997499116,
-          "duration_ms_m2": 5.953514002612792
+          "duration_ms_m1": 6.240054004592821,
+          "duration_ms_m2": 7.906543993158266
         },
         {
           "case_id": "CASE_HAND_16",
@@ -208,8 +209,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 6.0193070021341555,
-          "duration_ms_m2": 5.518363999726716
+          "duration_ms_m1": 6.664497996098362,
+          "duration_ms_m2": 7.220724000944756
         },
         {
           "case_id": "CASE_HAND_17",
@@ -218,8 +219,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 5.748175004555378,
-          "duration_ms_m2": 5.906076003157068
+          "duration_ms_m1": 6.348111011902802,
+          "duration_ms_m2": 7.082757001626305
         },
         {
           "case_id": "CASE_HAND_18",
@@ -228,8 +229,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 5.615076996036805,
-          "duration_ms_m2": 5.502694999449886
+          "duration_ms_m1": 6.516872002976015,
+          "duration_ms_m2": 6.17792499542702
         },
         {
           "case_id": "CASE_HAND_19",
@@ -238,8 +239,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 5.399939000199083,
-          "duration_ms_m2": 5.479833998833783
+          "duration_ms_m1": 6.622831002459861,
+          "duration_ms_m2": 6.419140001526102
         },
         {
           "case_id": "CASE_HAND_20",
@@ -248,8 +249,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 5.664188000082504,
-          "duration_ms_m2": 6.760299998859409
+          "duration_ms_m1": 6.852328995591961,
+          "duration_ms_m2": 6.650369003182277
         },
         {
           "case_id": "CASE_HAND_21",
@@ -258,8 +259,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 5.198008002480492,
-          "duration_ms_m2": 5.062771000666544
+          "duration_ms_m1": 5.5952389957383275,
+          "duration_ms_m2": 6.968201007111929
         },
         {
           "case_id": "CASE_HAND_22",
@@ -268,8 +269,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 5.225528999289963,
-          "duration_ms_m2": 5.493120996106882
+          "duration_ms_m1": 5.907020997256041,
+          "duration_ms_m2": 5.810578993987292
         },
         {
           "case_id": "CASE_HAND_23",
@@ -278,8 +279,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 6.749833999492694,
-          "duration_ms_m2": 6.156652998470236
+          "duration_ms_m1": 8.682016996317543,
+          "duration_ms_m2": 6.528984013129957
         },
         {
           "case_id": "CASE_HAND_24_Q6",
@@ -288,8 +289,8 @@
           "diagnostic": "",
           "m1_executed": true,
           "m2_executed": true,
-          "duration_ms_m1": 5.793636999442242,
-          "duration_ms_m2": 5.3844810026930645
+          "duration_ms_m1": 5.8781669940799475,
+          "duration_ms_m2": 5.852928006788716
         }
       ]
     },
@@ -307,7 +308,7 @@
       "m2_zero_duplicates": 840,
       "status": "PASS",
       "error": null,
-      "duration_seconds": 17.126878144998045
+      "duration_seconds": 18.536017449994688
     },
     "stream_56_matrix": {
       "total_configurations": 56,
@@ -330,7 +331,7 @@
       "total_exited_events": 1780,
       "status": "PASS",
       "error": null,
-      "duration_seconds": 3.2370629200013354
+      "duration_seconds": 3.641638436994981
     }
   }
 }
