@@ -365,6 +365,8 @@ class TestRapidFlowApxP4b1A(unittest.TestCase):
         """
         # CFG-01: Requested none, native output none, SUCCESS -> Valid, Eligible
         mock_none = {
+            "nlf_memory_limit_bytes": 256 * 1024 * 1024,
+            "nlf_index_logical_bytes": 0,
             "requested_nlf_mode": "none",
             "effective_nlf_mode": "none",
             "configuration_status": "SUCCESS"
@@ -386,6 +388,8 @@ class TestRapidFlowApxP4b1A(unittest.TestCase):
 
         # CFG-03: Requested static, native output static, SUCCESS -> Valid, Eligible
         mock_static = {
+            "nlf_memory_limit_bytes": 256 * 1024 * 1024,
+            "nlf_index_logical_bytes": 4,
             "requested_nlf_mode": "static",
             "effective_nlf_mode": "static",
             "configuration_status": "SUCCESS"
@@ -397,6 +401,8 @@ class TestRapidFlowApxP4b1A(unittest.TestCase):
         # CFG-04: Requested static, native fallback to none (REQUESTED_CONFIGURATION_UNAVAILABLE)
         # MUST be marked NOT eligible for static certification and runner must fail validation
         mock_fallback = {
+            "nlf_memory_limit_bytes": 256 * 1024 * 1024,
+            "nlf_index_logical_bytes": 0,
             "requested_nlf_mode": "static",
             "effective_nlf_mode": "none",
             "configuration_status": "REQUESTED_CONFIGURATION_UNAVAILABLE",
@@ -426,8 +432,11 @@ class TestRapidFlowApxP4b1A(unittest.TestCase):
             "error_category": "PREVALIDATION_ERROR",
             "error_message": "Unknown vertex ID",
             "requested_nlf_mode": "static",
-            "effective_nlf_mode": "none",
-            "configuration_status": "NONE"
+            "configuration_initialized": True,
+            "effective_nlf_mode": "static",
+            "configuration_status": "SUCCESS",
+            "nlf_memory_limit_bytes": 256 * 1024 * 1024,
+            "nlf_index_logical_bytes": 4,
         }
         ok, err, meta = validate_nlf_configuration("m2", "static", mock_neg, is_success_run=False)
         self.assertTrue(ok, "Negative runs preserve expected failure category without configuration false-alarm")

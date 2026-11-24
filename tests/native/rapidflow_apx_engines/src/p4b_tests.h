@@ -3,6 +3,16 @@
 
 namespace rapidflow_apx {
 
+class ApxAuthoritativeGraph;
+class ApxQuerySignatures;
+class ApxNlfIndex;
+
+bool verify_index_reconstruction(
+    const ApxAuthoritativeGraph& graph,
+    const ApxQuerySignatures& signatures,
+    const ApxNlfIndex& index
+);
+
 int run_p4b_native_tests(const char* suite_name = "all");
 
 } // namespace rapidflow_apx

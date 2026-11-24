@@ -21,16 +21,6 @@
 
 namespace rapidflow_apx {
 
-namespace {
-
-#define TEST_ASSERT(cond, msg) \
-    do { \
-        if (!(cond)) { \
-            std::cerr << "FAILED: " << msg << " at " << __FILE__ << ":" << __LINE__ << std::endl; \
-            return false; \
-        } \
-    } while (0)
-
 // Reference independent frequency reconstruction
 bool verify_index_reconstruction(
     const ApxAuthoritativeGraph& graph,
@@ -67,6 +57,16 @@ bool verify_index_reconstruction(
     }
     return true;
 }
+
+namespace {
+
+#define TEST_ASSERT(cond, msg) \
+    do { \
+        if (!(cond)) { \
+            std::cerr << "FAILED: " << msg << " at " << __FILE__ << ":" << __LINE__ << std::endl; \
+            return false; \
+        } \
+    } while (0)
 
 // ---------------------------------------------------------------------------
 // 1. Signature Registry Tests (SIG-01 to SIG-10)

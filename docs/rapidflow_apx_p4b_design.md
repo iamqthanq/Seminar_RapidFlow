@@ -667,36 +667,34 @@ To ensure continuity with Phase P3 and P4a, counter accounting is strictly prese
 | `raw_emissions` | `tuple_sink.cpp` in `push_tuple` | Total tuples received by sink staging buffer | $\equiv \text{Bare M2}$ | $\equiv \text{Bare M2}$ |
 | `committed_emissions`| `tuple_sink.cpp` in `commit_step` | Total tuples committed and published to caller | $\equiv \text{Bare M2}$ | $\equiv \text{Bare M2}$ |
 
-### 8.2. Actual P3 Test Suite Registries
-Verification in Phase P4b builds upon the actual historical test inventories from Phase P3:
-1. `configs/rapidflow_apx_required_cases.json`: **25 foundational test cases** verifying engine parity.
-2. `tests/fixtures/dstar03/workloads/`: **56 stateful stream workloads** (40 synthetic + 16 NetFlow, total 672 streaming steps).
-3. `tests/fixtures/dstar02/corpus_840/`: **840 corpus records** (composed of `seed1_cases.jsonl` with 420 records + `seed7_cases.jsonl` with 420 records).
+### 8.2. Native correctness registries and commands
 
-#### Proposed Future Verification Commands (Design Specification):
-- *Baseline Verification (Existing):*
-  ```bash
-  python3 scripts/run_rapidflow_apx_engines.py --engine m2 --suite required_25
-  ```
-- *Option A Static Verification (Proposed P4b-1A):*
-  ```bash
-  python3 scripts/run_rapidflow_apx_engines.py --engine m2_opt_a_static --suite required_25
-  ```
-- *Option A Residual Verification (Proposed P4b-1B):*
-  ```bash
-  python3 scripts/run_rapidflow_apx_engines.py --engine m2_opt_a_residual --suite required_25
-  ```
-- *Option B Verification (Proposed P4b-2):*
-  ```bash
-  python3 scripts/run_rapidflow_apx_engines.py --engine m2_opt_b --suite required_25
-  ```
+- [Required hand cases](../configs/rapidflow_apx_required_cases.json) locks 25 native cases.
+- [Native stream lock](../configs/rapidflow_apx_stream_56_lock.json) fixes 56 generated stateful streams and 672 updates.
+- [Corpus seed 1](../tests/fixtures/dstar02/corpus_840/seed1_cases.jsonl) and [corpus seed 7](../tests/fixtures/dstar02/corpus_840/seed7_cases.jsonl) contain 420 cases each, for 840 cases.
 
-### 8.3. Correctness Evidence Hierarchy
-Evidence gathered during verification is classified across four strict tiers:
-- **Level 1 (Independent Oracle Certification):** 100% tuple-level agreement with the independent Python ground truth oracle `DStarDynamicOracle`.
-- **Level 2 (Constructed Expected Results):** Analytic test cases with known, mathematically derived embedding sets.
-- **Level 3 (Differential Equivalence):** Exact parity across candidate counters and emitted tuples against Bare M2 (`Tuples_Opt == Tuples_BareM2`).
-- **Level 4 (Unverified / Censored):** Incomplete or timed-out runs; must never be claimed as valid evidence.
+Bare M2 hand verification:
+
+```bash
+python3 scripts/run_rapidflow_apx_engines.py --engine m2 --stage hand
+```
+
+A-static canonical verification:
+
+```bash
+python3 scripts/run_rapidflow_apx_engines.py --engine m2 --nlf-mode static --stage all
+```
+
+A-residual and Option B verification commands are planned for their implementation phases.
+
+### 8.3. Correctness contract and evidence hierarchy
+
+For completed valid workloads, M1, Bare M2, A-static and the planned A-residual and B variants must agree on exact ordered tuple sets, with correct graph and codec state and explicit duplicate detection. A pruning variant must preserve legacy counter definitions. Its counter values and work-budget outcomes may differ with legitimate pruning. A resource-censored run cannot earn completed-workload parity. Option B must preserve ordered neighbors, traversal and legacy counters wherever the search and accounting are held fixed.
+
+1. **Independent exhaustive oracle.** Compare exact tuples against the independent Python M0 within its registered bounds.
+2. **Analytical witness.** Compare with explicitly derived expected tuples and graph states.
+3. **Differential equivalence.** Compare completed runs against Bare M2 at the tuple and state level, with variant-specific counter expectations. This supplies agreement evidence.
+4. **Censored or unverified.** Record the missing check or resource outcome and exclude it from claims of completed correctness parity.
 
 ---
 
@@ -747,6 +745,8 @@ Workload groups cleanly disentangle query topology from data stream topology. Ea
 ---
 
 ## 10. Experimental & Performance Measurement Protocol
+
+Before P4b-3, a separately approved preregistration must close AUD-P4B-001 and AUD-P4B-002. It must lock exact fixture bytes and hashes, the deterministic generator, workload inventory, execution order and PROFILE_OFF macro timing. Build deep diagnostics outside the primary timed region. Specify workload-level aggregation, the bootstrap unit, seed and algorithm, censoring and missing-pair handling, memory and resource eligibility, unique decision precedence, the conditional A+B gate, evidence retention and peak RSS. The decision rules must be locked before observing performance.
 
 ### 10.1. Dual-Mode Measurement Architecture
 To eliminate observer interference from high-frequency profiling hooks:

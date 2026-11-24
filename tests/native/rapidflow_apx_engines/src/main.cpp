@@ -1,4 +1,5 @@
 #include <iostream>
+#include <cstdio>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -35,7 +36,8 @@ enum class ExitCode : int {
     RESOURCE_LIMIT_ERROR = 5,
     STEP_FAILURE = 6,
     IO_ERROR = 7,
-    UNCAUGHT_ERROR = 8
+    UNCAUGHT_ERROR = 8,
+    RESULT_DELIVERY_ERROR = 9
 };
 
 static bool parse_positive_uint64_exact(const std::string& s, uint64_t& out, std::string& err) {
@@ -91,6 +93,57 @@ static bool write_json_file_safe(const std::string& path, const std::string& con
         return false;
     }
     return true;
+}
+
+static const char* canonical_update_op(const std::string& op) noexcept {
+    if (op == "+" || op == "INSERT" || op == "INS") return "+";
+    if (op == "-" || op == "DELETE" || op == "DEL") return "-";
+    return nullptr;
+}
+
+static json::Value make_step_record(size_t index, const char* status) {
+    json::Value record = json::Value::make_object();
+    record["step_index"] = json::Value(static_cast<int64_t>(index));
+    record["status"] = json::Value(status);
+    record["commit_status"] = json::Value("NOT_COMMITTED");
+    record["error"] = json::Value("");
+    record["error_category"] = json::Value("NONE");
+    record["entered_tuples"] = json::Value::make_array();
+    record["exited_tuples"] = json::Value::make_array();
+    return record;
+}
+
+static json::Value unattempted_update(size_t index, const json::Value& update) {
+    auto record = make_step_record(index, "UNATTEMPTED");
+    if (!update.is_object()) return record;
+    if (update.contains("op") && update["op"].is_string()) {
+        if (const char* op = canonical_update_op(update["op"].as_string())) {
+            record["op"] = json::Value(op);
+        }
+    }
+    for (const char* endpoint : {"u", "v"}) {
+        if (update.contains(endpoint) && update[endpoint].is_int()) {
+            record[endpoint] = update[endpoint];
+        }
+    }
+    if (update.contains("label") && (update["label"].is_int() || update["label"].is_string())) {
+        record["label"] = update["label"];
+    }
+    return record;
+}
+
+struct StepFailure {
+    const char* category;
+    ExitCode exit_code;
+};
+
+static StepFailure step_failure(StepStatus status, const std::string& error) noexcept {
+    if (status == StepStatus::PREVALIDATION_FAILED) return {"PREVALIDATION_ERROR", ExitCode::STEP_FAILURE};
+    if (status == StepStatus::FAULT_INJECTED) return {"FAULT_INJECTED", ExitCode::STEP_FAILURE};
+    if (status == StepStatus::CALLBACK_ABORTED && error.find("Work budget exceeded") != std::string::npos) {
+        return {"WORK_BUDGET_EXCEEDED", ExitCode::WORK_BUDGET_EXCEEDED};
+    }
+    return {"STEP_FAILURE", ExitCode::STEP_FAILURE};
 }
 
 static TypedLabel parse_typed_label(const json::Value& v) {
@@ -483,6 +536,7 @@ int main(int argc, char* argv[]) {
     root_out["engine"] = json::Value(engine_str);
     root_out["case_id"] = json::Value("UNKNOWN");
     root_out["status"] = json::Value("FAIL");
+    root_out["configuration_initialized"] = json::Value(false);
     root_out["error_category"] = json::Value("NONE");
     root_out["error_message"] = json::Value("");
     root_out["steps"] = json::Value::make_array();
@@ -492,6 +546,8 @@ int main(int argc, char* argv[]) {
     json::Value exec_init = json::Value::make_object();
     exec_init["total_steps"] = json::Value(static_cast<int64_t>(0));
     exec_init["attempted_steps"] = json::Value(static_cast<int64_t>(0));
+    exec_init["committed_steps"] = json::Value(0);
+    exec_init["delivered_steps"] = json::Value(0);
     exec_init["completed_steps"] = json::Value(static_cast<int64_t>(0));
     exec_init["failed_steps"] = json::Value(static_cast<int64_t>(0));
     exec_init["unattempted_steps"] = json::Value(static_cast<int64_t>(0));
@@ -506,6 +562,12 @@ int main(int argc, char* argv[]) {
     root_out["work_budget"] = wb_init;
 
     ExitCode final_exit_code = ExitCode::SUCCESS;
+    size_t attempted_steps = 0;
+    size_t committed_steps = 0;
+    const auto fatal_delivery = [&](const char* detail) {
+        std::fprintf(stderr, "Fatal RESULT_DELIVERY_ERROR: %s (attempted_steps=%zu committed_steps=%zu)\n",
+                     detail, attempted_steps, committed_steps);
+    };
 
     try {
         json::Value root_in = json::Parser::parse(input_src);
@@ -698,6 +760,7 @@ int main(int argc, char* argv[]) {
         ApxStreamingEngine streaming_engine(graph, codec, sink, query_plan, engine_type, max_work, nlf_mode, max_nlf_memory_bytes);
         streaming_engine.set_profiling_enabled(profiling_enabled);
 
+        root_out["configuration_initialized"] = json::Value(true);
         root_out["requested_nlf_mode"] = json::Value(nlf_mode_str);
         root_out["effective_nlf_mode"] = json::Value(streaming_engine.get_effective_nlf_mode() == NlfMode::STATIC ? "static" : "none");
         root_out["configuration_status"] = json::Value(streaming_engine.get_configuration_status());
@@ -733,40 +796,45 @@ int main(int argc, char* argv[]) {
         }
         const auto& upd_arr = root_in["updates"].as_array();
         size_t total_steps = upd_arr.size();
+        size_t delivered_steps = 0;
         size_t completed_steps = 0;
         size_t failed_steps = 0;
         json::Value steps_arr = json::Value::make_array();
+        steps_arr.arr.reserve(total_steps);
 
-        bool any_failure = false;
-        std::string first_failing_error = "";
-        std::string first_failing_category = "NONE";
+        std::string first_failing_error;
+        const char* first_failing_category = "NONE";
         ExitCode first_failing_exit = ExitCode::SUCCESS;
+        size_t first_failing_step = total_steps;
+        bool delivery_failed = false;
+        std::string delivery_error;
+        const auto remember_failure = [&](size_t index, StepFailure failure, const std::string& message) {
+            if (first_failing_step != total_steps) return;
+            first_failing_step = index;
+            first_failing_category = failure.category;
+            first_failing_exit = failure.exit_code;
+            first_failing_error = message;
+        };
 
         ProfilingTimePoint stream_t0 = ProfilingClock::now();
         for (size_t step_idx = 0; step_idx < total_steps; ++step_idx) {
             const auto& upd_val = upd_arr[step_idx];
-            json::Value step_json = json::Value::make_object();
-            step_json["step_index"] = json::Value(static_cast<int64_t>(step_idx));
-            step_json["commit_status"] = json::Value("NOT_COMMITTED");
-            step_json["status"] = json::Value("NOT_EXECUTED");
-            step_json["error"] = json::Value("");
-            step_json["error_category"] = json::Value("NONE");
-            step_json["entered_tuples"] = json::Value::make_array();
-            step_json["exited_tuples"] = json::Value::make_array();
-
+            auto step_json = make_step_record(step_idx, "NOT_EXECUTED");
+            const char* execution_status = nullptr;
+            const char* delivery_stage = nullptr;
+            bool committed = false;
+            bool failed = false;
+            ++attempted_steps;
             try {
-                if (!upd_val.contains("op") || !upd_val["op"].is_string()) {
+                if (!upd_val.is_object() || !upd_val.contains("op") || !upd_val["op"].is_string()) {
                     throw std::invalid_argument("Update 'op' must be a string");
                 }
-                std::string op_str = upd_val["op"].as_string();
-                UpdateOp op;
-                if (op_str == "+" || op_str == "INSERT" || op_str == "INS") {
-                    op = UpdateOp::INSERT;
-                } else if (op_str == "-" || op_str == "DELETE" || op_str == "DEL") {
-                    op = UpdateOp::DELETE;
-                } else {
+                const auto& op_str = upd_val["op"].as_string();
+                const char* canonical_op = canonical_update_op(op_str);
+                if (!canonical_op) {
                     throw std::invalid_argument("Invalid update operation '" + op_str + "': must be '+', '-', 'INSERT', or 'DELETE'");
                 }
+                const UpdateOp op = *canonical_op == '+' ? UpdateOp::INSERT : UpdateOp::DELETE;
 
                 if (!upd_val.contains("u") || !upd_val["u"].is_int() || !upd_val.contains("v") || !upd_val["v"].is_int()) {
                     throw std::invalid_argument("Update edge endpoints 'u' and 'v' must be integers");
@@ -780,40 +848,42 @@ int main(int argc, char* argv[]) {
                 step_json["v"] = json::Value(ext_v);
                 step_json["label"] = typed_label_to_json(lbl);
 
-                // Controlled test-only fault injection hook for active transaction verification (P3-R5-F03, P3-FC-04)
-                if (upd_val.contains("fault") && upd_val["fault"].is_string()) {
-                    std::string fault_str = upd_val["fault"].as_string();
-                    if (fault_str == "AFTER_MUTATION") {
-                        streaming_engine.get_tx_manager().set_fault_injection(ApxTransactionManager::FaultPoint::AFTER_MUTATION);
-                        streaming_engine.set_m2_fault_hook(M2FaultHook::NONE);
-                    } else if (fault_str == "DURING_CALLBACK") {
-                        streaming_engine.get_tx_manager().set_fault_injection(ApxTransactionManager::FaultPoint::DURING_CALLBACK);
-                        streaming_engine.set_m2_fault_hook(M2FaultHook::NONE);
-                    } else if (fault_str == "BEFORE_PUBLISH") {
-                        streaming_engine.get_tx_manager().set_fault_injection(ApxTransactionManager::FaultPoint::BEFORE_PUBLISH);
-                        streaming_engine.set_m2_fault_hook(M2FaultHook::NONE);
-                    } else if (fault_str == "AFTER_MISSING_COMMITMENT") {
-                        streaming_engine.get_tx_manager().set_fault_injection(ApxTransactionManager::FaultPoint::NONE);
-                        streaming_engine.set_m2_fault_hook(M2FaultHook::AFTER_MISSING_COMMITMENT);
-                    } else if (fault_str == "AFTER_VERTEX_ASSIGNMENT") {
-                        streaming_engine.get_tx_manager().set_fault_injection(ApxTransactionManager::FaultPoint::NONE);
-                        streaming_engine.set_m2_fault_hook(M2FaultHook::AFTER_VERTEX_ASSIGNMENT);
-                    } else {
-                        streaming_engine.get_tx_manager().set_fault_injection(ApxTransactionManager::FaultPoint::NONE);
-                        streaming_engine.set_m2_fault_hook(M2FaultHook::NONE);
-                    }
-                } else {
-                    streaming_engine.get_tx_manager().set_fault_injection(ApxTransactionManager::FaultPoint::NONE);
-                    streaming_engine.set_m2_fault_hook(M2FaultHook::NONE);
-                }
+                // These workload fields are deterministic fault hooks for the test harness.
+                using FaultPoint = ApxTransactionManager::FaultPoint;
+                const auto fault = upd_val.contains("fault") && upd_val["fault"].is_string()
+                    ? upd_val["fault"].as_string() : std::string{};
+                auto tx_fault = FaultPoint::NONE;
+                auto m2_fault = M2FaultHook::NONE;
+                if (fault == "BEFORE_MUTATION") tx_fault = FaultPoint::BEFORE_MUTATION;
+                else if (fault == "ALLOCATION_FAILURE_MUTATION") tx_fault = FaultPoint::ALLOCATION_FAILURE_MUTATION;
+                else if (fault == "AFTER_MUTATION") tx_fault = FaultPoint::AFTER_MUTATION;
+                else if (fault == "DURING_CALLBACK") tx_fault = FaultPoint::DURING_CALLBACK;
+                else if (fault == "BEFORE_PUBLISH") tx_fault = FaultPoint::BEFORE_PUBLISH;
+                else if (fault == "AFTER_MISSING_COMMITMENT") m2_fault = M2FaultHook::AFTER_MISSING_COMMITMENT;
+                else if (fault == "AFTER_VERTEX_ASSIGNMENT") m2_fault = M2FaultHook::AFTER_VERTEX_ASSIGNMENT;
+                streaming_engine.get_tx_manager().set_fault_injection(tx_fault);
+                streaming_engine.set_m2_fault_hook(m2_fault);
 
                 UpdateOperation upd{op, ext_u, ext_v, lbl};
                 StreamStepResult step_res = streaming_engine.execute_step(upd, static_cast<uint32_t>(step_idx));
+                committed = step_res.committed;
+                if (committed) ++committed_steps;
+                execution_status = step_status_to_string(step_res.status);
+                failed = step_res.status != StepStatus::SUCCESS;
+                if (failed) {
+                    auto failure = step_failure(step_res.status, step_res.error_message);
+                    remember_failure(step_idx, failure, step_res.error_message);
+                    step_json["error_category"] = json::Value(failure.category);
+                }
 
-                step_json["status"] = json::Value(step_status_to_string(step_res.status));
+                delivery_stage = "AFTER_EXECUTION";
+                if (fault == "REPORT_AFTER_COMMIT") throw std::bad_alloc();
+                step_json["status"] = json::Value(execution_status);
                 step_json["error"] = json::Value(step_res.error_message);
-                step_json["commit_status"] = json::Value(step_res.status == StepStatus::SUCCESS ? "COMMITTED" : "NOT_COMMITTED");
+                step_json["commit_status"] = json::Value(committed ? "COMMITTED" : "NOT_COMMITTED");
 
+                delivery_stage = "RESULT_JSON";
+                if (fault == "REPORT_RESULT_JSON") throw std::bad_alloc();
                 json::Value ent_arr = json::Value::make_array();
                 for (const auto& tup : step_res.entered_tuples) {
                     json::Value t_arr = json::Value::make_array();
@@ -873,7 +943,15 @@ int main(int argc, char* argv[]) {
                 step_json["codec_state"] = c_state;
 
                 // Deep graph state
+                delivery_stage = "GRAPH_DIAGNOSTICS";
+                if (fault == "REPORT_GRAPH_DIAGNOSTICS") throw std::bad_alloc();
                 step_json["graph_state"] = build_graph_state_json(graph, codec);
+                if (tx_fault != FaultPoint::NONE) {
+                    if (const auto* index = streaming_engine.get_nlf_index()) {
+                        step_json["nlf_full_cell_reconstruction"] = json::Value(
+                            verify_index_reconstruction(graph, streaming_engine.get_query_signatures(), *index));
+                    }
+                }
 
                 if (profiling_enabled) {
                     json::Value p_step = json::Value::make_object();
@@ -887,111 +965,53 @@ int main(int argc, char* argv[]) {
                     step_json["profiling"] = p_step;
                 }
 
-                if (step_res.status != StepStatus::SUCCESS) {
-                    any_failure = true;
-                    failed_steps++;
-                    if (first_failing_error.empty()) {
-                        first_failing_error = step_res.error_message;
-                        if (step_res.status == StepStatus::CALLBACK_ABORTED &&
-                            step_res.error_message.find("Work budget exceeded") != std::string::npos) {
-                            first_failing_category = "WORK_BUDGET_EXCEEDED";
-                            first_failing_exit = ExitCode::WORK_BUDGET_EXCEEDED;
-                        } else if (step_res.status == StepStatus::PREVALIDATION_FAILED) {
-                            first_failing_category = "PREVALIDATION_ERROR";
-                            first_failing_exit = ExitCode::STEP_FAILURE;
-                        } else if (step_res.status == StepStatus::FAULT_INJECTED) {
-                            first_failing_category = "FAULT_INJECTED";
-                            first_failing_exit = ExitCode::STEP_FAILURE;
-                        } else {
-                            first_failing_category = "STEP_FAILURE";
-                            first_failing_exit = ExitCode::STEP_FAILURE;
-                        }
-                    }
-                    std::string cur_step_cat = "STEP_FAILURE";
-                    if (step_res.status == StepStatus::PREVALIDATION_FAILED) {
-                        cur_step_cat = "PREVALIDATION_ERROR";
-                    } else if (step_res.status == StepStatus::FAULT_INJECTED) {
-                        cur_step_cat = "FAULT_INJECTED";
-                    } else if (step_res.status == StepStatus::CALLBACK_ABORTED &&
-                               step_res.error_message.find("Work budget exceeded") != std::string::npos) {
-                        cur_step_cat = "WORK_BUDGET_EXCEEDED";
-                    }
-                    step_json["error_category"] = json::Value(cur_step_cat);
-                    steps_arr.push_back(step_json);
-
-                    if (continue_on_error) {
-                        streaming_engine.get_tx_manager().set_fault_injection(ApxTransactionManager::FaultPoint::NONE);
-                        streaming_engine.set_m2_fault_hook(M2FaultHook::NONE);
-                        continue;
-                    }
-
-                    for (size_t rem = step_idx + 1; rem < total_steps; ++rem) {
-                        json::Value un_step = json::Value::make_object();
-                        un_step["step_index"] = json::Value(static_cast<int64_t>(rem));
-                        if (rem < upd_arr.size()) {
-                            const auto& un_upd = upd_arr[rem];
-                            if (un_upd.is_object() && un_upd.contains("op") && un_upd.contains("u") && un_upd.contains("v") && un_upd.contains("label")) {
-                                std::string u_op_str = un_upd["op"].as_string();
-                                un_step["op"] = json::Value((u_op_str == "+" || u_op_str == "INSERT" || u_op_str == "INS") ? "+" : "-");
-                                un_step["u"] = json::Value(un_upd["u"].as_int());
-                                un_step["v"] = json::Value(un_upd["v"].as_int());
-                                un_step["label"] = un_upd["label"];
-                            }
-                        }
-                        un_step["status"] = json::Value("UNATTEMPTED");
-                        un_step["commit_status"] = json::Value("NOT_COMMITTED");
-                        un_step["error"] = json::Value("");
-                        un_step["error_category"] = json::Value("NONE");
-                        un_step["entered_tuples"] = json::Value::make_array();
-                        un_step["exited_tuples"] = json::Value::make_array();
-                        steps_arr.push_back(un_step);
-                    }
-                    break;
-                }
-
-                steps_arr.push_back(step_json);
-                completed_steps++;
+                delivery_stage = "APPEND_STEP";
+                if (fault == "REPORT_APPEND_STEP") throw std::bad_alloc();
+                steps_arr.arr.push_back(std::move(step_json));
+                ++delivered_steps;
             } catch (const std::exception& e) {
-                any_failure = true;
-                failed_steps++;
-                if (first_failing_error.empty()) {
-                    first_failing_error = e.what();
-                    first_failing_category = "INPUT_SCHEMA_ERROR";
-                    first_failing_exit = ExitCode::INPUT_PARSE_ERROR;
-                }
-
-                step_json["status"] = json::Value("ERROR");
-                step_json["commit_status"] = json::Value("NOT_COMMITTED");
-                step_json["error"] = json::Value(e.what());
-                step_json["error_category"] = json::Value("INPUT_SCHEMA_ERROR");
-                steps_arr.push_back(step_json);
-
-                if (continue_on_error) {
-                    streaming_engine.get_tx_manager().set_fault_injection(ApxTransactionManager::FaultPoint::NONE);
-                    streaming_engine.set_m2_fault_hook(M2FaultHook::NONE);
-                    continue;
-                }
-
-                for (size_t rem = step_idx + 1; rem < total_steps; ++rem) {
-                    json::Value un_step = json::Value::make_object();
-                    un_step["step_index"] = json::Value(static_cast<int64_t>(rem));
-                    if (rem < upd_arr.size()) {
-                        const auto& un_upd = upd_arr[rem];
-                        if (un_upd.is_object() && un_upd.contains("op") && un_upd.contains("u") && un_upd.contains("v") && un_upd.contains("label")) {
-                            std::string u_op_str = un_upd["op"].as_string();
-                            un_step["op"] = json::Value((u_op_str == "+" || u_op_str == "INSERT" || u_op_str == "INS") ? "+" : "-");
-                            un_step["u"] = json::Value(un_upd["u"].as_int());
-                            un_step["v"] = json::Value(un_upd["v"].as_int());
-                            un_step["label"] = un_upd["label"];
+                failed = true;
+                if (execution_status) {
+                    delivery_failed = true;
+                    delivery_error = e.what();
+                    remember_failure(step_idx, {"RESULT_DELIVERY_ERROR", ExitCode::RESULT_DELIVERY_ERROR}, delivery_error);
+                    auto failure_record = make_step_record(step_idx, "DELIVERY_FAILED");
+                    failure_record["commit_status"] = json::Value(committed ? "COMMITTED" : "NOT_COMMITTED");
+                    failure_record["execution_status"] = json::Value(execution_status);
+                    failure_record["delivery_status"] = json::Value("FAILED");
+                    failure_record["delivery_stage"] = json::Value(delivery_stage ? delivery_stage : "RESULT_JSON");
+                    failure_record["error"] = json::Value(delivery_error);
+                    failure_record["error_category"] = json::Value("RESULT_DELIVERY_ERROR");
+                    // For explicit test faults, inspect the actual graph and every NLF cell
+                    // after the real transaction and the simulated reporting failure.
+                    if (upd_val.contains("fault") && upd_val["fault"].is_string()
+                        && upd_val["fault"].as_string().rfind("REPORT_", 0) == 0) {
+                        failure_record["graph_state"] = build_graph_state_json(graph, codec);
+                        if (const auto* index = streaming_engine.get_nlf_index()) {
+                            failure_record["nlf_full_cell_reconstruction"] = json::Value(
+                                verify_index_reconstruction(graph, streaming_engine.get_query_signatures(), *index));
                         }
                     }
-                    un_step["status"] = json::Value("UNATTEMPTED");
-                    un_step["commit_status"] = json::Value("NOT_COMMITTED");
-                    un_step["error"] = json::Value("");
-                    un_step["error_category"] = json::Value("NONE");
-                    un_step["entered_tuples"] = json::Value::make_array();
-                    un_step["exited_tuples"] = json::Value::make_array();
-                    steps_arr.push_back(un_step);
+                    steps_arr.arr.push_back(std::move(failure_record));
+                } else {
+                    const bool exhausted = dynamic_cast<const std::bad_alloc*>(&e) != nullptr;
+                    const StepFailure failure = exhausted
+                        ? StepFailure{"RESOURCE_LIMIT_ERROR", ExitCode::RESOURCE_LIMIT_ERROR}
+                        : StepFailure{"INPUT_SCHEMA_ERROR", ExitCode::INPUT_PARSE_ERROR};
+                    remember_failure(step_idx, failure, e.what());
+                    step_json["status"] = json::Value("ERROR");
+                    step_json["error"] = json::Value(e.what());
+                    step_json["error_category"] = json::Value(failure.category);
+                    steps_arr.arr.push_back(std::move(step_json));
+                    ++delivered_steps;
+                }
+            }
+            if (failed) ++failed_steps;
+            else ++completed_steps;
+
+            if (delivery_failed || (failed && !continue_on_error)) {
+                for (size_t rem = step_idx + 1; rem < total_steps; ++rem) {
+                    steps_arr.arr.push_back(unattempted_update(rem, upd_arr[rem]));
                 }
                 break;
             }
@@ -999,14 +1019,16 @@ int main(int argc, char* argv[]) {
         ProfilingTimePoint stream_t1 = ProfilingClock::now();
         run_profiling.streaming_exec_ns = std::chrono::duration_cast<ProfilingNanoseconds>(stream_t1 - stream_t0).count();
 
-        root_out["steps"] = steps_arr;
+        root_out["steps"] = std::move(steps_arr);
 
         json::Value exec_obj = json::Value::make_object();
         exec_obj["total_steps"] = json::Value(static_cast<int64_t>(total_steps));
-        exec_obj["attempted_steps"] = json::Value(static_cast<int64_t>(completed_steps + failed_steps));
+        exec_obj["attempted_steps"] = json::Value(static_cast<int64_t>(attempted_steps));
+        exec_obj["committed_steps"] = json::Value(static_cast<int64_t>(committed_steps));
+        exec_obj["delivered_steps"] = json::Value(static_cast<int64_t>(delivered_steps));
         exec_obj["completed_steps"] = json::Value(static_cast<int64_t>(completed_steps));
         exec_obj["failed_steps"] = json::Value(static_cast<int64_t>(failed_steps));
-        exec_obj["unattempted_steps"] = json::Value(static_cast<int64_t>(total_steps - (completed_steps + failed_steps)));
+        exec_obj["unattempted_steps"] = json::Value(static_cast<int64_t>(total_steps - attempted_steps));
         root_out["execution"] = exec_obj;
 
         // Cumulative Counters across run
@@ -1082,11 +1104,19 @@ int main(int argc, char* argv[]) {
             root_out["profiling"] = p_root;
         }
 
-        if (any_failure) {
+        if (first_failing_step != total_steps) {
+            root_out["first_failing_step_index"] = json::Value(first_failing_step);
+            root_out["first_failure_category"] = json::Value(first_failing_category);
+            root_out["first_failure_message"] = json::Value(first_failing_error);
             root_out["status"] = json::Value("FAIL");
             root_out["error_category"] = json::Value(first_failing_category);
             root_out["error_message"] = json::Value(first_failing_error);
             final_exit_code = first_failing_exit;
+            if (delivery_failed) {
+                root_out["error_category"] = json::Value("RESULT_DELIVERY_ERROR");
+                root_out["error_message"] = json::Value(delivery_error);
+                final_exit_code = ExitCode::RESULT_DELIVERY_ERROR;
+            }
         } else {
             root_out["status"] = json::Value("SUCCESS");
             root_out["error_category"] = json::Value("NONE");
@@ -1114,27 +1144,33 @@ int main(int argc, char* argv[]) {
         root_out["error_message"] = json::Value(e.what());
         final_exit_code = ExitCode::INPUT_PARSE_ERROR;
     } catch (const std::exception& e) {
+        if (attempted_steps != 0) {
+            fatal_delivery(e.what());
+            return static_cast<int>(ExitCode::RESULT_DELIVERY_ERROR);
+        }
         root_out["status"] = json::Value("FAIL");
         root_out["error_category"] = json::Value("UNCAUGHT_ERROR");
         root_out["error_message"] = json::Value(e.what());
         final_exit_code = ExitCode::UNCAUGHT_ERROR;
     }
 
-    // Write output JSON safely
-    std::string err_msg;
-    std::string serialized = json::serialize(root_out, 0);
-    if (!write_json_file_safe(output_path, serialized, err_msg)) {
-        std::cerr << "Error: Output write failure: " << err_msg << "\n";
-        return static_cast<int>(ExitCode::IO_ERROR);
-    }
-
-    if (!profile_output_path.empty() && profiling_enabled && root_out.contains("profiling")) {
-        std::string p_serialized = json::serialize(root_out["profiling"], 2);
-        std::string p_err;
-        if (!write_json_file_safe(profile_output_path, p_serialized, p_err)) {
-            std::cerr << "Error: Profile output write failure: " << p_err << "\n";
+    try {
+        std::string err_msg;
+        if (!write_json_file_safe(output_path, json::serialize(root_out, 0), err_msg)) {
+            std::fprintf(stderr, "Output write failure: ");
+            fatal_delivery(err_msg.c_str());
             return static_cast<int>(ExitCode::IO_ERROR);
         }
+        if (!profile_output_path.empty() && profiling_enabled && root_out.contains("profiling")) {
+            if (!write_json_file_safe(profile_output_path, json::serialize(root_out["profiling"], 2), err_msg)) {
+                std::fprintf(stderr, "Profile output write failure: ");
+                fatal_delivery(err_msg.c_str());
+                return static_cast<int>(ExitCode::IO_ERROR);
+            }
+        }
+    } catch (const std::exception& e) {
+        fatal_delivery(e.what());
+        return static_cast<int>(ExitCode::RESULT_DELIVERY_ERROR);
     }
 
     return static_cast<int>(final_exit_code);

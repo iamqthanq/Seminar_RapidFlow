@@ -207,7 +207,8 @@ StreamStepResult ApxStreamingEngine::execute_step(const UpdateOperation& update,
     step_counters_.discarded_emissions = sink_.discarded_emissions() - disc_before;
 
     res.status = step_res.status;
-    res.error_message = step_res.error_message;
+    res.committed = step_res.committed;
+    res.error_message = std::move(step_res.error_message);
     res.step_counters = step_counters_;
     cumulative_counters_.accumulate(step_counters_);
 

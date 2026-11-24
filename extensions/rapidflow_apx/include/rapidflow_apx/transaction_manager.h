@@ -51,6 +51,7 @@ struct StepResult {
     std::vector<std::vector<int64_t>> published_tuples;
     uint64_t update_maintenance_ns{0};
     uint64_t tuple_sink_ns{0};
+    bool committed{false};
 };
 
 using SearchCallback = std::function<bool(

@@ -315,7 +315,7 @@ StepResult ApxTransactionManager::execute_update(
         return abort_and_rollback(StepStatus::FAULT_INJECTED, "Fault injected before publish");
     }
 
-    // 6. Commit and publish
+    // 6. Commit and publish. Only non-throwing operations follow the graph commit.
     tx_scope.commit();
     uint64_t sink_time_ns = 0;
     std::vector<std::vector<int64_t>> published_tuples;
@@ -327,7 +327,7 @@ StepResult ApxTransactionManager::execute_update(
     } else {
         published_tuples = sink_.commit_step();
     }
-    return {StepStatus::SUCCESS, "", std::move(published_tuples), update_time_ns, sink_time_ns};
+    return {StepStatus::SUCCESS, {}, std::move(published_tuples), update_time_ns, sink_time_ns, true};
 }
 
 } // namespace rapidflow_apx

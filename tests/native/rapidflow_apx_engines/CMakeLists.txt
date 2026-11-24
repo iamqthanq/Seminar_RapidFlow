@@ -28,3 +28,7 @@ add_executable(rapidflow_apx_native
 
 target_link_libraries(rapidflow_apx_native PRIVATE rapidflow_apx_foundation OpenSSL::Crypto)
 target_compile_options(rapidflow_apx_native PRIVATE -O3 -Wall -Wextra)
+
+add_executable(rapidflow_apx_json_strings src/json_string_tests.cpp)
+target_include_directories(rapidflow_apx_json_strings PRIVATE ../../../extensions/rapidflow_apx/include)
+target_compile_options(rapidflow_apx_json_strings PRIVATE -Wall -Wextra)

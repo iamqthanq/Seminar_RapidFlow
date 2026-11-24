@@ -57,7 +57,7 @@ bool ApxTupleSink::emit_mapping(const std::vector<uint32_t>& f_by_dense_u) {
     return emit_tuple(ordered_mapping);
 }
 
-std::vector<std::vector<int64_t>> ApxTupleSink::commit_step() {
+std::vector<std::vector<int64_t>> ApxTupleSink::commit_step() noexcept {
     committed_emissions_ += pending_tuples_.size();
     auto result = std::move(pending_tuples_);
     pending_tuples_.clear();

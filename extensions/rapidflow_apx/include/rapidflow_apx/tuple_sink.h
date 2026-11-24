@@ -32,7 +32,7 @@ public:
 
     // Transaction Interface
     void start_step();
-    std::vector<std::vector<int64_t>> commit_step();
+    std::vector<std::vector<int64_t>> commit_step() noexcept;
     void abort_step();
 
     // Counters

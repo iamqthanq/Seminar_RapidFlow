@@ -25,6 +25,7 @@ enum class EngineType {
 };
 
 struct StreamStepResult {
+    bool committed{false};
     uint32_t step_index{0};
     UpdateOp op{UpdateOp::INSERT};
     int64_t ext_u{0};
