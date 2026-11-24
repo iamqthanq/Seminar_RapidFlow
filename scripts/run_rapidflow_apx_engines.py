@@ -1481,7 +1481,7 @@ def validate_nlf_configuration(
     is_success_run: bool,
 ) -> Tuple[bool, str, Dict[str, Any]]:
     """
-    Validates requested vs effective NLF configuration integrity (P4B-1A-F01).
+    Validates requested vs effective NLF configuration integrity (P4B-1A-F01, R11-F01, R11-F02).
     Distinguishes process exit validity, schema validity, configuration identity,
     and eligibility for optimization evidence.
     """
@@ -1494,29 +1494,68 @@ def validate_nlf_configuration(
         "configuration_status": "NONE",
     }
 
-    # If execution failed early before successful run (e.g. invalid query, negative case, schema error)
+    # If execution failed early or is an initialized negative run
     if not is_success_run:
+        # If execution reached initialized engine state, it outputs NLF metadata
         if "requested_nlf_mode" in native_result:
             val = native_result["requested_nlf_mode"]
             if not isinstance(val, str) or val not in ("none", "static"):
                 meta_info["configuration_valid"] = False
-                meta_info["configuration_error"] = f"Invalid requested_nlf_mode type/value: {val}"
+                meta_info["configuration_error"] = f"[CONFIG_INTEGRITY] Invalid requested_nlf_mode type/value in negative run: {val}"
+                return False, meta_info["configuration_error"], meta_info
+            if val != requested_nlf_mode:
+                meta_info["configuration_valid"] = False
+                meta_info["configuration_error"] = (
+                    f"[CONFIG_INTEGRITY] Negative run requested_nlf_mode mismatch: "
+                    f"runner requested '{requested_nlf_mode}', native output reported '{val}'"
+                )
                 return False, meta_info["configuration_error"], meta_info
             meta_info["requested_nlf_mode"] = val
+
         if "effective_nlf_mode" in native_result:
             val = native_result["effective_nlf_mode"]
             if not isinstance(val, str) or val not in ("none", "static"):
                 meta_info["configuration_valid"] = False
-                meta_info["configuration_error"] = f"Invalid effective_nlf_mode type/value: {val}"
+                meta_info["configuration_error"] = f"[CONFIG_INTEGRITY] Invalid effective_nlf_mode type/value in negative run: {val}"
                 return False, meta_info["configuration_error"], meta_info
             meta_info["effective_nlf_mode"] = val
+
         if "configuration_status" in native_result:
             val = native_result["configuration_status"]
             if not isinstance(val, str):
                 meta_info["configuration_valid"] = False
-                meta_info["configuration_error"] = f"Invalid configuration_status type: {val}"
+                meta_info["configuration_error"] = f"[CONFIG_INTEGRITY] Invalid configuration_status type in negative run: {val}"
                 return False, meta_info["configuration_error"], meta_info
             meta_info["configuration_status"] = val
+            if val == "SUCCESS" and "fallback_reason" in native_result:
+                fb = native_result["fallback_reason"]
+                if fb is not None and (not isinstance(fb, str) or fb.strip() != ""):
+                    meta_info["configuration_valid"] = False
+                    meta_info["configuration_error"] = f"[CONFIG_CONTRADICTION] Contradictory metadata in negative run: status 'SUCCESS' with non-empty fallback_reason '{fb}'"
+                    return False, meta_info["configuration_error"], meta_info
+
+        if "fallback_reason" in native_result:
+            fb = native_result["fallback_reason"]
+            if fb is not None and not isinstance(fb, str):
+                meta_info["configuration_valid"] = False
+                meta_info["configuration_error"] = f"[CONFIG_INTEGRITY] Invalid fallback_reason type in negative run: {type(fb).__name__}"
+                return False, meta_info["configuration_error"], meta_info
+
+        # Validate memory metadata if present
+        if "nlf_memory_limit_bytes" in native_result:
+            mem_lim = native_result["nlf_memory_limit_bytes"]
+            if type(mem_lim) is not int or mem_lim < 0:
+                meta_info["configuration_valid"] = False
+                meta_info["configuration_error"] = f"[CONFIG_INTEGRITY] nlf_memory_limit_bytes must be non-negative int: {mem_lim}"
+                return False, meta_info["configuration_error"], meta_info
+
+        if "nlf_index_logical_bytes" in native_result:
+            log_bytes = native_result["nlf_index_logical_bytes"]
+            if type(log_bytes) is not int or log_bytes < 0:
+                meta_info["configuration_valid"] = False
+                meta_info["configuration_error"] = f"[CONFIG_INTEGRITY] nlf_index_logical_bytes must be non-negative int: {log_bytes}"
+                return False, meta_info["configuration_error"], meta_info
+
         return True, "", meta_info
 
     # For SUCCESSFUL positive execution:
@@ -1553,6 +1592,32 @@ def validate_nlf_configuration(
         meta_info["configuration_error"] = err
         return False, err, meta_info
 
+    # Validate fallback_reason type if present
+    if "fallback_reason" in native_result:
+        fb = native_result["fallback_reason"]
+        if fb is not None and not isinstance(fb, str):
+            err = f"[CONFIG_INTEGRITY] fallback_reason must be string or None (got {type(fb).__name__})"
+            meta_info["configuration_valid"] = False
+            meta_info["configuration_error"] = err
+            return False, err, meta_info
+
+    # Validate memory metadata if present
+    if "nlf_memory_limit_bytes" in native_result:
+        mem_lim = native_result["nlf_memory_limit_bytes"]
+        if type(mem_lim) is not int or mem_lim < 0:
+            err = f"[CONFIG_INTEGRITY] nlf_memory_limit_bytes must be non-negative int (got {mem_lim})"
+            meta_info["configuration_valid"] = False
+            meta_info["configuration_error"] = err
+            return False, err, meta_info
+
+    if "nlf_index_logical_bytes" in native_result:
+        log_bytes = native_result["nlf_index_logical_bytes"]
+        if type(log_bytes) is not int or log_bytes < 0:
+            err = f"[CONFIG_INTEGRITY] nlf_index_logical_bytes must be non-negative int (got {log_bytes})"
+            meta_info["configuration_valid"] = False
+            meta_info["configuration_error"] = err
+            return False, err, meta_info
+
     # 2. Check requested mode matches runner requested mode
     if native_req != requested_nlf_mode:
         err = f"[CONFIG_INTEGRITY] Requested mode mismatch: runner requested '{requested_nlf_mode}', native binary received '{native_req}'"
@@ -1560,43 +1625,95 @@ def validate_nlf_configuration(
         meta_info["configuration_error"] = err
         return False, err, meta_info
 
-    # 3. Mode-specific contracts
-    if requested_nlf_mode == "none":
-        if native_eff != "none":
-            err = f"[CONFIG_INTEGRITY] Effective mode mismatch for NONE: expected 'none', got '{native_eff}'"
-            meta_info["configuration_valid"] = False
-            meta_info["configuration_error"] = err
-            return False, err, meta_info
-        if native_cfg_status != "SUCCESS":
-            err = f"[CONFIG_INTEGRITY] Configuration status mismatch for NONE: expected 'SUCCESS', got '{native_cfg_status}'"
-            meta_info["configuration_valid"] = False
-            meta_info["configuration_error"] = err
-            return False, err, meta_info
-        meta_info["eligible_for_requested_variant"] = True
-        return True, "", meta_info
+    # 3. Mode-specific contracts and state machine verification
+    if native_cfg_status == "SUCCESS":
+        # Contradiction check: SUCCESS must not have a non-empty fallback reason
+        if "fallback_reason" in native_result:
+            fb = native_result["fallback_reason"]
+            if fb is not None and str(fb).strip() != "":
+                err = f"[CONFIG_CONTRADICTION] Contradictory metadata: status is 'SUCCESS' but non-empty fallback_reason '{fb}' is present"
+                meta_info["configuration_valid"] = False
+                meta_info["configuration_error"] = err
+                return False, err, meta_info
 
-    elif requested_nlf_mode == "static":
-        if native_cfg_status == "SUCCESS":
-            if native_eff != "static":
-                err = f"[CONFIG_INTEGRITY] Inconsistent configuration: status is 'SUCCESS' but effective mode is '{native_eff}' (must be 'static')"
+        if requested_nlf_mode == "none":
+            if native_eff != "none":
+                err = f"[CONFIG_INTEGRITY] Effective mode mismatch for NONE: expected 'none', got '{native_eff}'"
+                meta_info["configuration_valid"] = False
+                meta_info["configuration_error"] = err
+                return False, err, meta_info
+            if "nlf_index_logical_bytes" in native_result and native_result["nlf_index_logical_bytes"] != 0:
+                err = f"[CONFIG_INTEGRITY] Logical bytes for effective 'none' must be 0, got {native_result['nlf_index_logical_bytes']}"
                 meta_info["configuration_valid"] = False
                 meta_info["configuration_error"] = err
                 return False, err, meta_info
             meta_info["eligible_for_requested_variant"] = True
             return True, "", meta_info
-        elif native_cfg_status == "REQUESTED_CONFIGURATION_UNAVAILABLE":
-            # Fallback occurred. The workload ran with Bare M2, so it is NOT eligible for Static certification!
-            fallback_reason = native_result.get("fallback_reason", "UNKNOWN_REASON")
-            err = f"[CONFIG_UNAVAILABLE] Requested static optimization unavailable (fallback_reason: {fallback_reason})"
+
+        elif requested_nlf_mode == "static":
+            if native_eff != "static":
+                err = f"[CONFIG_INTEGRITY] Inconsistent configuration: status is 'SUCCESS' but effective mode is '{native_eff}' (must be 'static')"
+                meta_info["configuration_valid"] = False
+                meta_info["configuration_error"] = err
+                return False, err, meta_info
+            if "nlf_memory_limit_bytes" in native_result and "nlf_index_logical_bytes" in native_result:
+                lim = native_result["nlf_memory_limit_bytes"]
+                act = native_result["nlf_index_logical_bytes"]
+                if lim > 0 and act > lim:
+                    err = f"[CONFIG_INTEGRITY] Index logical bytes {act} exceeds limit {lim} in SUCCESS static mode"
+                    meta_info["configuration_valid"] = False
+                    meta_info["configuration_error"] = err
+                    return False, err, meta_info
+            meta_info["eligible_for_requested_variant"] = True
+            return True, "", meta_info
+
+    elif native_cfg_status == "REQUESTED_CONFIGURATION_UNAVAILABLE":
+        # Unsupported state for NONE:
+        if requested_nlf_mode == "none":
+            err = "[CONFIG_UNAVAILABLE] Unsupported state: requested 'none' cannot have status REQUESTED_CONFIGURATION_UNAVAILABLE"
             meta_info["configuration_valid"] = False
-            meta_info["eligible_for_requested_variant"] = False
             meta_info["configuration_error"] = err
             return False, err, meta_info
-        else:
-            err = f"[CONFIG_INTEGRITY] Unknown configuration status '{native_cfg_status}' for static request"
+
+        # Contradiction check: if effective mode is static, contradiction
+        if native_eff != "none":
+            err = f"[CONFIG_CONTRADICTION] Contradictory metadata: status is REQUESTED_CONFIGURATION_UNAVAILABLE but effective mode is '{native_eff}' (must be 'none')"
             meta_info["configuration_valid"] = False
             meta_info["configuration_error"] = err
             return False, err, meta_info
+
+        fb = native_result.get("fallback_reason")
+        if not fb or not isinstance(fb, str) or not fb.strip():
+            err = "[CONFIG_INVALID_METADATA] REQUESTED_CONFIGURATION_UNAVAILABLE requires non-empty string fallback_reason"
+            meta_info["configuration_valid"] = False
+            meta_info["configuration_error"] = err
+            return False, err, meta_info
+
+        valid_reasons = ("NLF_INDEX_MEMORY_LIMIT", "NLF_INDEX_ALLOCATION_FAILED")
+        if fb not in valid_reasons:
+            err = f"[CONFIG_INVALID_METADATA] Unexpected fallback_reason '{fb}' (expected one of {valid_reasons})"
+            meta_info["configuration_valid"] = False
+            meta_info["configuration_error"] = err
+            return False, err, meta_info
+
+        if "nlf_index_logical_bytes" in native_result and native_result["nlf_index_logical_bytes"] != 0:
+            err = f"[CONFIG_INTEGRITY] Logical bytes for fallback 'none' must be 0, got {native_result['nlf_index_logical_bytes']}"
+            meta_info["configuration_valid"] = False
+            meta_info["configuration_error"] = err
+            return False, err, meta_info
+
+        # Fallback occurred. The workload ran with Bare M2, so it is NOT eligible for Static certification!
+        err = f"[CONFIG_UNAVAILABLE] Requested static optimization unavailable (fallback_reason: {fb})"
+        meta_info["configuration_valid"] = False
+        meta_info["eligible_for_requested_variant"] = False
+        meta_info["configuration_error"] = err
+        return False, err, meta_info
+
+    else:
+        err = f"[CONFIG_INTEGRITY] Unknown configuration status '{native_cfg_status}'"
+        meta_info["configuration_valid"] = False
+        meta_info["configuration_error"] = err
+        return False, err, meta_info
 
     return True, "", meta_info
 
@@ -2309,6 +2426,10 @@ def run_hand_and_witness_cases(
                 if not eng_res.get("schema_valid", False):
                     case_ok = False
                     diag += f"{eng_name} schema validation failed on negative test: {eng_res.get('schema_error')}. "
+
+                if not eng_res.get("configuration_valid", True):
+                    case_ok = False
+                    diag += f"{eng_name} configuration integrity failure on negative test: {eng_res.get('configuration_error')}. "
 
                 c_code = eng_res.get("exit_code")
                 c_cat = eng_res.get("error_category")

@@ -52,7 +52,7 @@ class TestRapidFlowApxP4b1A(unittest.TestCase):
             raise RuntimeError(f"Binary not found at {BINARY_PATH}. Please build it first.")
 
     def test_01_native_p4b_test_suite(self):
-        """Runs the native C++ test suite covering SIG-01..10, NUM-01..18, HD, INIT-01..12, TX-01..25, CNT, A1..A7."""
+        """Runs the native C++ test suite covering SIG-01..10, NUM-01..18, HD, INIT-01..12, TX-01..25, CNT, A1..A7, RECON."""
         res = subprocess.run(
             [str(BINARY_PATH), "--test-p4b", "all"],
             cwd=str(REPO_ROOT),
@@ -63,7 +63,19 @@ class TestRapidFlowApxP4b1A(unittest.TestCase):
         )
         self.assertEqual(res.returncode, 0, f"Native p4b tests failed:\n{res.stdout}")
         self.assertIn("P4b-1A Native Tests Result: ALL TESTS PASSED", res.stdout)
-        self.assertIn("P4b-1A Native Tests Groups Executed: 7", res.stdout)
+        self.assertIn("P4b-1A Native Tests Groups Executed: 8", res.stdout)
+
+        # Also verify dedicated reconstruction selector (R11-D)
+        res_recon = subprocess.run(
+            [str(BINARY_PATH), "--test-p4b", "reconstruction"],
+            cwd=str(REPO_ROOT),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=30,
+        )
+        self.assertEqual(res_recon.returncode, 0, f"Reconstruction suite failed:\n{res_recon.stdout}")
+        self.assertIn("ALL TESTS PASSED", res_recon.stdout)
 
     def test_02_fixture_a1_and_chord(self):
         """Verifies Original A1 (8 ENTERED / 8 EXITED) and Chord fixture (16 ENTERED / 16 EXITED)."""
@@ -420,6 +432,89 @@ class TestRapidFlowApxP4b1A(unittest.TestCase):
         ok, err, meta = validate_nlf_configuration("m2", "static", mock_neg, is_success_run=False)
         self.assertTrue(ok, "Negative runs preserve expected failure category without configuration false-alarm")
 
+        # CFG-R11-01: Reviewer reproducer for contradictory SUCCESS/fallback metadata (R11-F01)
+        mock_contra = {
+            "requested_nlf_mode": "static",
+            "effective_nlf_mode": "static",
+            "configuration_status": "SUCCESS",
+            "fallback_reason": "NLF_INDEX_MEMORY_LIMIT",
+        }
+        ok_contra, err_contra, meta_contra = validate_nlf_configuration("m2", "static", mock_contra, is_success_run=True)
+        self.assertFalse(ok_contra, "Contradictory metadata (SUCCESS with non-empty fallback_reason) must be rejected")
+        self.assertFalse(meta_contra["configuration_valid"])
+        self.assertFalse(meta_contra["eligible_for_requested_variant"])
+        self.assertIn("CONFIG_CONTRADICTION", err_contra)
+
+        # CFG-R11-02: Contradictory unavailable metadata (UNAVAILABLE with effective static)
+        mock_contra_unavail = {
+            "requested_nlf_mode": "static",
+            "effective_nlf_mode": "static",
+            "configuration_status": "REQUESTED_CONFIGURATION_UNAVAILABLE",
+            "fallback_reason": "NLF_INDEX_MEMORY_LIMIT"
+        }
+        ok_cu, err_cu, meta_cu = validate_nlf_configuration("m2", "static", mock_contra_unavail, is_success_run=True)
+        self.assertFalse(ok_cu)
+        self.assertFalse(meta_cu["configuration_valid"])
+        self.assertIn("CONFIG_CONTRADICTION", err_cu)
+
+        # CFG-R11-03: Unavailable metadata with missing fallback reason
+        mock_missing_fb = {
+            "requested_nlf_mode": "static",
+            "effective_nlf_mode": "none",
+            "configuration_status": "REQUESTED_CONFIGURATION_UNAVAILABLE"
+        }
+        ok_mfb, err_mfb, meta_mfb = validate_nlf_configuration("m2", "static", mock_missing_fb, is_success_run=True)
+        self.assertFalse(ok_mfb)
+        self.assertFalse(meta_mfb["configuration_valid"])
+        self.assertIn("CONFIG_INVALID_METADATA", err_mfb)
+
+        # CFG-R11-04: Unsupported unavailable state for NONE
+        mock_none_unavail = {
+            "requested_nlf_mode": "none",
+            "effective_nlf_mode": "none",
+            "configuration_status": "REQUESTED_CONFIGURATION_UNAVAILABLE",
+            "fallback_reason": "NLF_INDEX_MEMORY_LIMIT"
+        }
+        ok_nu, err_nu, meta_nu = validate_nlf_configuration("m2", "none", mock_none_unavail, is_success_run=True)
+        self.assertFalse(ok_nu)
+        self.assertFalse(meta_nu["configuration_valid"])
+        self.assertIn("CONFIG_UNAVAILABLE", err_nu)
+
+        # CFG-R11-05: Initialized negative execution identity gap (R11-F02)
+        mock_neg_mismatch = {
+            "status": "FAIL",
+            "error_category": "PREVALIDATION_ERROR",
+            "requested_nlf_mode": "none",
+            "effective_nlf_mode": "none",
+            "configuration_status": "NONE"
+        }
+        ok_nm, err_nm, meta_nm = validate_nlf_configuration("m2", "static", mock_neg_mismatch, is_success_run=False)
+        self.assertFalse(ok_nm, "Negative execution with requested mode mismatch must be rejected")
+        self.assertFalse(meta_nm["configuration_valid"])
+        self.assertIn("mismatch", err_nm.lower())
+
+        # CFG-R11-06: Early startup negative execution without NLF metadata
+        mock_early_neg = {
+            "status": "FAIL",
+            "error_category": "CLI_ARG_ERROR",
+            "exit_code": 1
+        }
+        ok_en, _, meta_en = validate_nlf_configuration("m2", "static", mock_early_neg, is_success_run=False)
+        self.assertTrue(ok_en, "Early startup negative execution without NLF metadata is valid")
+        self.assertTrue(meta_en["configuration_valid"])
+
+        # CFG-R11-07: Memory metadata consistency (effective none must have 0 logical bytes)
+        mock_none_logical_leak = {
+            "requested_nlf_mode": "none",
+            "effective_nlf_mode": "none",
+            "configuration_status": "SUCCESS",
+            "nlf_index_logical_bytes": 1024
+        }
+        ok_ll, err_ll, meta_ll = validate_nlf_configuration("m2", "none", mock_none_logical_leak, is_success_run=True)
+        self.assertFalse(ok_ll)
+        self.assertFalse(meta_ll["configuration_valid"])
+        self.assertIn("Logical bytes", err_ll)
+
         # CFG-07: CLI fail-closed rejection: M1 with static
         res_m1 = subprocess.run(
             [sys.executable, str(REPO_ROOT / "scripts" / "run_rapidflow_apx_engines.py"), "--engine", "m1", "--nlf-mode", "static", "--stage", "hand"],
@@ -475,7 +570,40 @@ class TestRapidFlowApxP4b1A(unittest.TestCase):
             text=True
         )
         self.assertEqual(res_overflow.returncode, 1, f"Overflow budget must exit 1 (CLI_ARG_ERROR), got {res_overflow.returncode}")
-        self.assertIn("exceeds maximum representable memory limit", res_overflow.stderr + res_overflow.stdout)
+        self.assertIn("exceeds maximum", res_overflow.stderr + res_overflow.stdout)
+
+        # MEM-R11-04: Reviewer reproducer for signed JSON serialization overflow (2^43 MiB = 8796093022208) (R11-F03)
+        res_2_43 = subprocess.run(
+            [str(BINARY_PATH), "--max-nlf-memory-mib", "8796093022208"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        self.assertEqual(res_2_43.returncode, 1, f"2^43 MiB budget must exit 1 (CLI_ARG_ERROR), got {res_2_43.returncode}")
+        self.assertIn("exceeds maximum", res_2_43.stderr + res_2_43.stdout)
+
+        # MEM-R11-03: Largest supported serializable limit (8796093022207 MiB = 2^43 - 1 MiB)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            in_file = Path(tmpdir) / "in_max.json"
+            out_file = Path(tmpdir) / "out_max.json"
+            in_file.write_text(json.dumps(w_simple))
+            res_max = subprocess.run(
+                [
+                    str(BINARY_PATH),
+                    "--engine", "m2",
+                    "--workload", str(in_file),
+                    "--output", str(out_file),
+                    "--nlf-mode", "static",
+                    "--max-nlf-memory-mib", "8796093022207"
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            self.assertEqual(res_max.returncode, 0, f"Largest supported limit must succeed: {res_max.stderr}")
+            out_json = json.loads(out_file.read_text())
+            self.assertEqual(out_json["nlf_memory_limit_bytes"], 8796093022207 * 1024 * 1024, "Exact non-negative 64-bit byte count")
+            self.assertGreater(out_json["nlf_memory_limit_bytes"], 0)
 
         # MEM-03: Zero budget rejection
         res_zero = subprocess.run(
@@ -593,10 +721,10 @@ class TestRapidFlowApxP4b1A(unittest.TestCase):
         )
         self.assertEqual(res_foobar.returncode, 1, f"Unknown selector must exit 1, got {res_foobar.returncode}")
 
-        # DISP-03 to DISP-10: Valid selectors
+        # DISP-03 to DISP-11: Valid selectors
         valid_selectors = [
             "signatures", "numeric", "high_degree", "initialization",
-            "transactions", "counters", "counterexamples"
+            "transactions", "counters", "counterexamples", "reconstruction"
         ]
         for sel in valid_selectors:
             res_sel = subprocess.run(

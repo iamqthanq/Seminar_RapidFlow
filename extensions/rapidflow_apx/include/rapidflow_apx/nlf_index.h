@@ -16,7 +16,13 @@ namespace rapidflow_apx {
 inline constexpr size_t DEFAULT_NLF_MEMORY_BYTES = size_t{256} * size_t{1024} * size_t{1024}; // 256 MiB
 inline constexpr uint64_t DEFAULT_NLF_MEMORY_MIB = 256;
 inline constexpr uint64_t BYTES_PER_MIB = 1024ULL * 1024ULL;
-inline constexpr uint64_t MAX_REPRESENTABLE_NLF_MIB = std::numeric_limits<size_t>::max() / BYTES_PER_MIB;
+
+inline constexpr uint64_t MAX_SIZE_T_BYTES = static_cast<uint64_t>(std::numeric_limits<size_t>::max());
+inline constexpr uint64_t MAX_JSON_INT_BYTES = static_cast<uint64_t>(std::numeric_limits<int64_t>::max());
+inline constexpr uint64_t MAX_SERIALIZABLE_NLF_BYTES = MAX_SIZE_T_BYTES < MAX_JSON_INT_BYTES ? MAX_SIZE_T_BYTES : MAX_JSON_INT_BYTES;
+inline constexpr uint64_t MAX_NLF_MEMORY_MIB = MAX_SERIALIZABLE_NLF_BYTES / BYTES_PER_MIB;
+inline constexpr uint64_t MAX_SERIALIZABLE_NLF_MIB = MAX_NLF_MEMORY_MIB;
+inline constexpr uint64_t MAX_REPRESENTABLE_NLF_MIB = MAX_NLF_MEMORY_MIB;
 
 class NlfMemoryLimitException : public EngineException {
 public:

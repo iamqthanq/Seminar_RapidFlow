@@ -406,8 +406,8 @@ int main(int argc, char* argv[]) {
                 std::cerr << "Error: Invalid --max-nlf-memory-mib: value must be positive (got 0)\n";
                 return static_cast<int>(ExitCode::CLI_ARG_ERROR);
             }
-            if (val > MAX_REPRESENTABLE_NLF_MIB) {
-                std::cerr << "Error: Invalid --max-nlf-memory-mib: value " << val << " exceeds maximum representable memory limit\n";
+            if (val > MAX_NLF_MEMORY_MIB) {
+                std::cerr << "Error: Invalid --max-nlf-memory-mib: value " << val << " exceeds maximum serializable memory limit\n";
                 return static_cast<int>(ExitCode::CLI_ARG_ERROR);
             }
             max_nlf_memory_mib = val;

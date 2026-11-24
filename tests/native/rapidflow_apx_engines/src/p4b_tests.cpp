@@ -16,6 +16,8 @@
 #include <limits>
 #include <memory>
 #include <set>
+#include <random>
+#include <iomanip>
 
 namespace rapidflow_apx {
 
@@ -633,6 +635,56 @@ bool test_transactions_and_fault_injection() {
         TEST_ASSERT(idx.count(0, 0) == 0 && idx.count(1, 0) == 0, "TX-Snap: counts updated after commit");
     }
 
+    // Partial write rollback on INSERT: AFTER_FIRST_NLF_CELL (R11-C01)
+    {
+        ApxAuthoritativeGraph graph;
+        std::vector<std::pair<uint32_t, uint32_t>> verts = {{0, 0}, {1, 0}};
+        std::vector<std::tuple<uint32_t, uint32_t, uint32_t>> edges = {};
+        graph.load_baseline(verts, edges);
+
+        ApxTypedCodec codec;
+        codec.intern_data_vertex(0);
+        codec.intern_data_vertex(1);
+        codec.intern_vertex_label(TypedLabel::from_int(0));
+        codec.intern_edge_label(TypedLabel::from_int(0));
+
+        ApxQueryPlan qp;
+        std::vector<uint32_t> qv = {0, 0};
+        std::vector<QueryEdge> qe = {{0, 1, 0}};
+        std::vector<uint32_t> can = {0, 1};
+        qp.build(2, qv, qe, can, 0);
+
+        ApxQuerySignatures sigs;
+        sigs.build(qp);
+
+        ApxNlfIndex idx;
+        idx.initialize(graph, sigs);
+
+        ApxTupleSink sink(codec, can);
+        ApxTransactionManager tx_mgr(graph, codec, sink);
+        tx_mgr.set_nlf_context(&idx, &sigs);
+
+        // Inject fault AFTER_FIRST_NLF_CELL during INSERT
+        tx_mgr.set_fault_injection(ApxTransactionManager::FaultPoint::AFTER_FIRST_NLF_CELL);
+        UpdateOperation ins_op{UpdateOp::INSERT, 0, 1, TypedLabel::from_int(0)};
+        auto r_ins = tx_mgr.execute_update(ins_op, [](const ApxAuthoritativeGraph&, const UpdateOperation&, uint32_t, uint32_t, uint32_t) { return true; });
+
+        TEST_ASSERT(r_ins.status == StepStatus::FAULT_INJECTED, "TX-InsPartial: fault injected status");
+        TEST_ASSERT(!graph.has_edge(0, 1), "TX-InsPartial: graph edge absent after rollback");
+        TEST_ASSERT(idx.count(0, 0) == 0, "TX-InsPartial: cell 0 restored to 0");
+        TEST_ASSERT(idx.count(1, 0) == 0, "TX-InsPartial: cell 1 restored to 0");
+        TEST_ASSERT(verify_index_reconstruction(graph, sigs, idx), "TX-InsPartial: reconstruction holds");
+        TEST_ASSERT(sink.committed_emissions() == 0, "TX-InsPartial: no committed tuples");
+
+        // Next valid INSERT succeeds
+        tx_mgr.set_fault_injection(ApxTransactionManager::FaultPoint::NONE);
+        auto r_ins_next = tx_mgr.execute_update(ins_op, [](const ApxAuthoritativeGraph&, const UpdateOperation&, uint32_t, uint32_t, uint32_t) { return true; });
+        TEST_ASSERT(r_ins_next.status == StepStatus::SUCCESS, "TX-InsPartial: next insert succeeds");
+        TEST_ASSERT(graph.has_edge(0, 1), "TX-InsPartial: edge present after successful insert");
+        TEST_ASSERT(idx.count(0, 0) == 1 && idx.count(1, 0) == 1, "TX-InsPartial: counts incremented");
+        TEST_ASSERT(verify_index_reconstruction(graph, sigs, idx), "TX-InsPartial: reconstruction holds");
+    }
+
     // Partial write rollback on DELETE: AFTER_FIRST_NLF_CELL
     {
         ApxAuthoritativeGraph graph;
@@ -732,6 +784,234 @@ bool test_transactions_and_fault_injection() {
         TEST_ASSERT(graph.has_edge(0, 1), "TX-BeforePublish: edge preserved");
         TEST_ASSERT(idx.count(0, 0) == 1 && idx.count(1, 0) == 1, "TX-BeforePublish: counts preserved");
         TEST_ASSERT(verify_index_reconstruction(graph, sigs, idx), "TX-BeforePublish: reconstruction holds");
+    }
+
+    // Fault after NLF preparation: AFTER_NLF_PREPARE (R11-C03)
+    {
+        ApxAuthoritativeGraph graph;
+        std::vector<std::pair<uint32_t, uint32_t>> verts = {{0, 0}, {1, 0}};
+        std::vector<std::tuple<uint32_t, uint32_t, uint32_t>> edges = {};
+        graph.load_baseline(verts, edges);
+
+        ApxTypedCodec codec;
+        codec.intern_data_vertex(0);
+        codec.intern_data_vertex(1);
+        codec.intern_vertex_label(TypedLabel::from_int(0));
+        codec.intern_edge_label(TypedLabel::from_int(0));
+
+        ApxQueryPlan qp;
+        std::vector<uint32_t> qv = {0, 0};
+        std::vector<QueryEdge> qe = {{0, 1, 0}};
+        std::vector<uint32_t> can = {0, 1};
+        qp.build(2, qv, qe, can, 0);
+
+        ApxQuerySignatures sigs;
+        sigs.build(qp);
+
+        ApxNlfIndex idx;
+        idx.initialize(graph, sigs);
+
+        ApxTupleSink sink(codec, can);
+        ApxTransactionManager tx_mgr(graph, codec, sink);
+        tx_mgr.set_nlf_context(&idx, &sigs);
+
+        // INSERT + AFTER_NLF_PREPARE
+        tx_mgr.set_fault_injection(ApxTransactionManager::FaultPoint::AFTER_NLF_PREPARE);
+        UpdateOperation ins_op{UpdateOp::INSERT, 0, 1, TypedLabel::from_int(0)};
+        auto r_ins = tx_mgr.execute_update(ins_op, [](const ApxAuthoritativeGraph&, const UpdateOperation&, uint32_t, uint32_t, uint32_t) { return true; });
+        TEST_ASSERT(r_ins.status == StepStatus::FAULT_INJECTED, "TX-NlfPrep: insert fault injected");
+        TEST_ASSERT(!graph.has_edge(0, 1), "TX-NlfPrep: graph edge unchanged");
+        TEST_ASSERT(idx.count(0, 0) == 0 && idx.count(1, 0) == 0, "TX-NlfPrep: counts unchanged");
+        TEST_ASSERT(verify_index_reconstruction(graph, sigs, idx), "TX-NlfPrep: reconstruction holds");
+
+        // Commit the insert
+        tx_mgr.set_fault_injection(ApxTransactionManager::FaultPoint::NONE);
+        auto r_ins_ok = tx_mgr.execute_update(ins_op, [](const ApxAuthoritativeGraph&, const UpdateOperation&, uint32_t, uint32_t, uint32_t) { return true; });
+        TEST_ASSERT(r_ins_ok.status == StepStatus::SUCCESS, "TX-NlfPrep: insert committed");
+        TEST_ASSERT(graph.has_edge(0, 1), "TX-NlfPrep: edge present");
+
+        // DELETE + AFTER_NLF_PREPARE
+        tx_mgr.set_fault_injection(ApxTransactionManager::FaultPoint::AFTER_NLF_PREPARE);
+        UpdateOperation del_op{UpdateOp::DELETE, 0, 1, TypedLabel::from_int(0)};
+        auto r_del = tx_mgr.execute_update(del_op, [](const ApxAuthoritativeGraph&, const UpdateOperation&, uint32_t, uint32_t, uint32_t) { return true; });
+        TEST_ASSERT(r_del.status == StepStatus::FAULT_INJECTED, "TX-NlfPrep: delete fault injected");
+        TEST_ASSERT(graph.has_edge(0, 1), "TX-NlfPrep: edge preserved");
+        TEST_ASSERT(idx.count(0, 0) == 1 && idx.count(1, 0) == 1, "TX-NlfPrep: counts preserved");
+        TEST_ASSERT(verify_index_reconstruction(graph, sigs, idx), "TX-NlfPrep: reconstruction holds");
+    }
+
+    // Fault after graph mutation before NLF mutation: AFTER_GRAPH_BEFORE_NLF (R11-C04)
+    {
+        ApxAuthoritativeGraph graph;
+        std::vector<std::pair<uint32_t, uint32_t>> verts = {{0, 0}, {1, 0}};
+        std::vector<std::tuple<uint32_t, uint32_t, uint32_t>> edges = {};
+        graph.load_baseline(verts, edges);
+
+        ApxTypedCodec codec;
+        codec.intern_data_vertex(0);
+        codec.intern_data_vertex(1);
+        codec.intern_vertex_label(TypedLabel::from_int(0));
+        codec.intern_edge_label(TypedLabel::from_int(0));
+
+        ApxQueryPlan qp;
+        std::vector<uint32_t> qv = {0, 0};
+        std::vector<QueryEdge> qe = {{0, 1, 0}};
+        std::vector<uint32_t> can = {0, 1};
+        qp.build(2, qv, qe, can, 0);
+
+        ApxQuerySignatures sigs;
+        sigs.build(qp);
+
+        ApxNlfIndex idx;
+        idx.initialize(graph, sigs);
+
+        ApxTupleSink sink(codec, can);
+        ApxTransactionManager tx_mgr(graph, codec, sink);
+        tx_mgr.set_nlf_context(&idx, &sigs);
+
+        // INSERT + AFTER_GRAPH_BEFORE_NLF
+        tx_mgr.set_fault_injection(ApxTransactionManager::FaultPoint::AFTER_GRAPH_BEFORE_NLF);
+        UpdateOperation ins_op{UpdateOp::INSERT, 0, 1, TypedLabel::from_int(0)};
+        auto r_ins = tx_mgr.execute_update(ins_op, [](const ApxAuthoritativeGraph&, const UpdateOperation&, uint32_t, uint32_t, uint32_t) { return true; });
+        TEST_ASSERT(r_ins.status == StepStatus::FAULT_INJECTED, "TX-GraphBeforeNlf: insert fault injected");
+        TEST_ASSERT(!graph.has_edge(0, 1), "TX-GraphBeforeNlf: graph edge rolled back");
+        TEST_ASSERT(idx.count(0, 0) == 0 && idx.count(1, 0) == 0, "TX-GraphBeforeNlf: counts rolled back");
+        TEST_ASSERT(verify_index_reconstruction(graph, sigs, idx), "TX-GraphBeforeNlf: reconstruction holds");
+
+        // Commit insert
+        tx_mgr.set_fault_injection(ApxTransactionManager::FaultPoint::NONE);
+        tx_mgr.execute_update(ins_op, [](const ApxAuthoritativeGraph&, const UpdateOperation&, uint32_t, uint32_t, uint32_t) { return true; });
+
+        // DELETE + AFTER_GRAPH_BEFORE_NLF
+        tx_mgr.set_fault_injection(ApxTransactionManager::FaultPoint::AFTER_GRAPH_BEFORE_NLF);
+        UpdateOperation del_op{UpdateOp::DELETE, 0, 1, TypedLabel::from_int(0)};
+        auto r_del = tx_mgr.execute_update(del_op, [](const ApxAuthoritativeGraph&, const UpdateOperation&, uint32_t, uint32_t, uint32_t) { return true; });
+        TEST_ASSERT(r_del.status == StepStatus::FAULT_INJECTED, "TX-GraphBeforeNlf: delete fault injected");
+        TEST_ASSERT(graph.has_edge(0, 1), "TX-GraphBeforeNlf: edge preserved");
+        TEST_ASSERT(idx.count(0, 0) == 1 && idx.count(1, 0) == 1, "TX-GraphBeforeNlf: counts preserved");
+        TEST_ASSERT(verify_index_reconstruction(graph, sigs, idx), "TX-GraphBeforeNlf: reconstruction holds");
+    }
+
+    // Graph mutation faults with NLF enabled (R11-C05, R11-C06)
+    {
+        ApxAuthoritativeGraph graph;
+        std::vector<std::pair<uint32_t, uint32_t>> verts = {{0, 0}, {1, 0}};
+        std::vector<std::tuple<uint32_t, uint32_t, uint32_t>> edges = {};
+        graph.load_baseline(verts, edges);
+
+        ApxTypedCodec codec;
+        codec.intern_data_vertex(0);
+        codec.intern_data_vertex(1);
+        codec.intern_vertex_label(TypedLabel::from_int(0));
+        codec.intern_edge_label(TypedLabel::from_int(0));
+
+        ApxQueryPlan qp;
+        std::vector<uint32_t> qv = {0, 0};
+        std::vector<QueryEdge> qe = {{0, 1, 0}};
+        std::vector<uint32_t> can = {0, 1};
+        qp.build(2, qv, qe, can, 0);
+
+        ApxQuerySignatures sigs;
+        sigs.build(qp);
+
+        ApxNlfIndex idx;
+        idx.initialize(graph, sigs);
+
+        ApxTupleSink sink(codec, can);
+        ApxTransactionManager tx_mgr(graph, codec, sink);
+        tx_mgr.set_nlf_context(&idx, &sigs);
+
+        // BETWEEN_FORWARD_REVERSE_MUTATION on INSERT
+        tx_mgr.set_fault_injection(ApxTransactionManager::FaultPoint::BETWEEN_FORWARD_REVERSE_MUTATION);
+        UpdateOperation ins_op{UpdateOp::INSERT, 0, 1, TypedLabel::from_int(0)};
+        auto r_fwd_rev = tx_mgr.execute_update(ins_op, [](const ApxAuthoritativeGraph&, const UpdateOperation&, uint32_t, uint32_t, uint32_t) { return true; });
+        TEST_ASSERT(r_fwd_rev.status == StepStatus::FAULT_INJECTED, "TX-FwdRev: fault injected");
+        TEST_ASSERT(!graph.has_edge(0, 1), "TX-FwdRev: graph edge absent");
+        TEST_ASSERT(verify_index_reconstruction(graph, sigs, idx), "TX-FwdRev: reconstruction holds");
+
+        // ALLOCATION_FAILURE_MUTATION on INSERT
+        tx_mgr.set_fault_injection(ApxTransactionManager::FaultPoint::ALLOCATION_FAILURE_MUTATION);
+        auto r_alloc_ins = tx_mgr.execute_update(ins_op, [](const ApxAuthoritativeGraph&, const UpdateOperation&, uint32_t, uint32_t, uint32_t) { return true; });
+        TEST_ASSERT(r_alloc_ins.status == StepStatus::FAULT_INJECTED, "TX-AllocIns: fault injected");
+        TEST_ASSERT(!graph.has_edge(0, 1), "TX-AllocIns: graph edge absent");
+        TEST_ASSERT(verify_index_reconstruction(graph, sigs, idx), "TX-AllocIns: reconstruction holds");
+
+        // Commit insert
+        tx_mgr.set_fault_injection(ApxTransactionManager::FaultPoint::NONE);
+        tx_mgr.execute_update(ins_op, [](const ApxAuthoritativeGraph&, const UpdateOperation&, uint32_t, uint32_t, uint32_t) { return true; });
+
+        // ALLOCATION_FAILURE_MUTATION on DELETE
+        tx_mgr.set_fault_injection(ApxTransactionManager::FaultPoint::ALLOCATION_FAILURE_MUTATION);
+        UpdateOperation del_op{UpdateOp::DELETE, 0, 1, TypedLabel::from_int(0)};
+        auto r_alloc_del = tx_mgr.execute_update(del_op, [](const ApxAuthoritativeGraph&, const UpdateOperation&, uint32_t, uint32_t, uint32_t) { return true; });
+        TEST_ASSERT(r_alloc_del.status == StepStatus::FAULT_INJECTED, "TX-AllocDel: fault injected");
+        TEST_ASSERT(graph.has_edge(0, 1), "TX-AllocDel: graph edge preserved");
+        TEST_ASSERT(verify_index_reconstruction(graph, sigs, idx), "TX-AllocDel: reconstruction holds");
+    }
+
+    // Actual native M2 work-budget exhaustion under --max-work <small> and --nlf-mode static (R11-C07)
+    {
+        // Query: Triangle (k=0), vertices 0, 1, 2 label 0, edges (0, 1, 0), (1, 2, 0), (2, 0, 0)
+        ApxAuthoritativeGraph graph;
+        std::vector<std::pair<uint32_t, uint32_t>> verts = {{0, 0}, {1, 0}, {2, 0}};
+        std::vector<std::tuple<uint32_t, uint32_t, uint32_t>> edges = {{0, 2, 0}, {1, 2, 0}};
+        graph.load_baseline(verts, edges);
+
+        ApxTypedCodec codec;
+        codec.intern_data_vertex(0);
+        codec.intern_data_vertex(1);
+        codec.intern_data_vertex(2);
+        codec.intern_vertex_label(TypedLabel::from_int(0));
+        codec.intern_edge_label(TypedLabel::from_int(0));
+
+        ApxQueryPlan qp;
+        std::vector<uint32_t> qv = {0, 0, 0};
+        std::vector<QueryEdge> qe = {{0, 1, 0}, {1, 2, 0}, {2, 0, 0}};
+        std::vector<uint32_t> can = {0, 1, 2};
+        qp.build(3, qv, qe, can, 0);
+
+        ApxQuerySignatures sigs;
+        sigs.build(qp);
+
+        ApxTupleSink sink(codec, can);
+        // max_work = 1 guarantees work budget exhaustion during M2 traversal
+        ApxStreamingEngine engine(graph, codec, sink, qp, EngineType::M2, 1, NlfMode::STATIC, DEFAULT_NLF_MEMORY_BYTES);
+        TEST_ASSERT(engine.get_effective_nlf_mode() == NlfMode::STATIC, "TX-WorkBudget: engine effective mode static");
+
+        // INSERT (0, 1) closes the triangle -> search executes -> exceeds max_work=1 -> aborts
+        UpdateOperation ins_op{UpdateOp::INSERT, 0, 1, TypedLabel::from_int(0)};
+        StreamStepResult res_ins = engine.execute_step(ins_op, 0);
+        TEST_ASSERT(res_ins.status == StepStatus::CALLBACK_ABORTED, "TX-WorkBudget: insert aborted due to budget");
+        TEST_ASSERT(!graph.has_edge(0, 1), "TX-WorkBudget: inserted edge rolled back");
+        TEST_ASSERT(engine.get_nlf_index() != nullptr, "TX-WorkBudget: NLF index exists");
+        TEST_ASSERT(verify_index_reconstruction(graph, sigs, *engine.get_nlf_index()), "TX-WorkBudget: NLF reconstruction holds after insert abort");
+        TEST_ASSERT(sink.committed_emissions() == 0, "TX-WorkBudget: zero committed emissions");
+
+        // Now test DELETE under small work-budget:
+        // Set up graph containing full triangle: (0, 1), (1, 2), (2, 0)
+        ApxAuthoritativeGraph graph_del;
+        std::vector<std::pair<uint32_t, uint32_t>> verts_del = {{0, 0}, {1, 0}, {2, 0}};
+        std::vector<std::tuple<uint32_t, uint32_t, uint32_t>> edges_del = {{0, 1, 0}, {1, 2, 0}, {2, 0, 0}};
+        graph_del.load_baseline(verts_del, edges_del);
+
+        ApxTypedCodec codec_del;
+        codec_del.intern_data_vertex(0);
+        codec_del.intern_data_vertex(1);
+        codec_del.intern_data_vertex(2);
+        codec_del.intern_vertex_label(TypedLabel::from_int(0));
+        codec_del.intern_edge_label(TypedLabel::from_int(0));
+
+        ApxTupleSink sink_del(codec_del, can);
+        ApxStreamingEngine engine_del(graph_del, codec_del, sink_del, qp, EngineType::M2, 1, NlfMode::STATIC, DEFAULT_NLF_MEMORY_BYTES);
+        TEST_ASSERT(engine_del.get_effective_nlf_mode() == NlfMode::STATIC, "TX-WorkBudget: engine effective mode static for delete");
+
+        // DELETE (0, 1): search on G_before starts, exceeds max_work=1 -> aborts
+        UpdateOperation del_op{UpdateOp::DELETE, 0, 1, TypedLabel::from_int(0)};
+        StreamStepResult res_del = engine_del.execute_step(del_op, 0);
+        TEST_ASSERT(res_del.status == StepStatus::CALLBACK_ABORTED, "TX-WorkBudget: delete aborted due to budget");
+        TEST_ASSERT(graph_del.has_edge(0, 1), "TX-WorkBudget: edge preserved after delete abort");
+        TEST_ASSERT(verify_index_reconstruction(graph_del, sigs, *engine_del.get_nlf_index()), "TX-WorkBudget: NLF reconstruction holds after delete abort");
+        TEST_ASSERT(sink_del.committed_emissions() == 0, "TX-WorkBudget: zero committed emissions for delete abort");
     }
 
     // Callback abort and exception rollback
@@ -837,6 +1117,7 @@ bool test_transactions_and_fault_injection() {
         codec.intern_data_vertex(1);
         codec.intern_vertex_label(TypedLabel::from_int(0));
         codec.intern_edge_label(TypedLabel::from_string("initial_label"));
+        size_t initial_count = codec.edge_labels_count();
 
         ApxQueryPlan qp;
         std::vector<uint32_t> qv = {0, 0};
@@ -860,12 +1141,16 @@ bool test_transactions_and_fault_injection() {
         auto r_abort = tx_mgr.execute_update(ins_new_lbl, [](const ApxAuthoritativeGraph&, const UpdateOperation&, uint32_t, uint32_t, uint32_t) { return true; });
         TEST_ASSERT(r_abort.status == StepStatus::FAULT_INJECTED, "TX-Codec: transaction aborted");
         TEST_ASSERT(!codec.has_edge_label(TypedLabel::from_string("brand_new_label")), "TX-Codec: new label reverted by checkpoint restoration");
+        TEST_ASSERT(codec.edge_labels_count() == initial_count, "TX-Codec: edge labels count reverted");
 
-        // Subsequent valid transaction succeeds
+        // Subsequent valid transaction interned another label: verifies dense ID space reuse (R11-C08)
         tx_mgr.set_fault_injection(ApxTransactionManager::FaultPoint::NONE);
-        UpdateOperation ins_valid{UpdateOp::INSERT, 0, 1, TypedLabel::from_string("initial_label")};
-        auto r_next = tx_mgr.execute_update(ins_valid, [](const ApxAuthoritativeGraph&, const UpdateOperation&, uint32_t, uint32_t, uint32_t) { return true; });
+        UpdateOperation ins_subsequent{UpdateOp::INSERT, 0, 1, TypedLabel::from_string("reused_slot_label")};
+        auto r_next = tx_mgr.execute_update(ins_subsequent, [](const ApxAuthoritativeGraph&, const UpdateOperation&, uint32_t, uint32_t, uint32_t) { return true; });
         TEST_ASSERT(r_next.status == StepStatus::SUCCESS, "TX-Codec: subsequent valid update succeeds");
+        TEST_ASSERT(codec.has_edge_label(TypedLabel::from_string("reused_slot_label")), "TX-Codec: reused slot label interned");
+        TEST_ASSERT(codec.get_edge_label_id(TypedLabel::from_string("reused_slot_label")) == initial_count, "TX-Codec: assigned dense ID matches checkpoint boundary");
+        TEST_ASSERT(verify_index_reconstruction(graph, sigs, idx), "TX-Codec: reconstruction holds");
     }
 
     return true;
@@ -1115,17 +1400,250 @@ bool test_counterexamples_and_witness() {
     return true;
 }
 
+// ---------------------------------------------------------------------------
+// 8. Bounded Generated-Stream Index Reconstruction Tests (R11-D01 to R11-D04)
+// ---------------------------------------------------------------------------
+bool test_bounded_generated_stream_reconstruction() {
+    std::cout << "  Running Bounded Generated-Stream Index Reconstruction (R11-D01 to R11-D04)..." << std::endl;
+
+    const std::vector<uint32_t> seeds = {1, 7, 42};
+    const size_t STREAMS_PER_SEED = 2;
+    const size_t TOTAL_STREAMS = seeds.size() * STREAMS_PER_SEED; // 6
+    const size_t COMMITTED_PER_STREAM = 20;
+    const size_t ABORTS_PER_STREAM = 2;
+    const size_t TOTAL_STEPS_PER_STREAM = COMMITTED_PER_STREAM + ABORTS_PER_STREAM; // 22
+
+    size_t total_committed = 0;
+    size_t total_aborted = 0;
+    size_t total_reconstruction_checks = 0;
+    size_t total_cell_discrepancies = 0;
+    size_t total_recovery_discrepancies = 0;
+    size_t streams_passed = 0;
+
+    for (uint32_t seed : seeds) {
+        for (size_t s_idx = 0; s_idx < STREAMS_PER_SEED; ++s_idx) {
+            std::string stream_id = "seed_" + std::to_string(seed) + "_stream_" + std::to_string(s_idx);
+            std::mt19937 rng(seed * 1000 + static_cast<uint32_t>(s_idx) * 37 + 11);
+
+            ApxTypedCodec codec;
+            for (uint32_t i = 0; i < 8; ++i) {
+                codec.intern_data_vertex(i);
+            }
+            uint32_t vlbl_int0 = codec.intern_vertex_label(TypedLabel::from_int(0));       // 0
+            uint32_t vlbl_int1 = codec.intern_vertex_label(TypedLabel::from_int(1));       // 1
+            uint32_t vlbl_str0 = codec.intern_vertex_label(TypedLabel::from_string("0"));   // 2
+            uint32_t vlbl_str1 = codec.intern_vertex_label(TypedLabel::from_string("1"));   // 3
+
+            uint32_t elbl_0 = codec.intern_edge_label(TypedLabel::from_int(0));            // 0 (relevant)
+            uint32_t elbl_1 = codec.intern_edge_label(TypedLabel::from_int(1));            // 1 (relevant)
+            uint32_t elbl_99 = codec.intern_edge_label(TypedLabel::from_int(99));          // 2 (irrelevant)
+
+            // 8 data vertices with mixed typed labels
+            std::vector<std::pair<uint32_t, uint32_t>> verts = {
+                {0, vlbl_int0}, {1, vlbl_int0}, {2, vlbl_str0}, {3, vlbl_str1},
+                {4, vlbl_int1}, {5, vlbl_int1}, {6, vlbl_str0}, {7, vlbl_int0}
+            };
+            // 4 initial base edges
+            std::vector<std::tuple<uint32_t, uint32_t, uint32_t>> edges = {
+                {0, 1, elbl_0}, {2, 3, elbl_1}, {4, 5, elbl_99}, {6, 7, elbl_0}
+            };
+
+            ApxAuthoritativeGraph graph;
+            graph.load_baseline(verts, edges);
+
+            // Query: Triangle with 3 vertices:
+            // q0: int 0, q1: int 0, q2: string "0"
+            // qe: (0, 1, edge 0), (1, 2, edge 1), (2, 0, edge 0)
+            ApxQueryPlan qp;
+            std::vector<uint32_t> qv = {vlbl_int0, vlbl_int0, vlbl_str0};
+            std::vector<QueryEdge> qe = {
+                {0, 1, elbl_0},
+                {1, 2, elbl_1},
+                {2, 0, elbl_0}
+            };
+            std::vector<uint32_t> can = {0, 1, 2};
+            qp.build(3, qv, qe, can, 0);
+
+            ApxQuerySignatures sigs;
+            sigs.build(qp);
+            TEST_ASSERT(sigs.signature_count() > 0, "D-Reg: query signatures registered");
+
+            ApxNlfIndex idx;
+            idx.initialize(graph, sigs);
+
+            // Verification check 1: after initialization
+            total_reconstruction_checks++;
+            if (!verify_index_reconstruction(graph, sigs, idx)) {
+                total_cell_discrepancies++;
+                std::cerr << "FAILED: Initial reconstruction mismatch in " << stream_id << std::endl;
+                return false;
+            }
+
+            ApxTupleSink sink(codec, can);
+            ApxTransactionManager tx_mgr(graph, codec, sink);
+            tx_mgr.set_nlf_context(&idx, &sigs);
+
+            const std::set<size_t> abort_steps = {5, 15};
+            size_t committed_this_stream = 0;
+            size_t aborted_this_stream = 0;
+
+            for (size_t step = 0; step < TOTAL_STEPS_PER_STREAM; ++step) {
+                bool is_abort_step = (abort_steps.find(step) != abort_steps.end());
+
+                // Decide operation:
+                // Step 5: force aborted INSERT
+                // Step 15: force aborted DELETE
+                // Other steps: if graph has >= 6 edges, prefer DELETE; if <= 2 edges, prefer INSERT; else random
+                bool do_insert = true;
+                if (step == 15) {
+                    do_insert = false;
+                } else if (step == 5) {
+                    do_insert = true;
+                } else {
+                    size_t edge_count = 0;
+                    for (uint32_t u = 0; u < 8; ++u) {
+                        for (uint32_t v = u + 1; v < 8; ++v) {
+                            if (graph.has_edge(u, v)) edge_count++;
+                        }
+                    }
+                    if (edge_count >= 6) do_insert = false;
+                    else if (edge_count <= 2) do_insert = true;
+                    else do_insert = (rng() % 2 == 0);
+                }
+
+                uint32_t sel_u = 0, sel_v = 1;
+                TypedLabel sel_lbl = TypedLabel::from_int(0);
+
+                if (do_insert) {
+                    std::vector<std::pair<uint32_t, uint32_t>> non_edges;
+                    for (uint32_t u = 0; u < 8; ++u) {
+                        for (uint32_t v = u + 1; v < 8; ++v) {
+                            if (!graph.has_edge(u, v)) {
+                                non_edges.push_back({u, v});
+                            }
+                        }
+                    }
+                    if (non_edges.empty()) {
+                        do_insert = false;
+                    } else {
+                        auto p = non_edges[rng() % non_edges.size()];
+                        sel_u = p.first;
+                        sel_v = p.second;
+                        uint32_t choice = rng() % 3;
+                        sel_lbl = (choice == 0) ? TypedLabel::from_int(0) : ((choice == 1) ? TypedLabel::from_int(1) : TypedLabel::from_int(99));
+                    }
+                }
+
+                if (!do_insert) {
+                    std::vector<std::pair<uint32_t, uint32_t>> existing_edges;
+                    for (uint32_t u = 0; u < 8; ++u) {
+                        for (uint32_t v = u + 1; v < 8; ++v) {
+                            if (graph.has_edge(u, v)) {
+                                existing_edges.push_back({u, v});
+                            }
+                        }
+                    }
+                    if (existing_edges.empty()) {
+                        continue;
+                    }
+                    auto e = existing_edges[rng() % existing_edges.size()];
+                    sel_u = e.first;
+                    sel_v = e.second;
+                    auto lkp = graph.get_edge_label(sel_u, sel_v);
+                    sel_lbl = codec.decode_edge_label(lkp.label);
+                }
+
+                UpdateOp op = do_insert ? UpdateOp::INSERT : UpdateOp::DELETE;
+                UpdateOperation update_op{op, sel_u, sel_v, sel_lbl};
+
+                if (is_abort_step) {
+                    // For step 5, select a 2-cell relevant update (u=0, v=1, lbl=0) with AFTER_FIRST_NLF_CELL
+                    // For step 15, select BEFORE_PUBLISH on whatever operation was chosen
+                    if (step == 5) {
+                        sel_u = 0;
+                        sel_v = 1;
+                        sel_lbl = TypedLabel::from_int(0);
+                        do_insert = !graph.has_edge(0, 1);
+                        update_op.op = do_insert ? UpdateOp::INSERT : UpdateOp::DELETE;
+                        update_op.ext_u = sel_u;
+                        update_op.ext_v = sel_v;
+                        update_op.label = sel_lbl;
+                        tx_mgr.set_fault_injection(ApxTransactionManager::FaultPoint::AFTER_FIRST_NLF_CELL);
+                    } else {
+                        tx_mgr.set_fault_injection(ApxTransactionManager::FaultPoint::BEFORE_PUBLISH);
+                    }
+
+                    auto r_abort = tx_mgr.execute_update(update_op, [](const ApxAuthoritativeGraph&, const UpdateOperation&, uint32_t, uint32_t, uint32_t) { return true; });
+                    TEST_ASSERT(r_abort.status == StepStatus::FAULT_INJECTED, "R11-D: aborted step status must be FAULT_INJECTED");
+                    aborted_this_stream++;
+                    total_aborted++;
+
+                    total_reconstruction_checks++;
+                    if (!verify_index_reconstruction(graph, sigs, idx)) {
+                        total_recovery_discrepancies++;
+                        std::cerr << "FAILED: Post-abort reconstruction mismatch at step " << step << " in " << stream_id << std::endl;
+                        return false;
+                    }
+
+                    tx_mgr.set_fault_injection(ApxTransactionManager::FaultPoint::NONE);
+                } else {
+                    auto r_ok = tx_mgr.execute_update(update_op, [](const ApxAuthoritativeGraph&, const UpdateOperation&, uint32_t, uint32_t, uint32_t) { return true; });
+                    TEST_ASSERT(r_ok.status == StepStatus::SUCCESS, "R11-D: update must succeed");
+                    committed_this_stream++;
+                    total_committed++;
+
+                    total_reconstruction_checks++;
+                    if (!verify_index_reconstruction(graph, sigs, idx)) {
+                        total_cell_discrepancies++;
+                        std::cerr << "FAILED: Post-commit reconstruction mismatch at step " << step << " in " << stream_id << std::endl;
+                        return false;
+                    }
+                }
+            }
+
+            // Final check at stream completion
+            total_reconstruction_checks++;
+            if (!verify_index_reconstruction(graph, sigs, idx)) {
+                total_cell_discrepancies++;
+                std::cerr << "FAILED: Final stream reconstruction mismatch in " << stream_id << std::endl;
+                return false;
+            }
+
+            TEST_ASSERT(committed_this_stream == COMMITTED_PER_STREAM, "R11-D: exact committed updates per stream");
+            TEST_ASSERT(aborted_this_stream == ABORTS_PER_STREAM, "R11-D: exact aborted updates per stream");
+            streams_passed++;
+        }
+    }
+
+    TEST_ASSERT(streams_passed == TOTAL_STREAMS, "R11-D: all 6 streams passed");
+    TEST_ASSERT(total_committed == 120, "R11-D: 120 total committed updates");
+    TEST_ASSERT(total_aborted == 12, "R11-D: 12 total aborted updates");
+    TEST_ASSERT(total_cell_discrepancies == 0, "R11-D: zero cell discrepancies");
+    TEST_ASSERT(total_recovery_discrepancies == 0, "R11-D: zero recovery discrepancies");
+
+    std::cout << "  Bounded Generated-Stream Reconstruction Report:" << std::endl;
+    std::cout << "    Seeds Tested:                   3 (1, 7, 42)" << std::endl;
+    std::cout << "    Generated Streams:              " << streams_passed << " / " << TOTAL_STREAMS << std::endl;
+    std::cout << "    Committed Updates:              " << total_committed << std::endl;
+    std::cout << "    Aborted Updates:                " << total_aborted << std::endl;
+    std::cout << "    Full-Cell Checks:               " << total_reconstruction_checks << std::endl;
+    std::cout << "    Cell Discrepancies:             " << total_cell_discrepancies << std::endl;
+    std::cout << "    Recovery Discrepancies:         " << total_recovery_discrepancies << std::endl;
+
+    return true;
+}
+
 } // namespace
 
 int run_p4b_native_tests(const char* suite_name) {
     std::string s(suite_name ? suite_name : "all");
     const std::set<std::string> valid_suites = {
-        "all", "signatures", "numeric", "high_degree", "initialization", "transactions", "counters", "counterexamples"
+        "all", "signatures", "numeric", "high_degree", "initialization", "transactions", "counters", "counterexamples", "reconstruction"
     };
 
     if (valid_suites.find(s) == valid_suites.end()) {
         std::cerr << "Error: Unknown P4b test suite selector '" << s
-                  << "'. Valid selectors: all, signatures, numeric, high_degree, initialization, transactions, counters, counterexamples"
+                  << "'. Valid selectors: all, signatures, numeric, high_degree, initialization, transactions, counters, counterexamples, reconstruction"
                   << std::endl;
         return 1; // Strict fail-closed non-zero exit (Finding P4B-1A-F06)
     }
@@ -1165,6 +1683,10 @@ int run_p4b_native_tests(const char* suite_name) {
     if (all || s == "counterexamples") {
         groups_executed++;
         if (!test_counterexamples_and_witness()) ok = false;
+    }
+    if (all || s == "reconstruction") {
+        groups_executed++;
+        if (!test_bounded_generated_stream_reconstruction()) ok = false;
     }
 
     std::cout << "================================================================================" << std::endl;

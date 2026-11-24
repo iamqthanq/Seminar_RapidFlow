@@ -1,7 +1,7 @@
-# RapidFlow-APX Phase P4b-1A Implementation & Verification Report
+# RapidFlow-APX Phase P4b-1A Final Implementation & Verification Report (Patch R1.1)
 
 **Document ID:** `docs/rapidflow_apx_p4b_1a_implementation_report.md`
-**Milestone:** Phase P4b-1A — Native Transactional NLF Frequency Index & Sound Static Relaxed NLF Implementation
+**Milestone:** Phase P4b-1A Final Implementation Closure Patch R1.1 — Native Transactional NLF Frequency Index & Sound Static Relaxed NLF Implementation
 **Active Issue:** [Issue #38](https://github.com/iamqthanq/Seminar_RapidFlow/issues/38)
 **Draft PR:** [Draft PR #39](https://github.com/iamqthanq/Seminar_RapidFlow/pull/39)
 **Parent Roadmap:** [Issue #1](https://github.com/iamqthanq/Seminar_RapidFlow/issues/1)
@@ -11,13 +11,14 @@
 **Integration Target:** `QuangThang`
 **Pinned Upstream RapidFlow:** `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` (Pristine: `True`)
 **Historical P4a Evidence Integrity:** `7 / 7` artifacts verified bit-for-bit against `docs/evidence/p4a_evidence_manifest.json`
+**Accepted Baseline:** `P4B_1A_CORE_IMPLEMENTATION_ACCEPTED` (R1 Hardening Baseline)
 **Handoff Status:** **READY_FOR_INDEPENDENT_IMPLEMENTATION_REVIEW**
 
 ---
 
 ## 1. Executive Summary & Architectural Traceability
 
-Phase P4b-1A delivers the production native C++ implementation of the **Transactional Neighborhood Label Frequency (NLF) Frequency Index** and the mathematically sound **Static Relaxed NLF Pruning Filter** for the M2 Event Engine. This implementation strictly realizes the formal specifications, invariant definitions, and rollback semantics defined in the accepted P4b-0 R1.1 design document (`docs/rapidflow_apx_p4b_design.md`) and hardens all eight findings identified in the Independent Implementation Review R1.
+Phase P4b-1A delivers the production native C++ implementation of the **Transactional Neighborhood Label Frequency (NLF) Frequency Index** and the mathematically sound **Static Relaxed NLF Pruning Filter** for the M2 Event Engine. This implementation strictly realizes the formal specifications, invariant definitions, and rollback semantics defined in the accepted P4b-0 R1.1 design document (`docs/rapidflow_apx_p4b_design.md`). Following independent acceptance of the core implementation at R1 (`P4B_1A_CORE_IMPLEMENTATION_ACCEPTED`), Final Implementation Closure Patch R1.1 definitively resolves all seven residual findings (`R11-F01` through `R11-F07`).
 
 ### 1.1 Core Objectives Achieved
 1. **Mathematical Soundness Without False Negatives**:
@@ -240,55 +241,71 @@ The native verification suite (`p4b_tests.cpp`) explicitly evaluates the counter
 ### 5.3 Frozen Baseline Differential Verification (`be136f3` vs INT04B Candidate)
 - Frozen baseline binary SHA-256: `4fd6f8a16422587e7b0f9c5cd181ef2c5b8b8dbc8e6b0926e9052bbe00bb80ea`
 - INT04B candidate binary SHA-256: `14a8fd1641cdb7325222a3a3d33f691271a09a24b887bd6fc39c726c3f4a8a06`
-- **Hand Cases (25/25)**: 100% bit-for-bit parity on statuses, entered/exited tuples, and legacy counters (`work_units`, `candidate_evaluations`, `edge_lookups`, `vertex_label_checks`, `anchors_started`, `committed_emissions`).
-- **56 Stateful Stream Matrix (56 streams / 672 updates)**: 100% bit-for-bit parity on statuses, entered/exited tuples, and legacy counters.
+- **Hand Cases (25/25)**: 100% bit-for-bit parity on statuses, entered/exited tuples, and selected legacy counters (`work_units`, `candidate_evaluations`, `edge_lookups`, `vertex_label_checks`, `anchors_started`, `committed_emissions`).
+- **56 Stateful Stream Matrix (56 streams / 672 updates)**: 100% bit-for-bit parity on statuses, entered/exited tuples, and selected legacy counters.
+- **Corpus 840 Scope Distinction**: The full 840-case dynamic corpus was verified against the authoritative M0 Oracle in canonical regression; cross-revision differential comparison against the frozen reference binary was conducted on the bounded scope of 25 hand cases and 56 stateful streams.
 
 ### 5.4 Sanitizer Verification (AddressSanitizer + UndefinedBehaviorSanitizer)
 - Binary compiled with `-fsanitize=address,undefined -g`.
-- Native test suite executed under ASan/UBSan with `ASAN_OPTIONS=detect_leaks=0` (bypassing upstream baseline RapidFlow `buildEdgeIndex` allocation leak).
-- Result: **Zero memory errors, zero out-of-bounds accesses, zero integer overflows, zero undefined behavior across all 7 native test groups.**
+- Native test suite executed under ASan/UBSan with `ASAN_OPTIONS=detect_leaks=0`. Leak detection is intentionally disabled because upstream baseline RapidFlow's `buildEdgeIndex` (`sparsepp` internal hash table) performs dynamic memory allocations that are retained until process termination.
+- Result: **Zero memory errors, zero out-of-bounds accesses, zero integer overflows, zero undefined behavior across all 8 native test groups.**
 
 ---
 
 ## 6. Traceability Matrix for All 110 Acceptance Gates
 
+Full individual gate mappings with exact evidence types, source references, status, and limitations are maintained in the dedicated traceability artifact: [`docs/rapidflow_apx_p4b_1a_acceptance_matrix.md`](rapidflow_apx_p4b_1a_acceptance_matrix.md).
+
 | Group | Gate IDs | Scope / Description | Verification Method | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| **Group A: Query Signatures** | `A-01` to `A-10` | Signature encoding, registry construction, sorted lookup, degree invariant, multi-edge deduplication, bound $|\Sigma_Q| \le 2|E(Q)|$. | Native unit tests `SIG-01` to `SIG-10` | **PASS (10/10)** |
-| **Group B: Numeric Safety** | `B-01` to `B-18` | Checked index arithmetic, overflow/underflow protection, 256 MiB memory cap enforcement, vector max_size checks, 70,001-vertex actual star graph test. | Native unit tests `NUM-01` to `NUM-18`, high-degree star graph | **PASS (18/18)** |
-| **Group C: G0 Initialization** | `C-01` to `C-12` | Pristine initial state boundary, atomic table publication via temporary vector, zero-copy move, G0 degree verification, rebuild rejection. | Native unit tests `INIT-01` to `INIT-12` | **PASS (12/12)** |
-| **Group D: Transaction Safety** | `D-01` to `D-25` | 2-cell `NlfUndoRecord`, pre-validation, snapshot visibility (INSERT post-count, DELETE pre-count), zero-allocation rollback, 7 fault injection points, partial write rollback (`AFTER_FIRST_NLF_CELL`), repeated rollback idempotency, next update success, session poisoning on invariant failure. | Native unit tests `TX-01` to `TX-25` | **PASS (25/25)** |
-| **Group E: Static Relaxed NLF** | `E-01` to `E-12` | Deficit $\delta_{\text{static}}(u, v) \le k$, independent anchor evaluations, candidate pruning before expansion in PRESENT, MISSING branch untouched, exact-k leaf check untouched, counterexamples A1, Chord, A7 witness. | Native tests `A1` to `A7`, differential stream testing | **PASS (12/12)** |
-| **Group F: Engine Config & Fallback** | `F-01` to `F-15` | CLI `--nlf-mode`, `--max-nlf-memory-mib`, M1 rejection with exit 1, ALL rejection with exit 1, requested vs effective configuration integrity, fallback rejection from static certification, query-irrelevant updates bypass, memory ceiling fallback, clean lifecycle cleanup. | Python tests, CLI tests, runner integration | **PASS (15/15)** |
-| **Group G: Diagnostic Counters** | `G-01` to `G-06` | Versioned 8 NLF counters, strict monotonicity, reset on step begin, per-evaluation anchor counting without overcount, all zeros on `NONE` mode, diagnostic reporting JSON. | Native counter tests, summary schema tests | **PASS (6/6)** |
-| **Group H: Correctness & Non-Regression** | `H-01` to `H-12` | Hand cases (25/25), Corpus (840/840), Streams (56 streams / 672 updates), Bare M2 bit-for-bit invariance against frozen baseline `be136f3`, full regression 762 tests, historical P4a integrity (7/7 artifacts). | Canonical runner, unittest discover, SHA manifest audit | **PASS (12/12)** |
+| **Group A: Governance & Scope** | `A01` to `A09` | Clean worktree, starting revision, Issue #38 / PR #39 preserved, upstream pristine at `2ea4f4c`, no residual NLF / Option B / benchmarks. | Git inspection, worktree audit | **PASS (9/9)** |
+| **Group B: Mathematical Contract** | `B01` to `B11` | D-R contract, injectivity, typed vertex labels, missing-edge semantics, INSERT-after / DELETE-before boundaries, exact-k leaf check, static formula, original k, no double counting, explicit ordered tuple semantics. | Formal design audit, source inspection | **PASS (11/11)** |
+| **Group C: Signature Registry** | `C01` to `C07` | Both endpoint directions registered, typed label distinction, deterministic IDs, per-vertex requirements, degree sum invariant, canonical edge mapping, external ID mapping. | Native unit tests `SIG-01` to `SIG-10` | **PASS (7/7)** |
+| **Group D: Numeric Safety & Initialization** | `D01` to `D16` | Exact `uint32_t` storage, checked arithmetic, safe deficit subtraction/accumulation, capacity checks, >65535 verified, memory budget handling, G0 initialization, authoritative labels, undirected edge counts, atomic publication, unsupported dynamic initialization handling. | Native unit tests `NUM-01` to `NUM-18`, `INIT-01` to `INIT-12` | **PASS (16/16)** |
+| **Group E: Transactions** | `E01` to `E21` | Optional index lifetime, 0/1/2 affected-cell updates, fixed-capacity undo metadata, zero-allocation rollback, partial INSERT and DELETE rollback, graph transaction rollback, codec restoration, tuple abort, snapshot visibility, commit boundary, idempotent rollback, post-abort update success, full-cell reconstruction parity. | Native unit tests `TX-01` to `TX-25`, R11 transaction matrix | **PASS (21/21)** |
+| **Group F: Native M2 Integration** | `F01` to `F13` | Static NLF in native M2, default mode NONE, disabled mode has no frequency table / no scans / no maintenance, candidate pruning uses precomputed counts, no neighbor scan for NLF, no per-candidate heap allocation, MISSING branch unchanged, leaf check preserved, actual pruning witness, mode reporting, fallback not misclassified. | Native tests `A1` to `A7`, CLI integration tests | **PASS (13/13)** |
+| **Group G: Correctness & Regression** | `G01` to `G21` | A1 fixture (8/8), Chord fixture (16/16), A2 double-counting trap, typed labels, k=0/1/2 correctness, 25 hand cases, 840 corpus cases, 56 streams / 672 steps, zero tuple discrepancies, zero duplicate output, PBT completed, fault matrix, Bare M2 disabled parity, M1 regression, legacy counters unchanged, new counters reset/accumulate, full repo regression, sanitizer reporting. | Test suites, canonical runner, differential testing | **PASS (21/21)** |
+| **Group H: Evidence and Final Handoff** | `H01` to `H12` | Historical P4a 7/7 artifacts, complexity documented, source references accurate, test commands reproducible, outputs preserved, clean git diff, exact revision identified, commit pushed, PR head synced, PR #39 remains DRAFT, Issue #38 remains OPEN, stop at independent review. | SHA-256 audit, git inspection, PR verification | **PASS (12/12)** |
 
-**Total Acceptance Gates Checked & Passed:** **110 / 110 (100%)**
+**Total Original Acceptance Gates Checked & Passed:** **110 / 110 (100%)**
 
 ---
 
 ## 7. Traceability Matrix for All 78 R1 Hardening Closure Gates
 
-| Finding / Scope | Gate IDs | Scope / Description | Verification Method | Status |
+| Group | Gate IDs | Scope / Description | Verification Method | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| **P4B-1A-F01 (Config Integrity)** | `CFG-01` to `CFG-16` | Requested vs effective matching, fallback run rejection from static certification, reviewer subprocess substitution attack reproducer rejection, CLI fail-closed for M1 and ALL, negative case preservation. | `test_07_configuration_integrity`, runner integration | **PASS (16/16)** |
-| **P4B-1A-F02 (Numeric & Memory Safety)** | `MEM-01` to `MEM-18` | 256 MiB default budget, $2^{44}$ MiB overflow rejection, zero budget rejection, negative budget rejection, duplicate flag guards, low-memory fallback witness, safe vector deallocation via swap. | `test_08_memory_safety_and_cli_guards`, native NUM tests | **PASS (18/18)** |
-| **P4B-1A-F03 (Transaction Safety)** | `TXR-01` to `TXR-14` | Zero-cell, one-cell, two-cell matrix, callback snapshot inspection (G_after/G_before), partial write rollback on DELETE, fail-closed session poisoning on invariant failure (`session_poisoned_`). | Native TX tests, `test_transactions_and_fault_injection` | **PASS (14/14)** |
-| **P4B-1A-F04 (Counter Accuracy)** | `CNT-01` to `CNT-06` | Sequential anchor evaluation, second anchor never checked when first fails, eliminated overcount, all zeros in NONE mode. | Native CNT tests, `test_anchor_counter_accuracy` | **PASS (6/6)** |
-| **P4B-1A-F05 (High-Degree Fixture)** | `HD-01` to `HD-05` | Real 70,001-vertex / 70,000-edge star graph, center count 70,000, leaf count 1, delete/insert/rollback exact restoration. | Native HD tests, `test_actual_high_degree_star_graph` | **PASS (5/5)** |
-| **P4B-1A-F06 (Test Dispatcher)** | `DISP-01` to `DISP-07` | Strict fail-closed rejection of unknown suite selectors with exit 1, valid selector dispatching, accurate executed group tracking. | Native dispatcher tests, `test_09_dispatcher_selector_rejection` | **PASS (7/7)** |
-| **P4B-1A-F07 (Differential PBT)** | `PBT-01` to `PBT-08` | 78 streams / 780 stream updates across seeds [1, 7, 42], K2, Triangle, C4, Diamond, K4, Triangular Prism, mixed typed labels (`0`, `"0"`, `1`, `"1"`, `99`, `"irrel"`), zero-event churn, 100% agreement. | `test_06_property_based_differential` | **PASS (8/8)** |
-| **P4B-1A-F08 (Documentation)** | `DOC-01` to `DOC-04` | Reconciled 110 original gates + 78 closure gates, corrected 256 MiB budget, documented actual star graph, eliminated all trailing whitespace (`git diff --check be136f3d..HEAD` exit 0). | Manual audit, git diff whitespace check | **PASS (4/4)** |
+| **Group R1-A: Configuration Integrity** | `R1-A01` to `R1-A08` | Requested vs effective matching, fallback run rejection from static certification, reviewer subprocess substitution attack reproducer rejection, CLI fail-closed for M1 and ALL, negative case preservation. | `test_07_configuration_integrity`, runner integration | **PASS (8/8)** |
+| **Group R1-B: Numeric and Memory Safety** | `R1-B01` to `R1-B10` | 256 MiB default budget, $2^{44}$ MiB overflow rejection, zero budget rejection, negative budget rejection, duplicate flag guards, low-memory fallback witness, safe vector deallocation via swap. | `test_08_memory_safety_and_cli_guards`, native NUM tests | **PASS (10/10)** |
+| **Group R1-C: Transactions** | `R1-C01` to `R1-C20` | Zero-cell, one-cell, two-cell matrix, callback snapshot inspection (G_after/G_before), partial write rollback on DELETE, fail-closed session poisoning on invariant failure (`session_poisoned_`), forward/reverse fault integration, callback abort/exception, work-budget failure, before-publication failure, codec checkpoint rollback, repeated cleanup, commit not undone, full-cell reconstruction. | Native TX tests, `test_transactions_and_fault_injection` | **PASS (20/20)** |
+| **Group R1-D: Counters and Dispatch** | `R1-D01` to `R1-D10` | Sequential anchor evaluation, second anchor never checked when first fails, eliminated overcount, all zeros in NONE mode, candidate accounting preserved, step/cumulative counters, rollback-counter semantics, unknown test suite rejected, nonzero executed coverage, failure cannot produce success banner. | Native CNT tests, `test_anchor_counter_accuracy`, `test_09_dispatcher_selector_rejection` | **PASS (10/10)** |
+| **Group R1-E: Verification Expansion** | `R1-E01` to `R1-E12` | Synthetic high-count test classification, real 70,001-vertex / 70,000-edge star graph test, high-degree update/rollback, mixed typed-label PBT (78 streams / 780 updates), event-bearing generated streams, per-step exact tuples, generated index reconstruction, k=2 fixtures, frozen baseline reference build, frozen tuple/status/state parity, frozen legacy-counter parity, work-budget baseline parity. | `p4b_tests.cpp`, differential runner | **PASS (11/12)**<br>*(R1-E12: PARTIAL)* |
+| **Group R1-F: Evidence Closure** | `R1-F01` to `R1-F18` | Test inventory reconciled, original 110 gates reconciled, 25 hand cases, 840 corpus cases, 56 streams / 672 steps, M1 / Bare M2 canonical regression, full repository regression, sanitizer reporting, historical 7/7 artifacts, upstream pristine, clean git diff, tested revision identified, implementation report corrected, commit pushed, PR remains DRAFT, Issue remains OPEN, no future-phase implementation, stop at independent review. | Manual audit, git diff check, SHA manifest audit | **PASS (18/18)** |
 
-**Total R1 Closure Gates Checked & Passed:** **78 / 78 (100%)**
+**Total R1 Closure Gates Checked & Passed:** **77 / 78 PASS, 1 PARTIAL**
 
 ---
 
-## 8. Frozen Baseline Conformance Statement
+## 8. Traceability Matrix for All 32 R1.1 Final Closure Gates
+
+| Group | Gate IDs | Scope / Description | Verification Method | Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **Group R11-A: Configuration** | `R11-A01` to `R11-A06` | Contradictory SUCCESS/fallback metadata rejected, unavailable metadata consistency verified, initialized negative execution identity validated, early startup negative cases preserved, runner and hand-negative integration verified, Bare substitution and fallback remain ineligible. | `validate_nlf_configuration`, `test_07_configuration_integrity` (CFG-R11-01..07) | **PASS (6/6)** |
+| **Group R11-B: Serialization** | `R11-B01` to `R11-B04` | Signed JSON integer boundary enforced (`MAX_NLF_MEMORY_MIB = 8796093022207`), original $2^{43}$ MiB reproducer rejected with exit 1, largest supported limit serialized correctly, default 256 MiB and original overflow fixes preserved. | `nlf_index.h`, `main.cpp`, `test_08_memory_safety_and_cli_guards` (MEM-R11-01..07) | **PASS (4/4)** |
+| **Group R11-C: Transactions** | `R11-C01` to `R11-C09` | Partial INSERT regression restored (`AFTER_FIRST_NLF_CELL`), partial DELETE regression preserved, `AFTER_NLF_PREPARE` tested for INSERT and DELETE, `AFTER_GRAPH_BEFORE_NLF` tested for INSERT and DELETE, forward/reverse graph fault tested with NLF, allocation-failure mutation paths verified with NLF, actual M2 work-budget exhaustion verified with NLF, typed-label abort and dense-ID stability verified, full-cell restoration and recovery verified. | `p4b_tests.cpp` `test_transactions_and_fault_injection` | **PASS (9/9)** |
+| **Group R11-D: Generated Reconstruction** | `R11-D01` to `R11-D04` | Bounded deterministic generated-stream suite (6 streams across seeds 1, 7, 42), mixed-signature and relevant/irrelevant update coverage, full-cell reconstruction after committed (120) and aborted (12) updates (144 full-cell checks), zero unexplained reconstruction discrepancies. | `p4b_tests.cpp` `test_bounded_generated_stream_reconstruction` | **PASS (4/4)** |
+| **Group R11-E: Final Evidence** | `R11-E01` to `R11-E09` | Exact original 110 acceptance IDs reconciled, exact original 78 R1 closure IDs reconciled, frozen baseline scope and reproducibility corrected, sanitizer and test limitations disclosed accurately, canonical correctness and final regression completed, historical 7/7 artifacts and upstream preserved, exact final code/binary provenance and clean diff, final commit pushed with Issue OPEN and PR DRAFT, no future-phase implementation with independent review stop. | `docs/rapidflow_apx_p4b_1a_acceptance_matrix.md`, test suites, git checks | **PASS (9/9)** |
+
+**Total R1.1 Final Closure Gates Checked & Passed:** **32 / 32 (100%)**
+
+---
+
+## 9. Frozen Baseline Conformance Statement
 
 1. **Bare M2 Preservation**:
    - When `nlf_mode == NONE`, the event engine executes the pristine Bare M2 search path without evaluating NLF deficits, without signature lookups, and without updating NLF candidate counters.
-   - All 25 hand cases, 840 corpus cases, and 56 dynamic stream matrices produce identical event orderings and identical Bare M2 baseline counters against the frozen baseline `be136f3`.
+   - All 25 hand cases and 56 dynamic stream matrices (672 updates) produce identical event orderings and identical Bare M2 baseline counters against the frozen baseline `be136f3`.
+   - The full 840-case dynamic corpus is verified against the authoritative M0 Oracle in canonical regression.
 2. **Upstream Submodule Invariance**:
    - Pinned upstream submodule `baselines/rapidflow/source` remains pristine at commit `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` (`upstream_pristine: True`).
    - No modifications have been made to third-party code.
@@ -297,10 +314,15 @@ The native verification suite (`p4b_tests.cpp`) explicitly evaluates the counter
 
 ---
 
-## 9. Handoff & Stop Condition Statement
+## 10. Handoff & Stop Condition Statement
 
-Phase P4b-1A implementation hardening patch R1 is fully concluded. In strict adherence to `AGENTS.md` and repository policy:
-- Implementation is complete and validated across all 110 acceptance gates and all 78 R1 closure gates.
-- Work is restricted to the feature branch `feature/rf38-p4b-optimization`.
-- Execution stops at the **Independent Implementation Review Gate**.
-- Draft PR #39 remains in `DRAFT` status awaiting independent reviewer inspection. No merge will be attempted.
+Phase P4b-1A Final Implementation Closure Patch R1.1 is fully concluded.
+- Proposed Final Verdict: **`P4B_1A_FINAL_CLOSURE_READY_FOR_INDEPENDENT_ACCEPTANCE`**
+- All 7 R1.1 closure findings (`R11-F01` through `R11-F07`) are fully resolved.
+- All 110 original acceptance gates, 78 R1 closure gates, and 32 R1.1 closure gates (220 total gates) are mapped and verified in `docs/rapidflow_apx_p4b_1a_acceptance_matrix.md`.
+- No further optimization families, residual NLF, Option B, or benchmark extensions have been introduced.
+- In strict adherence to repository governance and branch policy v2:
+  - Work is restricted to the feature branch `feature/rf38-p4b-optimization`.
+  - Only permitted push command `bash scripts/push_issue_branch.sh` is used.
+  - Execution stops at the **Independent Implementation Review Gate**.
+  - Draft PR #39 remains in `DRAFT` status awaiting independent reviewer inspection. No merge will be attempted.
