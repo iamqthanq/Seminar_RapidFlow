@@ -44,3 +44,8 @@ option(APX_RESIDUAL_TEST_TRACE "Compile bounded residual DFS verification hooks"
 if(APX_RESIDUAL_TEST_TRACE)
     target_compile_definitions(rapidflow_apx_foundation PUBLIC APX_RESIDUAL_TEST_TRACE)
 endif()
+
+option(APX_NEIGHBOR_TEST_TRACE "Compile bounded neighbor-buffer trace and fault hooks" OFF)
+if(APX_NEIGHBOR_TEST_TRACE)
+    target_compile_definitions(rapidflow_apx_foundation PUBLIC APX_NEIGHBOR_TEST_TRACE)
+endif()

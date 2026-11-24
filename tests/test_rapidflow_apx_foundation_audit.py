@@ -14,7 +14,8 @@ from scripts import run_rapidflow_apx_engines as runner
 
 
 FIXTURES = runner.REPO_ROOT / "tests/fixtures/rapidflow_apx_foundation_audit"
-MODES = (("m1", "none"), ("m2", "none"), ("m2", "static"), ("m2", "residual"))
+MODES = (("m1", "none", "legacy"), ("m2", "none", "legacy"), ("m2", "static", "legacy"),
+         ("m2", "residual", "legacy"), ("m2", "none", "buffer"))
 
 
 def vertex(id_, label):
@@ -78,12 +79,12 @@ class FoundationAuditRemediation(unittest.TestCase):
             raise RuntimeError(f"Native build failed: {build}")
         cls.evidence_dir = os.environ.get("APX_FAR_EVIDENCE_DIR")
 
-    def native(self, workload, engine, mode, *args, output_device=None):
+    def native(self, workload, engine, mode, *args, output_device=None, neighbor="legacy"):
         raw = workload if isinstance(workload, bytes) else json.dumps(workload).encode()
         with tempfile.TemporaryDirectory() as d:
             path, out = Path(d) / "input.json", Path(d) / "output.json"
             path.write_bytes(raw)
-            cmd = [str(self.binary), "--engine", engine, "--nlf-mode", mode,
+            cmd = [str(self.binary), "--engine", engine, "--nlf-mode", mode, "--neighbor-mode", neighbor,
                    "--workload", str(path), "--output", str(output_device or out), *args]
             timing = Path(d) / "time"
             proc = subprocess.run(
@@ -116,11 +117,12 @@ class FoundationAuditRemediation(unittest.TestCase):
             ))
             self.assertEqual([sorted(map(list, delta.entered)), sorted(map(list, delta.exited))],
                              oracle_expected[index])
-        for engine, mode in MODES:
-            with self.subTest(engine=engine, mode=mode):
-                proc, res = self.native(raw, engine, mode)
+        for engine, mode, neighbor in MODES:
+            with self.subTest(engine=engine, mode=mode, neighbor=neighbor):
+                proc, res = self.native(raw, engine, mode, neighbor=neighbor)
                 self.assertEqual(proc.returncode, 0, (proc.stderr, res))
                 self.assertEqual(res["effective_nlf_mode"], mode)
+                self.assertEqual(res["effective_neighbor_mode"], neighbor)
                 self.assertEqual(
                     [[sorted(step["entered_tuples"]), sorted(step["exited_tuples"])] for step in res["steps"]],
                     oracle_expected,
@@ -203,9 +205,9 @@ class FoundationAuditRemediation(unittest.TestCase):
         self.assertGreater(start, 0)
         for invalid in (b'"\\ud800"', b'"\\uZZZZ"', b'"\xed\xa0\x80"', b'"a\x00b"'):
             inp = raw[:start] + raw[start:].replace(b'"label": 0', b'"label": ' + invalid, 1)
-            for engine, mode in MODES:
-                with self.subTest(invalid=invalid, engine=engine, mode=mode):
-                    proc, result = self.native(inp, engine, mode, "--continue-on-error")
+            for engine, mode, neighbor in MODES:
+                with self.subTest(invalid=invalid, engine=engine, mode=mode, neighbor=neighbor):
+                    proc, result = self.native(inp, engine, mode, "--continue-on-error", neighbor=neighbor)
                     self.assertEqual(proc.returncode, 2)
                     self.assertEqual(result["error_category"], "INPUT_SCHEMA_ERROR")
                     self.assertFalse(result["configuration_initialized"])
@@ -221,14 +223,14 @@ class FoundationAuditRemediation(unittest.TestCase):
             "REPORT_GRAPH_DIAGNOSTICS": "GRAPH_DIAGNOSTICS",
             "REPORT_APPEND_STEP": "APPEND_STEP",
         }
-        for engine, mode in MODES:
+        for engine, mode, neighbor in MODES:
             for op in ("+", "-"):
                 for fault in (*precommit, *reporting):
-                    with self.subTest(engine=engine, mode=mode, op=op, fault=fault):
+                    with self.subTest(engine=engine, mode=mode, neighbor=neighbor, op=op, fault=fault):
                         workload = {**base, "initial_graph": {**base["initial_graph"], "edges": (
                             [edge(0, 1, 0)] if op == "-" else []
                         )}, "updates": [update(op, 0, 1, 0, fault=fault), update(op, 0, 1, 0)]}
-                        proc, result = self.native(workload, engine, mode, "--continue-on-error")
+                        proc, result = self.native(workload, engine, mode, "--continue-on-error", neighbor=neighbor)
                         first, second = result["steps"]
                         if fault in precommit:
                             self.assertEqual(proc.returncode, 6)
@@ -265,12 +267,12 @@ class FoundationAuditRemediation(unittest.TestCase):
 
     def test_original_postcommit_witness_and_output_write_failure(self):
         w = json.loads((FIXTURES / "diagnostics-after-commit.json").read_bytes())
-        for engine, mode in MODES:
-            with self.subTest(engine=engine, mode=mode):
+        for engine, mode, neighbor in MODES:
+            with self.subTest(engine=engine, mode=mode, neighbor=neighbor):
                 injected = {**w, "updates": [
                     {**w["updates"][0], "fault": "REPORT_GRAPH_DIAGNOSTICS"}, *w["updates"][1:],
                 ]}
-                proc, result = self.native(injected, engine, mode, "--continue-on-error")
+                proc, result = self.native(injected, engine, mode, "--continue-on-error", neighbor=neighbor)
                 self.assertEqual(proc.returncode, 9)
                 self.assertEqual([s["status"] for s in result["steps"]],
                                  ["DELIVERY_FAILED", "UNATTEMPTED", "UNATTEMPTED"])
@@ -292,10 +294,10 @@ class FoundationAuditRemediation(unittest.TestCase):
             (base["updates"][0], "PREVALIDATION_ERROR", 6),
             ({"op": {}, "u": 0, "v": 1, "label": 0}, "INPUT_SCHEMA_ERROR", 2),
         ):
-            for engine, mode in MODES:
+            for engine, mode, neighbor in MODES:
                 for workload in ({**base, "updates": [first, *suffix]}, *([raw] if code == 6 else [])):
-                    with self.subTest(category=category, engine=engine, mode=mode):
-                        proc, result = self.native(workload, engine, mode)
+                    with self.subTest(category=category, engine=engine, mode=mode, neighbor=neighbor):
+                        proc, result = self.native(workload, engine, mode, neighbor=neighbor)
                         self.assertEqual(proc.returncode, code)
                         self.assertEqual(result["error_category"], category)
                         self.assertEqual(result["first_failing_step_index"], 0)
@@ -317,9 +319,9 @@ class FoundationAuditRemediation(unittest.TestCase):
                             self.assertNotIn("op", result["steps"][3])
                             self.assertNotIn("op", result["steps"][4])
                             self.assertEqual(result["steps"][-1]["op"], "+")
-        for engine, mode in MODES:
+        for engine, mode, neighbor in MODES:
             proc, result = self.native({**base, "updates": [False, update("+", 0, 1, 0)]},
-                                       engine, mode, "--continue-on-error")
+                                       engine, mode, "--continue-on-error", neighbor=neighbor)
             self.assertEqual(proc.returncode, 2)
             self.assertEqual(result["error_category"], "INPUT_SCHEMA_ERROR")
             self.assertEqual([s["status"] for s in result["steps"]], ["ERROR", "SUCCESS"])

@@ -59,6 +59,10 @@ public:
     bool has_edge(uint32_t u, uint32_t v) const;
     EdgeLookupResult get_edge_label(uint32_t u, uint32_t v) const;
     std::vector<uint32_t> get_neighbors(uint32_t u) const;
+
+    // Replace out with the sorted unique effective neighbor IDs, retaining
+    // its capacity. On allocation failure the partial output must be discarded.
+    void get_neighbors_into(uint32_t u, std::vector<uint32_t>& out) const;
     uint32_t get_degree(uint32_t u) const;
     uint32_t get_vertices_count() const;
     uint32_t get_edges_count() const;

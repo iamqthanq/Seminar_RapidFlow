@@ -68,6 +68,18 @@ bool residual_candidate_allows(
 #define APX_TRACE_RESIDUAL(point, count, edge, q, d, allowed) ((void)0)
 #endif
 
+#ifdef APX_NEIGHBOR_TEST_TRACE
+#define APX_TRACE_NEIGHBOR(point, d, a, m, edge, candidate, neighbors, before) \
+    do { \
+        if (neighbor_observer_) { \
+            neighbor_observer_({NeighborTracePoint::point, d, a, m, edge, candidate, mapping, status, \
+                                neighbors, before, pool ? pool->size() : 0}); \
+        } \
+    } while (false)
+#else
+#define APX_TRACE_NEIGHBOR(point, d, a, m, edge, candidate, neighbors, before) ((void)0)
+#endif
+
 int ApxM2EventEngine::find_frontier_edge(
     const std::vector<uint32_t>& mapping,
     const std::vector<EdgeCommitment>& status,
@@ -117,8 +129,12 @@ uint64_t ApxM2EventEngine::search_event(
     StepProfiling* profiler,
     NlfMode nlf_mode,
     const ApxNlfIndex* nlf_index,
-    const ApxQuerySignatures* signatures
+    const ApxQuerySignatures* signatures,
+    NeighborMode neighbor_mode
 ) {
+    if (neighbor_mode == NeighborMode::BUFFER && nlf_mode != NlfMode::NONE) {
+        throw EngineException("Neighbor BUFFER requires NLF NONE");
+    }
     uint32_t num_q = query_plan.get_vertices_count();
     uint32_t num_m = query_plan.get_edges_count();
     uint32_t num_d = snapshot.get_vertices_count();
@@ -142,6 +158,12 @@ uint64_t ApxM2EventEngine::search_event(
         residual_storage.emplace(query_plan, *signatures);
     }
     auto* residual = residual_storage ? &*residual_storage : nullptr;
+    std::optional<ApxNeighborBufferPool> pool_storage;
+    ApxNeighborBufferPool* pool = nullptr;
+    if (neighbor_mode == NeighborMode::BUFFER) {
+        APX_TRACE_NEIGHBOR(BEFORE_POOL, 0, 0, 0, UNASSIGNED, UNASSIGNED, nullptr, 0);
+        pool = &pool_storage.emplace(num_q, query_plan.get_k());
+    }
     uint64_t initial_emissions = sink.raw_emissions();
 
     for (uint32_t edge_idx : candidate_edges) {
@@ -195,6 +217,7 @@ uint64_t ApxM2EventEngine::search_event(
             used_data[pb] = true;
             status[edge_idx] = EdgeCommitment::PRESENT;
             APX_TRACE_RESIDUAL(ANCHOR, 0, edge_idx, qa, pa, true);
+            APX_TRACE_NEIGHBOR(ANCHOR, 0, 2, 0, edge_idx, pa, nullptr, 0);
 
             dfs_m2(
                 mapping,
@@ -210,7 +233,9 @@ uint64_t ApxM2EventEngine::search_event(
                 nlf_mode,
                 nlf_index,
                 signatures,
-                residual
+                residual,
+                pool,
+                0
             );
 
             // Undo anchor state
@@ -220,6 +245,7 @@ uint64_t ApxM2EventEngine::search_event(
             mapping[qa] = UNASSIGNED;
             mapping[qb] = UNASSIGNED;
             APX_TRACE_RESIDUAL(ANCHOR_RESTORED, 0, edge_idx, qa, pa, true);
+            APX_TRACE_NEIGHBOR(ANCHOR_END, 0, 0, 0, edge_idx, pa, nullptr, 0);
         }
     }
 
@@ -240,8 +266,12 @@ void ApxM2EventEngine::dfs_m2(
     NlfMode nlf_mode,
     const ApxNlfIndex* nlf_index,
     const ApxQuerySignatures* signatures,
-    ApxResidualMissingState* residual
+    ApxResidualMissingState* residual,
+    ApxNeighborBufferPool* pool,
+    size_t depth
 ) {
+    auto* slot = pool ? &pool->at(depth) : nullptr;
+    APX_TRACE_NEIGHBOR(DFS, depth, assigned_count, missing_count, UNASSIGNED, UNASSIGNED, slot, 0);
     APX_TRACE_RESIDUAL(DFS_ENTRY, missing_count, UNASSIGNED, UNASSIGNED, UNASSIGNED, true);
     counters.dfs_states++;
     uint32_t k = query_plan.get_k();
@@ -280,6 +310,7 @@ void ApxM2EventEngine::dfs_m2(
         if (missing_count == k) {
             sink.emit_mapping(mapping);
             counters.raw_emissions++;
+            APX_TRACE_NEIGHBOR(EMIT, depth, assigned_count, missing_count, UNASSIGNED, UNASSIGNED, nullptr, 0);
         }
         return;
     }
@@ -302,16 +333,35 @@ void ApxM2EventEngine::dfs_m2(
 
     // --- PRESENT Branch ---
     std::vector<uint32_t> cand_storage;
+    const size_t capacity_before = slot ? slot->capacity() : 0;
+    APX_TRACE_NEIGHBOR(BEFORE_FILL, depth, assigned_count, missing_count, e, u_data, slot, capacity_before);
+    auto retrieve = [&] {
+        if (slot) {
+            snapshot.get_neighbors_into(u_data, *slot);
+        } else {
+            cand_storage = snapshot.get_neighbors(u_data);
+        }
+    };
     if (profiler) {
         auto t0 = ProfilingClock::now();
-        cand_storage = snapshot.get_neighbors(u_data);
+        retrieve();
         auto t1 = ProfilingClock::now();
         profiler->neighbor_retrieval_ns += std::chrono::duration_cast<ProfilingNanoseconds>(t1 - t0).count();
     } else {
-        cand_storage = snapshot.get_neighbors(u_data);
+        retrieve();
     }
-    const auto& candidates = cand_storage;
+    if (slot) {
+        ++counters.neighbor_buffer_retrieval_calls;
+        if (slot->capacity() > capacity_before) {
+            ++counters.neighbor_buffer_growth_calls;
+        } else {
+            ++counters.neighbor_buffer_no_growth_calls;
+        }
+    }
+    const auto& candidates = slot ? *slot : cand_storage;
+    APX_TRACE_NEIGHBOR(FILLED, depth, assigned_count, missing_count, e, u_data, &candidates, capacity_before);
     for (uint32_t cand : candidates) {
+        APX_TRACE_NEIGHBOR(CANDIDATE, depth, assigned_count, missing_count, e, cand, nullptr, 0);
         counters.candidate_evaluations++;
         counters.charge_work();
 
@@ -348,6 +398,7 @@ void ApxM2EventEngine::dfs_m2(
         }
 
         counters.candidate_extensions++;
+        APX_TRACE_NEIGHBOR(EXTEND, depth, assigned_count, missing_count, e, cand, nullptr, 0);
 
         // Tentatively assign v_q -> cand
         mapping[v_q] = cand;
@@ -411,6 +462,7 @@ void ApxM2EventEngine::dfs_m2(
 
         APX_TRACE_RESIDUAL(RESOLVED_INCIDENT, missing_count, e, v_q, cand, ok);
         if (ok) {
+            APX_TRACE_NEIGHBOR(PRESENT_DESCEND, depth, assigned_count, missing_count, e, cand, &candidates, 0);
             dfs_m2(
                 mapping,
                 used_data,
@@ -425,8 +477,11 @@ void ApxM2EventEngine::dfs_m2(
                 nlf_mode,
                 nlf_index,
                 signatures,
-                residual
+                residual,
+                pool,
+                depth + 1
             );
+            APX_TRACE_NEIGHBOR(PRESENT_RETURN, depth, assigned_count, missing_count, e, cand, &candidates, 0);
             APX_TRACE_RESIDUAL(CHILD_RETURN, missing_count, e, v_q, cand, true);
         }
 
@@ -463,7 +518,8 @@ void ApxM2EventEngine::dfs_m2(
     }
 
     if (new_missing_count <= k) {
-        // Defer vertex assignment: mapping and assigned_count remain unchanged
+        // Defer vertex assignment: mapping and assigned_count remain unchanged.
+        APX_TRACE_NEIGHBOR(MISSING_DESCEND, depth, assigned_count, missing_count, e, UNASSIGNED, &candidates, 0);
         dfs_m2(
             mapping,
             used_data,
@@ -478,8 +534,11 @@ void ApxM2EventEngine::dfs_m2(
             nlf_mode,
             nlf_index,
             signatures,
-            residual
+            residual,
+            pool,
+            depth + 1
         );
+        APX_TRACE_NEIGHBOR(MISSING_RETURN, depth, assigned_count, new_missing_count, e, UNASSIGNED, &candidates, 0);
     }
 
     // Rollback MISSING branch. Its global count was local to the child.
@@ -491,6 +550,7 @@ void ApxM2EventEngine::dfs_m2(
     APX_TRACE_RESIDUAL(DEFERRED_RESTORED, missing_count, e, v_q, UNASSIGNED, true);
 }
 
+#undef APX_TRACE_NEIGHBOR
 #undef APX_TRACE_RESIDUAL
 
 } // namespace rapidflow_apx

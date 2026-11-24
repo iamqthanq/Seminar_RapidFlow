@@ -3,7 +3,7 @@
 
 #include <cstdint>
 #include <vector>
-#ifdef APX_RESIDUAL_TEST_TRACE
+#if defined(APX_RESIDUAL_TEST_TRACE) || defined(APX_NEIGHBOR_TEST_TRACE)
 #include <functional>
 #endif
 #include "rapidflow_apx/query_plan.h"
@@ -13,6 +13,7 @@
 #include "rapidflow_apx/profiler.h"
 #include "rapidflow_apx/nlf_signatures.h"
 #include "rapidflow_apx/nlf_index.h"
+#include "rapidflow_apx/neighbor_buffer_pool.h"
 
 namespace rapidflow_apx {
 
@@ -56,6 +57,28 @@ struct ResidualTrace {
 };
 #endif
 
+#ifdef APX_NEIGHBOR_TEST_TRACE
+enum class NeighborTracePoint {
+    BEFORE_POOL, ANCHOR, DFS, BEFORE_FILL, FILLED, CANDIDATE, EXTEND, PRESENT_DESCEND,
+    PRESENT_RETURN, MISSING_DESCEND, MISSING_RETURN, EMIT, ANCHOR_END
+};
+
+// Views are valid only during the synchronous observer call.
+struct NeighborTrace {
+    NeighborTracePoint point;
+    size_t depth;
+    uint32_t assigned_count;
+    uint32_t missing_count;
+    uint32_t edge;
+    uint32_t candidate;
+    const std::vector<uint32_t>& mapping;
+    const std::vector<EdgeCommitment>& status;
+    const std::vector<uint32_t>* neighbors;
+    size_t previous_capacity;
+    size_t pool_frames;
+};
+#endif
+
 class ApxM2EventEngine {
 public:
     static constexpr uint32_t UNASSIGNED = 0xFFFFFFFF;
@@ -69,6 +92,11 @@ public:
 #ifdef APX_RESIDUAL_TEST_TRACE
     using ResidualObserver = std::function<void(const ResidualTrace&)>;
     void set_residual_observer(ResidualObserver observer) { residual_observer_ = std::move(observer); }
+#endif
+
+#ifdef APX_NEIGHBOR_TEST_TRACE
+    using NeighborObserver = std::function<void(const NeighborTrace&)>;
+    void set_neighbor_observer(NeighborObserver observer) { neighbor_observer_ = std::move(observer); }
 #endif
 
     // Helper used by dfs_m2 to find the best frontier edge across the cut.
@@ -95,13 +123,18 @@ public:
         StepProfiling* profiler = nullptr,
         NlfMode nlf_mode = NlfMode::NONE,
         const ApxNlfIndex* nlf_index = nullptr,
-        const ApxQuerySignatures* signatures = nullptr
+        const ApxQuerySignatures* signatures = nullptr,
+        NeighborMode neighbor_mode = NeighborMode::LEGACY
     );
 
 private:
     M2FaultHook fault_hook_{M2FaultHook::NONE};
 #ifdef APX_RESIDUAL_TEST_TRACE
     ResidualObserver residual_observer_;
+#endif
+
+#ifdef APX_NEIGHBOR_TEST_TRACE
+    NeighborObserver neighbor_observer_;
 #endif
 
     void dfs_m2(
@@ -118,7 +151,9 @@ private:
         NlfMode nlf_mode,
         const ApxNlfIndex* nlf_index,
         const ApxQuerySignatures* signatures,
-        ApxResidualMissingState* residual
+        ApxResidualMissingState* residual,
+        ApxNeighborBufferPool* pool,
+        size_t depth
     );
 };
 

@@ -919,6 +919,28 @@ def validate_residual_counters(counters: Dict[str, Any], mode: str, completed: b
     return ""
 
 
+NEIGHBOR_COUNTER_FIELDS = (
+    "neighbor_buffer_retrieval_calls", "neighbor_buffer_growth_calls",
+    "neighbor_buffer_no_growth_calls",
+)
+
+
+def validate_neighbor_counters(counters: Dict[str, Any], result: Dict[str, Any]) -> str:
+    if ("neighbor_configuration_version" not in result
+            and not any(field in counters for field in NEIGHBOR_COUNTER_FIELDS)):
+        return ""
+    for field in NEIGHBOR_COUNTER_FIELDS:
+        value = counters.get(field)
+        if type(value) is not int or not 0 <= value <= 500000000000000:
+            return f"Invalid neighbor counter {field}: {value!r}"
+        if result.get("effective_neighbor_mode") != "buffer" and value:
+            return f"Nonzero buffer counter {field} outside effective buffer mode"
+    completed, growth, no_growth = (counters[field] for field in NEIGHBOR_COUNTER_FIELDS)
+    if completed != growth + no_growth:
+        return "Completed buffer retrievals differ from growth plus no-growth calls"
+    return ""
+
+
 def validate_native_output_schema(
     res_data: Dict[str, Any],
     expected_engine: str,
@@ -1177,6 +1199,9 @@ def validate_native_output_schema(
             residual_error = validate_residual_counters(sc, res_data.get("effective_nlf_mode"), step_stat == "SUCCESS")
             if residual_error:
                 return False, f"Step {s_idx}: {residual_error}"
+            neighbor_error = validate_neighbor_counters(sc, res_data)
+            if neighbor_error:
+                return False, f"Step {s_idx}: {neighbor_error}"
 
             if step_stat == "SUCCESS":
                 exp_step_tuples = len(step.get("entered_tuples", [])) + len(step.get("exited_tuples", []))
@@ -1446,6 +1471,9 @@ def validate_native_output_schema(
         residual_error = validate_residual_counters(cnt, res_data.get("effective_nlf_mode"), is_success)
         if residual_error:
             return False, residual_error
+        neighbor_error = validate_neighbor_counters(cnt, res_data)
+        if neighbor_error:
+            return False, neighbor_error
         mandatory_root_fields = [
             "raw_emissions", "unique_emissions", "committed_emissions", "discarded_emissions",
             "work_units", "max_work", "anchors_started", "dfs_states",
@@ -1491,7 +1519,7 @@ def validate_native_output_schema(
         elif expected_engine == "m2":
             reconciliation_fields.extend(["edge_decisions", "missing_branches", "commitment_checks", "commitment_rejections"])
 
-        reconciliation_fields.extend(field for field in RESIDUAL_COUNTER_FIELDS if field in cnt)
+        reconciliation_fields.extend(field for field in RESIDUAL_COUNTER_FIELDS + NEIGHBOR_COUNTER_FIELDS if field in cnt)
         for rf in reconciliation_fields:
             step_sum = sum(s.get("step_counters", {}).get(rf, 0) for s in steps if s.get("status") != "UNATTEMPTED" and "step_counters" in s)
             if cnt[rf] != step_sum:
@@ -1518,13 +1546,19 @@ def validate_nlf_configuration(
     requested_nlf_mode: str,
     native_result: Dict[str, Any],
     is_success_run: bool,
+    requested_neighbor_mode: Optional[str] = None,
 ) -> Tuple[bool, str, Dict[str, Any]]:
-    """Validate initialized NLF identity independently of the outcome of the updates."""
+    """Validate actual configuration, including on initialized failures.
+
+    A live runner always supplies the requested neighbor mode. Historical
+    validation callers may omit it for pre-P4b-2A records.
+    """
     fields = (
         "requested_nlf_mode", "effective_nlf_mode", "configuration_status",
         "nlf_memory_limit_bytes", "nlf_index_logical_bytes",
     )
-    metadata = (*fields, "fallback_reason")
+    neighbor_fields = ("requested_neighbor_mode", "effective_neighbor_mode")
+    metadata = (*fields, "fallback_reason", *neighbor_fields)
     meta_info: Dict[str, Any] = {
         "configuration_valid": True,
         "eligible_for_requested_variant": False,
@@ -1543,6 +1577,10 @@ def validate_nlf_configuration(
     marker = native_result.get("configuration_initialized")
     if "configuration_initialized" in native_result and type(marker) is not bool:
         return reject("configuration_initialized must be a boolean")
+
+    version = native_result.get("neighbor_configuration_version")
+    if "neighbor_configuration_version" in native_result and (type(version) is not int or version != 1):
+        return reject("Unknown neighbor configuration version")
 
     # Require a startup failure category and zero execution evidence before
     # accepting the absence of configuration metadata. Initialized failures
@@ -1583,6 +1621,24 @@ def validate_nlf_configuration(
         return reject(f"Requested mode mismatch: runner requested '{requested_nlf_mode}', native reported '{native_req}'")
     if requested_engine == "m1" and (native_req != "none" or native_eff != "none"):
         return reject("NLF optimization is unsupported for M1")
+    if requested_neighbor_mode is not None or version is not None or any(
+        field in native_result for field in neighbor_fields
+    ):
+        if version != 1 or marker is not True:
+            return reject("Missing initialized current neighbor configuration identity")
+        if native_result.get("engine") != requested_engine or native_result.get("engine_name") != requested_engine:
+            return reject("Engine identity mismatch in initialized configuration")
+        asked, effective = (native_result.get(field) for field in neighbor_fields)
+        if asked not in ("legacy", "buffer") or effective not in ("legacy", "buffer"):
+            return reject("Missing or unknown requested/effective neighbor mode")
+        if requested_neighbor_mode is not None and asked != requested_neighbor_mode:
+            return reject(f"Requested neighbor mode mismatch: runner requested {requested_neighbor_mode!r}, native reported {asked!r}")
+        if effective != asked:
+            return reject(f"Neighbor mode {asked!r} requires effective {asked!r}, got {effective!r}")
+        if effective == "buffer" and (requested_engine != "m2" or native_req != "none" or native_eff != "none"):
+            return reject("Neighbor buffer mode requires M2 with NLF NONE")
+        meta_info.update(requested_neighbor_mode=asked, effective_neighbor_mode=effective)
+
     if fallback is not None and not isinstance(fallback, str):
         return reject("fallback_reason must be a string when present")
 
@@ -1626,6 +1682,7 @@ def run_workload_on_binary(
     timeout: int = 30,
     address_space_mib: int = 512,
     nlf_mode: str = "none",
+    neighbor_mode: str = "legacy",
 ) -> Tuple[Dict[str, Any], float, bool]:
     """Runs a single workload JSON through rapidflow_apx_native with micro-containment and strict schema validation."""
     # Preflight micro-workload containment check (P3-R3-F08)
@@ -1654,6 +1711,8 @@ def run_workload_on_binary(
             cmd.extend(["--max-work", str(max_work)])
         if nlf_mode != "none":
             cmd.extend(["--nlf-mode", nlf_mode])
+        if neighbor_mode != "legacy":
+            cmd.extend(["--neighbor-mode", neighbor_mode])
 
         t0 = time.perf_counter()
         ret, out, err, timed_out = execute_contained_subprocess(
@@ -1714,6 +1773,7 @@ def run_workload_on_binary(
             requested_nlf_mode=nlf_mode,
             native_result=res_data,
             is_success_run=is_success_run,
+            requested_neighbor_mode=neighbor_mode,
         )
         res_data["configuration_valid"] = config_ok
         if not schema_ok or not config_ok:
@@ -2236,6 +2296,7 @@ def run_hand_and_witness_cases(
     engine_filter: str = "all",
     case_filter: Optional[str] = None,
     nlf_mode: str = "none",
+    neighbor_mode: str = "legacy",
 ) -> Tuple[List[Dict[str, Any]], bool]:
     """Executes hand and adversarial cases on selected engine(s), strictly verifying against M0 Oracle and negative contract."""
     all_workloads = build_hand_workloads()
@@ -2312,7 +2373,7 @@ def run_hand_and_witness_cases(
         if run_m1:
             res_m1, dur_m1, ok_m1 = run_workload_on_binary(binary_path, "m1", w)
         if run_m2:
-            res_m2, dur_m2, ok_m2 = run_workload_on_binary(binary_path, "m2", w, nlf_mode=nlf_mode)
+            res_m2, dur_m2, ok_m2 = run_workload_on_binary(binary_path, "m2", w, nlf_mode=nlf_mode, neighbor_mode=neighbor_mode)
 
         case_ok = True
         diag = ""
@@ -2571,6 +2632,7 @@ def run_corpus_840(
     engine_filter: str = "all",
     case_filter: Optional[str] = None,
     nlf_mode: str = "none",
+    neighbor_mode: str = "legacy",
 ) -> Tuple[Dict[str, Any], bool]:
     """Runs corpus cases on selected engine(s), locking fixture SHA-256 and recomputing M0 Oracle."""
     # Verify input fixture hashes before reading (P3-R2-F08)
@@ -2680,7 +2742,7 @@ def run_corpus_840(
 
                 # Execute Native M2 if selected
                 if run_m2:
-                    res_m2, _, ok_m2 = run_workload_on_binary(binary_path, "m2", workload, nlf_mode=nlf_mode)
+                    res_m2, _, ok_m2 = run_workload_on_binary(binary_path, "m2", workload, nlf_mode=nlf_mode, neighbor_mode=neighbor_mode)
                     if ok_m2 and res_m2.get("schema_valid", False):
                         s0 = res_m2["steps"][0]
                         if sorted(s0.get("entered_tuples", [])) == exp_ent and sorted(s0.get("exited_tuples", [])) == exp_ext:
@@ -2815,6 +2877,7 @@ def run_56_stream_matrix(
     engine_filter: str = "all",
     case_filter: Optional[str] = None,
     nlf_mode: str = "none",
+    neighbor_mode: str = "legacy",
 ) -> Tuple[Dict[str, Any], bool]:
     """Runs 56-stream matrix, verifying immutable workload locks, active-set reconstruction, deep graph state, codec, and counters."""
     v_ok, v_diag = validate_stream_lock_registry(STREAM_56_LOCK_PATH)
@@ -2983,7 +3046,7 @@ def run_56_stream_matrix(
             if run_m1:
                 res_m1, _, ok_m1 = run_workload_on_binary(binary_path, "m1", workload)
             if run_m2:
-                res_m2, _, ok_m2 = run_workload_on_binary(binary_path, "m2", workload, nlf_mode=nlf_mode)
+                res_m2, _, ok_m2 = run_workload_on_binary(binary_path, "m2", workload, nlf_mode=nlf_mode, neighbor_mode=neighbor_mode)
 
             if not ok_m1 or not ok_m2 or (run_m1 and not res_m1.get("schema_valid", False)) or (run_m2 and not res_m2.get("schema_valid", False)):
                 stats["status"] = "FAIL"
@@ -3199,13 +3262,28 @@ def main():
     parser.add_argument("--stage", choices=["provenance", "hand", "corpus", "stream", "all"], default="all", help="Target execution stage")
     parser.add_argument("--case", type=str, default=None, help="Diagnostic single case ID to run")
     parser.add_argument("--nlf-mode", choices=["none", "static", "residual"], default="none", help="NLF optimization mode (default: none)")
+    parser.add_argument("--neighbor-mode", choices=["legacy", "buffer"], default="legacy",
+                        help="M2 neighbor storage mode (default: legacy)")
     parser.add_argument("--output", type=str, default=None, help="Output summary report path")
     args = parser.parse_args()
 
     # Single engine or specific case or specific stage or NLF mode is diagnostic run (P3-R2-F03)
-    is_diagnostic = (args.case is not None or args.stage != "all" or args.engine != "all" or args.nlf_mode != "none")
+    is_diagnostic = (args.case is not None or args.stage != "all" or args.engine != "all"
+                     or args.nlf_mode != "none" or args.neighbor_mode != "legacy")
     output_path = Path(args.output) if args.output else (DIAGNOSTIC_SUMMARY_PATH if is_diagnostic else CANONICAL_SUMMARY_PATH)
     output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if args.neighbor_mode == "buffer" and (args.engine != "m2" or args.nlf_mode != "none"):
+        message = "Neighbor buffer mode requires --engine m2 --nlf-mode none"
+        print(f"ERROR: {message}", file=sys.stderr)
+        atomic_write_json(output_path, {
+            "runner_mode": "DIAGNOSTIC_SUBSET_RUN",
+            "overall_status": "UNSUPPORTED_CONFIGURATION",
+            "error_category": "CONFIGURATION_ERROR",
+            "error_message": message,
+            "stages": {},
+        })
+        sys.exit(1)
 
     # Reject unsupported or ambiguous M1 / all engine combinations with NLF mode (P4B-1A-F01)
     if args.engine == "m1" and args.nlf_mode != "none":
@@ -3354,6 +3432,7 @@ def main():
         "selected_stage": args.stage,
         "selected_case": args.case,
         "selected_nlf_mode": args.nlf_mode,
+        "selected_neighbor_mode": args.neighbor_mode,
         "provenance": provenance,
         "system_resources": res_info,
         "build_provenance": build_info,
@@ -3377,7 +3456,7 @@ def main():
     if "hand" in target_stages:
         print(f"[4/5] Executing Hand and Adversarial Witness Cases (engine: {args.engine}, nlf_mode: {args.nlf_mode})...")
         hand_results, hand_ok = run_hand_and_witness_cases(
-            bin_path, engine_filter=args.engine, case_filter=args.case, nlf_mode=args.nlf_mode
+            bin_path, engine_filter=args.engine, case_filter=args.case, nlf_mode=args.nlf_mode, neighbor_mode=args.neighbor_mode
         )
         hand_passed = sum(1 for c in hand_results if c["status"] == "PASS")
         print(f"  Hand cases: {hand_passed}/{len(hand_results)} passed ({'PASS' if hand_ok else 'FAIL'})")
@@ -3396,7 +3475,7 @@ def main():
     if "corpus" in target_stages:
         print(f"[5/5] Executing Correctness Corpus (Real M0 Recomputed, engine: {args.engine}, nlf_mode: {args.nlf_mode})...")
         corpus_stats, corpus_ok = run_corpus_840(
-            bin_path, engine_filter=args.engine, case_filter=args.case, nlf_mode=args.nlf_mode
+            bin_path, engine_filter=args.engine, case_filter=args.case, nlf_mode=args.nlf_mode, neighbor_mode=args.neighbor_mode
         )
         m1_info = f"{corpus_stats['m1_agreed']}/{corpus_stats.get('selected_cases', 840)} M1 agreed" if corpus_stats['m1_executed'] else "M1 NOT_RUN"
         m2_info = f"{corpus_stats['m2_agreed']}/{corpus_stats.get('selected_cases', 840)} M2 agreed" if corpus_stats['m2_executed'] else "M2 NOT_RUN"
@@ -3411,7 +3490,7 @@ def main():
     if "stream" in target_stages:
         print(f"[+] Executing Stateful Stream Matrix (engine: {args.engine}, nlf_mode: {args.nlf_mode})...")
         stream_stats, stream_ok = run_56_stream_matrix(
-            bin_path, engine_filter=args.engine, case_filter=args.case, nlf_mode=args.nlf_mode
+            bin_path, engine_filter=args.engine, case_filter=args.case, nlf_mode=args.nlf_mode, neighbor_mode=args.neighbor_mode
         )
         m1_s_info = f"M1 agreed {stream_stats['agreed_steps_m1']}/{stream_stats.get('selected_updates', 672)}" if stream_stats['m1_executed'] else "M1 NOT_RUN"
         m2_s_info = f"M2 agreed {stream_stats['agreed_steps_m2']}/{stream_stats.get('selected_updates', 672)}" if stream_stats['m2_executed'] else "M2 NOT_RUN"

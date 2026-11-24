@@ -10,7 +10,8 @@ ApxStreamingEngine::ApxStreamingEngine(
     EngineType engine_type,
     uint64_t max_work,
     NlfMode nlf_mode,
-    size_t max_nlf_memory_bytes
+    size_t max_nlf_memory_bytes,
+    NeighborMode neighbor_mode
 ) : graph_(graph),
     codec_(codec),
     sink_(sink),
@@ -19,11 +20,16 @@ ApxStreamingEngine::ApxStreamingEngine(
     max_work_(max_work),
     requested_nlf_mode_(nlf_mode),
     effective_nlf_mode_(NlfMode::NONE),
+    neighbor_mode_(neighbor_mode),
     configuration_status_("SUCCESS"),
     fallback_reason_(""),
     max_nlf_memory_bytes_(max_nlf_memory_bytes),
     tx_manager_(graph, codec, sink)
 {
+    if (!is_supported_neighbor_mode(engine_type_, requested_nlf_mode_, neighbor_mode_)) {
+        throw EngineException("Neighbor BUFFER requires M2 with NLF NONE");
+    }
+
     cumulative_counters_.max_work = max_work_;
     step_counters_.max_work = max_work_;
 
@@ -164,7 +170,7 @@ StreamStepResult ApxStreamingEngine::execute_step(const UpdateOperation& update,
             } else {
                 m2_engine_.search_event(
                     query_plan_, snapshot, du, dv, dlbl, sink_, step_counters_, prof_ptr,
-                    effective_nlf_mode_, nlf_index_.get(), &query_signatures_
+                    effective_nlf_mode_, nlf_index_.get(), &query_signatures_, neighbor_mode_
                 );
             }
             if (profiling_enabled_) {

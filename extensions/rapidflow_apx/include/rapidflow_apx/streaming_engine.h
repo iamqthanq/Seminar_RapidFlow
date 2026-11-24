@@ -24,6 +24,11 @@ enum class EngineType {
     M2
 };
 
+inline bool is_supported_neighbor_mode(EngineType engine, NlfMode nlf, NeighborMode mode) noexcept {
+    return mode == NeighborMode::LEGACY
+        || (mode == NeighborMode::BUFFER && engine == EngineType::M2 && nlf == NlfMode::NONE);
+}
+
 struct StreamStepResult {
     bool committed{false};
     uint32_t step_index{0};
@@ -49,7 +54,8 @@ public:
         EngineType engine_type = EngineType::M2,
         uint64_t max_work = 500000,
         NlfMode nlf_mode = NlfMode::NONE,
-        size_t max_nlf_memory_bytes = 0
+        size_t max_nlf_memory_bytes = 0,
+        NeighborMode neighbor_mode = NeighborMode::LEGACY
     );
 
     StreamStepResult execute_step(const UpdateOperation& update, uint32_t step_index);
@@ -62,6 +68,7 @@ public:
 
     NlfMode get_requested_nlf_mode() const noexcept { return requested_nlf_mode_; }
     NlfMode get_effective_nlf_mode() const noexcept { return effective_nlf_mode_; }
+    NeighborMode get_neighbor_mode() const noexcept { return neighbor_mode_; }
     const std::string& get_configuration_status() const noexcept { return configuration_status_; }
     const std::string& get_fallback_reason() const noexcept { return fallback_reason_; }
     const ApxNlfIndex* get_nlf_index() const noexcept { return nlf_index_.get(); }
@@ -73,6 +80,12 @@ public:
 #ifdef APX_RESIDUAL_TEST_TRACE
     void set_residual_observer(ApxM2EventEngine::ResidualObserver observer) {
         m2_engine_.set_residual_observer(std::move(observer));
+    }
+#endif
+
+#ifdef APX_NEIGHBOR_TEST_TRACE
+    void set_neighbor_observer(ApxM2EventEngine::NeighborObserver observer) {
+        m2_engine_.set_neighbor_observer(std::move(observer));
     }
 #endif
 
@@ -92,6 +105,7 @@ private:
     uint64_t max_work_;
     NlfMode requested_nlf_mode_{NlfMode::NONE};
     NlfMode effective_nlf_mode_{NlfMode::NONE};
+    NeighborMode neighbor_mode_{NeighborMode::LEGACY};
     std::string configuration_status_{"SUCCESS"};
     std::string fallback_reason_{""};
     size_t max_nlf_memory_bytes_{0};

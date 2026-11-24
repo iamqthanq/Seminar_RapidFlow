@@ -570,12 +570,12 @@ void ApxNlfIndex::rollback_mutations(NlfUndoRecord& undo) noexcept {
 
 ### 7.1. Deconstruction of Current Retrieval Bottleneck
 In `extensions/rapidflow_apx/src/authoritative_graph.cpp:130-161`, `get_neighbors(uint32_t u)` performs:
-1. `std::vector<uint32_t> neighbors;` (Heap allocation on every invocation).
+1. Construct a fresh vector. Nonempty results can grow its storage, which may allocate.
 2. Loop over base CSR neighbors: performs two hash lookups per neighbor (`tombstones_.find()` and `overlay_labels_.find()`), pushing to vector.
 3. Loop over dynamic overlay neighbors: pushes to vector.
 4. `std::sort(neighbors.begin(), neighbors.end());` ($O(d \log d)$ sorting overhead).
 5. `neighbors.erase(std::unique(...), neighbors.end());` (Deduplication).
-6. Return by value (Move semantics / copy).
+6. Return the vector by value. The return may use NRVO or a move.
 
 ### 7.2. Source-Backed Sortedness Properties
 - **Base CSR Sortedness:** `baselines/rapidflow/source/graph/graph.cpp:164` proves base neighbors are strictly sorted by `uint32_t` vertex ID:
@@ -691,7 +691,13 @@ A-residual canonical workload verification:
 python3 scripts/run_rapidflow_apx_engines.py --engine m2 --nlf-mode residual --stage all
 ```
 
-Option B verification commands are planned for its implementation phase.
+B-buffer canonical workload verification (P4b-2A):
+
+```bash
+python3 scripts/run_rapidflow_apx_engines.py --engine m2 --nlf-mode none --neighbor-mode buffer --stage all
+```
+
+This mode retains collection and sort/unique from the legacy path. The sorted merge and fast paths in §7.3 are reserved for P4b-2B.
 
 ### 8.3. Correctness contract and evidence hierarchy
 

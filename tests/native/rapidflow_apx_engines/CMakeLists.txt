@@ -25,6 +25,7 @@ add_executable(rapidflow_apx_native
     src/main.cpp
     src/p4b_tests.cpp
     src/residual_tests.cpp
+    src/neighbor_buffer_tests.cpp
 )
 
 target_link_libraries(rapidflow_apx_native PRIVATE rapidflow_apx_foundation OpenSSL::Crypto)

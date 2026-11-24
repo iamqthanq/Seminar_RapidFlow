@@ -360,6 +360,16 @@ static bool parse_nlf_mode(const std::string& text, NlfMode& mode) {
     return false;
 }
 
+static const char* neighbor_mode_name(NeighborMode mode) noexcept {
+    return mode == NeighborMode::BUFFER ? "buffer" : "legacy";
+}
+
+static void add_neighbor_counters(json::Value& out, const EngineCounters& counters) {
+    out["neighbor_buffer_retrieval_calls"] = json::Value(counters.neighbor_buffer_retrieval_calls);
+    out["neighbor_buffer_growth_calls"] = json::Value(counters.neighbor_buffer_growth_calls);
+    out["neighbor_buffer_no_growth_calls"] = json::Value(counters.neighbor_buffer_no_growth_calls);
+}
+
 static void add_residual_counters(json::Value& out, const EngineCounters& counters) {
     out["nlf_residual_checks"] = json::Value(counters.nlf_residual_checks);
     out["nlf_residual_pruned"] = json::Value(counters.nlf_residual_pruned);
@@ -373,6 +383,7 @@ static void add_residual_counters(json::Value& out, const EngineCounters& counte
 int main(int argc, char* argv[]) {
     std::string engine_str = "m2";
     NlfMode nlf_mode = NlfMode::NONE;
+    NeighborMode neighbor_mode = NeighborMode::LEGACY;
     uint64_t max_nlf_memory_mib = DEFAULT_NLF_MEMORY_MIB; // 256 MiB default
     bool cli_max_nlf_memory_mib_set = false;
     std::string workload_path = "";
@@ -386,6 +397,7 @@ int main(int argc, char* argv[]) {
     bool seen_output = false;
     bool seen_max_work = false;
     bool seen_nlf_mode = false;
+    bool seen_neighbor_mode = false;
     bool seen_max_nlf_memory_mib = false;
     bool profiling_enabled = false;
     std::string profile_output_path = "";
@@ -396,6 +408,8 @@ int main(int argc, char* argv[]) {
         std::string arg = argv[i];
         if (arg == "--test-empty-frontier") {
             return run_native_empty_frontier_test();
+        } else if (arg == "--test-p4b-neighbor") {
+            return run_neighbor_buffer_tests(i + 1 < argc ? argv[i + 1] : "graph");
         } else if (arg == "--test-p4b-residual") {
             return run_residual_native_tests(i + 1 < argc ? argv[i + 1] : "numeric");
         } else if (arg == "--test-p4b") {
@@ -455,6 +469,19 @@ int main(int argc, char* argv[]) {
             seen_max_work = true;
         } else if (arg == "--continue-on-error") {
             continue_on_error = true;
+        } else if (arg == "--neighbor-mode") {
+            if (seen_neighbor_mode || i + 1 >= argc) {
+                std::cerr << "Error: Duplicate or missing --neighbor-mode argument\n";
+                return static_cast<int>(ExitCode::CLI_ARG_ERROR);
+            }
+            seen_neighbor_mode = true;
+            const std::string mode = argv[++i];
+            if (mode == "buffer") {
+                neighbor_mode = NeighborMode::BUFFER;
+            } else if (mode != "legacy") {
+                std::cerr << "Error: Invalid --neighbor-mode '" << mode << "'. Must be 'legacy' or 'buffer'.\n";
+                return static_cast<int>(ExitCode::CLI_ARG_ERROR);
+            }
         } else if (arg == "--nlf-mode") {
             if (seen_nlf_mode) {
                 std::cerr << "Error: Duplicate --nlf-mode argument\n";
@@ -506,7 +533,7 @@ int main(int argc, char* argv[]) {
             profile_output_path = argv[++i];
             profiling_enabled = true;
         } else if (arg == "--help" || arg == "-h") {
-            std::cout << "Usage: rapidflow_apx_native --engine <m1|m2> --workload <INPUT.json> --output <OUTPUT.json> [--max-work <N>] [--continue-on-error] [--nlf-mode <none|static|residual>] [--max-nlf-memory-mib <MiB>] [--profile] [--profile-output <FILE>]\n";
+            std::cout << "Usage: rapidflow_apx_native --engine <m1|m2> --workload <INPUT.json> --output <OUTPUT.json> [--max-work <N>] [--continue-on-error] [--nlf-mode <none|static|residual>] [--neighbor-mode <legacy|buffer>] [--max-nlf-memory-mib <MiB>] [--profile] [--profile-output <FILE>]\n";
             return static_cast<int>(ExitCode::SUCCESS);
         } else {
             std::cerr << "Error: Unknown or unsupported option: " << arg << "\n";
@@ -539,6 +566,11 @@ int main(int argc, char* argv[]) {
         return static_cast<int>(ExitCode::CLI_ARG_ERROR);
     }
 
+    if (!is_supported_neighbor_mode(engine_type, nlf_mode, neighbor_mode)) {
+        std::cerr << "Error: Neighbor buffer mode requires M2 with NLF NONE.\n";
+        return static_cast<int>(ExitCode::CLI_ARG_ERROR);
+    }
+
     try {
         apply_process_caps();
     } catch (const std::exception& e) {
@@ -567,6 +599,7 @@ int main(int argc, char* argv[]) {
     root_out["case_id"] = json::Value("UNKNOWN");
     root_out["status"] = json::Value("FAIL");
     root_out["configuration_initialized"] = json::Value(false);
+    root_out["neighbor_configuration_version"] = json::Value(1);
     root_out["error_category"] = json::Value("NONE");
     root_out["error_message"] = json::Value("");
     root_out["steps"] = json::Value::make_array();
@@ -786,10 +819,12 @@ int main(int argc, char* argv[]) {
         // 4. Initialize Sink and Streaming Engine
         size_t max_nlf_memory_bytes = static_cast<size_t>(max_nlf_memory_mib) * BYTES_PER_MIB;
         ApxTupleSink sink(codec, canonical_order);
-        ApxStreamingEngine streaming_engine(graph, codec, sink, query_plan, engine_type, max_work, nlf_mode, max_nlf_memory_bytes);
+        ApxStreamingEngine streaming_engine(graph, codec, sink, query_plan, engine_type, max_work, nlf_mode, max_nlf_memory_bytes, neighbor_mode);
         streaming_engine.set_profiling_enabled(profiling_enabled);
 
         root_out["configuration_initialized"] = json::Value(true);
+        root_out["requested_neighbor_mode"] = json::Value(neighbor_mode_name(neighbor_mode));
+        root_out["effective_neighbor_mode"] = json::Value(neighbor_mode_name(streaming_engine.get_neighbor_mode()));
         root_out["requested_nlf_mode"] = json::Value(nlf_mode_name(streaming_engine.get_requested_nlf_mode()));
         root_out["effective_nlf_mode"] = json::Value(nlf_mode_name(streaming_engine.get_effective_nlf_mode()));
         root_out["configuration_status"] = json::Value(streaming_engine.get_configuration_status());
@@ -884,6 +919,7 @@ int main(int argc, char* argv[]) {
                 auto tx_fault = FaultPoint::NONE;
                 auto m2_fault = M2FaultHook::NONE;
                 if (fault == "BEFORE_MUTATION") tx_fault = FaultPoint::BEFORE_MUTATION;
+                else if (fault == "BETWEEN_FORWARD_REVERSE_MUTATION") tx_fault = FaultPoint::BETWEEN_FORWARD_REVERSE_MUTATION;
                 else if (fault == "ALLOCATION_FAILURE_MUTATION") tx_fault = FaultPoint::ALLOCATION_FAILURE_MUTATION;
                 else if (fault == "AFTER_MUTATION") tx_fault = FaultPoint::AFTER_MUTATION;
                 else if (fault == "DURING_CALLBACK") tx_fault = FaultPoint::DURING_CALLBACK;
@@ -956,6 +992,7 @@ int main(int argc, char* argv[]) {
                     step_cnt["commitment_checks"] = json::Value(step_res.step_counters.commitment_checks);
                     step_cnt["commitment_rejections"] = json::Value(step_res.step_counters.commitment_rejections);
                 }
+                add_neighbor_counters(step_cnt, step_res.step_counters);
                 add_residual_counters(step_cnt, step_res.step_counters);
                 step_cnt["nlf_static_checks"] = json::Value(step_res.step_counters.nlf_static_checks);
                 step_cnt["nlf_static_pruned"] = json::Value(step_res.step_counters.nlf_static_pruned);
@@ -1044,9 +1081,9 @@ int main(int argc, char* argv[]) {
             if (failed) ++failed_steps;
             else ++completed_steps;
 
-            const bool poisoned_residual = nlf_mode == NlfMode::RESIDUAL
+            const bool poisoned_optimized = (nlf_mode == NlfMode::RESIDUAL || neighbor_mode == NeighborMode::BUFFER)
                 && streaming_engine.get_tx_manager().is_session_poisoned();
-            if (delivery_failed || (failed && !continue_on_error) || poisoned_residual) {
+            if (delivery_failed || (failed && !continue_on_error) || poisoned_optimized) {
                 for (size_t rem = step_idx + 1; rem < total_steps; ++rem) {
                     steps_arr.arr.push_back(unattempted_update(rem, upd_arr[rem]));
                 }
@@ -1094,6 +1131,7 @@ int main(int argc, char* argv[]) {
             cnt_json["commitment_checks"] = json::Value(counters.commitment_checks);
             cnt_json["commitment_rejections"] = json::Value(counters.commitment_rejections);
         }
+        add_neighbor_counters(cnt_json, counters);
         add_residual_counters(cnt_json, counters);
         cnt_json["nlf_static_checks"] = json::Value(counters.nlf_static_checks);
         cnt_json["nlf_static_pruned"] = json::Value(counters.nlf_static_pruned);

@@ -40,6 +40,7 @@ from scripts.run_rapidflow_apx_engines import (
     validate_nlf_configuration,
     validate_graph_state,
     validate_codec_state,
+    NEIGHBOR_COUNTER_FIELDS,
 )
 
 BINARY_PATH = REPO_ROOT / "build" / "rapidflow_apx_native"
@@ -219,6 +220,7 @@ class TestRapidFlowApxP4b1A(unittest.TestCase):
         total_streams = 0
         total_steps = 0
         event_streams = truth_events = residual_checks = residual_prunes = 0
+        buffer_retrievals = buffer_growth = 0
 
         # Query topologies with lambda > k
         # 1. K2: lambda=1, k=0
@@ -343,19 +345,36 @@ class TestRapidFlowApxP4b1A(unittest.TestCase):
                                           oracle.G, codec_state))
 
                         results = {}
-                        for mode in ("none", "static", "residual"):
-                            result, _, ok = run_workload_on_binary(BINARY_PATH, "m2", workload, nlf_mode=mode)
-                            self.assertTrue(ok, (workload["case_id"], mode, result.get("error_message")))
+                        for mode, neighbor in (("none", "legacy"), ("static", "legacy"),
+                                               ("residual", "legacy"), ("none", "buffer")):
+                            result, _, ok = run_workload_on_binary(
+                                BINARY_PATH, "m2", workload, nlf_mode=mode, neighbor_mode=neighbor
+                            )
+                            self.assertTrue(ok, (workload["case_id"], mode, neighbor, result.get("error_message")))
                             self.assertEqual(result["requested_nlf_mode"], mode)
                             self.assertEqual(result["effective_nlf_mode"], mode)
+                            self.assertEqual(result["requested_neighbor_mode"], neighbor)
+                            self.assertEqual(result["effective_neighbor_mode"], neighbor)
                             self.assertTrue(result["eligible_for_requested_variant"])
                             self.assertEqual(len(result["steps"]), len(stream_updates))
-                            results[mode] = result
+                            results[mode if neighbor == "legacy" else "buffer"] = result
+
+                        def controls(counters):
+                            return {key: value for key, value in counters.items() if key not in NEIGHBOR_COUNTER_FIELDS}
+
+                        self.assertEqual(controls(results["none"]["counters"]), controls(results["buffer"]["counters"]))
+                        buffer_retrievals += results["buffer"]["counters"]["neighbor_buffer_retrieval_calls"]
+                        buffer_growth += results["buffer"]["counters"]["neighbor_buffer_growth_calls"]
 
                         stream_events = 0
                         for idx, (entered, exited, graph_state, codec_state) in enumerate(truth):
                             total_steps += 1
                             stream_events += len(entered) + len(exited)
+                            bare_step = results["none"]["steps"][idx]
+                            buffer_step = results["buffer"]["steps"][idx]
+                            self.assertEqual(controls(bare_step["step_counters"]), controls(buffer_step["step_counters"]))
+                            for field in ("entered_tuples", "exited_tuples"):
+                                self.assertEqual(bare_step[field], buffer_step[field])
                             for mode, result in results.items():
                                 step = result["steps"][idx]
                                 where = (workload["case_id"], mode, idx)
@@ -379,7 +398,8 @@ class TestRapidFlowApxP4b1A(unittest.TestCase):
         print(f"  [PBT] {total_streams} streams {total_steps} updates seeds={seeds} "
               f"event_streams={event_streams} zero_event={total_streams - event_streams} "
               f"truth_events={truth_events} residual_checks={residual_checks} residual_prunes={residual_prunes} "
-              f"tuple_duplicate_graph_codec_discrepancies=0")
+              f"buffer_retrievals={buffer_retrievals} buffer_growth={buffer_growth} "
+              "tuple_duplicate_graph_codec_counter_discrepancies=0")
         self.assertEqual(total_streams, 78)
         self.assertEqual(total_steps, 780)
         self.assertGreater(event_streams, 0)

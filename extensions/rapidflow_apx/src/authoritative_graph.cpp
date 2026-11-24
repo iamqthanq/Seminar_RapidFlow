@@ -160,6 +160,38 @@ std::vector<uint32_t> ApxAuthoritativeGraph::get_neighbors(uint32_t u) const {
     return neighbors;
 }
 
+void ApxAuthoritativeGraph::get_neighbors_into(uint32_t u, std::vector<uint32_t>& out) const {
+    out.clear();
+    if (!has_vertex(u)) {
+        return;
+    }
+
+    // Match the legacy control's collection and sort/unique steps while
+    // retaining the caller's storage across independent retrievals.
+    if (base_graph_) {
+        ui count = 0;
+        const VertexID* base_nbrs = base_graph_->getVertexNeighbors(u, count);
+        for (ui i = 0; i < count; ++i) {
+            const uint32_t v = base_nbrs[i];
+            const uint64_t key = make_edge_key(u, v);
+            if (tombstones_.find(key) != tombstones_.end()
+                || overlay_labels_.find(key) != overlay_labels_.end()) {
+                continue;
+            }
+            out.push_back(v);
+        }
+    }
+
+    auto* self = const_cast<ApxAuthoritativeGraph*>(this);
+    uint32_t overlay_count = 0;
+    const uint32_t* overlay_nbrs = self->fwd_overlay_.get_neighbor(u, overlay_count);
+    for (uint32_t i = 0; i < overlay_count; ++i) {
+        out.push_back(overlay_nbrs[i]);
+    }
+    std::sort(out.begin(), out.end());
+    out.erase(std::unique(out.begin(), out.end()), out.end());
+}
+
 uint32_t ApxAuthoritativeGraph::get_degree(uint32_t u) const {
     return static_cast<uint32_t>(get_neighbors(u).size());
 }

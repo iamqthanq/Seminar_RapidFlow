@@ -83,6 +83,11 @@ struct EngineCounters {
     uint64_t nlf_residual_missing_commits{0};
     uint64_t nlf_residual_missing_undos{0};
 
+    // Successful M2 reusable retrievals, classified by observed capacity change.
+    uint64_t neighbor_buffer_retrieval_calls{0};
+    uint64_t neighbor_buffer_growth_calls{0};
+    uint64_t neighbor_buffer_no_growth_calls{0};
+
     // Work limit
     uint64_t work_units{0};
     uint64_t max_work{500000};
@@ -141,6 +146,9 @@ struct EngineCounters {
         nlf_residual_signature_lookups = 0;
         nlf_residual_missing_commits = 0;
         nlf_residual_missing_undos = 0;
+        neighbor_buffer_retrieval_calls = 0;
+        neighbor_buffer_growth_calls = 0;
+        neighbor_buffer_no_growth_calls = 0;
         work_units = 0;
     }
 
@@ -177,6 +185,9 @@ struct EngineCounters {
         nlf_residual_signature_lookups += other.nlf_residual_signature_lookups;
         nlf_residual_missing_commits += other.nlf_residual_missing_commits;
         nlf_residual_missing_undos += other.nlf_residual_missing_undos;
+        neighbor_buffer_retrieval_calls += other.neighbor_buffer_retrieval_calls;
+        neighbor_buffer_growth_calls += other.neighbor_buffer_growth_calls;
+        neighbor_buffer_no_growth_calls += other.neighbor_buffer_no_growth_calls;
         work_units += other.work_units;
     }
 };
