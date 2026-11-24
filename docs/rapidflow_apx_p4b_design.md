@@ -2,18 +2,18 @@
 ## Mathematical Design, Architectural Specification, Correctness Proofs & Experimental Protocol
 ### Evidence-Driven Optional Optimization of Native Bare M2
 
-**Document ID:** `docs/rapidflow_apx_p4b_design.md`  
-**Milestone:** Phase P4b-0  
-**Parent Roadmap Issue:** [Issue #1](https://github.com/iamqthanq/Seminar_RapidFlow/issues/1)  
-**Active Phase Issue:** [Issue #38](https://github.com/iamqthanq/Seminar_RapidFlow/issues/38)  
-**Active Draft PR:** [Draft PR #39](https://github.com/iamqthanq/Seminar_RapidFlow/pull/39)  
-**Target Integration Branch:** `QuangThang`  
-**Target Release Branch:** `main` (User-approved release only)  
-**Base Commit:** `7009daea477721c12eb52aa3d5db62f54f5b2ca4` (Merge PR #37 into `QuangThang`)  
-**Design Starting Commit:** `11963e642d8df2bc8082336fe1c534c19b4c3b6e`  
-**Pinned Upstream RapidFlow:** `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` (Pristine: `true`)  
-**Status:** COMPLETE & READY FOR COORDINATOR REVIEW  
-**Proposed Design Verdict:** `P4B_DESIGN_READY_FOR_REVIEW`  
+**Document ID:** `docs/rapidflow_apx_p4b_design.md`
+**Milestone:** Phase P4b-0
+**Parent Roadmap Issue:** [Issue #1](https://github.com/iamqthanq/Seminar_RapidFlow/issues/1)
+**Active Phase Issue:** [Issue #38](https://github.com/iamqthanq/Seminar_RapidFlow/issues/38)
+**Active Draft PR:** [Draft PR #39](https://github.com/iamqthanq/Seminar_RapidFlow/pull/39)
+**Target Integration Branch:** `QuangThang`
+**Target Release Branch:** `main` (User-approved release only)
+**Base Commit:** `7009daea477721c12eb52aa3d5db62f54f5b2ca4` (Merge PR #37 into `QuangThang`)
+**Design Starting Commit:** `94325e14c7b8165eb1a9b50262ee497a6a3bfb92`
+**Pinned Upstream RapidFlow:** `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1` (Pristine: `true`)
+**Status:** COMPLETE & READY FOR COORDINATOR REVIEW (REVISION R1)
+**Proposed Design Verdict:** `P4B_DESIGN_READY_FOR_REVIEW`
 
 ---
 
@@ -22,7 +22,7 @@
 Phase P4b-0 formalizes the mathematical principles, architectural specifications, correctness proofs, and experimental methodology for the evidence-driven optional optimization of the Bare M2 native event engine (`ApxM2EventEngine`) within RapidFlow-APX.
 
 ### 1.1. Context & Accepted P4a Empirical Foundation
-Phase P4a completed the native profiling of Bare M2 against the enumeration baseline M1 across 180 canonical measurement slots (30 workloads $\times$ 3 repetitions $\times$ 2 engines = 90 paired observations), achieving 100% agreement with the independent Python ground truth oracle (`DStarDynamicOracle`) and zero duplicate embeddings. The certified findings established:
+Phase P4a completed native profiling of Bare M2 against the enumeration baseline M1 across 180 canonical measurement slots (30 workloads $\times$ 3 repetitions $\times$ 2 engines = 90 paired observations), achieving 100% agreement with the independent Python ground truth oracle (`DStarDynamicOracle`) and zero duplicate embeddings. The certified findings established:
 1. **Search Speedup ($T_{\text{M1}} / T_{\text{M2}}$ across 4 Scopes):**
    - Cumulative Search Speedup: Median **2.1269x** (Mean: 2.7092x, Max: 9.7401x across 84 valid computable pairs).
    - Native Step Speedup: Median **1.8021x** (Mean: 2.1542x, Max: 6.1823x across 90 pairs).
@@ -33,191 +33,170 @@ Phase P4a completed the native profiling of Bare M2 against the enumeration base
 3. **Micro-Stage Cost Centers in Bare M2:**
    - Within Search duration: **Search Core occupies 77.22%** (median) and **Neighbor Retrieval occupies 22.78%** (median).
    - Within Native Step duration: Search Core occupies 67.23% (median), Neighbor Retrieval occupies 16.25% (median), Update Maintenance occupies 3.12% (median), and Tuple Commit occupies 1.38% (median).
+4. **Baseline Outer Speedup Parity:**
+   - Overall baseline outer wall speedup median was **1.0004x** (strictly `PARITY`).
 
 ### 1.2. P4b Research Mission
 The central research question of Phase P4b is:
 > *Can the computational cost of Bare M2 be significantly reduced without losing any valid approximate event embeddings, violating transaction atomicity, or inflating memory overhead beyond practical bounds?*
 
-To address this question scientifically, Phase P4b investigates two independent optimization avenues directly derived from empirical profiling:
-- **Option A (Sound Relaxed NLF):** Pruning unviable candidate exploration branches early by establishing provably sound lower bounds on missing edges from incident neighbor label frequencies (targeting the 77.22% Search Core bottleneck).
-- **Option B (Neighbor Retrieval Optimization):** Eliminating heap allocation overhead and vector sorting during neighbor expansion via depth-indexed reusable candidate scratchpads and linear two-pointer merging (targeting the 22.78% Neighbor Retrieval bottleneck).
+To address this question scientifically, Phase P4b investigates two mutually independent candidate optimization avenues directly derived from empirical profiling:
+- **Option A (Sound Relaxed NLF):** Pruning unviable candidate exploration branches early during search by establishing provably sound lower bounds on missing edges from incident neighbor label frequencies (targeting the 77.22% Search Core bottleneck).
+- **Option B (Neighbor Retrieval Optimization):** Reusing pre-allocated buffer capacity across search iterations, eliminating repeated per-call heap allocation in the common recursion path (reallocation occurs only on initial allocation or when degree exceeds pre-allocated capacity), and exploiting upstream sortedness via linear two-pointer merging (targeting the 22.78% Neighbor Retrieval bottleneck).
 
 ### 1.3. Scientific & Governance Boundaries
 In strict adherence to repository governance (`AGENTS.md`, `GEMINI.md`, and `docs/BRANCH_POLICY.md`):
-- **Design Gate Restriction:** P4b-0 is strictly a design and formalization gate. **No production C++ optimization code is implemented in this phase**, and no performance benchmarks are executed.
+- **Design Gate Restriction:** P4b-0 is strictly a design and formalization gate. **No production C++ optimization code is implemented in this phase**, and no new benchmark measurements are executed.
 - **Pristine Upstream:** The upstream RapidFlow submodule at `baselines/rapidflow/source` remains pristine at pinned commit `2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1`.
 - **Domain Invariance:** The formal problem definition (Domain D-R: $0 \le k < \lambda(Q)$, injective matching, hard vertex label matching, event leaf condition $|R_G(f)| = k$, and explicit ordered tuple output) is strictly invariant.
-- **Honest Fallback:** If neither Option A nor Option B demonstrates a statistically significant net performance advantage over Bare M2 under fair experimental conditions, Bare M2 remains the primary engine of RapidFlow-APX (**Option D: Safe Fallback**). A negative result is a scientifically valid and acceptable outcome.
+- **Honest Fallback (Option D):** If neither Option A nor Option B demonstrates a statistically significant net performance advantage over Bare M2 under fair experimental conditions, Bare M2 remains the primary engine of RapidFlow-APX (**Option D: Safe Fallback**). A negative result is a scientifically valid and acceptable outcome.
 
 ---
 
 ## 2. Source & Evidence Inventory
 
 ### 2.1. Codebase & Document Artifact Audit
-Every claim and design decision in this document is anchored in verified source code and documentation:
-
-| Component / File Path | Key Inspected Entities | Audit Classification |
-| :--- | :--- | :---: |
-| `extensions/rapidflow_apx/src/m2_event_engine.cpp` | `search_event()`, `find_frontier_edge()`, `dfs_m2()` | `PROVEN_FROM_SOURCE` |
-| `extensions/rapidflow_apx/include/rapidflow_apx/m2_event_engine.h` | `EdgeCommitment`, `ApxM2EventEngine` interface | `PROVEN_FROM_SOURCE` |
-| `extensions/rapidflow_apx/src/authoritative_graph.cpp` | `get_neighbors()`, `get_degree()`, `begin/commit/rollback_transaction()` | `PROVEN_FROM_SOURCE` |
-| `extensions/rapidflow_apx/include/rapidflow_apx/authoritative_graph.h` | Hybrid CSR + overlay storage, transaction records | `PROVEN_FROM_SOURCE` |
-| `extensions/rapidflow_apx/src/transaction_manager.cpp` | `execute_insert()`, `execute_delete()`, transaction lifecycle | `PROVEN_FROM_SOURCE` |
-| `extensions/rapidflow_apx/src/query_plan.cpp` | `get_incident_edges()`, `get_edges_with_label()`, edge connectivity | `PROVEN_FROM_SOURCE` |
-| `extensions/rapidflow_apx/include/rapidflow_apx/engine_counters.h` | Legacy engine counters, `charge_work()`, work cap | `PROVEN_FROM_SOURCE` |
-| `baselines/rapidflow/source/graph/graph.cpp` | `loadGraphFromMemory()` (L87-180), CSR neighbor sorting (L164) | `PROVEN_FROM_SOURCE` |
-| `baselines/rapidflow/source/graph/graph.h` | `getVertexNeighbors()` (L193), binary search in `checkEdgeExistence()` | `PROVEN_FROM_SOURCE` |
-| `baselines/rapidflow/source/utility/relation/global_edge_view.h` | `GlobalEdgeView::insert()` (L24-41), `remove()` (L43-55) | `PROVEN_FROM_SOURCE` |
-| `docs/research_decisions/D-R4a-native-profiling.md` | P4a decision matrix, speedup scopes, bottleneck analysis | `PROVEN_FROM_SOURCE` |
-| `docs/evidence/p4a_evidence_manifest.json` | 7 registered evidence artifacts, historical execution identity | `PROVEN_FROM_SOURCE` |
-| `results/logs/rf36-p4a/p4a_raw_ledger.jsonl` | 180 canonical measurement records, SHA `34452fb4ee...` | `PROVEN_FROM_SOURCE` |
+The P4b-0 design is grounded in comprehensive audit of existing production components and historical empirical ledgers:
+1. `extensions/rapidflow_apx/src/authoritative_graph.cpp`:
+   - `apply_insert(uint32_t u, uint32_t v, uint32_t label, bool simulate_rev_fail = false)` (lines 239-298): Transactional topological insertion with strong exception guarantee.
+   - `apply_delete(uint32_t u, uint32_t v, uint32_t label)` (lines 300-343): Transactional topological deletion.
+   - `get_neighbors(uint32_t u)` (lines 130-161): Base CSR retrieval, tombstone filtering, overlay collection, `std::sort`, and `std::unique`.
+   - `get_degree(uint32_t u)` (lines 163-165): Currently calls `get_neighbors(u).size()`, incurring full neighbor materialization overhead.
+2. `extensions/rapidflow_apx/src/transaction_manager.cpp`:
+   - `execute_update(const UpdateOperation& update, SearchCallback callback)` (lines 57-240): Coordinates transaction lifecycle, fault injection points, mutation application, and tuple sink commitment.
+3. `extensions/rapidflow_apx/src/streaming_engine.cpp`:
+   - `execute_step(const UpdateOperation& update, uint32_t step_index)` (lines 24-52): Outer stream loop step driver invoking transaction manager.
+4. `baselines/rapidflow/source/graph/graph.cpp`:
+   - `loadGraphFromFile` / memory load (line 164): Executes `std::sort(neighbors_ + offsets_[i], neighbors_ + offsets_[i + 1])`, proving base CSR neighbor lists are strictly sorted by vertex ID. Upstream assumes simple graph inputs (no multi-edges).
+5. `baselines/rapidflow/source/utility/relation/global_edge_view.h`:
+   - `GlobalEdgeView::insert` (lines 27-29): Maintains dynamic overlay adjacency arrays in strictly sorted order.
+6. `docs/evidence/p4a_evidence_manifest.json` (SHA-256: `b6d7777d5b17c10db8e5f00f5c40885a99b9fefb06242c3c05bbd1064a9d70be`):
+   - Certified P4a canonical measurement records (180 total records, 90 paired comparisons).
 
 ### 2.2. Critical Source Findings
-1. **Upstream CSR Neighbors are Strictly Sorted:** Inspection of `baselines/rapidflow/source/graph/graph.cpp:164` reveals:
-   ```cpp
-   for (ui i = 0; i < vertices_count_; ++i) {
-       std::sort(neighbors_ + offsets_[i], neighbors_ + offsets_[i + 1]);
-   }
-   ```
-   Within the base CSR structure, all neighbors of every vertex are sorted in strictly ascending order of `VertexID` (`uint32_t`) with zero duplicate edges.
-2. **Upstream Dynamic Overlay is Strictly Sorted:** Inspection of `baselines/rapidflow/source/utility/relation/global_edge_view.h:27-29` reveals:
-   ```cpp
-   auto lb = std::lower_bound(it->second.begin(), it->second.end(), v);
-   if (lb == it->second.end() || *lb != v) {
-       it->second.insert(lb, v);
-   ```
-   `GlobalEdgeView::insert()` performs binary search via `std::lower_bound` and inserts at `lb`, ensuring the overlay neighbor vector is invariant under strictly ascending order with zero duplicates.
-3. **`get_degree()` is NEVER Called on the M2 Search Hot Path:** Inspection of all call sites reveals `ApxAuthoritativeGraph::get_degree()` is called only in test harness logging and foundation validation. Neither `dfs_m2` nor `search_event` calls `get_degree()`.
-4. **MISSING Branch Advances Stack Depth Without Advancing `assigned_count`:** In `m2_event_engine.cpp:317-328`, when a frontier edge is committed as `MISSING`, `dfs_m2` recurses with `missing_count + 1` while `assigned_count` and `mapping` remain unchanged.
+- **API Realities:** Production code uses `apply_insert` and `apply_delete` on `ApxAuthoritativeGraph`, `execute_update` on `ApxTransactionManager`, and `execute_step` on `ApxStreamingEngine`. Earlier informal terms (`insert_edge`, `delete_edge`, `execute_insert`, `execute_delete`) do not exist and are eliminated.
+- **Sortedness vs Uniqueness:** Upstream `Graph::loadGraphFromFile` guarantees that base CSR neighbors are strictly sorted by `VertexID`. Multi-edge deduplication is not performed by upstream because input streams are contractually simple graphs. `ApxAuthoritativeGraph` deduplicates against overlay replacements via `overlay_labels_` map lookup.
+- **Snapshot Visibility Realities:** In `ApxTransactionManager::execute_update`, for an `INSERT` operation, `graph_.apply_insert()` is executed *before* the search callback, meaning search operates on $G_{\text{after}}$. For a `DELETE` operation, search callback is executed *before* `graph_.apply_delete()`, meaning search operates on $G_{\text{before}}$. Any dynamic index must respect this exact asymmetry.
 
 ---
 
 ## 3. Formal Problem Contract
 
-The formal semantics of RapidFlow-APX are immutable and enforced across all phases:
-
 ### 3.1. Problem Entities
-- **Query Graph:** $Q = (V_Q, E_Q)$ is a simple, undirected, connected graph with vertex count $n = |V_Q| \ge 2$, edge count $m = |E_Q|$, vertex label function $\ell_Q: V_Q \to \mathcal{L}_V$, and edge label function $\ell_Q: E_Q \to \mathcal{L}_E$.
-- **Dynamic Data Graph:** $G_t = (V_0, E_t)$ where $V_0$ is a fixed data vertex set, vertex labels $\ell_G: V_0 \to \mathcal{L}_V$ are static, and edge set $E_t \subseteq \binom{V_0}{2}$ changes via single-edge stream operations (`INSERT` or `DELETE`).
-- **Injective Mapping:** $f: V_Q \to V_0$ satisfies:
-  1. *Injectivity:* $\forall u, w \in V_Q, u \neq w \implies f(u) \neq f(w)$.
-  2. *Hard Vertex Label Match:* $\forall u \in V_Q, \ell_G(f(u)) = \ell_Q(u)$.
-- **Missing-Edge Set:**
-  $$R_G(f) = \left\{ \{u, w\} \in E_Q : \{f(u), f(w)\} \notin E_G \;\lor\; \ell_G(f(u), f(w)) \neq \ell_Q(u, w) \right\}$$
-  An edge that exists in $G$ but has a mismatched edge label is treated strictly as a missing query edge.
-- **Missing-Edge Budget:** An embedding $f$ is admissible under tolerance $k$ if and only if $|R_G(f)| \le k$.
-- **Domain D-R Guard:** Every tested workload strictly satisfies $0 \le k < \lambda(Q)$, where $\lambda(Q)$ is the edge connectivity of $Q$. Under Domain D-R, the matched query subgraph $Q[E_Q \setminus R_G(f)]$ is guaranteed to be connected.
+- **Query Graph $Q = (V_Q, E_Q, \ell_V^Q, \ell_E^Q)$:** Connected, undirected, labeled graph with $|V_Q| = n$, $|E_Q| = m$, and edge connectivity $\lambda(Q) > k$.
+- **Data Graph $G = (V_G, E_G, \ell_V^G, \ell_E^G)$:** Dynamic undirected labeled graph maintained in `ApxAuthoritativeGraph`.
+- **Stream Update $\Delta = (\text{op}, u, v, \ell_E)$:** Edge insertion or deletion with $\text{op} \in \{\text{INSERT}, \text{DELETE}\}$.
+- **Missing Edge Budget $k$:** Integer $0 \le k < \lambda(Q)$.
+- **Candidate Embedding $f: V_Q \to V_G$:** Injective mapping ($f(u) = f(v) \implies u = v$) satisfying exact vertex label compatibility ($\forall u \in V_Q, \ell_V^G(f(u)) = \ell_V^Q(u)$).
+- **Missing Edge Set:**
+  $$R_G(f) = \{\{u, w\} \in E_Q : \{f(u), f(w)\} \notin E_G \lor \ell_E^G(f(u), f(w)) \neq \ell_E^Q(u, w)\}$$
+- **Approximate Embedding:** Any injective mapping $f$ such that $|R_G(f)| \le k$.
 
 ### 3.2. Event Boundaries & Output Contract
-- **Event Search Semantics:**
-  - For `INSERT (u, v, label)`: Search is executed on $G_{\text{after}} = (V_0, E_{t-1} \cup \{e\})$.
-  - For `DELETE (u, v, label)`: Search is executed on $G_{\text{before}} = (V_0, E_{t-1})$.
-- **Anchor Condition:** The search is strictly anchored at the updated edge: the edge $(u, v)$ must map to a query edge $e \in E_Q$ with matching edge label under both valid orientations.
-- **Event Leaf Condition:** An event is emitted if and only if $|R_G(f)| = k$.
-- **Canonical Output Format:** Explicit ordered tuples $T(f) = (f(u_1), f(u_2), \ldots, f(u_n))$, ordered strictly by canonical query vertex ID. Symmetric automorphisms are explicitly enumerated; count-only approximation is prohibited.
+- **Trigger Condition:** Embedding $f$ is an *event embedding* for stream update $\Delta = (\text{op}, u_0, v_0, \ell_e)$ if and only if:
+  1. For $\text{op} = \text{INSERT}$: $f$ is valid in $G_{\text{after}}$ ($|R_{G_{\text{after}}}(f)| \le k$) and involves the newly inserted edge, i.e., $\exists \{qa, qb\} \in E_Q$ such that $\{f(qa), f(qb)\} = \{u_0, v_0\}$ and $\ell_E^Q(qa, qb) = \ell_e$.
+  2. For $\text{op} = \text{DELETE}$: $f$ was valid in $G_{\text{before}}$ ($|R_{G_{\text{before}}}(f)| \le k$) and involves the deleted edge.
+- **Leaf Output Invariant:** In Phase P4b, as established in P4a, search operates under Domain D-R where event leaf candidates satisfy $|R_G(f)| = k$.
+- **Explicit Tuple Output:** Every verified event embedding is emitted to `ApxTupleSink` as an ordered tuple of vertex IDs $(f(0), f(1), \ldots, f(n-1))$. Count-only matching is strictly rejected.
 
 ---
 
 ## 4. Bare M2 Native Architecture & Invariants
 
 ### 4.1. Call Graph Architecture
+The execution pipeline flows through well-defined transactional and search boundaries:
+
 ```text
-Native Test Runner / Streaming Harness
-       |
-       v
-ApxStreamingEngine::execute_step()
-       |
-       v
-ApxTransactionManager::execute_insert() / execute_delete()
-       |
-       +---> ApxAuthoritativeGraph::begin_transaction()
-       |
-       +---> [For INSERT]: ApxAuthoritativeGraph::insert_edge()
-       |
-       +---> ApxM2EventEngine::search_event(snapshot, u_upd, v_upd, label_upd, sink, counters)
-       |           |
-       |           +---> Anchor Initialization (orientations 0 and 1)
-       |           |
-       |           +---> ApxM2EventEngine::dfs_m2() [Recursive Search]
-       |                       |
-       |                       +---> find_frontier_edge()
-       |                       |
-       |                       +---> PRESENT Branch:
-       |                       |        snapshot.get_neighbors(u_data)
-       |                       |        Candidate verification (edge label, injectivity, vertex label)
-       |                       |        Tentative assignment v_q -> cand
-       |                       |        Two-endpoint incident edge resolution
-       |                       |        dfs_m2(..., missing_count, assigned_count + 1)
-       |                       |        Rollback assignment & commitments
-       |                       |
-       |                       +---> MISSING Branch:
-       |                                status[frontier_edge] = MISSING
-       |                                dfs_m2(..., missing_count + 1, assigned_count)
-       |                                Rollback status[frontier_edge] = UNKNOWN
-       |
-       +---> [For DELETE]: ApxAuthoritativeGraph::delete_edge()
-       |
-       +---> ApxAuthoritativeGraph::commit_transaction() [or rollback_transaction() on error]
+ApxStreamingEngine::execute_step(update, step_index)
+  |
+  +--> ApxTransactionManager::execute_update(update, callback)
+         |
+         +--> [INSERT] ApxAuthoritativeGraph::apply_insert(u, v, label)
+         |
+         +--> SearchCallback -> ApxM2EventEngine::search(anchor_edge, update)
+         |      |
+         |      +--> ApxM2EventEngine::search_event(qa, qb, u, v)
+         |             |
+         |             +--> ApxM2EventEngine::dfs_m2(depth, assigned_count, missing_count)
+         |                    |
+         |                    +--> ApxAuthoritativeGraph::get_neighbors(curr_v)
+         |                    +--> Candidate Filtering & Commitment Extension
+         |                    +--> Recurse (PRESENT or MISSING)
+         |                    +--> On Leaf: ApxTupleSink::push_tuple(f)
+         |
+         +--> [DELETE] ApxAuthoritativeGraph::apply_delete(u, v, label)
+         |
+         +--> ApxTransactionScope::commit()
+         +--> ApxTupleSink::commit_step() -> Returns published tuples
 ```
 
 ### 4.2. Invariant Specifications
+The native architecture enforces six mandatory system invariants:
 
-| Invariant ID | Name | Source Location | Enforcement Mechanism | Failure Consequence |
-| :--- | :--- | :--- | :--- | :--- |
-| **INV-01** | Injective Data Mapping | `m2_event_engine.cpp:214` | `used_data[cand]` check before assignment | Corrupted non-injective embeddings |
-| **INV-02** | Hard Vertex Label Match | `m2_event_engine.cpp:219` | `snapshot.get_vertex_label(cand) == v_q_label` | Semantically invalid embeddings |
-| **INV-03** | Frontier Cut Existence | `m2_event_engine.cpp:34` | Throws `InvariantViolationException` if cut is empty and $m_{\text{cur}} \le k$ | Search prematurely terminates; lost embeddings |
-| **INV-04** | Missing Budget Containment | `m2_event_engine.cpp:138` | Immediate return if `missing_count > k` | Search tree explosion; budget violation |
-| **INV-05** | Incident Edge Consistency | `m2_event_engine.cpp:240-278` | Resolves all edges between newly mapped vertex and previously mapped vertices | Inconsistent commitment states |
-| **INV-06** | Leaf Commitment Verification | `m2_event_engine.cpp:148-167` | Re-verifies every query edge in $G$; rejects if committed MISSING edge actually exists | False positive event emissions |
-| **INV-07** | Event Leaf Boundary | `m2_event_engine.cpp:170` | Emits tuple if and only if `missing_count == k` | Incorrect event classification |
-| **INV-08** | Transaction Snapshot Integrity | `transaction_manager.cpp:23-95` | INSERT searches $G_{\text{after}}$; DELETE searches $G_{\text{before}}$ | State corruption; inconsistent time travel |
-| **INV-09** | Zero-Allocation Rollback | `authoritative_graph.cpp:206-258` | All rollback paths use `noexcept` container operations | Memory leak / crash during exception handling |
+| Invariant ID | Target Component | Formal Specification | Violation Action |
+| :--- | :--- | :--- | :--- |
+| **INV-01** | Transaction Scope | Graph mutation, search execution, and sink staging occur inside a single `ApxTransactionScope`. | Immediate rollback; no tuples published. |
+| **INV-02** | Snapshot Isolation | INSERT search observes $G_{\text{after}}$ exclusively; DELETE search observes $G_{\text{before}}$ exclusively. | Fail prevalidation; reject dirty read. |
+| **INV-03** | Injection Invariance | $\forall u \neq w \in V_Q, f(u) \neq f(w)$. Maintained via `visited_data_` bitset. | Candidate rejected; branch pruned. |
+| **INV-04** | Label Invariance | $\forall u \in V_Q, \ell_V^G(f(u)) = \ell_V^Q(u)$ strictly. | Candidate rejected; zero missing allowance. |
+| **INV-05** | Budget Invariance | At any DFS stack frame: $\text{missing\_count} \le k$. | Immediate branch cutoff; do not recurse. |
+| **INV-06** | Sink Isolation | Uncommitted tuples reside in staging buffers; committed only if `execute_update` succeeds. | Clear staging buffer on transaction abort. |
 
 ---
 
 ## 5. Option A: Sound Relaxed NLF Theory & Formal Proofs
 
 ### 5.1. The Failure of Exact NLF in Approximate Matching
-In exact subgraph matching, Neighborhood Label Frequency (NLF) requires that for every label $\ell$, the number of $\ell$-labeled neighbors of a data vertex $v$ must be greater than or equal to that of the query vertex $u$:
-$$\forall \ell \in \mathcal{L}_V, \quad |N_G(v, \ell)| \ge |N_Q(u, \ell)|$$
-In approximate matching with missing budget $k$, an embedding $f$ is permitted to miss up to $k$ incident query edges. Applying the exact condition directly results in catastrophic false negatives (pruning valid approximate embeddings).
+In exact subgraph matching ($k=0$), Neighbor Label Frequency (NLF) filtering enforces that for a data vertex $v \in V_G$ to match a query vertex $u \in V_Q$, $v$ must have at least as many neighbors of each label type as $u$:
+$$\forall \sigma \in \Sigma_Q(u): \quad N_G(v, \sigma) \ge N_Q(u, \sigma)$$
+In approximate subgraph matching ($k > 0$), applying Exact NLF is **catastrophically unsound**. A query edge incident to $u$ may be missing in $G$, causing $N_G(v, \sigma) < N_Q(u, \sigma)$ even when $v$ belongs to a perfectly valid approximate embedding (Counterexample A1). Exact NLF prunes such valid vertices, producing false negatives.
 
 ### 5.2. Formal Definition of Typed Incident Signatures
-To capture both edge labels and vertex labels without type conflation:
-- **Typed Signature:** A signature is an ordered pair $\sigma = (\ell_E, \ell_V) \in \mathcal{L}_E \times \mathcal{L}_V$.
-- **Query Signature Frequency:** For $u \in V_Q$:
-  $$N_Q(u, \sigma) = \left| \left\{ \{u, w\} \in E_Q : \ell_Q(u, w) = \ell_E \;\land\; \ell_Q(w) = \ell_V \right\} \right|$$
-- **Data Signature Frequency:** For $v \in V_0$ in snapshot $G$:
-  $$N_G(v, \sigma) = \left| \left\{ \{v, x\} \in E_G : \ell_G(v, x) = \ell_E \;\land\; \ell_G(x) = \ell_V \right\} \right|$$
+Let $\Sigma$ denote the universe of edge-vertex label pairs.
+For an undirected edge $e = \{u, w\} \in E_Q$ with edge label $\ell_E^Q(e)$ and endpoint labels $\ell_V^Q(u), \ell_V^Q(w)$:
+- From the perspective of endpoint $u$, the incident signature is:
+  $$\sigma_{e, u} = (\ell_E^Q(e), \ell_V^Q(w))$$
+- From the perspective of endpoint $w$, the incident signature is:
+  $$\sigma_{e, w} = (\ell_E^Q(e), \ell_V^Q(u))$$
+Notice that if $\ell_V^Q(u) \neq \ell_V^Q(w)$, then $\sigma_{e, u} \neq \sigma_{e, w}$.
+
+The set of incident query edges at $u$ matching signature $\sigma$ is:
+$$I_Q(u, \sigma) = \{e = \{u, w\} \in E_Q : \sigma_{e, u} = \sigma\}, \quad N_Q(u, \sigma) = |I_Q(u, \sigma)|$$
+Similarly, for data vertex $v \in V_G$:
+$$I_G(v, \sigma) = \{e = \{v, w\} \in E_G : (\ell_E^G(e), \ell_V^G(w)) = \sigma\}, \quad N_G(v, \sigma) = |I_G(v, \sigma)|$$
+
+The active query signature set for the entire query is:
+$$\Sigma_Q = \bigcup_{\{u, w\} \in E_Q} \{ (\ell_E^Q(u,w), \ell_V^Q(w)), \; (\ell_E^Q(u,w), \ell_V^Q(u)) \}$$
+Notice that $|\Sigma_Q| \le 2 |E_Q|$.
+
+---
 
 ### 5.3. Theorem 1: Soundness of Static Relaxed NLF
-**Definition (Static Deficit):** For $u \in V_Q$ and $v \in V_0$:
-$$\delta_{\text{static}}(u, v) = \sum_{\sigma \in \Sigma_Q(u)} \max\left(0, \; N_Q(u, \sigma) - N_G(v, \sigma)\right)$$
-where $\Sigma_Q(u) = \{\sigma : N_Q(u, \sigma) > 0\}$.
 
-**Theorem 1:** *Let $f: V_Q \to V_0$ be any valid approximate embedding of $Q$ in $G$ with $|R_G(f)| \le k$. If $f(u) = v$, then:*
-$$\delta_{\text{static}}(u, v) \le |R_G(f) \cap I_Q(u)| \le |R_G(f)| \le k$$
-*where $I_Q(u)$ is the set of query edges incident to $u$.*
+**Definition (Static Local Deficit):**
+$$\delta_{\text{static}}(u, v) = \sum_{\sigma \in \Sigma_Q(u)} \max\left(0, \; N_Q(u, \sigma) - N_G(v, \sigma)\right)$$
+
+**Theorem 1:** *Let $f: V_Q \to V_G$ be any injective candidate embedding with $f(u) = v$ satisfying exact vertex label compatibility. Then:*
+$$|R_G(f)| \ge \delta_{\text{static}}(u, v)$$
 
 **Proof:**
-1. Let $I_Q(u, \sigma) = \{\{u, w\} \in E_Q : \ell_Q(u, w) = \ell_E \land \ell_Q(w) = \ell_V\}$. The sets $\{I_Q(u, \sigma)\}_{\sigma \in \Sigma_Q(u)}$ form a partition of $I_Q(u)$:
-   $$\bigcup_{\sigma \in \Sigma_Q(u)} I_Q(u, \sigma) = I_Q(u) \quad \text{and} \quad I_Q(u, \sigma) \cap I_Q(u, \sigma') = \emptyset \;\; (\sigma \neq \sigma')$$
-2. For each query edge $e = \{u, w\} \in I_Q(u, \sigma)$, let $e_G = \{f(u), f(w)\} = \{v, f(w)\}$. By the injectivity of $f$, for any two distinct query edges $\{u, w_1\}, \{u, w_2\} \in I_Q(u, \sigma)$ with $w_1 \neq w_2$, we have $f(w_1) \neq f(w_2)$. Hence, the corresponding data edges $\{v, f(w_1)\}$ and $\{v, f(w_2)\}$ are distinct.
-3. A query edge $e \in I_Q(u, \sigma)$ is matched (not missing) in $G$ if and only if $\{v, f(w)\} \in E_G$ and $\ell_G(v, f(w)) = \ell_E$. Since $f$ preserves vertex labels, $\ell_G(f(w)) = \ell_Q(w) = \ell_V$. Thus, every matched edge in $I_Q(u, \sigma)$ corresponds to a distinct data neighbor of $v$ with signature $\sigma$.
-4. The total number of such matched edges cannot exceed the total number of available $\sigma$-neighbors of $v$ in $G$, which is $N_G(v, \sigma)$:
+1. Consider the set of query edges incident to $u$: $I_Q(u) = \bigcup_{\sigma} I_Q(u, \sigma)$.
+2. By definition of $R_G(f)$, a query edge $e = \{u, w\} \in I_Q(u, \sigma)$ belongs to $R_G(f)$ if and only if $\{v, f(w)\} \notin E_G$ or $\ell_E^G(v, f(w)) \neq \ell_E^Q(e)$.
+3. The number of edges in $I_Q(u, \sigma)$ successfully matched in $G$ cannot exceed the number of available incident edges in $G$ with signature $\sigma$:
    $$\left| I_Q(u, \sigma) \setminus R_G(f) \right| \le N_G(v, \sigma)$$
-5. Therefore, the number of missing edges in $I_Q(u, \sigma)$ is bounded below by:
-   $$\left| I_Q(u, \sigma) \cap R_G(f) \right| = |I_Q(u, \sigma)| - \left| I_Q(u, \sigma) \setminus R_G(f) \right| \ge N_Q(u, \sigma) - N_G(v, \sigma)$$
-   Since the count of missing edges cannot be negative, we have:
+4. Therefore, the number of missing edges in $I_Q(u, \sigma)$ is bounded below by:
+   $$\left| I_Q(u, \sigma) \cap R_G(f) \right| = |I_Q(u, \sigma)| - |I_Q(u, \sigma) \setminus R_G(f)| \ge N_Q(u, \sigma) - N_G(v, \sigma)$$
+5. Since the count of missing edges cannot be negative:
    $$\left| I_Q(u, \sigma) \cap R_G(f) \right| \ge \max\left(0, \; N_Q(u, \sigma) - N_G(v, \sigma)\right)$$
-6. Summing over all disjoint signatures $\sigma \in \Sigma_Q(u)$:
-   $$|R_G(f) \cap I_Q(u)| = \sum_{\sigma \in \Sigma_Q(u)} \left| I_Q(u, \sigma) \cap R_G(f) \right| \ge \sum_{\sigma \in \Sigma_Q(u)} \max\left(0, \; N_Q(u, \sigma) - N_G(v, \sigma)\right) = \delta_{\text{static}}(u, v)$$
-7. Since $I_Q(u) \subseteq E_Q$, we have $|R_G(f) \cap I_Q(u)| \le |R_G(f)| \le k$.
-8. Hence, $\delta_{\text{static}}(u, v) > k \implies |R_G(f)| > k$, which proves that pruning candidate $v$ for query vertex $u$ when $\delta_{\text{static}}(u, v) > k$ is **strictly sound** (no false negatives). $\blacksquare$
+6. Because the sets $I_Q(u, \sigma)$ are mutually disjoint for distinct signatures $\sigma$:
+   $$|R_G(f)| \ge |I_Q(u) \cap R_G(f)| = \sum_{\sigma \in \Sigma_Q(u)} |I_Q(u, \sigma) \cap R_G(f)| \ge \sum_{\sigma \in \Sigma_Q(u)} \max\left(0, \; N_Q(u, \sigma) - N_G(v, \sigma)\right) = \delta_{\text{static}}(u, v)$$
+7. Thus, if $\delta_{\text{static}}(u, v) > k$, then $|R_G(f)| > k$. Pruning $v$ is **strictly sound**; no valid embedding can map $u$ to $v$. $\blacksquare$
+
+---
 
 ### 5.4. Theorem 2: Soundness of Conservative Residual Relaxed NLF
-During DFS, the search maintains a set of committed missing edges:
+
+During depth-first search, some query edges have already been committed as `PRESENT` or `MISSING`:
 $$M_{\text{cur}} = \{e \in E_Q : \text{status}[e] = \text{MISSING}\}, \quad m_{\text{cur}} = |M_{\text{cur}}|$$
 
 **The Double-Counting Pitfall:** Adding $m_{\text{cur}} + \delta_{\text{static}}(u, v) > k$ is **unsound**. If an edge $e \in I_Q(u)$ was already committed as `MISSING`, it contributed $1$ to $m_{\text{cur}}$, and its absence in $G$ may also create a deficit in $\delta_{\text{static}}(u, v)$. Adding both counts that single missing edge twice, causing false negatives (Counterexample A2).
@@ -228,20 +207,20 @@ $$I_Q^{\text{miss}}(u, \sigma) = \{e \in I_Q(u, \sigma) : \text{status}[e] = \te
 **Definition (Conservative Residual Deficit):**
 $$\delta_{\text{res}}^{\text{cons}}(u, v) = \sum_{\sigma \in \Sigma_Q(u)} \max\left(0, \; N_Q(u, \sigma) - |I_Q^{\text{miss}}(u, \sigma)| - N_G(v, \sigma)\right)$$
 
-**Theorem 2:** *Let $f: V_Q \to V_0$ be any completion consistent with current commitments (i.e. $M_{\text{cur}} \subseteq R_G(f)$ and $\text{status}[e] = \text{PRESENT} \implies e \notin R_G(f)$). If $f(u) = v$, then:*
+**Theorem 2:** *Let $f: V_Q \to V_G$ be any completion consistent with current commitments (i.e. $M_{\text{cur}} \subseteq R_G(f)$ and $\text{status}[e] = \text{PRESENT} \implies e \notin R_G(f)$). If $f(u) = v$, then:*
 $$m_{\text{cur}} + \delta_{\text{res}}^{\text{cons}}(u, v) \le |R_G(f)| \le k$$
 
 **Proof:**
 1. Decompose the total missing set into committed missing edges and uncommitted missing edges:
    $$R_G(f) = M_{\text{cur}} \;\dot\cup\; \left( R_G(f) \setminus M_{\text{cur}} \right)$$
    Hence, $|R_G(f)| = |M_{\text{cur}}| + |R_G(f) \setminus M_{\text{cur}}| = m_{\text{cur}} + |R_G(f) \setminus M_{\text{cur}}|$.
-2. Consider the uncommitted query edges incident to $u$ with signature $\sigma$:
+2. Consider uncommitted query edges incident to $u$ with signature $\sigma$:
    $$I_Q^{\text{uncommitted}}(u, \sigma) = I_Q(u, \sigma) \setminus M_{\text{cur}}$$
    Its cardinality is $|I_Q^{\text{uncommitted}}(u, \sigma)| = N_Q(u, \sigma) - |I_Q^{\text{miss}}(u, \sigma)|$.
-3. Any edge $e \in I_Q^{\text{uncommitted}}(u, \sigma)$ that is matched in $G$ must map to an available $\sigma$-neighbor of $v$ in $G$. Thus:
+3. Any edge $e \in I_Q^{\text{uncommitted}}(u, \sigma)$ matched in $G$ maps to an available $\sigma$-neighbor of $v$ in $G$. Thus:
    $$\left| I_Q^{\text{uncommitted}}(u, \sigma) \setminus R_G(f) \right| \le N_G(v, \sigma)$$
-4. The number of additional missing edges in $I_Q^{\text{uncommitted}}(u, \sigma)$ is therefore bounded below by:
-   $$\left| I_Q^{\text{uncommitted}}(u, \sigma) \cap R_G(f) \right| \ge \max\left(0, \; |I_Q^{\text{uncommitted}}(u, \sigma)| - N_G(v, \sigma)\right) = \max\left(0, \; N_Q(u, \sigma) - |I_Q^{\text{miss}}(u, \sigma)| - N_G(v, \sigma)\right)$$
+4. The number of additional missing edges in $I_Q^{\text{uncommitted}}(u, \sigma)$ is bounded below by:
+   $$\left| I_Q^{\text{uncommitted}}(u, \sigma) \cap R_G(f) \right| \ge \max\left(0, \; N_Q(u, \sigma) - |I_Q^{\text{miss}}(u, \sigma)| - N_G(v, \sigma)\right)$$
 5. Since $I_Q^{\text{uncommitted}}(u, \sigma) \subseteq E_Q \setminus M_{\text{cur}}$, these additional missing edges are completely disjoint from $M_{\text{cur}}$.
 6. Summing over all signatures $\sigma \in \Sigma_Q(u)$ gives a lower bound on missing edges in $E_Q \setminus M_{\text{cur}}$:
    $$\left| (E_Q \setminus M_{\text{cur}}) \cap R_G(f) \right| \ge \sum_{\sigma \in \Sigma_Q(u)} \left| I_Q^{\text{uncommitted}}(u, \sigma) \cap R_G(f) \right| \ge \delta_{\text{res}}^{\text{cons}}(u, v)$$
@@ -254,8 +233,8 @@ $$m_{\text{cur}} + \delta_{\text{res}}^{\text{cons}}(u, v) \le |R_G(f)| \le k$$
 ### 5.5. Rigorous Counterexample Analysis (A1–A7)
 
 ```text
-[A1: Exact NLF False Negative]
-Query Q (Diamond, k=1):             Data Graph G (C4 after insert 2-3):
+[A1: Exact NLF False Negative & Independent Oracle Verification]
+Query Q (Diamond, k=1):             Data Graph G (C4 after insert 1-2):
         0 (deg 2)                              0 (deg 2)
        / \                                    / \
       1---2 (deg 3)                          1   2 (deg 2)
@@ -263,6 +242,7 @@ Query Q (Diamond, k=1):             Data Graph G (C4 after insert 2-3):
         3 (deg 2)                              3 (deg 2)
 Exact NLF: Query v1 has deg 3 > all G vertices (deg 2) -> Prunes (0 embeddings, WRONG!)
 Static Relaxed NLF: Delta_static = max(0, 3 - 2) = 1 <= k=1 -> Preserves (0,1,2,3) (SOUND!)
+Verified M0 Oracle Run: Edge insert (1, 2) emits 8 ENTERED events; inverse delete emits 8 EXITED events.
 
 [A2: Residual Double-Counting Pitfall]
 At DFS state: Edge 1-2 committed MISSING (m_cur = 1).
@@ -272,10 +252,11 @@ Conservative Residual: I_miss = 1 -> Remaining = 3 - 1 = 2 -> Delta_res = max(0,
 Combined: m_cur + Delta_res = 1 + 0 = 1 <= k=1 -> Preserves (0,1,2,3) (SOUND!)
 ```
 
-- **Counterexample A1 (Exact NLF False Negative):**
-  - *Setup:* Query $Q$ is Diamond ($V_Q=\{0,1,2,3\}$, edges $0-1, 0-2, 1-2, 1-3, 2-3$, all labels 0, $\lambda(Q)=2, k=1$). Data graph $G$ is $C_4$ (edges $0-1, 0-2, 1-3, 2-3$, missing only $1-2$).
+- **Counterexample A1 (Exact NLF False Negative & Independent Verification):**
+  - *Setup:* Query $Q$ is Diamond ($V_Q=\{0,1,2,3\}$, edges $0-1, 0-2, 1-2, 1-3, 2-3$, all labels 0, $\lambda(Q)=2, k=1$). Data graph $G$ is $C_4$ (edges $0-1, 0-2, 1-3, 2-3$, missing only chord $1-2$).
   - *Exact NLF:* At query vertex 1 (degree 3), every data vertex has degree 2. Exact NLF rejects all mappings. Result: 0 embeddings emitted (false negative).
-  - *Static Relaxed NLF:* $N_Q(1, \sigma)=3, N_G(v, \sigma)=2$. Deficit $\delta_{\text{static}}(1, v) = \max(0, 3 - 2) = 1$. Since $1 \le k=1$, the candidate is NOT pruned. The valid embedding $(0, 1, 2, 3)$ is found.
+  - *Static Relaxed NLF:* $N_Q(1, \sigma)=3, N_G(v, \sigma)=2$. Deficit $\delta_{\text{static}}(1, v) = \max(0, 3 - 2) = 1$. Since $1 \le k=1$, candidate is NOT pruned.
+  - *Independent Oracle Check:* M0 Oracle execution on this exact setup emits **8 ENTERED** events when chord edge $(1, 2)$ is inserted, and exactly **8 EXITED** events when chord edge $(1, 2)$ is inversely deleted. Net active embeddings: $8 - 8 = 0$. This confirms both mathematical soundness and dynamic event symmetry.
 - **Counterexample A2 (Double-Counting in Residual NLF):**
   - *Setup:* Same Diamond graph. During DFS, edge $1-2$ is committed as `MISSING` ($m_{\text{cur}} = 1$). Next, candidate $v$ is evaluated for vertex 1.
   - *Naive Combined:* $m_{\text{cur}} + \delta_{\text{static}} = 1 + 1 = 2 > k=1$. Prunes candidate, missing valid completion $(0, 1, 2, 3)$.
@@ -298,64 +279,201 @@ Combined: m_cur + Delta_res = 1 + 0 = 1 <= k=1 -> Preserves (0,1,2,3) (SOUND!)
 
 ## 6. Option A Architecture & Data-Side Index Design
 
-### 6.1. Query Signature Registry (`ApxQueryPlan`)
-During query plan construction:
-1. Extract unique signatures $\Sigma_Q = \{(\ell_Q(e), \ell_Q(w)) : e = \{u, w\} \in E_Q\}$.
-2. Assign dense 0-based signature IDs: $\text{SigID} \in [0, |\Sigma_Q| - 1]$.
-3. For each $u \in V_Q$, precompute:
-   - A compact list of requirements: `std::vector<std::pair<SigID, uint16_t>> signature_requirements`.
-   - Incident edge signature lookup: `SigID edge_signature[u][inc_idx]`.
+### 6.1. Numeric Representation & Overflow Safety
+To eliminate numeric truncation and wrapping defects:
+- **Representation Type:** The NLF frequency counter is defined as:
+  ```cpp
+  using NlfCount = uint32_t;
+  ```
+- **Justification for `uint32_t` over `uint16_t`:**
+  `uint16_t` has a maximum representable value of $65,535$. In dense graph datasets or bursty streams, high-degree hubs can readily exceed $65,535$ incident edges matching a single query signature. If `uint16_t` is used:
+  - If arithmetic wraps around ($65,536 \to 0$, $70,000 \to 4,464$), a vertex with high available degree will report an artificially tiny count, creating a large false deficit ($\delta > k$) and causing false-negative pruning (violating Theorem 1).
+  - If arithmetic saturates at $65,535$, subsequent edge deletions cannot accurately decrement (decrementing from $65,535$ when true degree was $70,000$ leaves the count at $65,534$ instead of $69,999$, producing corrupt state).
+  `uint32_t` safely counts up to $4,294,967,295$, well beyond any physical graph memory limits on 64-bit systems.
 
-### 6.2. Data-Side Frequency Index (`ApxNlfIndex`)
+### 6.2. Checked Arithmetic Specifications
+All NLF index operations enforce strict checked arithmetic guards:
+1. **Checked Increment (Fail-Closed):**
+   ```cpp
+   inline void checked_increment(NlfCount& val) {
+       if (val == std::numeric_limits<NlfCount>::max()) {
+           throw ApxNlfOverflowException("NLF frequency counter overflowed UINT32_MAX");
+       }
+       ++val;
+   }
+   ```
+2. **Checked Decrement (Underflow Invariant):**
+   ```cpp
+   inline void checked_decrement(NlfCount& val) {
+       if (val == 0) {
+           throw ApxNlfUnderflowException("NLF frequency counter underflowed below 0 on decrement");
+       }
+       --val;
+   }
+   ```
+3. **Guarded Deficit Computation:**
+   ```cpp
+   inline uint32_t compute_deficit(uint32_t req, uint32_t avail, uint32_t k_rem) noexcept {
+       const uint32_t effective_req = (k_rem < req) ? (req - k_rem) : 0;
+       return (effective_req > avail) ? (effective_req - avail) : 0;
+   }
+   ```
 
-#### Representation Trade-off Analysis:
-
-| Representation | Storage Format | Memory Complexity ($|V_G|=10^5, |\Sigma_Q|=8$) | Lookup Complexity | Allocation on Update | Rollback Safety |
-| :--- | :--- | :---: | :---: | :---: | :---: |
-| **Dense 1D Vector** (Selected) | `std::vector<uint16_t> table_` ($|V_G| \cdot |\Sigma_Q|$) | **1.60 MB** | **$O(1)$ direct index** | **Zero** | **Zero-allocation `noexcept`** |
-| Sparse Map Vector | `vector<sparse_hash_map<SigID, uint16_t>>` | 6.40 – 12.80 MB | $O(1)$ amortized hash | Dynamic on new sig | Heap allocation on insert |
-| Dynamic 2D Jagged | `vector<vector<SigID, uint16_t>>` | 3.20 – 5.00 MB | $O(|\Sigma_Q|)$ linear scan | Dynamic on growth | Reallocation risk |
-
-**Selected Architecture:** The **Dense 1D Vector** is selected. Indexed by `v * num_signatures + sig_id`, it provides guaranteed $O(1)$ lookup, optimal cache locality, zero allocation during streaming updates, and guaranteed zero-allocation rollback on transaction abort.
-
-### 6.3. Memory Scaling Model
-Total memory consumed by `ApxNlfIndex`:
-$$M_{\text{dense}}(|V_G|, |\Sigma_Q|) = |V_G| \times |\Sigma_Q| \times \text{sizeof(uint16_t)} \quad \text{bytes}$$
-
-| Data Graph Vertices ($|V_G|$) | Signatures ($|\Sigma_Q| = 4$) | Signatures ($|\Sigma_Q| = 8$) | Signatures ($|\Sigma_Q| = 16$) | Feasibility within 512 MiB Budget |
-| :---: | :---: | :---: | :---: | :---: |
-| $16$ (P4a small) | 128 bytes | 256 bytes | 512 bytes | $\ll 0.01\%$ |
-| $64$ (P4b discrimination) | 512 bytes | 1,024 bytes | 2,048 bytes | $\ll 0.01\%$ |
-| $1,000$ (P4b medium) | 8 KB | 16 KB | 32 KB | $< 0.01\%$ |
-| $100,000$ (P5 NetFlow subset) | 800 KB | 1.6 MB | 3.2 MB | $0.31\%$ |
-| $1,000,000$ (Large graph) | 8.0 MB | 16.0 MB | 32.0 MB | $3.12\%$ |
-
-### 6.4. Transactional Snapshot Maintenance
-To guarantee snapshot consistency without time-travel anomalies:
-
-```text
-========================================================================
-INSERT TRANSACTION:
-1. Prevalidation (vertex exists, edge does not exist).
-2. Graph Mutation: authoritative_graph.insert_edge(u, v, label).
-3. NLF Index Mutation:
-     nlf_index.increment(u, sig(label, label_v));
-     nlf_index.increment(v, sig(label, label_u));
-4. Search Execution: search_event() on G_after using updated nlf_index.
-5. Commit: graph.commit(), nlf_index.commit().
-   [On Abort]: graph.rollback(), nlf_index.rollback() (decrements counts).
-========================================================================
-DELETE TRANSACTION:
-1. Prevalidation (edge exists).
-2. Search Execution: search_event() on G_before using UNMODIFIED nlf_index.
-3. Graph Mutation: authoritative_graph.delete_edge(u, v, label).
-4. NLF Index Mutation:
-     nlf_index.decrement(u, sig(label, label_v));
-     nlf_index.decrement(v, sig(label, label_u));
-5. Commit: graph.commit(), nlf_index.commit().
-   [On Abort]: graph.rollback(), nlf_index.rollback() (increments counts).
-========================================================================
+### 6.3. Checked Allocation Size & Memory Scaling
+The data-side frequency table is laid out as a contiguous dense 1D vector:
+```cpp
+std::vector<NlfCount> table_;
 ```
+Cell index calculation:
+$$\text{index}(v, \text{sig\_id}) = v \times |\Sigma_Q| + \text{sig\_id}$$
+Before allocation, checked multiplication guards against `size_t` overflow:
+```cpp
+size_t total_cells = (size_t)max_vertices * (size_t)num_signatures;
+if (max_vertices != 0 && total_cells / max_vertices != num_signatures) {
+    throw ApxNlfOverflowException("Allocation size overflow in NLF table sizing");
+}
+```
+
+#### Recalculated Dense Memory Scaling Table:
+Dense table memory is strictly $|V_G| \times |\Sigma_Q| \times \text{sizeof(uint32_t)} = |V_G| \times |\Sigma_Q| \times 4$ bytes:
+
+| Data Graph Vertices ($|V_G|$) | Signatures ($|\Sigma_Q| = 4$) | Signatures ($|\Sigma_Q| = 8$) | Signatures ($|\Sigma_Q| = 16$) | Signatures ($|\Sigma_Q| = 32$) | Memory Feasibility |
+| :---: | :---: | :---: | :---: | :---: | :---: |
+| $1,000$ | 15.62 KiB | 31.25 KiB | 62.50 KiB | 125.00 KiB | $\ll 0.01\%$ |
+| $10,000$ | 156.25 KiB | 312.50 KiB | 625.00 KiB | 1.22 MiB | $< 0.01\%$ |
+| $100,000$ | 1.53 MiB | 3.05 MiB | 6.10 MiB | 12.21 MiB | $0.60\%$ of 512 MiB |
+| $1,000,000$ | 15.26 MiB | 30.52 MiB | 61.04 MiB | 122.07 MiB | $5.96\%$ of 512 MiB |
+| **$3,114,895$ (NetFlow)** | **47.53 MiB** | **95.06 MiB** | **190.12 MiB** | **380.24 MiB** | **18.57% of 512 MiB** |
+
+**NetFlow Estimate Verification:** For the certified NetFlow dataset with $|V_G| = 3,114,895$ and a typical query with $|\Sigma_Q| = 8$, the exact table size is $3,114,895 \times 8 \times 4 = 99,676,640$ bytes $\approx 95.06$ MiB. This sits comfortably below the default 512 MiB budget limit.
+
+### 6.4. Memory Budget & Transparent Fallback
+To protect system stability:
+- Configurable budget limit: `max_nlf_memory_mb` (default 512 MB).
+- **Pre-Allocation Fallback:** If `total_cells * sizeof(uint32_t) > max_nlf_memory_mb * 1024 * 1024`, the engine does NOT allocate the table and does NOT crash. Instead, it disables NLF optimization and falls back to Bare M2 (`NLF_MEMORY_BUDGET_EXCEEDED`).
+- **Transparency:** The run metadata explicitly records:
+  ```json
+  {
+    "requested_optimization": "option_a_nlf",
+    "effective_optimization": "bare_m2_fallback",
+    "fallback_reason": "NLF_MEMORY_BUDGET_EXCEEDED",
+    "estimated_memory_mb": 620.5,
+    "memory_budget_mb": 512.0
+  }
+  ```
+
+---
+
+### 6.5. Bidirectional Query Signature Registry
+Given query edge $e = \{u, w\} \in E_Q$ with label $\ell_E^Q(e)$ and vertex labels $\ell_V^Q(u), \ell_V^Q(w)$:
+- Directed signature from $u$: $\sigma_{e, u} = (\ell_E^Q(e), \ell_V^Q(w))$
+- Directed signature from $w$: $\sigma_{e, w} = (\ell_E^Q(e), \ell_V^Q(u))$
+
+The query plan precomputes:
+1. `std::vector<std::pair<uint32_t, uint32_t>> distinct_signatures;` mapping dense `sig_id` $\in [0, |\Sigma_Q|-1]$.
+2. For each query vertex $u$:
+   `std::vector<std::pair<uint32_t, uint32_t>> query_sig_reqs[u];` containing pairs `(sig_id, required_count)`.
+3. For fast lookups during stream updates:
+   A lookup table mapping `(edge_label, neighbor_vertex_label) -> optional<sig_id>`.
+
+---
+
+### 6.6. Ownership, Lifetime & Transaction Architecture
+- **Ownership:** `ApxNlfIndex` is owned by `ApxStreamingEngine` (or `ApxM2EventEngine` query execution context). The upstream `Graph` and `ApxAuthoritativeGraph` classes remain completely decoupled and unaware of NLF.
+- **Lifetime:** Allocated upon query registration / streaming session start; destroyed with the engine.
+- **Authoritative Initialization:**
+  At startup, the table is initialized by iterating over all edges in `ApxAuthoritativeGraph`:
+  ```cpp
+  void ApxNlfIndex::initialize_from_graph(const ApxAuthoritativeGraph& graph) {
+      table_.assign(max_vertices_ * num_signatures_, 0);
+      for (uint32_t u = 0; u < graph.get_vertices_count(); ++u) {
+          uint32_t count = 0;
+          const auto* nbrs = graph.get_base_graph()->getVertexNeighbors(u, count);
+          for (uint32_t i = 0; i < count; ++i) {
+              uint32_t v = nbrs[i];
+              if (u < v) { // Undirected: process each edge once
+                  auto [has_lbl, lbl] = graph.get_edge_label(u, v);
+                  if (has_lbl) apply_insert_edge(u, v, lbl);
+              }
+          }
+      }
+  }
+  ```
+
+---
+
+### 6.7. Fixed-Capacity Undo Record & Transaction Sequences
+To eliminate dynamic heap allocation during transaction execution:
+```cpp
+struct NlfUndoEntry {
+    size_t cell_index = 0;
+    NlfCount old_value = 0;
+    bool applied = false;
+};
+
+struct NlfUndoRecord {
+    std::array<NlfUndoEntry, 2> entries{};
+    uint8_t count = 0;
+
+    void record_mutation(size_t cell_idx, NlfCount old_val) noexcept {
+        entries[count++] = {cell_idx, old_val, true};
+    }
+};
+```
+
+**Rollback Principle:** Rollback restores exact recorded `old_value` without relying on inverse arithmetic:
+```cpp
+void ApxNlfIndex::rollback_mutations(const NlfUndoRecord& undo) noexcept {
+    for (int i = undo.count - 1; i >= 0; --i) {
+        if (undo.entries[i].applied) {
+            table_[undo.entries[i].cell_index] = undo.entries[i].old_value;
+        }
+    }
+}
+```
+
+#### Transaction Execution Sequences:
+1. **INSERT Sequence (INSERT-after snapshot):**
+   - Step 1: Prevalidation (vertex bounds, edge non-existence).
+   - Step 2: Prepare signatures $\sigma_{uv}$ and $\sigma_{vu}$. If neither matches $\Sigma_Q$, NLF is unaffected.
+   - Step 3: Base graph mutation: `graph_.apply_insert(u, v, label)`.
+   - Step 4: NLF mutation:
+     - Mutate cell $u$: record `undo.record_mutation(idx_u, table_[idx_u])`, then `checked_increment(table_[idx_u])`.
+     - Mutate cell $v$: record `undo.record_mutation(idx_v, table_[idx_v])`, then `checked_increment(table_[idx_v])`.
+   - Step 5: Search callback runs on $G_{\text{after}}$ observing updated NLF.
+   - Step 6: Commit transaction. (On abort: rollback NLF using `undo`, then rollback graph).
+2. **DELETE Sequence (DELETE-before snapshot):**
+   - Step 1: Prevalidation (edge exists).
+   - Step 2: Search callback runs on $G_{\text{before}}$ observing UNMODIFIED NLF.
+   - Step 3: Base graph mutation: `graph_.apply_delete(u, v, label)`.
+   - Step 4: NLF mutation:
+     - Mutate cell $u$: record `undo.record_mutation(idx_u, table_[idx_u])`, then `checked_decrement(table_[idx_u])`.
+     - Mutate cell $v$: record `undo.record_mutation(idx_v, table_[idx_v])`, then `checked_decrement(table_[idx_v])`.
+   - Step 5: Commit transaction. (On abort: rollback NLF using `undo`, then rollback graph).
+
+---
+
+### 6.8. Complete Failure Matrix (F01–F17)
+
+| Failure ID | Phase | Trigger Event | NLF State | Graph State | Recovery Action | Post-Recovery Invariant |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **F01** | Prevalidation | Vertex ID $\ge V_{\max}$ | Pristine | Pristine | Abort step; emit PREVALIDATION_FAILED | Zero state drift |
+| **F02** | Prevalidation | Edge already exists on INSERT | Pristine | Pristine | Abort step; emit PREVALIDATION_FAILED | Zero state drift |
+| **F03** | Prevalidation | Edge does not exist on DELETE | Pristine | Pristine | Abort step; emit PREVALIDATION_FAILED | Zero state drift |
+| **F04** | INSERT Graph | `apply_insert` returns false | Pristine | Partially inserted | Graph reverts overlay; emit STEP_FAILURE | Graph clean, NLF untouched |
+| **F05** | INSERT Graph | `apply_insert` throws `bad_alloc` | Pristine | Partially inserted | Graph reverts overlay; rethrow / abort | Graph clean, NLF untouched |
+| **F06** | INSERT NLF | Vertex $u$ NLF increment overflows | Cell $u$ pristine | Graph mutated | Graph `apply_delete`; emit STEP_FAILURE | Graph clean, NLF untouched |
+| **F07** | INSERT NLF | Vertex $v$ NLF increment overflows | Cell $u$ modified, $v$ pristine | Graph mutated | Rollback $u$ from undo; Graph `apply_delete` | Exact state restoration |
+| **F08** | INSERT Search | Callback aborts (returns false) | Both modified | Graph mutated | Rollback $u, v$ from undo; Graph `apply_delete` | Exact state restoration |
+| **F09** | INSERT Search | Work budget exceeded in DFS | Both modified | Graph mutated | Rollback $u, v$ from undo; Graph `apply_delete` | Exact state restoration |
+| **F10** | INSERT Sink | `sink.commit_step` throws | Both modified | Graph mutated | Rollback $u, v$ from undo; Graph `apply_delete` | Zero published tuples |
+| **F11** | DELETE Search | Callback aborts (returns false) | Pristine | Pristine | Abort step; emit CALLBACK_ABORTED | Zero state drift |
+| **F12** | DELETE Search | Work budget exceeded in DFS | Pristine | Pristine | Abort step; emit WORK_BUDGET_EXCEEDED | Zero state drift |
+| **F13** | DELETE Graph | `apply_delete` returns false | Pristine | Mutated | Graph rollback; emit STEP_FAILURE | Zero state drift |
+| **F14** | DELETE Graph | `apply_delete` throws `bad_alloc` | Pristine | Mutated | Graph rollback; rethrow / abort | Zero state drift |
+| **F15** | DELETE NLF | Vertex $u$ NLF underflows | Cell $u$ pristine | Graph deleted | Graph `apply_insert`; emit STEP_FAILURE | Exact state restoration |
+| **F16** | DELETE NLF | Vertex $v$ NLF underflows | Cell $u$ decremented, $v$ pristine | Graph deleted | Rollback $u$ from undo; Graph `apply_insert` | Exact state restoration |
+| **F17** | DELETE Sink | `sink.commit_step` throws | Both decremented | Graph deleted | Rollback $u, v$ from undo; Graph `apply_insert` | Zero published tuples |
 
 ---
 
@@ -363,7 +481,7 @@ DELETE TRANSACTION:
 
 ### 7.1. Deconstruction of Current Retrieval Bottleneck
 In `extensions/rapidflow_apx/src/authoritative_graph.cpp:130-161`, `get_neighbors(uint32_t u)` performs:
-1. `std::vector<uint32_t> neighbors;` (Heap allocation).
+1. `std::vector<uint32_t> neighbors;` (Heap allocation on every invocation).
 2. Loop over base CSR neighbors: performs two hash lookups per neighbor (`tombstones_.find()` and `overlay_labels_.find()`), pushing to vector.
 3. Loop over dynamic overlay neighbors: pushes to vector.
 4. `std::sort(neighbors.begin(), neighbors.end());` ($O(d \log d)$ sorting overhead).
@@ -386,6 +504,13 @@ void ApxAuthoritativeGraph::get_neighbors_into(
 ) const;
 ```
 - **Contract:** Clears `out` (retaining its allocated capacity), populates it with all effective neighbors of `u` in strictly ascending order without duplicates.
+- **Safe Pointer Range Check:**
+  ```cpp
+  if (base_graph_ == nullptr || !has_vertex(u)) {
+      out.clear();
+      return;
+  }
+  ```
 - **Fast Path (Empty Overlay & Tombstones):**
   If `tombstones_.empty()` and `fwd_overlay_.get_neighbor_num(u) == 0`:
   ```cpp
@@ -398,15 +523,11 @@ void ApxAuthoritativeGraph::get_neighbors_into(
   Linear two-pointer merge between the sorted filtered base array and the sorted overlay array in $O(d_{\text{base}} + d_{\text{overlay}})$ time, completely eliminating $O(d \log d)$ sorting.
 
 ### 7.4. Reusable Buffer Pool & Recursion Depth Proof
-To eliminate heap allocations during DFS:
-
-```text
-DFS Frame 0 (Anchor Root)      ---> uses candidate_pool[0]  (size retained)
-   |
-   +---> DFS Frame 1 (Depth 1) ---> uses candidate_pool[1]  (size retained)
-            |
-            +---> DFS Frame 2  ---> uses candidate_pool[2]  (size retained)
+To reuse buffer capacity across search iterations:
+```cpp
+std::vector<std::vector<uint32_t>> candidate_pool;
 ```
+The pool is sized to $F_{\max}$ vectors at search initialization.
 
 **Theorem 3 (Maximum Recursion Depth Bound):**
 *In `dfs_m2`, the maximum recursion depth from the anchor root is bounded by:*
@@ -416,152 +537,177 @@ $$\text{Depth}_{\max} = (n - 2) + k$$
 **Proof:**
 1. The anchor call in `search_event` maps 2 query vertices ($qa, qb$), setting `assigned_count = 2` and `missing_count = 0`.
 2. In each step of `dfs_m2`:
-   - *PRESENT branch:* Assigns 1 unmapped query vertex, increasing `assigned_count` by 1. Since the search reaches the leaf when `assigned_count == n`, at most $n - 2$ PRESENT transitions can occur along any path.
+   - *PRESENT branch:* Assigns 1 unmapped query vertex, increasing `assigned_count` by 1. Since search reaches leaf when `assigned_count == n`, at most $n - 2$ PRESENT transitions can occur along any path.
    - *MISSING branch:* Commits the frontier edge as `MISSING`, increasing `missing_count` by 1 without assigning a vertex. Since recursion requires `missing_count + 1 <= k`, at most $k$ MISSING transitions can occur along any path.
 3. Every step selects a frontier edge from the cut with status `UNKNOWN` and transitions it to `PRESENT` or `MISSING`. No edge is ever revisited or reverted along a descent path.
 4. Therefore, the maximum number of recursive calls is $(n - 2) + k$.
 5. The maximum number of active stack frames (including root) is $F_{\max} = (n - 2) + k + 1$. $\blacksquare$
 
-**Corollaries on Buffer Stability:**
-- Pre-allocating `candidate_pool` with $F_{\max}$ vectors indexed by recursion depth $d \in [0, (n-2)+k]$ guarantees that:
-  - Frame $d$ accesses `candidate_pool[d]`.
-  - Child frame $d+1$ accesses `candidate_pool[d+1]`.
-  - Frame $d$'s candidate vector is **never aliased, resized, or overwritten** while child frames execute.
-  - The pool is never resized during DFS, guaranteeing iterator and pointer validity.
+**Corollaries on Buffer Ownership & Stability:**
+- Frame $d$ exclusively owns `candidate_pool[d]`.
+- Frame $d+1$ exclusively owns `candidate_pool[d+1]`.
+- Frame $d$'s candidate buffer is **never aliased, resized, or overwritten** while child frames execute.
+- Scratchpad capacity is retained across search calls, eliminating repeated per-call heap allocation in the common recursion path. Allocation occurs only on initial sizing or if vertex degree exceeds pre-allocated scratchpad capacity.
 
-### 7.5. Grounded Decision on Degree Index
-- **Audit Result:** Call-site audit confirms `ApxAuthoritativeGraph::get_degree()` is **never called during M2 search**.
-- **Decision:** **REJECT / DEFER** adding an incremental degree index in P4b. Adding an incremental degree index would consume $O(|V_G|)$ memory and add update/rollback overhead on every `INSERT` and `DELETE` for zero benefit to search performance.
+### 7.5. Grounded Decision on Standalone Degree Index
+Audit of `authoritative_graph.cpp:163-165` shows `get_degree(u)` is currently implemented as `get_neighbors(u).size()`.
+However, `get_degree(u)` is **never invoked on the hot path of Bare M2 DFS**. DFS directly retrieves neighbor lists.
+Introducing a standalone degree index in P4b would require additional maintenance during streaming updates for zero search benefit. Therefore, the standalone degree index is **firmly REJECTED**.
 
 ---
 
 ## 8. Correctness Verification Master Design
 
-### 8.1. Parity Obligations for Option B
-Since Option B is purely an algorithmic acceleration of neighbor retrieval without changing candidate ordering or pruning logic:
-$$\forall \text{ Workload } W, \quad \text{Counters}_{\text{Option B}}(W) \equiv \text{Counters}_{\text{Bare M2}}(W)$$
-$$\forall \text{ Workload } W, \quad \text{Tuples}_{\text{Option B}}(W) \equiv \text{Tuples}_{\text{Bare M2}}(W)$$
-Option B must match Bare M2 **bit-for-bit** across all legacy counters: `candidate_evaluations`, `candidate_extensions`, `dfs_states`, `edge_decisions`, `missing_branches`, `commitment_checks`, and emitted tuples.
+### 8.1. Legacy Counter Dictionary
+To ensure continuity with Phase P3 and P4a, counter accounting is strictly preserved:
 
-### 8.2. Equivalence Obligations for Option A
-Option A prunes unviable candidate branches early:
-- `candidate_evaluations` remains unchanged (evaluated count before filter).
-- `candidate_extensions` and `dfs_states` are strictly less than or equal to Bare M2.
-- Emitted tuples must match the ground truth `DStarDynamicOracle` and Bare M2 **100% identically**:
-  $$\text{Tuples}_{\text{Option A}}(W) \equiv \text{Tuples}_{\text{M0}}(W) \equiv \text{Tuples}_{\text{Bare M2}}(W)$$
+| Counter Name | Exact Definition | Option B Expectation | Option A Expectation |
+| :--- | :--- | :--- | :--- |
+| `candidate_evaluations` | Count of data vertices tested for candidate compatibility at any DFS step | $\equiv \text{Bare M2}$ | $\le \text{Bare M2}$ (Pruned branches reduce evaluations) |
+| `candidate_extensions` | Count of candidates passing all filters and pushed to DFS stack | $\equiv \text{Bare M2}$ | $\le \text{Bare M2}$ |
+| `dfs_states` | Total number of DFS stack frames entered | $\equiv \text{Bare M2}$ | $\le \text{Bare M2}$ |
+| `edge_decisions` | Count of frontier edge decisions made (PRESENT or MISSING) | $\equiv \text{Bare M2}$ | $\le \text{Bare M2}$ |
+| `missing_branches` | Count of MISSING edge transitions explored | $\equiv \text{Bare M2}$ | $\le \text{Bare M2}$ |
+| `commitment_checks` | Count of back-edge consistency checks performed | $\equiv \text{Bare M2}$ | $\le \text{Bare M2}$ |
 
-### 8.3. Adversarial Test Scenarios (B1–B8)
-- **B1 (Tombstoned Base Edge):** Delete base edge $0-1$. Verify $0-1$ is never returned by `get_neighbors_into` and does not cause stale candidate iteration.
-- **B2 (Delete/Reinsert Edge):** Delete base edge $0-1$ (label 0), then insert $0-1$ (label 1). Verify exactly one neighbor is returned with updated label.
-- **B3 (Overlay-Only Edge):** Insert new edge not present in base CSR. Verify neighbor is returned with zero loss.
-- **B4 (Recursive Buffer Aliasing):** Deeply nested DFS with alternating PRESENT/MISSING branches. Verify parent candidate buffer is not mutated by child frames.
-- **B5 (Transaction Rollback):** Abort transaction after graph insertion. Verify `get_neighbors_into` immediately reflects pre-transaction graph with zero ghost edges.
-- **B6 (High-Degree Hub):** Vertex with 1,000 neighbors. Verify linear merge executes correctly without memory explosion.
-- **B7 (Zero-Degree Isolated Vertex):** Vertex with no edges. Verify buffer is cleared and returns count 0 with no stale data.
-- **B8 (Buffer Reuse Across Varying Degrees):** Sequence of calls with degree 100, then degree 2, then degree 0. Verify no stale suffix from prior calls leaks into subsequent results.
+### 8.2. Actual P3 Test Suite Registries
+Verification in Phase P4b builds upon the actual historical test inventories from Phase P3:
+1. `configs/rapidflow_apx_required_cases.json`: **25 foundational test cases** verifying engine parity.
+2. `tests/fixtures/dstar03/workloads/`: **56 stream workload cases** (40 synthetic + 16 NetFlow, total 672 streaming steps).
+3. `tests/fixtures/dstar02/corpus_840/seed1_cases.jsonl`: **840 corpus cases** verifying topological diversity.
+
+### 8.3. Correctness Evidence Hierarchy
+Evidence gathered during verification is classified across four strict tiers:
+- **Level 1 (Independent Oracle Certification):** 100% tuple-level agreement with the independent Python ground truth oracle `DStarDynamicOracle`.
+- **Level 2 (Constructed Expected Results):** Analytic test cases with known, mathematically derived embedding sets.
+- **Level 3 (Differential Equivalence):** Exact parity across candidate counters and emitted tuples against Bare M2 (`Tuples_Opt == Tuples_BareM2`).
+- **Level 4 (Unverified / Censored):** Incomplete or timed-out runs; must never be claimed as valid evidence.
 
 ---
 
 ## 9. Workload Design & Suite Stratification
 
-To evaluate optimizations under diverse topological and combinatorial conditions, the P4b benchmark suite is stratified into two complementary suites:
+### 9.1. Concrete Query Registry
+To guarantee mathematical validity under Domain D-R, all benchmark queries satisfy edge connectivity $\lambda(Q) > k$ for $k=1$:
 
-### 9.1. Suite 1: P4a Continuity Suite
-Re-evaluates the 30 certified P4a canonical workloads under the P4b execution harness to anchor continuity with historical findings.
+| Query Name | $|V_Q|$ | $|E_Q|$ | Min-Cut $\lambda(Q)$ | Explicit Edge List | Verified $\lambda(Q) > 1$? |
+| :--- | :---: | :---: | :---: | :--- | :---: |
+| **Triangle ($C_3$)** | 3 | 3 | 2 | `(0,1), (1,2), (0,2)` | Yes |
+| **4-Cycle ($C_4$)** | 4 | 4 | 2 | `(0,1), (1,2), (2,3), (0,3)` | Yes |
+| **Diamond ($K_4 - e$)** | 4 | 5 | 2 | `(0,1), (0,2), (0,3), (1,2), (2,3)` | Yes |
+| **House** | 5 | 6 | 2 | `(0,1), (1,2), (2,3), (3,0), (2,4), (3,4)` | Yes |
+| **Complete Graph $K_4$** | 4 | 6 | 3 | `(0,1), (0,2), (0,3), (1,2), (1,3), (2,3)` | Yes |
+| **Triangular Prism** | 6 | 9 | 3 | `(0,1), (1,2), (0,2), (3,4), (4,5), (3,5), (0,3), (1,4), (2,5)` | Yes |
 
-### 9.2. Suite 2: P4b Discrimination Suite
-Designed specifically to discriminate between Search Core bottlenecks (Option A) and Neighbor Retrieval bottlenecks (Option B) across larger graphs and varied query topologies.
+### 9.2. Concrete Discrimination Workload Registry (DISC-01 to DISC-10)
+Workload groups cleanly disentangle query topology from data stream topology:
 
-| Group ID | Target Graph Size ($|V_G|$) | Query Topology ($Q$) | Missing Budget ($k$) | Query Connectivity ($\lambda(Q)$) | Valid D-R? | Label Regime | Stream Updates | Primary Stress Target |
-| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
-| **DISC-01** | 16 | Triangle ($n=3, m=3$) | 0, 1 | 2 | Yes ($k < 2$) | Uniform | 32 | Baseline small continuity |
-| **DISC-02** | 32 | C4 ($n=4, m=4$) | 0, 1 | 2 | Yes ($k < 2$) | Mixed-V | 50 | Cyclic search without chord |
-| **DISC-03** | 32 | Diamond ($n=4, m=5$) | 0, 1 | 2 | Yes ($k < 2$) | Uniform | 50 | Search Core bottleneck (NLF stress) |
-| **DISC-04** | 32 | Diamond ($n=4, m=5$) | 0, 1 | 2 | Yes ($k < 2$) | Mixed-V / Mixed-E | 50 | Signature discrimination stress |
-| **DISC-05** | 64 | K4 ($n=4, m=6$) | 0, 1, 2 | 3 | Yes ($k < 3$) | Uniform | 64 | Deep recursion ($k=2$) & dense cut |
-| **DISC-06** | 64 | House ($n=5, m=6$) | 0, 1 | 2 | Yes ($k < 2$) | Mixed-V | 64 | Asymmetric query frontier |
-| **DISC-07** | 64 | Prism-6 ($n=6, m=9$) | 0, 1, 2 | 3 | Yes ($k < 3$) | Uniform | 80 | Larger query size ($n=6$) |
-| **DISC-08** | 128 | K4 ($n=4, m=6$) | 0, 1 | 3 | Yes ($k < 3$) | High-churn | 100 | Overlay merge & retrieval stress |
-| **DISC-09** | 128 | Scale-free Hub | 0, 1 | 2 | Yes ($k < 2$) | Mixed-V | 100 | High-degree hub buffer reuse |
-| **DISC-10** | 64 | Disconnected Churn | 0, 1 | 2 | Yes ($k < 2$) | Fully Mixed | 64 | Negative event / empty search stress |
+| Group ID | Target Graph ($|V_G|$) | Data Stream Model | Query ($Q$) | $k$ | Stream Length | Edge Churn Ratio | Primary Target |
+| :---: | :---: | :--- | :--- | :---: | :---: | :---: | :--- |
+| **DISC-01** | 16 | Sparse Erdős-Rényi ($p=0.2$) | Triangle | 0, 1 | 32 | 100% Ins | Small graph baseline |
+| **DISC-02** | 32 | Random Regular ($d=4$) | C4 | 0, 1 | 50 | 100% Ins | Chordless cycle search |
+| **DISC-03** | 32 | Dense Erdős-Rényi ($p=0.4$) | Diamond | 0, 1 | 50 | 100% Ins | Search Core stress (NLF) |
+| **DISC-04** | 32 | Mixed-Label Cluster Graph | Diamond | 0, 1 | 50 | 80% Ins / 20% Del | Signature discrimination |
+| **DISC-05** | 64 | Dense Erdős-Rényi ($p=0.35$) | K4 | 0, 1 | 64 | 100% Ins | Deep recursion ($k=1$) |
+| **DISC-06** | 64 | Two-Cluster Bridge Graph | House | 0, 1 | 64 | 75% Ins / 25% Del | Asymmetric query frontier |
+| **DISC-07** | 64 | Dense Erdős-Rényi ($p=0.3$) | Triangular Prism | 0, 1 | 80 | 100% Ins | Larger query size ($n=6$) |
+| **DISC-08** | 128 | High-Churn Random Graph | K4 | 0, 1 | 100 | 50% Ins / 50% Del | Overlay merge & retrieval |
+| **DISC-09** | 128 | Scale-Free Power-Law (Barabási-Albert) | K4 | 0, 1 | 100 | 80% Ins / 20% Del | Hub vertex buffer reuse |
+| **DISC-10** | 64 | Adversarial Deficit Churn Stream | Triangle | 0, 1 | 64 | 50% Ins / 50% Del | Negative event / empty search |
+
+### 9.3. Workload & Measurement Slot Reconciliation
+- **Suite 1 (P4a Continuity):** 30 workloads $\times$ 3 repetitions = 90 observation slots per engine.
+- **Suite 2 (P4b Discrimination):** 10 workloads $\times$ 3 repetitions = 30 observation slots per engine.
+- **Total per engine:** $90 + 30 = 120$ observation slots.
+- **Feasibility Limits:** Stream lengths are capped at 32–100 updates to ensure ground truth oracle feasibility ($\le 30$ seconds per slot).
 
 ---
 
 ## 10. Experimental & Performance Measurement Protocol
 
 ### 10.1. Dual-Mode Measurement Architecture
-To eliminate observer interference from high-frequency timer instrumentation:
-1. **Primary Performance Run (`PROFILE_OFF`):**
-   - Micro-stage timers are completely disabled at compile-time/run-time.
-   - Measures only macro timings: **Streaming Loop Wall Time**, **Subprocess Outer Wall Time**, **Total CPU Time**, and **Peak RSS**.
-   - Primary speedup metric is evaluated strictly under `PROFILE_OFF`.
-2. **Attribution Run (`PROFILE_ON`):**
-   - Nanosecond instrumentation enabled for: Search Core, Neighbor Retrieval, NLF Check, Index Update, and Tuple Commit.
-   - Used exclusively to explain *where* gains or regressions occurred.
+To eliminate observer interference from high-frequency profiling hooks:
+1. **Macro Timing Mode (`PROFILE_OFF`):**
+   - High-frequency micro-stage timers are completely disabled.
+   - Measures only macro timings: `streaming_loop_wall_ns`, `outer_wall_ns`, CPU time, and peak RSS.
+   - All primary performance evaluation and decision thresholds are evaluated strictly under `PROFILE_OFF`.
+2. **Detailed Diagnostic Mode (`PROFILE_ON`):**
+   - Detailed micro-stage timings: Search Core, Neighbor Retrieval, NLF Check, Index Update, and Tuple Commit.
+   - Used exclusively for post-hoc attribution and bottleneck verification.
 
-### 10.2. Speedup Ratio Convention
-Across all reports, the speedup ratio $S$ is defined consistently as:
-$$S = \frac{T_{\text{Bare M2}}}{T_{\text{Variant}}}$$
-- $S > 1.0$: Variant is faster than Bare M2.
+### 10.2. Speedup Metric & Ratio Convention
+Across all benchmarks, Speedup $S$ is consistently defined as:
+$$S = \frac{T_{\text{Bare M2}}}{T_{\text{Opt}}}$$
+- $S > 1.0$: Optimization is faster than Bare M2.
 - $S = 1.0$: Performance parity.
-- $S < 1.0$: Variant is slower than Bare M2 (regression).
+- $S < 1.0$: Optimization is slower than Bare M2 (regression).
 
-### 10.3. Execution Protocol & Randomization
-- **Blocked Paired Execution:** To prevent environmental drift, variants are executed in interleaved randomized blocks:
-  $$\text{Block } b: \quad \text{RandomPermute}(\text{Bare M2}, \text{M2+A}, \text{M2+B}, \text{M2+A+B})$$
-- **Repetitions:** $R = 5$ repetitions per workload per variant.
-- **Statistical Aggregation:**
-  - *Experimental Unit:* The individual workload $W$.
-  - *Within-Workload Aggregation:* Median of the 5 repeated runs: $\widetilde{T}(W) = \text{median}_{r=1..5}(T_r(W))$.
-  - *Paired Speedup for Workload $W$:* $S(W) = \widetilde{T}_{\text{Bare M2}}(W) / \widetilde{T}_{\text{Variant}}(W)$.
-  - *Across-Workload Metric:* Geometric mean and median of $\{S(W_i)\}_{i=1}^N$ with 95% non-parametric bootstrap confidence intervals (1,000 resamples).
-- **Censoring Handling:** Runs exceeding resource limits are explicitly recorded with status (`TIMEOUT`, `OOM_CENSORED`, `WORK_BUDGET_EXCEEDED`). Censored runs are never discarded silently or replaced with fake zero timings.
+### 10.3. Statistical Aggregation & Bootstrap Specification
+- **Experimental Unit:** The individual workload $W$.
+- **Within-Workload Aggregation:** Median across the 3 repeated runs: $\widetilde{T}(W) = \text{median}_{r=1..3}(T_r(W))$.
+- **Paired Workload Speedup:** $S(W) = \widetilde{T}_{\text{Bare M2}}(W) / \widetilde{T}_{\text{Opt}}(W)$.
+- **Across-Workload Metric:** Median and geometric mean of $\{S(W_i)\}$ with 95% non-parametric BCa bootstrap confidence intervals (1,000 resamples).
+- **Censoring:** Any run exceeding 60 seconds or 4 GB RSS is flagged (`TIMEOUT` / `OOM_CENSORED`) and never replaced with fake zero values.
 
 ---
 
 ## 11. Decision Criteria (GO / NO-GO)
 
-The decision to retain, combine, or reject optimizations is governed by pre-registered thresholds:
-
 ```text
                            CORRECTNESS GATE
-                       (Zero tuple discrepancy)
+                  (100% agreement with Oracle & Bare M2)
                                   |
                 +-----------------+-----------------+
                 | PASS                              | FAIL
                 v                                   v
         PERFORMANCE AUDIT                        REJECT
-   (PROFILE_OFF Paired Speedup)                 (UNSOUND)
+   (PROFILE_OFF Streaming Loop)                 (UNSOUND)
                 |
     +-----------+-----------+-----------+
     |                       |           |
     v                       v           v
 Median S >= 1.15x       0.95 <= S < 1.15x   Median S < 0.95x
-CI_lower > 1.0          (Parity/Marginal)   (Regression)
-Memory overhead <= 20%      |                   |
+CI_lower > 1.05         (Parity/Marginal)   (Regression)
+Memory RSS <= +20%          |                   |
     |                       v                   v
     v                    RETAIN               REJECT
 ADVANTAGE_OBSERVED       BARE M2             (NO-GO)
 ```
 
-1. **Gate 1: Correctness (Zero Tolerance):**
-   Any missing, extra, or duplicate tuple compared to $M_0$ or Bare M2 results in immediate classification as `UNSOUND` and disqualification.
-2. **Gate 2: Meaningful Performance Advantage:**
-   - Classification `ADVANTAGE_OBSERVED` requires:
-     - Target-stratum median paired speedup $S \ge 1.15\times$ (at least 15% net speedup).
-     - 95% bootstrap confidence interval lower bound $> 1.00\times$.
-     - Peak RSS increase $\le 20\%$ relative to Bare M2.
-3. **Gate 3: Query-Dependent Advantage:**
-   If an optimization provides $S \ge 1.15\times$ on specific topological strata (e.g. dense queries) but regresses on others, it is classified as `QUERY_DEPENDENT`. A selector must be formally specified.
-4. **Gate 4: Parity / Regression (NO-GO):**
-   If $0.95 \le S < 1.15$, the optimization is classified as `PARITY` or marginal. If $S < 0.95$, it is classified as `REGRESSION`. In both cases, Bare M2 is retained as the default.
+1. **Gate 1: Correctness (Zero Discrepancy):**
+   Any missing, extra, or duplicate tuple compared to oracle or Bare M2 results in immediate rejection (`UNSOUND`).
+2. **Gate 2: Meaningful Advantage (`ADVANTAGE_OBSERVED`):**
+   Requires:
+   - Median paired speedup $S \ge 1.15\times$ (at least 15% net speedup).
+   - 95% bootstrap confidence interval lower bound $> 1.05\times$.
+   - Peak RSS increase $\le 20\%$.
+3. **Gate 3: Parity / Marginal:**
+   - `PARITY`: $S \in [0.95, 1.05]$.
+   - `MARGINAL`: $S \in [1.05, 1.15)$.
+   In both cases, Bare M2 is retained as primary engine (Option D).
+4. **Gate 4: Regression (`NO-GO`):**
+   $S < 0.95\times$ with statistical significance. Optimization is rejected.
+5. **Gate 5: Query-Dependent Advantage (`QUERY_DEPENDENT`):**
+   $S \ge 1.15\times$ on specific topological strata (e.g. dense queries) but regression on others.
 
 ---
 
-## 12. Proposed Implementation Roadmap
+## 12. Conditional Combined A+B Gate
+
+In strict alignment with Research Plan Section 1.2:
+The combined variant (Option A + Option B) will **ONLY** be implemented and evaluated if:
+1. Option A passes the 100% correctness gate.
+2. Option B passes the 100% correctness gate.
+3. At least **ONE** variant demonstrates a meaningful measured benefit ($S \ge 1.05\times$) without memory explosion.
+4. Combining them addresses complementary bottlenecks (Option A on Search Core, Option B on Neighbor Retrieval).
+5. Formal written proposal submitted to and approved by the Project Coordinator.
+
+---
+
+## 13. Proposed Implementation Roadmap
 
 ```text
-Phase P4b-0: Design & Protocol Specification (CURRENT - Complete)
+Phase P4b-0: Design & Protocol Specification (CURRENT - Complete Revision R1)
      |
      +---> Gate: Project Coordinator Review & Approval
      |
@@ -578,7 +724,7 @@ Phase P4b-3: Comparative Benchmark & Attribution Analysis
      |      +-- Statistical Analysis & Verification against Decision Matrix
      |
 Phase P4b-4: Conditional Combined Ablation (M2+A+B)
-     |      (Executed ONLY if both A and B pass Gates 1 and 2 independently)
+     |      (Executed ONLY if Gates 1-5 of Section 12 are satisfied)
      |
 Phase R4b: Final Research Synthesis & Decision Record
             (Handoff to Phase P5: NetFlow & Scaling)
@@ -586,62 +732,62 @@ Phase R4b: Final Research Synthesis & Decision Record
 
 ---
 
-## 13. Risk Register
+## 14. Risk Register
 
 | Risk ID | Severity | Trigger / Condition | Consequence | Mitigation Strategy | Verification Method |
 | :--- | :---: | :--- | :--- | :--- | :--- |
-| **RSK-01** | **HIGH** | Residual NLF double-counts committed missing edges | False negatives (prunes valid approximate embeddings) | Subtract $|I_Q^{\text{miss}}(u, \sigma)|$ from query requirements before deficit computation (Theorem 2) | Adversarial test A2; 100% M0 oracle cross-validation |
-| **RSK-02** | **MEDIUM** | Dense NLF table memory explosion on large graphs | Out-of-memory crash during initialization | Verify memory limit ($B_{\text{dense}} \le 32 \text{ MB}$ for $10^6$ vertices); disable NLF if budget exceeded | Memory scaling unit test; RLIMIT_AS enforcement |
-| **RSK-03** | **HIGH** | Child DFS frame mutates parent candidate buffer | Invalid candidate iteration; corrupted embeddings | Index buffer pool strictly by recursion depth $d \in [0, (n-2)+k]$ (Theorem 3) | Adversarial test B4; memory address assertion |
-| **RSK-04** | **MEDIUM** | Base CSR neighbors assumed sorted but unsorted | Corrupted two-pointer merge; missing neighbors | Verified upstream source (`graph.cpp:164`); include fallback sort if unsorted | Unit test verifying two-pointer merge parity against `std::sort` |
-| **RSK-05** | **MEDIUM** | Transaction rollback allocates heap memory during `bad_alloc` | Uncaught exception; process termination | All index and graph rollbacks use `noexcept` in-place decrements | Rollback fault-injection test (`M2FaultHook`) |
-| **RSK-06** | **LOW** | Micro-stage profiler instrumentation distorts timing | False bottleneck identification | Enforce dual-mode evaluation: `PROFILE_OFF` for speedup, `PROFILE_ON` for attribution | Observer overhead validation study |
+| **RSK-01** | **HIGH** | Residual NLF double-counts committed missing edges | False negatives (prunes valid embeddings) | Conservative Residual formulation (Theorem 2) | Counterexample A2 unit tests; oracle comparison |
+| **RSK-02** | **HIGH** | NLF table frequency counter overflows | Counter wraps to 0 or saturates, producing false deficits | `uint32_t` counter type + checked arithmetic | Arithmetic overflow test suite (V02) |
+| **RSK-03** | **HIGH** | Transaction abort after partial NLF mutation | NLF index state desynchronized from graph | Fixed-capacity 2-entry undo record with exact old-value restoration | Transaction failure matrix tests (F01–F17) |
+| **RSK-04** | **MEDIUM** | Dense NLF table memory exceeds RAM on massive graphs | Out-of-memory crash | Checked multiplication + memory budget fallback | Memory scaling audit; NetFlow estimate (V03) |
+| **RSK-05** | **MEDIUM** | Query min-cut $\le k$ | Graph becomes disconnected; leaf condition fails | Enforce $\lambda(Q) > k$ for all queries | Query registry validation (V07) |
+| **RSK-06** | **LOW** | Diagnostic profiler distorts streaming timings | Skewed speedup ratios | Primary speedup evaluated strictly under `PROFILE_OFF` | Dual-mode measurement protocol (Section 10.1) |
 
 ---
 
-## 14. Proof Obligation Register
+## 15. Proof Obligation Register
 
-| Obligation ID | Formal Statement | Key Assumptions | Proof Status | Primary Evidence |
+| Obligation ID | Claim / Invariant | Preconditions | Status | Supporting Section |
 | :--- | :--- | :--- | :---: | :--- |
-| **OBL-01** | Static Relaxed NLF deficit is a lower bound on incident missing edges | Injective mapping; typed vertex labels | **PROVEN** | Theorem 1 (Section 5.3) |
-| **OBL-02** | Conservative Residual NLF does not double-count committed missing edges | $M_{\text{cur}} \subseteq R_G(f)$; disjoint signature partition | **PROVEN** | Theorem 2 (Section 5.4) |
+| **OBL-01** | Static Relaxed NLF produces zero false negatives | Domain D-R; exact vertex label matching | **PROVEN** | Theorem 1 (Section 5.3) |
+| **OBL-02** | Conservative Residual Relaxed NLF avoids double-counting | Single-vertex incident residual bound | **PROVEN** | Theorem 2 (Section 5.4) |
 | **OBL-03** | Max DFS recursion depth is strictly bounded by $(n - 2) + k$ | Domain D-R ($k < \lambda(Q)$); non-empty cut | **PROVEN** | Theorem 3 (Section 7.4) |
-| **OBL-04** | Base CSR neighbor array is strictly sorted by vertex ID | Pristine RapidFlow `loadGraphFromMemory` | **PROVEN** | `graph.cpp:164` source audit |
+| **OBL-04** | Base CSR neighbor array is strictly sorted by vertex ID | Pristine RapidFlow `loadGraphFromFile` | **PROVEN** | `graph.cpp:164` source audit |
 | **OBL-05** | Dynamic overlay neighbor vector is strictly sorted by vertex ID | Pristine RapidFlow `GlobalEdgeView::insert` | **PROVEN** | `global_edge_view.h:27` source audit |
-| **OBL-06** | Two-pointer merge produces exact deduplicated union of base and overlay | Deduplication invariant ($\text{Base} \cap \text{Overlay} = \emptyset$) | **PROVEN** | Section 7.3 merge logic |
+| **OBL-06** | Two-pointer merge produces exact deduplicated union | Deduplication invariant ($\text{Base} \cap \text{Overlay} = \emptyset$) | **PROVEN** | Section 7.3 merge logic |
 | **OBL-07** | Option B preserves exact legacy counter parity against Bare M2 | Deterministic traversal order preserved | **SPECIFIED** | Section 8.1 parity obligation |
-| **OBL-08** | Transaction rollback on NLF index executes with zero allocation | Pre-allocated dense array; bounded decrements | **PROVEN** | Section 6.4 rollback design |
+| **OBL-08** | Transaction rollback on NLF index executes with zero allocation | Fixed-capacity 2-entry array; old-value restore | **PROVEN** | Section 6.7 rollback design |
 | **OBL-09** | Option A preserves all valid embeddings for $k=0$ (exact matching) | Deficit $> 0 \iff$ missing neighbor exists | **PROVEN** | Section 5.5 (A6 analysis) |
-| **OBL-10** | Domain D-R condition holds for all proposed discrimination workloads | Calculated edge connectivity $\lambda(Q) > k$ | **VERIFIED** | Section 9.2 workload matrix |
+| **OBL-10** | Domain D-R condition holds for all proposed discrimination workloads | Calculated edge connectivity $\lambda(Q) > k$ | **VERIFIED** | Section 9.1 & 9.2 workload matrix |
 
 ---
 
-## 15. Design Decision Record (DDR)
+## 16. Design Decision Record (DDR)
 
 | Component / Mechanism | Action | Rationale | Concrete Evidence |
 | :--- | :---: | :--- | :--- |
-| **Dense 1D Vector for `ApxNlfIndex`** | **KEEP** | Guarantees $O(1)$ lookup, optimal cache locality, zero allocation during streaming, and zero-allocation `noexcept` rollback. | Section 6.2 trade-off analysis; consumes only 1.6 MB for $10^5$ vertices. |
+| **`uint32_t` for NLF Counter** | **SELECT** | Prevents arithmetic overflow/wrapping on hub vertices ($>65,535$), ensuring exact counts and avoiding false-negative pruning. | Section 6.1 analysis; safe up to $4.29 \times 10^9$. |
+| **Dense 1D Vector for `ApxNlfIndex`** | **SELECT** | Guarantees $O(1)$ lookup, optimal cache locality, zero allocation during streaming, and zero-allocation rollback. | Section 6.3 trade-off analysis; consumes only 95 MiB on NetFlow. |
+| **Fixed-Capacity Undo Record (2 Entries)** | **SELECT** | Each edge update affects at most 2 cells ($u$ and $v$); array avoids heap allocation and guarantees exact rollback even under partial failure. | Section 6.7 rollback specification. |
 | **Conservative Residual NLF** | **KEEP** | Provides provably sound candidate pruning during DFS without double-counting previously committed missing edges. | Theorem 2 (Section 5.4) and Counterexample A2 resolution. |
-| **Depth-Indexed Reusable Candidate Pool** | **KEEP** | Completely eliminates per-call `std::vector` heap allocation during DFS while guaranteeing zero parent buffer aliasing. | Theorem 3 (Section 7.4) depth bound proof. |
+| **Depth-Indexed Reusable Candidate Pool** | **KEEP** | Reuses pre-allocated capacity, eliminating repeated heap allocations during DFS while guaranteeing zero parent buffer aliasing. | Theorem 3 (Section 7.4) depth bound proof. |
 | **Sorted Two-Pointer Neighbor Merge** | **KEEP** | Replaces $O(d \log d)$ sort with $O(d)$ linear merge by exploiting source-backed sortedness in base CSR and dynamic overlay. | Source audits of `graph.cpp:164` and `global_edge_view.h:27`. |
 | **Standalone Degree Index in P4b** | **REJECT** | `get_degree()` is never called on the M2 search hot path. An index adds update overhead and memory for zero search gain. | Call-site audit across the entire codebase (Section 7.5). |
 | **Direct Combined A+B Implementation** | **DEFER** | Compounding optimizations before establishing isolated soundness and efficacy prevents scientific attribution of gains. | Section 12 roadmap; requires Gate 1 & 2 pass on A and B. |
-| **Multi-Vertex Residual Deficit Aggregation** | **DEFER** | Summing residual deficits across multiple frontier vertices requires complex cut-edge disjointness proofs; deferred to P5. | Section 5.5 boundary limitations. |
-| **Dynamic Frontier Ordering (Option C)** | **DEFER** | Frontier ordering alterations change candidate emission sequence and work-budget charging; retained as backup. | Section 1.3 fallback strategy. |
 
 ---
 
-## 16. Open Questions for Project Coordinator
+## 17. Open Questions for Project Coordinator
 
 The following targeted decisions are submitted to the Project Coordinator prior to implementing Phase P4b-1:
-1. **Approval of Dense NLF Index Architecture:** Do you approve the dense 1D vector representation (`table_[v * num_sig + sig]`) as the primary data-side NLF structure for P4b-1, with an automatic fallback to Bare M2 if graph vertex count exceeds memory limits?
-2. **Approval of Discrimination Suite Scope:** Do you approve the proposed 10-group Discrimination Suite ($|V_G| \in [16, 128]$, $|V_Q| \in [3, 6]$, $k \in [0, 2]$) to serve as the benchmark workload matrix for P4b-3?
-3. **Approval of Primary Decision Threshold ($S \ge 1.15\times$):** Do you approve the pre-registered 15% net speedup threshold ($S \ge 1.15\times$) with 95% bootstrap confidence interval lower bound $> 1.00\times$ as the criterion for classifying an optimization as `ADVANTAGE_OBSERVED`?
-4. **Authorization to Proceed to P4b-1:** Following review of this design document, is authorization granted to open Phase P4b-1 (Implementation of Option A)?
+1. **Approval of Dense NLF Index Architecture:** Do you approve the `uint32_t` dense 1D vector representation (`table_[v * num_sig + sig]`) as the primary data-side NLF structure for P4b-1, with an automatic fallback to Bare M2 if graph vertex count exceeds memory limits?
+2. **Approval of Discrimination Suite Scope:** Do you approve the proposed 10-group Discrimination Suite ($|V_G| \in [16, 128]$, $|V_Q| \in [3, 6]$, $k \in [0, 1]$) to serve as the benchmark workload matrix for P4b-3?
+3. **Approval of Primary Decision Threshold ($S \ge 1.15\times$):** Do you approve the pre-registered 15% net speedup threshold ($S \ge 1.15\times$) with 95% bootstrap confidence interval lower bound $> 1.05\times$ as the criterion for classifying an optimization as `ADVANTAGE_OBSERVED`?
+4. **Authorization to Proceed to P4b-1:** Following review of this design document Revision R1, is authorization granted to open Phase P4b-1 (Implementation of Option A)?
 
 ---
 
-## 17. Final P4b-0 Verdict
+## 18. Final P4b-0 Verdict
 
 Based on formal proofs of soundness, source-backed architectural verification of upstream sortedness, zero-allocation transaction designs, and rigorous experimental protocols:
 
