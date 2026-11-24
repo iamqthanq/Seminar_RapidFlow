@@ -48,6 +48,11 @@ public:
         const std::vector<std::tuple<uint32_t, uint32_t, uint32_t>>& edges
     );
 
+    // Pristine initial state check (for authoritative G0 NLF initialization)
+    bool is_pristine_initial_state() const noexcept {
+        return overlay_labels_.empty() && tombstones_.empty() && dynamic_edge_count_ == 0;
+    }
+
     // Topological & Label Queries
     bool has_vertex(uint32_t u) const;
     uint32_t get_vertex_label(uint32_t u) const;

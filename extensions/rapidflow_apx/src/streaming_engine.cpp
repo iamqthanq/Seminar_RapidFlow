@@ -8,17 +8,59 @@ ApxStreamingEngine::ApxStreamingEngine(
     ApxTupleSink& sink,
     const ApxQueryPlan& query_plan,
     EngineType engine_type,
-    uint64_t max_work
+    uint64_t max_work,
+    NlfMode nlf_mode,
+    size_t max_nlf_memory_bytes
 ) : graph_(graph),
     codec_(codec),
     sink_(sink),
     query_plan_(query_plan),
     engine_type_(engine_type),
     max_work_(max_work),
+    requested_nlf_mode_(nlf_mode),
+    effective_nlf_mode_(NlfMode::NONE),
+    configuration_status_("SUCCESS"),
+    fallback_reason_(""),
+    max_nlf_memory_bytes_(max_nlf_memory_bytes),
     tx_manager_(graph, codec, sink)
 {
     cumulative_counters_.max_work = max_work_;
     step_counters_.max_work = max_work_;
+
+    if (engine_type_ == EngineType::M1) {
+        if (requested_nlf_mode_ != NlfMode::NONE) {
+            throw EngineException("NLF optimization is not supported for M1 engine");
+        }
+        effective_nlf_mode_ = NlfMode::NONE;
+    } else {
+        if (requested_nlf_mode_ == NlfMode::STATIC) {
+            try {
+                query_signatures_.build(query_plan_);
+                auto idx = std::make_unique<ApxNlfIndex>();
+                idx->initialize(graph_, query_signatures_, max_nlf_memory_bytes_);
+                nlf_index_ = std::move(idx);
+                tx_manager_.set_nlf_context(nlf_index_.get(), &query_signatures_);
+                effective_nlf_mode_ = NlfMode::STATIC;
+                configuration_status_ = "SUCCESS";
+                cumulative_counters_.nlf_index_initialization_cells = nlf_index_->total_cells();
+            } catch (const NlfMemoryLimitException&) {
+                nlf_index_.reset();
+                tx_manager_.set_nlf_context(nullptr, nullptr);
+                effective_nlf_mode_ = NlfMode::NONE;
+                configuration_status_ = "REQUESTED_CONFIGURATION_UNAVAILABLE";
+                fallback_reason_ = "NLF_INDEX_MEMORY_LIMIT";
+            } catch (const std::bad_alloc&) {
+                nlf_index_.reset();
+                tx_manager_.set_nlf_context(nullptr, nullptr);
+                effective_nlf_mode_ = NlfMode::NONE;
+                configuration_status_ = "REQUESTED_CONFIGURATION_UNAVAILABLE";
+                fallback_reason_ = "NLF_INDEX_ALLOCATION_FAILED";
+            }
+        } else {
+            effective_nlf_mode_ = NlfMode::NONE;
+            configuration_status_ = "SUCCESS";
+        }
+    }
 }
 
 StreamStepResult ApxStreamingEngine::execute_step(const UpdateOperation& update, uint32_t step_index) {
@@ -117,7 +159,10 @@ StreamStepResult ApxStreamingEngine::execute_step(const UpdateOperation& update,
             if (engine_type_ == EngineType::M1) {
                 m1_engine_.search_event(query_plan_, snapshot, du, dv, dlbl, sink_, step_counters_, prof_ptr);
             } else {
-                m2_engine_.search_event(query_plan_, snapshot, du, dv, dlbl, sink_, step_counters_, prof_ptr);
+                m2_engine_.search_event(
+                    query_plan_, snapshot, du, dv, dlbl, sink_, step_counters_, prof_ptr,
+                    effective_nlf_mode_, nlf_index_.get(), &query_signatures_
+                );
             }
             if (profiling_enabled_) {
                 auto search_t1 = ProfilingClock::now();
@@ -140,6 +185,7 @@ StreamStepResult ApxStreamingEngine::execute_step(const UpdateOperation& update,
     uint64_t com_before = sink_.committed_emissions();
     uint64_t disc_before = sink_.discarded_emissions();
 
+    tx_manager_.set_counters(&step_counters_);
     StepResult step_res = tx_manager_.execute_update(update, callback);
 
     if (profiling_enabled_) {

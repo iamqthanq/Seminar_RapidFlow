@@ -8,8 +8,15 @@
 #include "rapidflow_apx/tuple_sink.h"
 #include "rapidflow_apx/engine_counters.h"
 #include "rapidflow_apx/profiler.h"
+#include "rapidflow_apx/nlf_signatures.h"
+#include "rapidflow_apx/nlf_index.h"
 
 namespace rapidflow_apx {
+
+enum class NlfMode : uint8_t {
+    NONE = 0,
+    STATIC = 1
+};
 
 enum class EdgeCommitment : uint8_t {
     UNKNOWN = 0,
@@ -54,7 +61,10 @@ public:
         uint32_t label_upd,
         ApxTupleSink& sink,
         EngineCounters& counters,
-        StepProfiling* profiler = nullptr
+        StepProfiling* profiler = nullptr,
+        NlfMode nlf_mode = NlfMode::NONE,
+        const ApxNlfIndex* nlf_index = nullptr,
+        const ApxQuerySignatures* signatures = nullptr
     );
 
 private:
@@ -70,7 +80,10 @@ private:
         const ApxAuthoritativeGraph& snapshot,
         ApxTupleSink& sink,
         EngineCounters& counters,
-        StepProfiling* profiler = nullptr
+        StepProfiling* profiler = nullptr,
+        NlfMode nlf_mode = NlfMode::NONE,
+        const ApxNlfIndex* nlf_index = nullptr,
+        const ApxQuerySignatures* signatures = nullptr
     );
 };
 

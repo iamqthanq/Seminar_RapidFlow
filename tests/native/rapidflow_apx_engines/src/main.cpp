@@ -22,6 +22,7 @@
 #include "rapidflow_apx/streaming_engine.h"
 #include "rapidflow_apx/engine_counters.h"
 #include "rapidflow_apx/profiler.h"
+#include "p4b_tests.h"
 
 using namespace rapidflow_apx;
 
@@ -289,6 +290,8 @@ int run_native_empty_frontier_test() {
 
 int main(int argc, char* argv[]) {
     std::string engine_str = "m2";
+    std::string nlf_mode_str = "none";
+    uint64_t max_nlf_memory_mib = 0;
     std::string workload_path = "";
     std::string output_path = "";
     bool cli_max_work_set = false;
@@ -308,6 +311,12 @@ int main(int argc, char* argv[]) {
         std::string arg = argv[i];
         if (arg == "--test-empty-frontier") {
             return run_native_empty_frontier_test();
+        } else if (arg == "--test-p4b") {
+            std::string suite = "all";
+            if (i + 1 < argc && argv[i + 1][0] != '-') {
+                suite = argv[++i];
+            }
+            return run_p4b_native_tests(suite.c_str());
         } else if (arg == "--engine") {
             if (seen_engine) {
                 std::cerr << "Error: Duplicate --engine argument\n";
@@ -359,6 +368,26 @@ int main(int argc, char* argv[]) {
             seen_max_work = true;
         } else if (arg == "--continue-on-error") {
             continue_on_error = true;
+        } else if (arg == "--nlf-mode") {
+            if (i + 1 >= argc) {
+                std::cerr << "Error: Missing argument for --nlf-mode\n";
+                return static_cast<int>(ExitCode::CLI_ARG_ERROR);
+            }
+            nlf_mode_str = argv[++i];
+            if (nlf_mode_str != "none" && nlf_mode_str != "static") {
+                std::cerr << "Error: Invalid --nlf-mode '" << nlf_mode_str << "'. Must be 'none' or 'static'.\n";
+                return static_cast<int>(ExitCode::CLI_ARG_ERROR);
+            }
+        } else if (arg == "--max-nlf-memory-mib") {
+            if (i + 1 >= argc) {
+                std::cerr << "Error: Missing argument for --max-nlf-memory-mib\n";
+                return static_cast<int>(ExitCode::CLI_ARG_ERROR);
+            }
+            std::string parse_err;
+            if (!parse_positive_uint64_exact(argv[++i], max_nlf_memory_mib, parse_err)) {
+                std::cerr << "Error: Invalid --max-nlf-memory-mib: " << parse_err << "\n";
+                return static_cast<int>(ExitCode::CLI_ARG_ERROR);
+            }
         } else if (arg == "--profile") {
             profiling_enabled = true;
         } else if (arg == "--profile-output") {
@@ -394,6 +423,12 @@ int main(int argc, char* argv[]) {
         engine_type = EngineType::M2;
     } else {
         std::cerr << "Error: Unknown engine '" << engine_str << "'. Must be 'm1' or 'm2'.\n";
+        return static_cast<int>(ExitCode::CLI_ARG_ERROR);
+    }
+
+    NlfMode nlf_mode = (nlf_mode_str == "static") ? NlfMode::STATIC : NlfMode::NONE;
+    if (engine_type == EngineType::M1 && nlf_mode != NlfMode::NONE) {
+        std::cerr << "Error: NLF optimization is not supported for M1 engine.\n";
         return static_cast<int>(ExitCode::CLI_ARG_ERROR);
     }
 
@@ -633,9 +668,18 @@ int main(int argc, char* argv[]) {
         run_profiling.query_prep_ns = std::chrono::duration_cast<ProfilingNanoseconds>(qp_t1 - qp_t0).count();
 
         // 4. Initialize Sink and Streaming Engine
+        NlfMode nlf_mode = (nlf_mode_str == "static") ? NlfMode::STATIC : NlfMode::NONE;
+        size_t max_nlf_memory_bytes = static_cast<size_t>(max_nlf_memory_mib) * 1024ULL * 1024ULL;
         ApxTupleSink sink(codec, canonical_order);
-        ApxStreamingEngine streaming_engine(graph, codec, sink, query_plan, engine_type, max_work);
+        ApxStreamingEngine streaming_engine(graph, codec, sink, query_plan, engine_type, max_work, nlf_mode, max_nlf_memory_bytes);
         streaming_engine.set_profiling_enabled(profiling_enabled);
+
+        root_out["requested_nlf_mode"] = json::Value(nlf_mode_str);
+        root_out["effective_nlf_mode"] = json::Value(streaming_engine.get_effective_nlf_mode() == NlfMode::STATIC ? "static" : "none");
+        root_out["configuration_status"] = json::Value(streaming_engine.get_configuration_status());
+        if (!streaming_engine.get_fallback_reason().empty()) {
+            root_out["fallback_reason"] = json::Value(streaming_engine.get_fallback_reason());
+        }
 
         // Record Query Info
         json::Value q_info = json::Value::make_object();
@@ -780,6 +824,14 @@ int main(int argc, char* argv[]) {
                     step_cnt["commitment_checks"] = json::Value(step_res.step_counters.commitment_checks);
                     step_cnt["commitment_rejections"] = json::Value(step_res.step_counters.commitment_rejections);
                 }
+                step_cnt["nlf_static_checks"] = json::Value(step_res.step_counters.nlf_static_checks);
+                step_cnt["nlf_static_pruned"] = json::Value(step_res.step_counters.nlf_static_pruned);
+                step_cnt["nlf_signature_lookups"] = json::Value(step_res.step_counters.nlf_signature_lookups);
+                step_cnt["nlf_anchor_checks"] = json::Value(step_res.step_counters.nlf_anchor_checks);
+                step_cnt["nlf_anchor_pruned"] = json::Value(step_res.step_counters.nlf_anchor_pruned);
+                step_cnt["nlf_index_cell_updates"] = json::Value(step_res.step_counters.nlf_index_cell_updates);
+                step_cnt["nlf_index_rollback_cells"] = json::Value(step_res.step_counters.nlf_index_rollback_cells);
+                step_cnt["nlf_index_initialization_cells"] = json::Value(step_res.step_counters.nlf_index_initialization_cells);
                 step_json["step_counters"] = step_cnt;
 
                 // Codec state
@@ -953,6 +1005,14 @@ int main(int argc, char* argv[]) {
             cnt_json["commitment_checks"] = json::Value(counters.commitment_checks);
             cnt_json["commitment_rejections"] = json::Value(counters.commitment_rejections);
         }
+        cnt_json["nlf_static_checks"] = json::Value(counters.nlf_static_checks);
+        cnt_json["nlf_static_pruned"] = json::Value(counters.nlf_static_pruned);
+        cnt_json["nlf_signature_lookups"] = json::Value(counters.nlf_signature_lookups);
+        cnt_json["nlf_anchor_checks"] = json::Value(counters.nlf_anchor_checks);
+        cnt_json["nlf_anchor_pruned"] = json::Value(counters.nlf_anchor_pruned);
+        cnt_json["nlf_index_cell_updates"] = json::Value(counters.nlf_index_cell_updates);
+        cnt_json["nlf_index_rollback_cells"] = json::Value(counters.nlf_index_rollback_cells);
+        cnt_json["nlf_index_initialization_cells"] = json::Value(counters.nlf_index_initialization_cells);
         root_out["counters"] = cnt_json;
 
         if (profiling_enabled) {

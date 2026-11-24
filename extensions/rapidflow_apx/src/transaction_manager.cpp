@@ -1,5 +1,7 @@
 #include "rapidflow_apx/transaction_manager.h"
 #include "rapidflow_apx/engine_counters.h"
+#include "rapidflow_apx/nlf_index.h"
+#include "rapidflow_apx/nlf_signatures.h"
 #include <new>
 #include <chrono>
 
@@ -14,8 +16,19 @@ struct ReentrancyGuard {
 
 class TransactionScope {
 public:
-    TransactionScope(ApxAuthoritativeGraph& graph, ApxTypedCodec& codec, ApxTupleSink& sink)
-        : graph_(graph), codec_(codec), sink_(sink), codec_cp_(codec.create_checkpoint()), committed_(false) {
+    TransactionScope(
+        ApxAuthoritativeGraph& graph,
+        ApxTypedCodec& codec,
+        ApxTupleSink& sink,
+        ApxNlfIndex* nlf = nullptr,
+        EngineCounters* counters = nullptr
+    ) : graph_(graph),
+        codec_(codec),
+        sink_(sink),
+        codec_cp_(codec.create_checkpoint()),
+        nlf_(nlf),
+        counters_(counters),
+        committed_(false) {
         graph_.begin_transaction();
         sink_.start_step();
     }
@@ -26,6 +39,9 @@ public:
 
     void rollback_if_needed() noexcept {
         if (!committed_) {
+            if (nlf_) {
+                nlf_->rollback(nlf_undo_, counters_);
+            }
             graph_.rollback_transaction();
             codec_.restore_checkpoint(codec_cp_);
             sink_.abort_step();
@@ -34,16 +50,23 @@ public:
 
     void commit() noexcept {
         graph_.commit_transaction();
+        if (nlf_) {
+            nlf_->finalize(nlf_undo_);
+        }
         committed_ = true;
     }
 
     bool is_committed() const noexcept { return committed_; }
+    NlfUndoRecord& nlf_undo() noexcept { return nlf_undo_; }
 
 private:
     ApxAuthoritativeGraph& graph_;
     ApxTypedCodec& codec_;
     ApxTupleSink& sink_;
     CodecCheckpoint codec_cp_;
+    ApxNlfIndex* nlf_{nullptr};
+    EngineCounters* counters_{nullptr};
+    NlfUndoRecord nlf_undo_{};
     bool committed_{false};
 };
 } // namespace
@@ -65,7 +88,7 @@ StepResult ApxTransactionManager::execute_update(
     ReentrancyGuard guard(is_in_transaction_);
 
     // 1. Transaction Scope provides RAII containment and zero-allocation rollback
-    TransactionScope tx_scope(graph_, codec_, sink_);
+    TransactionScope tx_scope(graph_, codec_, sink_, nlf_index_, counters_);
 
     auto abort_and_rollback = [&](StepStatus status, const std::string& err) -> StepResult {
         // Run rollback BEFORE creating/returning error payload
@@ -113,6 +136,22 @@ StepResult ApxTransactionManager::execute_update(
         return abort_and_rollback(StepStatus::PREVALIDATION_FAILED, "Unknown update operation");
     }
 
+    // Prepare NLF update for INSERT before graph mutation
+    PreparedNlfUpdate prepared_insert;
+    if (update.op == UpdateOp::INSERT && nlf_index_ && signatures_) {
+        try {
+            nlf_index_->prepare_edge_update(
+                graph_, *signatures_, dense_u, dense_v, dense_label, true,
+                prepared_insert, tx_scope.nlf_undo()
+            );
+        } catch (const std::exception& ex) {
+            return abort_and_rollback(StepStatus::PREVALIDATION_FAILED, std::string("NLF prepare insert failure: ") + ex.what());
+        }
+        if (fault_point_ == FaultPoint::AFTER_NLF_PREPARE) {
+            return abort_and_rollback(StepStatus::FAULT_INJECTED, "Fault injected after NLF prepare");
+        }
+    }
+
     // Fault Injection check: BEFORE_MUTATION
     if (fault_point_ == FaultPoint::BEFORE_MUTATION) {
         return abort_and_rollback(StepStatus::FAULT_INJECTED, "Fault injected before mutation");
@@ -151,6 +190,22 @@ StepResult ApxTransactionManager::execute_update(
             }
             return abort_and_rollback(StepStatus::PREVALIDATION_FAILED, "Failed to apply insert mutation");
         }
+
+        if (fault_point_ == FaultPoint::AFTER_GRAPH_BEFORE_NLF) {
+            return abort_and_rollback(StepStatus::FAULT_INJECTED, "Fault injected after graph mutation before NLF mutation");
+        }
+
+        if (nlf_index_ && signatures_) {
+            if (fault_point_ == FaultPoint::AFTER_FIRST_NLF_CELL && prepared_insert.count > 1) {
+                PreparedNlfUpdate partial;
+                partial.count = 1;
+                partial.valid = true;
+                partial.mutations[0] = prepared_insert.mutations[0];
+                nlf_index_->apply_prepared_update(partial, counters_);
+                return abort_and_rollback(StepStatus::FAULT_INJECTED, "Fault injected after first NLF cell write");
+            }
+            nlf_index_->apply_prepared_update(prepared_insert, counters_);
+        }
     }
 
     // Fault Injection check: AFTER_MUTATION
@@ -188,6 +243,21 @@ StepResult ApxTransactionManager::execute_update(
     // 5. Post-callback finalization
     // DELETE sees G_before -> apply mutation after search callback
     if (update.op == UpdateOp::DELETE) {
+        PreparedNlfUpdate prepared_delete;
+        if (nlf_index_ && signatures_) {
+            try {
+                nlf_index_->prepare_edge_update(
+                    graph_, *signatures_, dense_u, dense_v, dense_label, false,
+                    prepared_delete, tx_scope.nlf_undo()
+                );
+            } catch (const std::exception& ex) {
+                return abort_and_rollback(StepStatus::PREVALIDATION_FAILED, std::string("NLF prepare delete failure: ") + ex.what());
+            }
+            if (fault_point_ == FaultPoint::AFTER_NLF_PREPARE) {
+                return abort_and_rollback(StepStatus::FAULT_INJECTED, "Fault injected after NLF prepare");
+            }
+        }
+
         if (fault_point_ == FaultPoint::ALLOCATION_FAILURE_MUTATION) {
             try {
                 throw std::bad_alloc();
@@ -212,6 +282,22 @@ StepResult ApxTransactionManager::execute_update(
 
         if (!applied) {
             return abort_and_rollback(StepStatus::PREVALIDATION_FAILED, "Failed to apply delete mutation after callback");
+        }
+
+        if (fault_point_ == FaultPoint::AFTER_GRAPH_BEFORE_NLF) {
+            return abort_and_rollback(StepStatus::FAULT_INJECTED, "Fault injected after graph mutation before NLF mutation");
+        }
+
+        if (nlf_index_ && signatures_) {
+            if (fault_point_ == FaultPoint::AFTER_FIRST_NLF_CELL && prepared_delete.count > 1) {
+                PreparedNlfUpdate partial;
+                partial.count = 1;
+                partial.valid = true;
+                partial.mutations[0] = prepared_delete.mutations[0];
+                nlf_index_->apply_prepared_update(partial, counters_);
+                return abort_and_rollback(StepStatus::FAULT_INJECTED, "Fault injected after first NLF cell write");
+            }
+            nlf_index_->apply_prepared_update(prepared_delete, counters_);
         }
     }
 

@@ -1480,6 +1480,7 @@ def run_workload_on_binary(
     max_work: Optional[int] = None,
     timeout: int = 30,
     address_space_mib: int = 512,
+    nlf_mode: str = "none",
 ) -> Tuple[Dict[str, Any], float, bool]:
     """Runs a single workload JSON through rapidflow_apx_native with micro-containment and strict schema validation."""
     # Preflight micro-workload containment check (P3-R3-F08)
@@ -1506,6 +1507,8 @@ def run_workload_on_binary(
         ]
         if max_work is not None:
             cmd.extend(["--max-work", str(max_work)])
+        if nlf_mode != "none":
+            cmd.extend(["--nlf-mode", nlf_mode])
 
         t0 = time.perf_counter()
         ret, out, err, timed_out = execute_contained_subprocess(
@@ -2065,6 +2068,7 @@ def run_hand_and_witness_cases(
     binary_path: Path,
     engine_filter: str = "all",
     case_filter: Optional[str] = None,
+    nlf_mode: str = "none",
 ) -> Tuple[List[Dict[str, Any]], bool]:
     """Executes hand and adversarial cases on selected engine(s), strictly verifying against M0 Oracle and negative contract."""
     all_workloads = build_hand_workloads()
@@ -2141,7 +2145,7 @@ def run_hand_and_witness_cases(
         if run_m1:
             res_m1, dur_m1, ok_m1 = run_workload_on_binary(binary_path, "m1", w)
         if run_m2:
-            res_m2, dur_m2, ok_m2 = run_workload_on_binary(binary_path, "m2", w)
+            res_m2, dur_m2, ok_m2 = run_workload_on_binary(binary_path, "m2", w, nlf_mode=nlf_mode)
 
         case_ok = True
         diag = ""
@@ -2395,6 +2399,7 @@ def run_corpus_840(
     binary_path: Path,
     engine_filter: str = "all",
     case_filter: Optional[str] = None,
+    nlf_mode: str = "none",
 ) -> Tuple[Dict[str, Any], bool]:
     """Runs corpus cases on selected engine(s), locking fixture SHA-256 and recomputing M0 Oracle."""
     # Verify input fixture hashes before reading (P3-R2-F08)
@@ -2504,7 +2509,7 @@ def run_corpus_840(
 
                 # Execute Native M2 if selected
                 if run_m2:
-                    res_m2, _, ok_m2 = run_workload_on_binary(binary_path, "m2", workload)
+                    res_m2, _, ok_m2 = run_workload_on_binary(binary_path, "m2", workload, nlf_mode=nlf_mode)
                     if ok_m2 and res_m2.get("schema_valid", False):
                         s0 = res_m2["steps"][0]
                         if sorted(s0.get("entered_tuples", [])) == exp_ent and sorted(s0.get("exited_tuples", [])) == exp_ext:
@@ -2638,6 +2643,7 @@ def run_56_stream_matrix(
     binary_path: Path,
     engine_filter: str = "all",
     case_filter: Optional[str] = None,
+    nlf_mode: str = "none",
 ) -> Tuple[Dict[str, Any], bool]:
     """Runs 56-stream matrix, verifying immutable workload locks, active-set reconstruction, deep graph state, codec, and counters."""
     v_ok, v_diag = validate_stream_lock_registry(STREAM_56_LOCK_PATH)
@@ -2806,7 +2812,7 @@ def run_56_stream_matrix(
             if run_m1:
                 res_m1, _, ok_m1 = run_workload_on_binary(binary_path, "m1", workload)
             if run_m2:
-                res_m2, _, ok_m2 = run_workload_on_binary(binary_path, "m2", workload)
+                res_m2, _, ok_m2 = run_workload_on_binary(binary_path, "m2", workload, nlf_mode=nlf_mode)
 
             if not ok_m1 or not ok_m2 or (run_m1 and not res_m1.get("schema_valid", False)) or (run_m2 and not res_m2.get("schema_valid", False)):
                 stats["status"] = "FAIL"
@@ -3021,11 +3027,12 @@ def main():
     parser.add_argument("--engine", choices=["m1", "m2", "all"], default="all", help="Target engine")
     parser.add_argument("--stage", choices=["provenance", "hand", "corpus", "stream", "all"], default="all", help="Target execution stage")
     parser.add_argument("--case", type=str, default=None, help="Diagnostic single case ID to run")
+    parser.add_argument("--nlf-mode", choices=["none", "static"], default="none", help="NLF optimization mode (default: none)")
     parser.add_argument("--output", type=str, default=None, help="Output summary report path")
     args = parser.parse_args()
 
-    # Single engine or specific case or specific stage is diagnostic run (P3-R2-F03)
-    is_diagnostic = (args.case is not None or args.stage != "all" or args.engine != "all")
+    # Single engine or specific case or specific stage or NLF mode is diagnostic run (P3-R2-F03)
+    is_diagnostic = (args.case is not None or args.stage != "all" or args.engine != "all" or args.nlf_mode != "none")
     output_path = Path(args.output) if args.output else (DIAGNOSTIC_SUMMARY_PATH if is_diagnostic else CANONICAL_SUMMARY_PATH)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -3150,6 +3157,7 @@ def main():
         "selected_engine": args.engine,
         "selected_stage": args.stage,
         "selected_case": args.case,
+        "selected_nlf_mode": args.nlf_mode,
         "provenance": provenance,
         "system_resources": res_info,
         "build_provenance": build_info,
@@ -3171,9 +3179,9 @@ def main():
 
     # Execute Hand Cases
     if "hand" in target_stages:
-        print(f"[4/5] Executing Hand and Adversarial Witness Cases (engine: {args.engine})...")
+        print(f"[4/5] Executing Hand and Adversarial Witness Cases (engine: {args.engine}, nlf_mode: {args.nlf_mode})...")
         hand_results, hand_ok = run_hand_and_witness_cases(
-            bin_path, engine_filter=args.engine, case_filter=args.case
+            bin_path, engine_filter=args.engine, case_filter=args.case, nlf_mode=args.nlf_mode
         )
         hand_passed = sum(1 for c in hand_results if c["status"] == "PASS")
         print(f"  Hand cases: {hand_passed}/{len(hand_results)} passed ({'PASS' if hand_ok else 'FAIL'})")
@@ -3190,9 +3198,9 @@ def main():
 
     # Execute Corpus 840
     if "corpus" in target_stages:
-        print(f"[5/5] Executing Correctness Corpus (Real M0 Recomputed, engine: {args.engine})...")
+        print(f"[5/5] Executing Correctness Corpus (Real M0 Recomputed, engine: {args.engine}, nlf_mode: {args.nlf_mode})...")
         corpus_stats, corpus_ok = run_corpus_840(
-            bin_path, engine_filter=args.engine, case_filter=args.case
+            bin_path, engine_filter=args.engine, case_filter=args.case, nlf_mode=args.nlf_mode
         )
         m1_info = f"{corpus_stats['m1_agreed']}/{corpus_stats.get('selected_cases', 840)} M1 agreed" if corpus_stats['m1_executed'] else "M1 NOT_RUN"
         m2_info = f"{corpus_stats['m2_agreed']}/{corpus_stats.get('selected_cases', 840)} M2 agreed" if corpus_stats['m2_executed'] else "M2 NOT_RUN"
@@ -3205,9 +3213,9 @@ def main():
 
     # Execute 56-Stream Matrix
     if "stream" in target_stages:
-        print(f"[+] Executing Stateful Stream Matrix (engine: {args.engine})...")
+        print(f"[+] Executing Stateful Stream Matrix (engine: {args.engine}, nlf_mode: {args.nlf_mode})...")
         stream_stats, stream_ok = run_56_stream_matrix(
-            bin_path, engine_filter=args.engine, case_filter=args.case
+            bin_path, engine_filter=args.engine, case_filter=args.case, nlf_mode=args.nlf_mode
         )
         m1_s_info = f"M1 agreed {stream_stats['agreed_steps_m1']}/{stream_stats.get('selected_updates', 672)}" if stream_stats['m1_executed'] else "M1 NOT_RUN"
         m2_s_info = f"M2 agreed {stream_stats['agreed_steps_m2']}/{stream_stats.get('selected_updates', 672)}" if stream_stats['m2_executed'] else "M2 NOT_RUN"

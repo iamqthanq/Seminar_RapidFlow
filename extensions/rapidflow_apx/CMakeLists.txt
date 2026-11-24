@@ -26,6 +26,8 @@ set(FOUNDATION_SRCS
     src/transaction_manager.cpp
     src/micro_matcher.cpp
     src/query_plan.cpp
+    src/nlf_signatures.cpp
+    src/nlf_index.cpp
     src/m1_enum_engine.cpp
     src/m2_event_engine.cpp
     src/streaming_engine.cpp

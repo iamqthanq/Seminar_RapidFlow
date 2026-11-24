@@ -3,6 +3,33 @@
 
 namespace rapidflow_apx {
 
+namespace {
+inline bool static_nlf_allows(
+    const ApxQuerySignatures& signatures,
+    const ApxNlfIndex& index,
+    uint32_t query_vertex,
+    uint32_t data_vertex,
+    uint32_t k,
+    EngineCounters& counters
+) noexcept {
+    const auto& reqs = signatures.get_vertex_requirements(query_vertex);
+    uint64_t total_deficit = 0;
+    const uint64_t k_budget = static_cast<uint64_t>(k);
+
+    for (const auto& req : reqs) {
+        counters.nlf_signature_lookups++;
+        NlfCount available = index.count_unchecked(data_vertex, req.sig_id);
+        NlfCount local_deficit = ApxNlfIndex::compute_static_deficit(req.required_count, available);
+
+        if (local_deficit > k_budget - total_deficit) {
+            return false; // PRUNE
+        }
+        total_deficit += local_deficit;
+    }
+    return true; // KEEP
+}
+} // namespace
+
 int ApxM2EventEngine::find_frontier_edge(
     const std::vector<uint32_t>& mapping,
     const std::vector<EdgeCommitment>& status,
@@ -49,7 +76,10 @@ uint64_t ApxM2EventEngine::search_event(
     uint32_t label_upd,
     ApxTupleSink& sink,
     EngineCounters& counters,
-    StepProfiling* profiler
+    StepProfiling* profiler,
+    NlfMode nlf_mode,
+    const ApxNlfIndex* nlf_index,
+    const ApxQuerySignatures* signatures
 ) {
     uint32_t num_q = query_plan.get_vertices_count();
     uint32_t num_m = query_plan.get_edges_count();
@@ -86,6 +116,21 @@ uint64_t ApxM2EventEngine::search_event(
                 continue;
             }
 
+            if (nlf_mode == NlfMode::STATIC && nlf_index && signatures) {
+                counters.nlf_static_checks += 2;
+                counters.nlf_anchor_checks += 2;
+                if (!static_nlf_allows(*signatures, *nlf_index, qa, pa, query_plan.get_k(), counters)) {
+                    counters.nlf_static_pruned++;
+                    counters.nlf_anchor_pruned++;
+                    continue;
+                }
+                if (!static_nlf_allows(*signatures, *nlf_index, qb, pb, query_plan.get_k(), counters)) {
+                    counters.nlf_static_pruned++;
+                    counters.nlf_anchor_pruned++;
+                    continue;
+                }
+            }
+
             counters.anchors_started++;
             counters.charge_work();
 
@@ -106,7 +151,10 @@ uint64_t ApxM2EventEngine::search_event(
                 snapshot,
                 sink,
                 counters,
-                profiler
+                profiler,
+                nlf_mode,
+                nlf_index,
+                signatures
             );
 
             // Undo anchor state
@@ -131,7 +179,10 @@ void ApxM2EventEngine::dfs_m2(
     const ApxAuthoritativeGraph& snapshot,
     ApxTupleSink& sink,
     EngineCounters& counters,
-    StepProfiling* profiler
+    StepProfiling* profiler,
+    NlfMode nlf_mode,
+    const ApxNlfIndex* nlf_index,
+    const ApxQuerySignatures* signatures
 ) {
     counters.dfs_states++;
     uint32_t k = query_plan.get_k();
@@ -220,6 +271,15 @@ void ApxM2EventEngine::dfs_m2(
             continue;
         }
 
+        // Static Relaxed NLF necessary-condition pruning
+        if (nlf_mode == NlfMode::STATIC && nlf_index && signatures) {
+            counters.nlf_static_checks++;
+            if (!static_nlf_allows(*signatures, *nlf_index, v_q, cand, k, counters)) {
+                counters.nlf_static_pruned++;
+                continue;
+            }
+        }
+
         counters.candidate_extensions++;
 
         // Tentatively assign v_q -> cand
@@ -288,7 +348,10 @@ void ApxM2EventEngine::dfs_m2(
                 snapshot,
                 sink,
                 counters,
-                profiler
+                profiler,
+                nlf_mode,
+                nlf_index,
+                signatures
             );
         }
 
@@ -324,7 +387,10 @@ void ApxM2EventEngine::dfs_m2(
             snapshot,
             sink,
             counters,
-            profiler
+            profiler,
+            nlf_mode,
+            nlf_index,
+            signatures
         );
     }
 

@@ -13,6 +13,9 @@
 #include "rapidflow_apx/m2_event_engine.h"
 #include "rapidflow_apx/engine_counters.h"
 #include "rapidflow_apx/profiler.h"
+#include "rapidflow_apx/nlf_signatures.h"
+#include "rapidflow_apx/nlf_index.h"
+#include <memory>
 
 namespace rapidflow_apx {
 
@@ -43,7 +46,9 @@ public:
         ApxTupleSink& sink,
         const ApxQueryPlan& query_plan,
         EngineType engine_type = EngineType::M2,
-        uint64_t max_work = 500000
+        uint64_t max_work = 500000,
+        NlfMode nlf_mode = NlfMode::NONE,
+        size_t max_nlf_memory_bytes = 0
     );
 
     StreamStepResult execute_step(const UpdateOperation& update, uint32_t step_index);
@@ -53,6 +58,13 @@ public:
     const EngineCounters& get_cumulative_counters() const noexcept { return cumulative_counters_; }
     const EngineCounters& get_step_counters() const noexcept { return step_counters_; }
     EngineType get_engine_type() const noexcept { return engine_type_; }
+
+    NlfMode get_requested_nlf_mode() const noexcept { return requested_nlf_mode_; }
+    NlfMode get_effective_nlf_mode() const noexcept { return effective_nlf_mode_; }
+    const std::string& get_configuration_status() const noexcept { return configuration_status_; }
+    const std::string& get_fallback_reason() const noexcept { return fallback_reason_; }
+    const ApxNlfIndex* get_nlf_index() const noexcept { return nlf_index_.get(); }
+    const ApxQuerySignatures& get_query_signatures() const noexcept { return query_signatures_; }
 
     ApxTransactionManager& get_tx_manager() noexcept { return tx_manager_; }
     void set_m2_fault_hook(M2FaultHook hook) noexcept { m2_engine_.set_fault_hook(hook); }
@@ -71,6 +83,14 @@ private:
     const ApxQueryPlan& query_plan_;
     EngineType engine_type_;
     uint64_t max_work_;
+    NlfMode requested_nlf_mode_{NlfMode::NONE};
+    NlfMode effective_nlf_mode_{NlfMode::NONE};
+    std::string configuration_status_{"SUCCESS"};
+    std::string fallback_reason_{""};
+    size_t max_nlf_memory_bytes_{0};
+
+    ApxQuerySignatures query_signatures_{};
+    std::unique_ptr<ApxNlfIndex> nlf_index_{nullptr};
 
     ApxM1EnumEngine m1_engine_;
     ApxM2EventEngine m2_engine_;
