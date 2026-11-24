@@ -43,6 +43,8 @@ struct StepResult {
     StepStatus status;
     std::string error_message;
     std::vector<std::vector<int64_t>> published_tuples;
+    uint64_t update_maintenance_ns{0};
+    uint64_t tuple_sink_ns{0};
 };
 
 using SearchCallback = std::function<bool(
@@ -72,6 +74,9 @@ public:
     void set_fault_injection(FaultPoint point) noexcept { fault_point_ = point; }
     FaultPoint get_fault_injection() const noexcept { return fault_point_; }
 
+    void set_profiling_enabled(bool enabled) noexcept { profiling_enabled_ = enabled; }
+    bool is_profiling_enabled() const noexcept { return profiling_enabled_; }
+
     bool is_in_transaction() const noexcept { return is_in_transaction_; }
 
 private:
@@ -80,6 +85,7 @@ private:
     ApxTupleSink& sink_;
     FaultPoint fault_point_{FaultPoint::NONE};
     bool is_in_transaction_{false};
+    bool profiling_enabled_{false};
 };
 
 } // namespace rapidflow_apx

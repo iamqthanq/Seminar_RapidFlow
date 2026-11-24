@@ -48,7 +48,8 @@ uint64_t ApxM2EventEngine::search_event(
     uint32_t v_upd,
     uint32_t label_upd,
     ApxTupleSink& sink,
-    EngineCounters& counters
+    EngineCounters& counters,
+    StepProfiling* profiler
 ) {
     uint32_t num_q = query_plan.get_vertices_count();
     uint32_t num_m = query_plan.get_edges_count();
@@ -104,7 +105,8 @@ uint64_t ApxM2EventEngine::search_event(
                 query_plan,
                 snapshot,
                 sink,
-                counters
+                counters,
+                profiler
             );
 
             // Undo anchor state
@@ -128,7 +130,8 @@ void ApxM2EventEngine::dfs_m2(
     const ApxQueryPlan& query_plan,
     const ApxAuthoritativeGraph& snapshot,
     ApxTupleSink& sink,
-    EngineCounters& counters
+    EngineCounters& counters,
+    StepProfiling* profiler
 ) {
     counters.dfs_states++;
     uint32_t k = query_plan.get_k();
@@ -188,7 +191,16 @@ void ApxM2EventEngine::dfs_m2(
     uint32_t v_q_label = query_plan.get_vertex_label(v_q);
 
     // --- PRESENT Branch ---
-    const auto& candidates = snapshot.get_neighbors(u_data);
+    std::vector<uint32_t> cand_storage;
+    if (profiler) {
+        auto t0 = ProfilingClock::now();
+        cand_storage = snapshot.get_neighbors(u_data);
+        auto t1 = ProfilingClock::now();
+        profiler->neighbor_retrieval_ns += std::chrono::duration_cast<ProfilingNanoseconds>(t1 - t0).count();
+    } else {
+        cand_storage = snapshot.get_neighbors(u_data);
+    }
+    const auto& candidates = cand_storage;
     for (uint32_t cand : candidates) {
         counters.candidate_evaluations++;
         counters.charge_work();
@@ -275,7 +287,8 @@ void ApxM2EventEngine::dfs_m2(
                 query_plan,
                 snapshot,
                 sink,
-                counters
+                counters,
+                profiler
             );
         }
 
@@ -310,7 +323,8 @@ void ApxM2EventEngine::dfs_m2(
             query_plan,
             snapshot,
             sink,
-            counters
+            counters,
+            profiler
         );
     }
 

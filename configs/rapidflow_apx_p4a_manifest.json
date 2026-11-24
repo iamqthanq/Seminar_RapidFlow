@@ -1,0 +1,7657 @@
+{
+  "manifest_version": "1.0",
+  "description": "RapidFlow-APX Phase P4a Bounded Native Profiling & Measurement Workloads",
+  "total_cases": 30,
+  "cases": [
+    {
+      "case_id": "P4A_WL_01",
+      "description": "Diamond k=0 exact control uniform micro",
+      "query_type": "diamond",
+      "k": 0,
+      "regime": "uniform",
+      "topology": "micro",
+      "max_work": 500000,
+      "query": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 1
+          }
+        ]
+      },
+      "initial_graph": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          },
+          {
+            "id": 4,
+            "label": 1
+          },
+          {
+            "id": 5,
+            "label": 1
+          },
+          {
+            "id": 6,
+            "label": 1
+          },
+          {
+            "id": 7,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 5,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 6,
+            "label": 1
+          },
+          {
+            "u": 5,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 6,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 4,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 5,
+            "label": 1
+          }
+        ]
+      },
+      "updates": [
+        {
+          "op": "+",
+          "u": 1,
+          "v": 2,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 5,
+          "v": 6,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 2,
+          "v": 4,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 3,
+          "v": 7,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 2,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 5,
+          "v": 6,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 2,
+          "v": 4,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 3,
+          "v": 7,
+          "label": 1
+        }
+      ]
+    },
+    {
+      "case_id": "P4A_WL_02",
+      "description": "Diamond k=0 exact control mixed micro",
+      "query_type": "diamond",
+      "k": 0,
+      "regime": "mixed",
+      "topology": "micro",
+      "max_work": 500000,
+      "query": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 2
+          },
+          {
+            "id": 2,
+            "label": 2
+          },
+          {
+            "id": 3,
+            "label": 3
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 10
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 20
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 20
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 30
+          }
+        ]
+      },
+      "initial_graph": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 2
+          },
+          {
+            "id": 2,
+            "label": 2
+          },
+          {
+            "id": 3,
+            "label": 3
+          },
+          {
+            "id": 4,
+            "label": 1
+          },
+          {
+            "id": 5,
+            "label": 2
+          },
+          {
+            "id": 6,
+            "label": 3
+          },
+          {
+            "id": 7,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 10
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 10
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 10
+          },
+          {
+            "u": 4,
+            "v": 5,
+            "label": 10
+          },
+          {
+            "u": 4,
+            "v": 6,
+            "label": 10
+          },
+          {
+            "u": 5,
+            "v": 7,
+            "label": 10
+          },
+          {
+            "u": 6,
+            "v": 7,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 4,
+            "label": 10
+          },
+          {
+            "u": 1,
+            "v": 5,
+            "label": 10
+          }
+        ]
+      },
+      "updates": [
+        {
+          "op": "+",
+          "u": 1,
+          "v": 2,
+          "label": 30
+        },
+        {
+          "op": "+",
+          "u": 5,
+          "v": 6,
+          "label": 30
+        },
+        {
+          "op": "+",
+          "u": 2,
+          "v": 4,
+          "label": 10
+        },
+        {
+          "op": "+",
+          "u": 3,
+          "v": 7,
+          "label": 10
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 2,
+          "label": 30
+        },
+        {
+          "op": "-",
+          "u": 5,
+          "v": 6,
+          "label": 30
+        },
+        {
+          "op": "-",
+          "u": 2,
+          "v": 4,
+          "label": 10
+        },
+        {
+          "op": "-",
+          "u": 3,
+          "v": 7,
+          "label": 10
+        }
+      ]
+    },
+    {
+      "case_id": "P4A_WL_03",
+      "description": "Diamond k=1 approximate uniform micro",
+      "query_type": "diamond",
+      "k": 1,
+      "regime": "uniform",
+      "topology": "micro",
+      "max_work": 500000,
+      "query": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 1
+          }
+        ]
+      },
+      "initial_graph": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          },
+          {
+            "id": 4,
+            "label": 1
+          },
+          {
+            "id": 5,
+            "label": 1
+          },
+          {
+            "id": 6,
+            "label": 1
+          },
+          {
+            "id": 7,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 5,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 6,
+            "label": 1
+          },
+          {
+            "u": 5,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 6,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 4,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 5,
+            "label": 1
+          }
+        ]
+      },
+      "updates": [
+        {
+          "op": "+",
+          "u": 1,
+          "v": 2,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 5,
+          "v": 6,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 2,
+          "v": 4,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 3,
+          "v": 7,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 2,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 5,
+          "v": 6,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 2,
+          "v": 4,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 3,
+          "v": 7,
+          "label": 1
+        }
+      ]
+    },
+    {
+      "case_id": "P4A_WL_04",
+      "description": "Diamond k=1 approximate mixed micro",
+      "query_type": "diamond",
+      "k": 1,
+      "regime": "mixed",
+      "topology": "micro",
+      "max_work": 500000,
+      "query": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 2
+          },
+          {
+            "id": 2,
+            "label": 2
+          },
+          {
+            "id": 3,
+            "label": 3
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 10
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 20
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 20
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 30
+          }
+        ]
+      },
+      "initial_graph": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 2
+          },
+          {
+            "id": 2,
+            "label": 2
+          },
+          {
+            "id": 3,
+            "label": 3
+          },
+          {
+            "id": 4,
+            "label": 1
+          },
+          {
+            "id": 5,
+            "label": 2
+          },
+          {
+            "id": 6,
+            "label": 3
+          },
+          {
+            "id": 7,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 10
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 10
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 10
+          },
+          {
+            "u": 4,
+            "v": 5,
+            "label": 10
+          },
+          {
+            "u": 4,
+            "v": 6,
+            "label": 10
+          },
+          {
+            "u": 5,
+            "v": 7,
+            "label": 10
+          },
+          {
+            "u": 6,
+            "v": 7,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 4,
+            "label": 10
+          },
+          {
+            "u": 1,
+            "v": 5,
+            "label": 10
+          }
+        ]
+      },
+      "updates": [
+        {
+          "op": "+",
+          "u": 1,
+          "v": 2,
+          "label": 30
+        },
+        {
+          "op": "+",
+          "u": 5,
+          "v": 6,
+          "label": 30
+        },
+        {
+          "op": "+",
+          "u": 2,
+          "v": 4,
+          "label": 10
+        },
+        {
+          "op": "+",
+          "u": 3,
+          "v": 7,
+          "label": 10
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 2,
+          "label": 30
+        },
+        {
+          "op": "-",
+          "u": 5,
+          "v": 6,
+          "label": 30
+        },
+        {
+          "op": "-",
+          "u": 2,
+          "v": 4,
+          "label": 10
+        },
+        {
+          "op": "-",
+          "u": 3,
+          "v": 7,
+          "label": 10
+        }
+      ]
+    },
+    {
+      "case_id": "P4A_WL_05",
+      "description": "Diamond k=1 approximate uniform cycle",
+      "query_type": "diamond",
+      "k": 1,
+      "regime": "uniform",
+      "topology": "cycle",
+      "max_work": 500000,
+      "query": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 1
+          }
+        ]
+      },
+      "initial_graph": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          },
+          {
+            "id": 4,
+            "label": 1
+          },
+          {
+            "id": 5,
+            "label": 1
+          },
+          {
+            "id": 6,
+            "label": 1
+          },
+          {
+            "id": 7,
+            "label": 1
+          },
+          {
+            "id": 8,
+            "label": 1
+          },
+          {
+            "id": 9,
+            "label": 1
+          },
+          {
+            "id": 10,
+            "label": 1
+          },
+          {
+            "id": 11,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 3,
+            "v": 4,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 5,
+            "label": 1
+          },
+          {
+            "u": 5,
+            "v": 6,
+            "label": 1
+          },
+          {
+            "u": 6,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 7,
+            "v": 8,
+            "label": 1
+          },
+          {
+            "u": 8,
+            "v": 9,
+            "label": 1
+          },
+          {
+            "u": 9,
+            "v": 10,
+            "label": 1
+          },
+          {
+            "u": 10,
+            "v": 11,
+            "label": 1
+          },
+          {
+            "u": 11,
+            "v": 0,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 3,
+            "v": 6,
+            "label": 1
+          },
+          {
+            "u": 6,
+            "v": 9,
+            "label": 1
+          },
+          {
+            "u": 9,
+            "v": 0,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 10,
+            "label": 1
+          }
+        ]
+      },
+      "updates": [
+        {
+          "op": "+",
+          "u": 1,
+          "v": 4,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 2,
+          "v": 5,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 5,
+          "v": 8,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 7,
+          "v": 10,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 4,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 2,
+          "v": 5,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 5,
+          "v": 8,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 7,
+          "v": 10,
+          "label": 1
+        }
+      ]
+    },
+    {
+      "case_id": "P4A_WL_06",
+      "description": "Diamond k=1 approximate mixed cycle",
+      "query_type": "diamond",
+      "k": 1,
+      "regime": "mixed",
+      "topology": "cycle",
+      "max_work": 500000,
+      "query": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 2
+          },
+          {
+            "id": 2,
+            "label": 2
+          },
+          {
+            "id": 3,
+            "label": 3
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 10
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 20
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 20
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 30
+          }
+        ]
+      },
+      "initial_graph": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 2
+          },
+          {
+            "id": 2,
+            "label": 2
+          },
+          {
+            "id": 3,
+            "label": 3
+          },
+          {
+            "id": 4,
+            "label": 1
+          },
+          {
+            "id": 5,
+            "label": 2
+          },
+          {
+            "id": 6,
+            "label": 2
+          },
+          {
+            "id": 7,
+            "label": 3
+          },
+          {
+            "id": 8,
+            "label": 1
+          },
+          {
+            "id": 9,
+            "label": 2
+          },
+          {
+            "id": 10,
+            "label": 2
+          },
+          {
+            "id": 11,
+            "label": 3
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 10
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 20
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 10
+          },
+          {
+            "u": 3,
+            "v": 4,
+            "label": 20
+          },
+          {
+            "u": 4,
+            "v": 5,
+            "label": 10
+          },
+          {
+            "u": 5,
+            "v": 6,
+            "label": 20
+          },
+          {
+            "u": 6,
+            "v": 7,
+            "label": 10
+          },
+          {
+            "u": 7,
+            "v": 8,
+            "label": 20
+          },
+          {
+            "u": 8,
+            "v": 9,
+            "label": 10
+          },
+          {
+            "u": 9,
+            "v": 10,
+            "label": 20
+          },
+          {
+            "u": 10,
+            "v": 11,
+            "label": 10
+          },
+          {
+            "u": 11,
+            "v": 0,
+            "label": 20
+          },
+          {
+            "u": 0,
+            "v": 3,
+            "label": 30
+          },
+          {
+            "u": 3,
+            "v": 6,
+            "label": 30
+          },
+          {
+            "u": 6,
+            "v": 9,
+            "label": 30
+          },
+          {
+            "u": 9,
+            "v": 0,
+            "label": 30
+          },
+          {
+            "u": 1,
+            "v": 7,
+            "label": 30
+          },
+          {
+            "u": 4,
+            "v": 10,
+            "label": 30
+          }
+        ]
+      },
+      "updates": [
+        {
+          "op": "+",
+          "u": 1,
+          "v": 4,
+          "label": 10
+        },
+        {
+          "op": "+",
+          "u": 2,
+          "v": 5,
+          "label": 20
+        },
+        {
+          "op": "+",
+          "u": 5,
+          "v": 8,
+          "label": 10
+        },
+        {
+          "op": "+",
+          "u": 7,
+          "v": 10,
+          "label": 20
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 4,
+          "label": 10
+        },
+        {
+          "op": "-",
+          "u": 2,
+          "v": 5,
+          "label": 20
+        },
+        {
+          "op": "-",
+          "u": 5,
+          "v": 8,
+          "label": 10
+        },
+        {
+          "op": "-",
+          "u": 7,
+          "v": 10,
+          "label": 20
+        }
+      ]
+    },
+    {
+      "case_id": "P4A_WL_07",
+      "description": "Diamond k=1 approximate uniform dense hub",
+      "query_type": "diamond",
+      "k": 1,
+      "regime": "uniform",
+      "topology": "hub",
+      "max_work": 500000,
+      "query": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 1
+          }
+        ]
+      },
+      "initial_graph": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          },
+          {
+            "id": 4,
+            "label": 1
+          },
+          {
+            "id": 5,
+            "label": 1
+          },
+          {
+            "id": 6,
+            "label": 1
+          },
+          {
+            "id": 7,
+            "label": 1
+          },
+          {
+            "id": 8,
+            "label": 1
+          },
+          {
+            "id": 9,
+            "label": 1
+          },
+          {
+            "id": 10,
+            "label": 1
+          },
+          {
+            "id": 11,
+            "label": 1
+          },
+          {
+            "id": 12,
+            "label": 1
+          },
+          {
+            "id": 13,
+            "label": 1
+          },
+          {
+            "id": 14,
+            "label": 1
+          },
+          {
+            "id": 15,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 4,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 5,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 6,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 8,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 9,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 10,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 3,
+            "v": 4,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 5,
+            "label": 1
+          },
+          {
+            "u": 5,
+            "v": 6,
+            "label": 1
+          },
+          {
+            "u": 6,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 7,
+            "v": 8,
+            "label": 1
+          },
+          {
+            "u": 8,
+            "v": 9,
+            "label": 1
+          },
+          {
+            "u": 9,
+            "v": 10,
+            "label": 1
+          },
+          {
+            "u": 10,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 11,
+            "v": 12,
+            "label": 1
+          },
+          {
+            "u": 12,
+            "v": 13,
+            "label": 1
+          },
+          {
+            "u": 13,
+            "v": 14,
+            "label": 1
+          },
+          {
+            "u": 14,
+            "v": 15,
+            "label": 1
+          },
+          {
+            "u": 15,
+            "v": 11,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 11,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 12,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 13,
+            "label": 1
+          },
+          {
+            "u": 6,
+            "v": 14,
+            "label": 1
+          },
+          {
+            "u": 8,
+            "v": 15,
+            "label": 1
+          }
+        ]
+      },
+      "updates": [
+        {
+          "op": "+",
+          "u": 1,
+          "v": 6,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 2,
+          "v": 7,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 3,
+          "v": 8,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 4,
+          "v": 9,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 0,
+          "v": 12,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 1,
+          "v": 14,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 6,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 2,
+          "v": 7,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 3,
+          "v": 8,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 4,
+          "v": 9,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 0,
+          "v": 12,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 14,
+          "label": 1
+        }
+      ]
+    },
+    {
+      "case_id": "P4A_WL_08",
+      "description": "Diamond k=1 approximate mixed dense hub",
+      "query_type": "diamond",
+      "k": 1,
+      "regime": "mixed",
+      "topology": "hub",
+      "max_work": 500000,
+      "query": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 2
+          },
+          {
+            "id": 2,
+            "label": 2
+          },
+          {
+            "id": 3,
+            "label": 3
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 10
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 20
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 20
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 30
+          }
+        ]
+      },
+      "initial_graph": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 2
+          },
+          {
+            "id": 2,
+            "label": 2
+          },
+          {
+            "id": 3,
+            "label": 3
+          },
+          {
+            "id": 4,
+            "label": 1
+          },
+          {
+            "id": 5,
+            "label": 2
+          },
+          {
+            "id": 6,
+            "label": 1
+          },
+          {
+            "id": 7,
+            "label": 3
+          },
+          {
+            "id": 8,
+            "label": 2
+          },
+          {
+            "id": 9,
+            "label": 1
+          },
+          {
+            "id": 10,
+            "label": 3
+          },
+          {
+            "id": 11,
+            "label": 2
+          },
+          {
+            "id": 12,
+            "label": 1
+          },
+          {
+            "id": 13,
+            "label": 2
+          },
+          {
+            "id": 14,
+            "label": 3
+          },
+          {
+            "id": 15,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 20
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 3,
+            "label": 20
+          },
+          {
+            "u": 0,
+            "v": 4,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 5,
+            "label": 20
+          },
+          {
+            "u": 0,
+            "v": 6,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 7,
+            "label": 20
+          },
+          {
+            "u": 0,
+            "v": 8,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 9,
+            "label": 20
+          },
+          {
+            "u": 0,
+            "v": 10,
+            "label": 10
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 10
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 10
+          },
+          {
+            "u": 3,
+            "v": 4,
+            "label": 10
+          },
+          {
+            "u": 4,
+            "v": 5,
+            "label": 10
+          },
+          {
+            "u": 5,
+            "v": 6,
+            "label": 10
+          },
+          {
+            "u": 6,
+            "v": 7,
+            "label": 10
+          },
+          {
+            "u": 7,
+            "v": 8,
+            "label": 10
+          },
+          {
+            "u": 8,
+            "v": 9,
+            "label": 10
+          },
+          {
+            "u": 9,
+            "v": 10,
+            "label": 10
+          },
+          {
+            "u": 10,
+            "v": 1,
+            "label": 10
+          },
+          {
+            "u": 11,
+            "v": 12,
+            "label": 20
+          },
+          {
+            "u": 12,
+            "v": 13,
+            "label": 20
+          },
+          {
+            "u": 13,
+            "v": 14,
+            "label": 20
+          },
+          {
+            "u": 14,
+            "v": 15,
+            "label": 20
+          },
+          {
+            "u": 15,
+            "v": 11,
+            "label": 20
+          },
+          {
+            "u": 0,
+            "v": 11,
+            "label": 30
+          },
+          {
+            "u": 2,
+            "v": 12,
+            "label": 30
+          },
+          {
+            "u": 4,
+            "v": 13,
+            "label": 30
+          },
+          {
+            "u": 6,
+            "v": 14,
+            "label": 30
+          },
+          {
+            "u": 8,
+            "v": 15,
+            "label": 30
+          }
+        ]
+      },
+      "updates": [
+        {
+          "op": "+",
+          "u": 1,
+          "v": 6,
+          "label": 10
+        },
+        {
+          "op": "+",
+          "u": 2,
+          "v": 7,
+          "label": 20
+        },
+        {
+          "op": "+",
+          "u": 3,
+          "v": 8,
+          "label": 30
+        },
+        {
+          "op": "+",
+          "u": 4,
+          "v": 9,
+          "label": 10
+        },
+        {
+          "op": "+",
+          "u": 0,
+          "v": 12,
+          "label": 20
+        },
+        {
+          "op": "+",
+          "u": 1,
+          "v": 14,
+          "label": 30
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 6,
+          "label": 10
+        },
+        {
+          "op": "-",
+          "u": 2,
+          "v": 7,
+          "label": 20
+        },
+        {
+          "op": "-",
+          "u": 3,
+          "v": 8,
+          "label": 30
+        },
+        {
+          "op": "-",
+          "u": 4,
+          "v": 9,
+          "label": 10
+        },
+        {
+          "op": "-",
+          "u": 0,
+          "v": 12,
+          "label": 20
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 14,
+          "label": 30
+        }
+      ]
+    },
+    {
+      "case_id": "P4A_WL_09",
+      "description": "Diamond k=1 zero-event fast-path control",
+      "query_type": "diamond",
+      "k": 1,
+      "regime": "uniform",
+      "topology": "micro",
+      "max_work": 500000,
+      "query": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 1
+          }
+        ]
+      },
+      "initial_graph": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          },
+          {
+            "id": 4,
+            "label": 1
+          },
+          {
+            "id": 5,
+            "label": 1
+          },
+          {
+            "id": 6,
+            "label": 1
+          },
+          {
+            "id": 7,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 5,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 6,
+            "label": 1
+          },
+          {
+            "u": 5,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 6,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 4,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 5,
+            "label": 1
+          }
+        ]
+      },
+      "updates": [
+        {
+          "op": "+",
+          "u": 0,
+          "v": 7,
+          "label": 999
+        },
+        {
+          "op": "+",
+          "u": 1,
+          "v": 6,
+          "label": 999
+        },
+        {
+          "op": "+",
+          "u": 2,
+          "v": 5,
+          "label": 999
+        },
+        {
+          "op": "+",
+          "u": 3,
+          "v": 4,
+          "label": 999
+        },
+        {
+          "op": "-",
+          "u": 0,
+          "v": 7,
+          "label": 999
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 6,
+          "label": 999
+        },
+        {
+          "op": "-",
+          "u": 2,
+          "v": 5,
+          "label": 999
+        },
+        {
+          "op": "-",
+          "u": 3,
+          "v": 4,
+          "label": 999
+        }
+      ]
+    },
+    {
+      "case_id": "P4A_WL_10",
+      "description": "Diamond k=1 delete-heavy stream",
+      "query_type": "diamond",
+      "k": 1,
+      "regime": "uniform",
+      "topology": "micro",
+      "max_work": 500000,
+      "query": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 1
+          }
+        ]
+      },
+      "initial_graph": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          },
+          {
+            "id": 4,
+            "label": 1
+          },
+          {
+            "id": 5,
+            "label": 1
+          },
+          {
+            "id": 6,
+            "label": 1
+          },
+          {
+            "id": 7,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 5,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 6,
+            "label": 1
+          },
+          {
+            "u": 5,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 6,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 4,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 5,
+            "label": 1
+          }
+        ]
+      },
+      "updates": [
+        {
+          "op": "-",
+          "u": 0,
+          "v": 1,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 3,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 0,
+          "v": 1,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 1,
+          "v": 3,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 4,
+          "v": 5,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 5,
+          "v": 7,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 4,
+          "v": 5,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 5,
+          "v": 7,
+          "label": 1
+        }
+      ]
+    },
+    {
+      "case_id": "P4A_WL_11",
+      "description": "K4 k=0 exact control uniform micro",
+      "query_type": "k4",
+      "k": 0,
+      "regime": "uniform",
+      "topology": "micro",
+      "max_work": 500000,
+      "query": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          }
+        ]
+      },
+      "initial_graph": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          },
+          {
+            "id": 4,
+            "label": 1
+          },
+          {
+            "id": 5,
+            "label": 1
+          },
+          {
+            "id": 6,
+            "label": 1
+          },
+          {
+            "id": 7,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 5,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 6,
+            "label": 1
+          },
+          {
+            "u": 5,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 6,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 4,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 5,
+            "label": 1
+          }
+        ]
+      },
+      "updates": [
+        {
+          "op": "+",
+          "u": 1,
+          "v": 2,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 5,
+          "v": 6,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 2,
+          "v": 4,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 3,
+          "v": 7,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 2,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 5,
+          "v": 6,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 2,
+          "v": 4,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 3,
+          "v": 7,
+          "label": 1
+        }
+      ]
+    },
+    {
+      "case_id": "P4A_WL_12",
+      "description": "K4 k=0 exact control mixed micro",
+      "query_type": "k4",
+      "k": 0,
+      "regime": "mixed",
+      "topology": "micro",
+      "max_work": 500000,
+      "query": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 2
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 2
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 3,
+            "label": 20
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 20
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 10
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 10
+          }
+        ]
+      },
+      "initial_graph": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 2
+          },
+          {
+            "id": 2,
+            "label": 2
+          },
+          {
+            "id": 3,
+            "label": 3
+          },
+          {
+            "id": 4,
+            "label": 1
+          },
+          {
+            "id": 5,
+            "label": 2
+          },
+          {
+            "id": 6,
+            "label": 3
+          },
+          {
+            "id": 7,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 10
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 10
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 10
+          },
+          {
+            "u": 4,
+            "v": 5,
+            "label": 10
+          },
+          {
+            "u": 4,
+            "v": 6,
+            "label": 10
+          },
+          {
+            "u": 5,
+            "v": 7,
+            "label": 10
+          },
+          {
+            "u": 6,
+            "v": 7,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 4,
+            "label": 10
+          },
+          {
+            "u": 1,
+            "v": 5,
+            "label": 10
+          }
+        ]
+      },
+      "updates": [
+        {
+          "op": "+",
+          "u": 1,
+          "v": 2,
+          "label": 30
+        },
+        {
+          "op": "+",
+          "u": 5,
+          "v": 6,
+          "label": 30
+        },
+        {
+          "op": "+",
+          "u": 2,
+          "v": 4,
+          "label": 10
+        },
+        {
+          "op": "+",
+          "u": 3,
+          "v": 7,
+          "label": 10
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 2,
+          "label": 30
+        },
+        {
+          "op": "-",
+          "u": 5,
+          "v": 6,
+          "label": 30
+        },
+        {
+          "op": "-",
+          "u": 2,
+          "v": 4,
+          "label": 10
+        },
+        {
+          "op": "-",
+          "u": 3,
+          "v": 7,
+          "label": 10
+        }
+      ]
+    },
+    {
+      "case_id": "P4A_WL_13",
+      "description": "K4 k=0 exact control uniform dense hub",
+      "query_type": "k4",
+      "k": 0,
+      "regime": "uniform",
+      "topology": "hub",
+      "max_work": 500000,
+      "query": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          }
+        ]
+      },
+      "initial_graph": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          },
+          {
+            "id": 4,
+            "label": 1
+          },
+          {
+            "id": 5,
+            "label": 1
+          },
+          {
+            "id": 6,
+            "label": 1
+          },
+          {
+            "id": 7,
+            "label": 1
+          },
+          {
+            "id": 8,
+            "label": 1
+          },
+          {
+            "id": 9,
+            "label": 1
+          },
+          {
+            "id": 10,
+            "label": 1
+          },
+          {
+            "id": 11,
+            "label": 1
+          },
+          {
+            "id": 12,
+            "label": 1
+          },
+          {
+            "id": 13,
+            "label": 1
+          },
+          {
+            "id": 14,
+            "label": 1
+          },
+          {
+            "id": 15,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 4,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 5,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 6,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 8,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 9,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 10,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 3,
+            "v": 4,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 5,
+            "label": 1
+          },
+          {
+            "u": 5,
+            "v": 6,
+            "label": 1
+          },
+          {
+            "u": 6,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 7,
+            "v": 8,
+            "label": 1
+          },
+          {
+            "u": 8,
+            "v": 9,
+            "label": 1
+          },
+          {
+            "u": 9,
+            "v": 10,
+            "label": 1
+          },
+          {
+            "u": 10,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 11,
+            "v": 12,
+            "label": 1
+          },
+          {
+            "u": 12,
+            "v": 13,
+            "label": 1
+          },
+          {
+            "u": 13,
+            "v": 14,
+            "label": 1
+          },
+          {
+            "u": 14,
+            "v": 15,
+            "label": 1
+          },
+          {
+            "u": 15,
+            "v": 11,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 11,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 12,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 13,
+            "label": 1
+          },
+          {
+            "u": 6,
+            "v": 14,
+            "label": 1
+          },
+          {
+            "u": 8,
+            "v": 15,
+            "label": 1
+          }
+        ]
+      },
+      "updates": [
+        {
+          "op": "+",
+          "u": 1,
+          "v": 6,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 2,
+          "v": 7,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 3,
+          "v": 8,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 4,
+          "v": 9,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 0,
+          "v": 12,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 1,
+          "v": 14,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 6,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 2,
+          "v": 7,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 3,
+          "v": 8,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 4,
+          "v": 9,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 0,
+          "v": 12,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 14,
+          "label": 1
+        }
+      ]
+    },
+    {
+      "case_id": "P4A_WL_14",
+      "description": "K4 k=1 approximate uniform micro",
+      "query_type": "k4",
+      "k": 1,
+      "regime": "uniform",
+      "topology": "micro",
+      "max_work": 500000,
+      "query": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          }
+        ]
+      },
+      "initial_graph": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          },
+          {
+            "id": 4,
+            "label": 1
+          },
+          {
+            "id": 5,
+            "label": 1
+          },
+          {
+            "id": 6,
+            "label": 1
+          },
+          {
+            "id": 7,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 5,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 6,
+            "label": 1
+          },
+          {
+            "u": 5,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 6,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 4,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 5,
+            "label": 1
+          }
+        ]
+      },
+      "updates": [
+        {
+          "op": "+",
+          "u": 1,
+          "v": 2,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 5,
+          "v": 6,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 2,
+          "v": 4,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 3,
+          "v": 7,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 2,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 5,
+          "v": 6,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 2,
+          "v": 4,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 3,
+          "v": 7,
+          "label": 1
+        }
+      ]
+    },
+    {
+      "case_id": "P4A_WL_15",
+      "description": "K4 k=1 approximate mixed micro",
+      "query_type": "k4",
+      "k": 1,
+      "regime": "mixed",
+      "topology": "micro",
+      "max_work": 500000,
+      "query": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 2
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 2
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 3,
+            "label": 20
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 20
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 10
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 10
+          }
+        ]
+      },
+      "initial_graph": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 2
+          },
+          {
+            "id": 2,
+            "label": 2
+          },
+          {
+            "id": 3,
+            "label": 3
+          },
+          {
+            "id": 4,
+            "label": 1
+          },
+          {
+            "id": 5,
+            "label": 2
+          },
+          {
+            "id": 6,
+            "label": 3
+          },
+          {
+            "id": 7,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 10
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 10
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 10
+          },
+          {
+            "u": 4,
+            "v": 5,
+            "label": 10
+          },
+          {
+            "u": 4,
+            "v": 6,
+            "label": 10
+          },
+          {
+            "u": 5,
+            "v": 7,
+            "label": 10
+          },
+          {
+            "u": 6,
+            "v": 7,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 4,
+            "label": 10
+          },
+          {
+            "u": 1,
+            "v": 5,
+            "label": 10
+          }
+        ]
+      },
+      "updates": [
+        {
+          "op": "+",
+          "u": 1,
+          "v": 2,
+          "label": 30
+        },
+        {
+          "op": "+",
+          "u": 5,
+          "v": 6,
+          "label": 30
+        },
+        {
+          "op": "+",
+          "u": 2,
+          "v": 4,
+          "label": 10
+        },
+        {
+          "op": "+",
+          "u": 3,
+          "v": 7,
+          "label": 10
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 2,
+          "label": 30
+        },
+        {
+          "op": "-",
+          "u": 5,
+          "v": 6,
+          "label": 30
+        },
+        {
+          "op": "-",
+          "u": 2,
+          "v": 4,
+          "label": 10
+        },
+        {
+          "op": "-",
+          "u": 3,
+          "v": 7,
+          "label": 10
+        }
+      ]
+    },
+    {
+      "case_id": "P4A_WL_16",
+      "description": "K4 k=1 approximate uniform cycle",
+      "query_type": "k4",
+      "k": 1,
+      "regime": "uniform",
+      "topology": "cycle",
+      "max_work": 500000,
+      "query": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          }
+        ]
+      },
+      "initial_graph": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          },
+          {
+            "id": 4,
+            "label": 1
+          },
+          {
+            "id": 5,
+            "label": 1
+          },
+          {
+            "id": 6,
+            "label": 1
+          },
+          {
+            "id": 7,
+            "label": 1
+          },
+          {
+            "id": 8,
+            "label": 1
+          },
+          {
+            "id": 9,
+            "label": 1
+          },
+          {
+            "id": 10,
+            "label": 1
+          },
+          {
+            "id": 11,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 3,
+            "v": 4,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 5,
+            "label": 1
+          },
+          {
+            "u": 5,
+            "v": 6,
+            "label": 1
+          },
+          {
+            "u": 6,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 7,
+            "v": 8,
+            "label": 1
+          },
+          {
+            "u": 8,
+            "v": 9,
+            "label": 1
+          },
+          {
+            "u": 9,
+            "v": 10,
+            "label": 1
+          },
+          {
+            "u": 10,
+            "v": 11,
+            "label": 1
+          },
+          {
+            "u": 11,
+            "v": 0,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 3,
+            "v": 6,
+            "label": 1
+          },
+          {
+            "u": 6,
+            "v": 9,
+            "label": 1
+          },
+          {
+            "u": 9,
+            "v": 0,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 10,
+            "label": 1
+          }
+        ]
+      },
+      "updates": [
+        {
+          "op": "+",
+          "u": 1,
+          "v": 4,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 2,
+          "v": 5,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 5,
+          "v": 8,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 7,
+          "v": 10,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 4,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 2,
+          "v": 5,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 5,
+          "v": 8,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 7,
+          "v": 10,
+          "label": 1
+        }
+      ]
+    },
+    {
+      "case_id": "P4A_WL_17",
+      "description": "K4 k=1 approximate mixed cycle",
+      "query_type": "k4",
+      "k": 1,
+      "regime": "mixed",
+      "topology": "cycle",
+      "max_work": 500000,
+      "query": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 2
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 2
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 3,
+            "label": 20
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 20
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 10
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 10
+          }
+        ]
+      },
+      "initial_graph": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 2
+          },
+          {
+            "id": 2,
+            "label": 2
+          },
+          {
+            "id": 3,
+            "label": 3
+          },
+          {
+            "id": 4,
+            "label": 1
+          },
+          {
+            "id": 5,
+            "label": 2
+          },
+          {
+            "id": 6,
+            "label": 2
+          },
+          {
+            "id": 7,
+            "label": 3
+          },
+          {
+            "id": 8,
+            "label": 1
+          },
+          {
+            "id": 9,
+            "label": 2
+          },
+          {
+            "id": 10,
+            "label": 2
+          },
+          {
+            "id": 11,
+            "label": 3
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 10
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 20
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 10
+          },
+          {
+            "u": 3,
+            "v": 4,
+            "label": 20
+          },
+          {
+            "u": 4,
+            "v": 5,
+            "label": 10
+          },
+          {
+            "u": 5,
+            "v": 6,
+            "label": 20
+          },
+          {
+            "u": 6,
+            "v": 7,
+            "label": 10
+          },
+          {
+            "u": 7,
+            "v": 8,
+            "label": 20
+          },
+          {
+            "u": 8,
+            "v": 9,
+            "label": 10
+          },
+          {
+            "u": 9,
+            "v": 10,
+            "label": 20
+          },
+          {
+            "u": 10,
+            "v": 11,
+            "label": 10
+          },
+          {
+            "u": 11,
+            "v": 0,
+            "label": 20
+          },
+          {
+            "u": 0,
+            "v": 3,
+            "label": 30
+          },
+          {
+            "u": 3,
+            "v": 6,
+            "label": 30
+          },
+          {
+            "u": 6,
+            "v": 9,
+            "label": 30
+          },
+          {
+            "u": 9,
+            "v": 0,
+            "label": 30
+          },
+          {
+            "u": 1,
+            "v": 7,
+            "label": 30
+          },
+          {
+            "u": 4,
+            "v": 10,
+            "label": 30
+          }
+        ]
+      },
+      "updates": [
+        {
+          "op": "+",
+          "u": 1,
+          "v": 4,
+          "label": 10
+        },
+        {
+          "op": "+",
+          "u": 2,
+          "v": 5,
+          "label": 20
+        },
+        {
+          "op": "+",
+          "u": 5,
+          "v": 8,
+          "label": 10
+        },
+        {
+          "op": "+",
+          "u": 7,
+          "v": 10,
+          "label": 20
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 4,
+          "label": 10
+        },
+        {
+          "op": "-",
+          "u": 2,
+          "v": 5,
+          "label": 20
+        },
+        {
+          "op": "-",
+          "u": 5,
+          "v": 8,
+          "label": 10
+        },
+        {
+          "op": "-",
+          "u": 7,
+          "v": 10,
+          "label": 20
+        }
+      ]
+    },
+    {
+      "case_id": "P4A_WL_18",
+      "description": "K4 k=1 approximate uniform dense hub",
+      "query_type": "k4",
+      "k": 1,
+      "regime": "uniform",
+      "topology": "hub",
+      "max_work": 500000,
+      "query": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          }
+        ]
+      },
+      "initial_graph": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          },
+          {
+            "id": 4,
+            "label": 1
+          },
+          {
+            "id": 5,
+            "label": 1
+          },
+          {
+            "id": 6,
+            "label": 1
+          },
+          {
+            "id": 7,
+            "label": 1
+          },
+          {
+            "id": 8,
+            "label": 1
+          },
+          {
+            "id": 9,
+            "label": 1
+          },
+          {
+            "id": 10,
+            "label": 1
+          },
+          {
+            "id": 11,
+            "label": 1
+          },
+          {
+            "id": 12,
+            "label": 1
+          },
+          {
+            "id": 13,
+            "label": 1
+          },
+          {
+            "id": 14,
+            "label": 1
+          },
+          {
+            "id": 15,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 4,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 5,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 6,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 8,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 9,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 10,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 3,
+            "v": 4,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 5,
+            "label": 1
+          },
+          {
+            "u": 5,
+            "v": 6,
+            "label": 1
+          },
+          {
+            "u": 6,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 7,
+            "v": 8,
+            "label": 1
+          },
+          {
+            "u": 8,
+            "v": 9,
+            "label": 1
+          },
+          {
+            "u": 9,
+            "v": 10,
+            "label": 1
+          },
+          {
+            "u": 10,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 11,
+            "v": 12,
+            "label": 1
+          },
+          {
+            "u": 12,
+            "v": 13,
+            "label": 1
+          },
+          {
+            "u": 13,
+            "v": 14,
+            "label": 1
+          },
+          {
+            "u": 14,
+            "v": 15,
+            "label": 1
+          },
+          {
+            "u": 15,
+            "v": 11,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 11,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 12,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 13,
+            "label": 1
+          },
+          {
+            "u": 6,
+            "v": 14,
+            "label": 1
+          },
+          {
+            "u": 8,
+            "v": 15,
+            "label": 1
+          }
+        ]
+      },
+      "updates": [
+        {
+          "op": "+",
+          "u": 1,
+          "v": 6,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 2,
+          "v": 7,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 3,
+          "v": 8,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 4,
+          "v": 9,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 0,
+          "v": 12,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 1,
+          "v": 14,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 6,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 2,
+          "v": 7,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 3,
+          "v": 8,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 4,
+          "v": 9,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 0,
+          "v": 12,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 14,
+          "label": 1
+        }
+      ]
+    },
+    {
+      "case_id": "P4A_WL_19",
+      "description": "K4 k=1 approximate mixed dense hub",
+      "query_type": "k4",
+      "k": 1,
+      "regime": "mixed",
+      "topology": "hub",
+      "max_work": 500000,
+      "query": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 2
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 2
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 3,
+            "label": 20
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 20
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 10
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 10
+          }
+        ]
+      },
+      "initial_graph": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 2
+          },
+          {
+            "id": 2,
+            "label": 2
+          },
+          {
+            "id": 3,
+            "label": 3
+          },
+          {
+            "id": 4,
+            "label": 1
+          },
+          {
+            "id": 5,
+            "label": 2
+          },
+          {
+            "id": 6,
+            "label": 1
+          },
+          {
+            "id": 7,
+            "label": 3
+          },
+          {
+            "id": 8,
+            "label": 2
+          },
+          {
+            "id": 9,
+            "label": 1
+          },
+          {
+            "id": 10,
+            "label": 3
+          },
+          {
+            "id": 11,
+            "label": 2
+          },
+          {
+            "id": 12,
+            "label": 1
+          },
+          {
+            "id": 13,
+            "label": 2
+          },
+          {
+            "id": 14,
+            "label": 3
+          },
+          {
+            "id": 15,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 20
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 3,
+            "label": 20
+          },
+          {
+            "u": 0,
+            "v": 4,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 5,
+            "label": 20
+          },
+          {
+            "u": 0,
+            "v": 6,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 7,
+            "label": 20
+          },
+          {
+            "u": 0,
+            "v": 8,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 9,
+            "label": 20
+          },
+          {
+            "u": 0,
+            "v": 10,
+            "label": 10
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 10
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 10
+          },
+          {
+            "u": 3,
+            "v": 4,
+            "label": 10
+          },
+          {
+            "u": 4,
+            "v": 5,
+            "label": 10
+          },
+          {
+            "u": 5,
+            "v": 6,
+            "label": 10
+          },
+          {
+            "u": 6,
+            "v": 7,
+            "label": 10
+          },
+          {
+            "u": 7,
+            "v": 8,
+            "label": 10
+          },
+          {
+            "u": 8,
+            "v": 9,
+            "label": 10
+          },
+          {
+            "u": 9,
+            "v": 10,
+            "label": 10
+          },
+          {
+            "u": 10,
+            "v": 1,
+            "label": 10
+          },
+          {
+            "u": 11,
+            "v": 12,
+            "label": 20
+          },
+          {
+            "u": 12,
+            "v": 13,
+            "label": 20
+          },
+          {
+            "u": 13,
+            "v": 14,
+            "label": 20
+          },
+          {
+            "u": 14,
+            "v": 15,
+            "label": 20
+          },
+          {
+            "u": 15,
+            "v": 11,
+            "label": 20
+          },
+          {
+            "u": 0,
+            "v": 11,
+            "label": 30
+          },
+          {
+            "u": 2,
+            "v": 12,
+            "label": 30
+          },
+          {
+            "u": 4,
+            "v": 13,
+            "label": 30
+          },
+          {
+            "u": 6,
+            "v": 14,
+            "label": 30
+          },
+          {
+            "u": 8,
+            "v": 15,
+            "label": 30
+          }
+        ]
+      },
+      "updates": [
+        {
+          "op": "+",
+          "u": 1,
+          "v": 6,
+          "label": 10
+        },
+        {
+          "op": "+",
+          "u": 2,
+          "v": 7,
+          "label": 20
+        },
+        {
+          "op": "+",
+          "u": 3,
+          "v": 8,
+          "label": 30
+        },
+        {
+          "op": "+",
+          "u": 4,
+          "v": 9,
+          "label": 10
+        },
+        {
+          "op": "+",
+          "u": 0,
+          "v": 12,
+          "label": 20
+        },
+        {
+          "op": "+",
+          "u": 1,
+          "v": 14,
+          "label": 30
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 6,
+          "label": 10
+        },
+        {
+          "op": "-",
+          "u": 2,
+          "v": 7,
+          "label": 20
+        },
+        {
+          "op": "-",
+          "u": 3,
+          "v": 8,
+          "label": 30
+        },
+        {
+          "op": "-",
+          "u": 4,
+          "v": 9,
+          "label": 10
+        },
+        {
+          "op": "-",
+          "u": 0,
+          "v": 12,
+          "label": 20
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 14,
+          "label": 30
+        }
+      ]
+    },
+    {
+      "case_id": "P4A_WL_20",
+      "description": "K4 k=1 approximate uniform scale-free",
+      "query_type": "k4",
+      "k": 1,
+      "regime": "uniform",
+      "topology": "scalefree",
+      "max_work": 500000,
+      "query": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          }
+        ]
+      },
+      "initial_graph": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          },
+          {
+            "id": 4,
+            "label": 1
+          },
+          {
+            "id": 5,
+            "label": 1
+          },
+          {
+            "id": 6,
+            "label": 1
+          },
+          {
+            "id": 7,
+            "label": 1
+          },
+          {
+            "id": 8,
+            "label": 1
+          },
+          {
+            "id": 9,
+            "label": 1
+          },
+          {
+            "id": 10,
+            "label": 1
+          },
+          {
+            "id": 11,
+            "label": 1
+          },
+          {
+            "id": 12,
+            "label": 1
+          },
+          {
+            "id": 13,
+            "label": 1
+          },
+          {
+            "id": 14,
+            "label": 1
+          },
+          {
+            "id": 15,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 4,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 5,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 6,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 8,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 9,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 10,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 4,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 11,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 12,
+            "label": 1
+          },
+          {
+            "u": 3,
+            "v": 5,
+            "label": 1
+          },
+          {
+            "u": 3,
+            "v": 13,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 6,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 14,
+            "label": 1
+          },
+          {
+            "u": 5,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 5,
+            "v": 15,
+            "label": 1
+          },
+          {
+            "u": 6,
+            "v": 8,
+            "label": 1
+          },
+          {
+            "u": 7,
+            "v": 9,
+            "label": 1
+          },
+          {
+            "u": 8,
+            "v": 10,
+            "label": 1
+          },
+          {
+            "u": 9,
+            "v": 11,
+            "label": 1
+          },
+          {
+            "u": 10,
+            "v": 12,
+            "label": 1
+          },
+          {
+            "u": 11,
+            "v": 13,
+            "label": 1
+          },
+          {
+            "u": 12,
+            "v": 14,
+            "label": 1
+          },
+          {
+            "u": 13,
+            "v": 15,
+            "label": 1
+          }
+        ]
+      },
+      "updates": [
+        {
+          "op": "+",
+          "u": 0,
+          "v": 9,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 0,
+          "v": 10,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 1,
+          "v": 4,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 2,
+          "v": 5,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 3,
+          "v": 6,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 5,
+          "v": 8,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 0,
+          "v": 9,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 0,
+          "v": 10,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 4,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 2,
+          "v": 5,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 3,
+          "v": 6,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 5,
+          "v": 8,
+          "label": 1
+        }
+      ]
+    },
+    {
+      "case_id": "P4A_WL_21",
+      "description": "K4 k=1 zero-event fast-path control",
+      "query_type": "k4",
+      "k": 1,
+      "regime": "uniform",
+      "topology": "micro",
+      "max_work": 500000,
+      "query": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          }
+        ]
+      },
+      "initial_graph": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          },
+          {
+            "id": 4,
+            "label": 1
+          },
+          {
+            "id": 5,
+            "label": 1
+          },
+          {
+            "id": 6,
+            "label": 1
+          },
+          {
+            "id": 7,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 5,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 6,
+            "label": 1
+          },
+          {
+            "u": 5,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 6,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 4,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 5,
+            "label": 1
+          }
+        ]
+      },
+      "updates": [
+        {
+          "op": "+",
+          "u": 0,
+          "v": 7,
+          "label": 999
+        },
+        {
+          "op": "+",
+          "u": 1,
+          "v": 6,
+          "label": 999
+        },
+        {
+          "op": "+",
+          "u": 2,
+          "v": 5,
+          "label": 999
+        },
+        {
+          "op": "+",
+          "u": 3,
+          "v": 4,
+          "label": 999
+        },
+        {
+          "op": "-",
+          "u": 0,
+          "v": 7,
+          "label": 999
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 6,
+          "label": 999
+        },
+        {
+          "op": "-",
+          "u": 2,
+          "v": 5,
+          "label": 999
+        },
+        {
+          "op": "-",
+          "u": 3,
+          "v": 4,
+          "label": 999
+        }
+      ]
+    },
+    {
+      "case_id": "P4A_WL_22",
+      "description": "K4 k=1 delete-heavy stream",
+      "query_type": "k4",
+      "k": 1,
+      "regime": "uniform",
+      "topology": "micro",
+      "max_work": 500000,
+      "query": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          }
+        ]
+      },
+      "initial_graph": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          },
+          {
+            "id": 4,
+            "label": 1
+          },
+          {
+            "id": 5,
+            "label": 1
+          },
+          {
+            "id": 6,
+            "label": 1
+          },
+          {
+            "id": 7,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 5,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 6,
+            "label": 1
+          },
+          {
+            "u": 5,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 6,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 4,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 5,
+            "label": 1
+          }
+        ]
+      },
+      "updates": [
+        {
+          "op": "-",
+          "u": 0,
+          "v": 1,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 3,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 0,
+          "v": 1,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 1,
+          "v": 3,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 4,
+          "v": 5,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 5,
+          "v": 7,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 4,
+          "v": 5,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 5,
+          "v": 7,
+          "label": 1
+        }
+      ]
+    },
+    {
+      "case_id": "P4A_WL_23",
+      "description": "K4 k=2 approximate uniform micro defect=2",
+      "query_type": "k4",
+      "k": 2,
+      "regime": "uniform",
+      "topology": "micro",
+      "max_work": 500000,
+      "query": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          }
+        ]
+      },
+      "initial_graph": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          },
+          {
+            "id": 4,
+            "label": 1
+          },
+          {
+            "id": 5,
+            "label": 1
+          },
+          {
+            "id": 6,
+            "label": 1
+          },
+          {
+            "id": 7,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 5,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 6,
+            "label": 1
+          },
+          {
+            "u": 5,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 6,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 4,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 5,
+            "label": 1
+          }
+        ]
+      },
+      "updates": [
+        {
+          "op": "+",
+          "u": 1,
+          "v": 2,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 5,
+          "v": 6,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 2,
+          "v": 4,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 3,
+          "v": 7,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 2,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 5,
+          "v": 6,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 2,
+          "v": 4,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 3,
+          "v": 7,
+          "label": 1
+        }
+      ]
+    },
+    {
+      "case_id": "P4A_WL_24",
+      "description": "K4 k=2 approximate mixed micro defect=2",
+      "query_type": "k4",
+      "k": 2,
+      "regime": "mixed",
+      "topology": "micro",
+      "max_work": 500000,
+      "query": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 2
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 2
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 3,
+            "label": 20
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 20
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 10
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 10
+          }
+        ]
+      },
+      "initial_graph": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 2
+          },
+          {
+            "id": 2,
+            "label": 2
+          },
+          {
+            "id": 3,
+            "label": 3
+          },
+          {
+            "id": 4,
+            "label": 1
+          },
+          {
+            "id": 5,
+            "label": 2
+          },
+          {
+            "id": 6,
+            "label": 3
+          },
+          {
+            "id": 7,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 10
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 10
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 10
+          },
+          {
+            "u": 4,
+            "v": 5,
+            "label": 10
+          },
+          {
+            "u": 4,
+            "v": 6,
+            "label": 10
+          },
+          {
+            "u": 5,
+            "v": 7,
+            "label": 10
+          },
+          {
+            "u": 6,
+            "v": 7,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 4,
+            "label": 10
+          },
+          {
+            "u": 1,
+            "v": 5,
+            "label": 10
+          }
+        ]
+      },
+      "updates": [
+        {
+          "op": "+",
+          "u": 1,
+          "v": 2,
+          "label": 30
+        },
+        {
+          "op": "+",
+          "u": 5,
+          "v": 6,
+          "label": 30
+        },
+        {
+          "op": "+",
+          "u": 2,
+          "v": 4,
+          "label": 10
+        },
+        {
+          "op": "+",
+          "u": 3,
+          "v": 7,
+          "label": 10
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 2,
+          "label": 30
+        },
+        {
+          "op": "-",
+          "u": 5,
+          "v": 6,
+          "label": 30
+        },
+        {
+          "op": "-",
+          "u": 2,
+          "v": 4,
+          "label": 10
+        },
+        {
+          "op": "-",
+          "u": 3,
+          "v": 7,
+          "label": 10
+        }
+      ]
+    },
+    {
+      "case_id": "P4A_WL_25",
+      "description": "K4 k=2 approximate uniform cycle defect=2",
+      "query_type": "k4",
+      "k": 2,
+      "regime": "uniform",
+      "topology": "cycle",
+      "max_work": 500000,
+      "query": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          }
+        ]
+      },
+      "initial_graph": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          },
+          {
+            "id": 4,
+            "label": 1
+          },
+          {
+            "id": 5,
+            "label": 1
+          },
+          {
+            "id": 6,
+            "label": 1
+          },
+          {
+            "id": 7,
+            "label": 1
+          },
+          {
+            "id": 8,
+            "label": 1
+          },
+          {
+            "id": 9,
+            "label": 1
+          },
+          {
+            "id": 10,
+            "label": 1
+          },
+          {
+            "id": 11,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 3,
+            "v": 4,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 5,
+            "label": 1
+          },
+          {
+            "u": 5,
+            "v": 6,
+            "label": 1
+          },
+          {
+            "u": 6,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 7,
+            "v": 8,
+            "label": 1
+          },
+          {
+            "u": 8,
+            "v": 9,
+            "label": 1
+          },
+          {
+            "u": 9,
+            "v": 10,
+            "label": 1
+          },
+          {
+            "u": 10,
+            "v": 11,
+            "label": 1
+          },
+          {
+            "u": 11,
+            "v": 0,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 3,
+            "v": 6,
+            "label": 1
+          },
+          {
+            "u": 6,
+            "v": 9,
+            "label": 1
+          },
+          {
+            "u": 9,
+            "v": 0,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 10,
+            "label": 1
+          }
+        ]
+      },
+      "updates": [
+        {
+          "op": "+",
+          "u": 1,
+          "v": 4,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 2,
+          "v": 5,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 5,
+          "v": 8,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 7,
+          "v": 10,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 4,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 2,
+          "v": 5,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 5,
+          "v": 8,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 7,
+          "v": 10,
+          "label": 1
+        }
+      ]
+    },
+    {
+      "case_id": "P4A_WL_26",
+      "description": "K4 k=2 approximate mixed cycle defect=2",
+      "query_type": "k4",
+      "k": 2,
+      "regime": "mixed",
+      "topology": "cycle",
+      "max_work": 500000,
+      "query": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 2
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 2
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 3,
+            "label": 20
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 20
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 10
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 10
+          }
+        ]
+      },
+      "initial_graph": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 2
+          },
+          {
+            "id": 2,
+            "label": 2
+          },
+          {
+            "id": 3,
+            "label": 3
+          },
+          {
+            "id": 4,
+            "label": 1
+          },
+          {
+            "id": 5,
+            "label": 2
+          },
+          {
+            "id": 6,
+            "label": 2
+          },
+          {
+            "id": 7,
+            "label": 3
+          },
+          {
+            "id": 8,
+            "label": 1
+          },
+          {
+            "id": 9,
+            "label": 2
+          },
+          {
+            "id": 10,
+            "label": 2
+          },
+          {
+            "id": 11,
+            "label": 3
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 10
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 20
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 10
+          },
+          {
+            "u": 3,
+            "v": 4,
+            "label": 20
+          },
+          {
+            "u": 4,
+            "v": 5,
+            "label": 10
+          },
+          {
+            "u": 5,
+            "v": 6,
+            "label": 20
+          },
+          {
+            "u": 6,
+            "v": 7,
+            "label": 10
+          },
+          {
+            "u": 7,
+            "v": 8,
+            "label": 20
+          },
+          {
+            "u": 8,
+            "v": 9,
+            "label": 10
+          },
+          {
+            "u": 9,
+            "v": 10,
+            "label": 20
+          },
+          {
+            "u": 10,
+            "v": 11,
+            "label": 10
+          },
+          {
+            "u": 11,
+            "v": 0,
+            "label": 20
+          },
+          {
+            "u": 0,
+            "v": 3,
+            "label": 30
+          },
+          {
+            "u": 3,
+            "v": 6,
+            "label": 30
+          },
+          {
+            "u": 6,
+            "v": 9,
+            "label": 30
+          },
+          {
+            "u": 9,
+            "v": 0,
+            "label": 30
+          },
+          {
+            "u": 1,
+            "v": 7,
+            "label": 30
+          },
+          {
+            "u": 4,
+            "v": 10,
+            "label": 30
+          }
+        ]
+      },
+      "updates": [
+        {
+          "op": "+",
+          "u": 1,
+          "v": 4,
+          "label": 10
+        },
+        {
+          "op": "+",
+          "u": 2,
+          "v": 5,
+          "label": 20
+        },
+        {
+          "op": "+",
+          "u": 5,
+          "v": 8,
+          "label": 10
+        },
+        {
+          "op": "+",
+          "u": 7,
+          "v": 10,
+          "label": 20
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 4,
+          "label": 10
+        },
+        {
+          "op": "-",
+          "u": 2,
+          "v": 5,
+          "label": 20
+        },
+        {
+          "op": "-",
+          "u": 5,
+          "v": 8,
+          "label": 10
+        },
+        {
+          "op": "-",
+          "u": 7,
+          "v": 10,
+          "label": 20
+        }
+      ]
+    },
+    {
+      "case_id": "P4A_WL_27",
+      "description": "K4 k=2 approximate uniform dense hub defect=2",
+      "query_type": "k4",
+      "k": 2,
+      "regime": "uniform",
+      "topology": "hub",
+      "max_work": 500000,
+      "query": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          }
+        ]
+      },
+      "initial_graph": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          },
+          {
+            "id": 4,
+            "label": 1
+          },
+          {
+            "id": 5,
+            "label": 1
+          },
+          {
+            "id": 6,
+            "label": 1
+          },
+          {
+            "id": 7,
+            "label": 1
+          },
+          {
+            "id": 8,
+            "label": 1
+          },
+          {
+            "id": 9,
+            "label": 1
+          },
+          {
+            "id": 10,
+            "label": 1
+          },
+          {
+            "id": 11,
+            "label": 1
+          },
+          {
+            "id": 12,
+            "label": 1
+          },
+          {
+            "id": 13,
+            "label": 1
+          },
+          {
+            "id": 14,
+            "label": 1
+          },
+          {
+            "id": 15,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 4,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 5,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 6,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 8,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 9,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 10,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 3,
+            "v": 4,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 5,
+            "label": 1
+          },
+          {
+            "u": 5,
+            "v": 6,
+            "label": 1
+          },
+          {
+            "u": 6,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 7,
+            "v": 8,
+            "label": 1
+          },
+          {
+            "u": 8,
+            "v": 9,
+            "label": 1
+          },
+          {
+            "u": 9,
+            "v": 10,
+            "label": 1
+          },
+          {
+            "u": 10,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 11,
+            "v": 12,
+            "label": 1
+          },
+          {
+            "u": 12,
+            "v": 13,
+            "label": 1
+          },
+          {
+            "u": 13,
+            "v": 14,
+            "label": 1
+          },
+          {
+            "u": 14,
+            "v": 15,
+            "label": 1
+          },
+          {
+            "u": 15,
+            "v": 11,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 11,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 12,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 13,
+            "label": 1
+          },
+          {
+            "u": 6,
+            "v": 14,
+            "label": 1
+          },
+          {
+            "u": 8,
+            "v": 15,
+            "label": 1
+          }
+        ]
+      },
+      "updates": [
+        {
+          "op": "+",
+          "u": 1,
+          "v": 6,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 2,
+          "v": 7,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 3,
+          "v": 8,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 4,
+          "v": 9,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 0,
+          "v": 12,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 1,
+          "v": 14,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 6,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 2,
+          "v": 7,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 3,
+          "v": 8,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 4,
+          "v": 9,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 0,
+          "v": 12,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 14,
+          "label": 1
+        }
+      ]
+    },
+    {
+      "case_id": "P4A_WL_28",
+      "description": "K4 k=2 approximate mixed dense hub defect=2",
+      "query_type": "k4",
+      "k": 2,
+      "regime": "mixed",
+      "topology": "hub",
+      "max_work": 500000,
+      "query": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 2
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 2
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 3,
+            "label": 20
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 20
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 10
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 10
+          }
+        ]
+      },
+      "initial_graph": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 2
+          },
+          {
+            "id": 2,
+            "label": 2
+          },
+          {
+            "id": 3,
+            "label": 3
+          },
+          {
+            "id": 4,
+            "label": 1
+          },
+          {
+            "id": 5,
+            "label": 2
+          },
+          {
+            "id": 6,
+            "label": 1
+          },
+          {
+            "id": 7,
+            "label": 3
+          },
+          {
+            "id": 8,
+            "label": 2
+          },
+          {
+            "id": 9,
+            "label": 1
+          },
+          {
+            "id": 10,
+            "label": 3
+          },
+          {
+            "id": 11,
+            "label": 2
+          },
+          {
+            "id": 12,
+            "label": 1
+          },
+          {
+            "id": 13,
+            "label": 2
+          },
+          {
+            "id": 14,
+            "label": 3
+          },
+          {
+            "id": 15,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 20
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 3,
+            "label": 20
+          },
+          {
+            "u": 0,
+            "v": 4,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 5,
+            "label": 20
+          },
+          {
+            "u": 0,
+            "v": 6,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 7,
+            "label": 20
+          },
+          {
+            "u": 0,
+            "v": 8,
+            "label": 10
+          },
+          {
+            "u": 0,
+            "v": 9,
+            "label": 20
+          },
+          {
+            "u": 0,
+            "v": 10,
+            "label": 10
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 10
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 10
+          },
+          {
+            "u": 3,
+            "v": 4,
+            "label": 10
+          },
+          {
+            "u": 4,
+            "v": 5,
+            "label": 10
+          },
+          {
+            "u": 5,
+            "v": 6,
+            "label": 10
+          },
+          {
+            "u": 6,
+            "v": 7,
+            "label": 10
+          },
+          {
+            "u": 7,
+            "v": 8,
+            "label": 10
+          },
+          {
+            "u": 8,
+            "v": 9,
+            "label": 10
+          },
+          {
+            "u": 9,
+            "v": 10,
+            "label": 10
+          },
+          {
+            "u": 10,
+            "v": 1,
+            "label": 10
+          },
+          {
+            "u": 11,
+            "v": 12,
+            "label": 20
+          },
+          {
+            "u": 12,
+            "v": 13,
+            "label": 20
+          },
+          {
+            "u": 13,
+            "v": 14,
+            "label": 20
+          },
+          {
+            "u": 14,
+            "v": 15,
+            "label": 20
+          },
+          {
+            "u": 15,
+            "v": 11,
+            "label": 20
+          },
+          {
+            "u": 0,
+            "v": 11,
+            "label": 30
+          },
+          {
+            "u": 2,
+            "v": 12,
+            "label": 30
+          },
+          {
+            "u": 4,
+            "v": 13,
+            "label": 30
+          },
+          {
+            "u": 6,
+            "v": 14,
+            "label": 30
+          },
+          {
+            "u": 8,
+            "v": 15,
+            "label": 30
+          }
+        ]
+      },
+      "updates": [
+        {
+          "op": "+",
+          "u": 1,
+          "v": 6,
+          "label": 10
+        },
+        {
+          "op": "+",
+          "u": 2,
+          "v": 7,
+          "label": 20
+        },
+        {
+          "op": "+",
+          "u": 3,
+          "v": 8,
+          "label": 30
+        },
+        {
+          "op": "+",
+          "u": 4,
+          "v": 9,
+          "label": 10
+        },
+        {
+          "op": "+",
+          "u": 0,
+          "v": 12,
+          "label": 20
+        },
+        {
+          "op": "+",
+          "u": 1,
+          "v": 14,
+          "label": 30
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 6,
+          "label": 10
+        },
+        {
+          "op": "-",
+          "u": 2,
+          "v": 7,
+          "label": 20
+        },
+        {
+          "op": "-",
+          "u": 3,
+          "v": 8,
+          "label": 30
+        },
+        {
+          "op": "-",
+          "u": 4,
+          "v": 9,
+          "label": 10
+        },
+        {
+          "op": "-",
+          "u": 0,
+          "v": 12,
+          "label": 20
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 14,
+          "label": 30
+        }
+      ]
+    },
+    {
+      "case_id": "P4A_WL_29",
+      "description": "K4 k=2 approximate uniform scale-free defect=2",
+      "query_type": "k4",
+      "k": 2,
+      "regime": "uniform",
+      "topology": "scalefree",
+      "max_work": 500000,
+      "query": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          }
+        ]
+      },
+      "initial_graph": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          },
+          {
+            "id": 4,
+            "label": 1
+          },
+          {
+            "id": 5,
+            "label": 1
+          },
+          {
+            "id": 6,
+            "label": 1
+          },
+          {
+            "id": 7,
+            "label": 1
+          },
+          {
+            "id": 8,
+            "label": 1
+          },
+          {
+            "id": 9,
+            "label": 1
+          },
+          {
+            "id": 10,
+            "label": 1
+          },
+          {
+            "id": 11,
+            "label": 1
+          },
+          {
+            "id": 12,
+            "label": 1
+          },
+          {
+            "id": 13,
+            "label": 1
+          },
+          {
+            "id": 14,
+            "label": 1
+          },
+          {
+            "id": 15,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 4,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 5,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 6,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 8,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 9,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 10,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 4,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 11,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 12,
+            "label": 1
+          },
+          {
+            "u": 3,
+            "v": 5,
+            "label": 1
+          },
+          {
+            "u": 3,
+            "v": 13,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 6,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 14,
+            "label": 1
+          },
+          {
+            "u": 5,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 5,
+            "v": 15,
+            "label": 1
+          },
+          {
+            "u": 6,
+            "v": 8,
+            "label": 1
+          },
+          {
+            "u": 7,
+            "v": 9,
+            "label": 1
+          },
+          {
+            "u": 8,
+            "v": 10,
+            "label": 1
+          },
+          {
+            "u": 9,
+            "v": 11,
+            "label": 1
+          },
+          {
+            "u": 10,
+            "v": 12,
+            "label": 1
+          },
+          {
+            "u": 11,
+            "v": 13,
+            "label": 1
+          },
+          {
+            "u": 12,
+            "v": 14,
+            "label": 1
+          },
+          {
+            "u": 13,
+            "v": 15,
+            "label": 1
+          }
+        ]
+      },
+      "updates": [
+        {
+          "op": "+",
+          "u": 0,
+          "v": 9,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 0,
+          "v": 10,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 1,
+          "v": 4,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 2,
+          "v": 5,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 3,
+          "v": 6,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 5,
+          "v": 8,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 0,
+          "v": 9,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 0,
+          "v": 10,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 4,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 2,
+          "v": 5,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 3,
+          "v": 6,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 5,
+          "v": 8,
+          "label": 1
+        }
+      ]
+    },
+    {
+      "case_id": "P4A_WL_30",
+      "description": "K4 k=2 delete-heavy stream defect=2",
+      "query_type": "k4",
+      "k": 2,
+      "regime": "uniform",
+      "topology": "micro",
+      "max_work": 500000,
+      "query": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          }
+        ]
+      },
+      "initial_graph": {
+        "vertices": [
+          {
+            "id": 0,
+            "label": 1
+          },
+          {
+            "id": 1,
+            "label": 1
+          },
+          {
+            "id": 2,
+            "label": 1
+          },
+          {
+            "id": 3,
+            "label": 1
+          },
+          {
+            "id": 4,
+            "label": 1
+          },
+          {
+            "id": 5,
+            "label": 1
+          },
+          {
+            "id": 6,
+            "label": 1
+          },
+          {
+            "id": 7,
+            "label": 1
+          }
+        ],
+        "edges": [
+          {
+            "u": 0,
+            "v": 1,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 2,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 2,
+            "v": 3,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 5,
+            "label": 1
+          },
+          {
+            "u": 4,
+            "v": 6,
+            "label": 1
+          },
+          {
+            "u": 5,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 6,
+            "v": 7,
+            "label": 1
+          },
+          {
+            "u": 0,
+            "v": 4,
+            "label": 1
+          },
+          {
+            "u": 1,
+            "v": 5,
+            "label": 1
+          }
+        ]
+      },
+      "updates": [
+        {
+          "op": "-",
+          "u": 0,
+          "v": 1,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 1,
+          "v": 3,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 0,
+          "v": 1,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 1,
+          "v": 3,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 4,
+          "v": 5,
+          "label": 1
+        },
+        {
+          "op": "-",
+          "u": 5,
+          "v": 7,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 4,
+          "v": 5,
+          "label": 1
+        },
+        {
+          "op": "+",
+          "u": 5,
+          "v": 7,
+          "label": 1
+        }
+      ]
+    }
+  ]
+}

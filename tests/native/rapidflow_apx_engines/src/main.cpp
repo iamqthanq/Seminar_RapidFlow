@@ -21,6 +21,7 @@
 #include "rapidflow_apx/query_plan.h"
 #include "rapidflow_apx/streaming_engine.h"
 #include "rapidflow_apx/engine_counters.h"
+#include "rapidflow_apx/profiler.h"
 
 using namespace rapidflow_apx;
 
@@ -298,6 +299,10 @@ int main(int argc, char* argv[]) {
     bool seen_workload = false;
     bool seen_output = false;
     bool seen_max_work = false;
+    bool profiling_enabled = false;
+    std::string profile_output_path = "";
+    RunProfiling run_profiling;
+    ProfilingTimePoint run_wall_t0 = ProfilingClock::now();
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -354,8 +359,17 @@ int main(int argc, char* argv[]) {
             seen_max_work = true;
         } else if (arg == "--continue-on-error") {
             continue_on_error = true;
+        } else if (arg == "--profile") {
+            profiling_enabled = true;
+        } else if (arg == "--profile-output") {
+            if (i + 1 >= argc) {
+                std::cerr << "Error: Missing argument for --profile-output\n";
+                return static_cast<int>(ExitCode::CLI_ARG_ERROR);
+            }
+            profile_output_path = argv[++i];
+            profiling_enabled = true;
         } else if (arg == "--help" || arg == "-h") {
-            std::cout << "Usage: rapidflow_apx_native --engine <m1|m2> --workload <INPUT.json> --output <OUTPUT.json> [--max-work <N>] [--continue-on-error]\n";
+            std::cout << "Usage: rapidflow_apx_native --engine <m1|m2> --workload <INPUT.json> --output <OUTPUT.json> [--max-work <N>] [--continue-on-error] [--profile] [--profile-output <FILE>]\n";
             return static_cast<int>(ExitCode::SUCCESS);
         } else {
             std::cerr << "Error: Unknown or unsupported option: " << arg << "\n";
@@ -365,6 +379,11 @@ int main(int argc, char* argv[]) {
 
     if (!seen_workload || !seen_output) {
         std::cerr << "Error: --workload and --output are required.\n";
+        return static_cast<int>(ExitCode::CLI_ARG_ERROR);
+    }
+
+    if (!profile_output_path.empty() && profile_output_path == output_path) {
+        std::cerr << "Error: --profile-output path cannot be identical to --output path\n";
         return static_cast<int>(ExitCode::CLI_ARG_ERROR);
     }
 
@@ -386,6 +405,7 @@ int main(int argc, char* argv[]) {
     }
 
     // Read input file
+    ProfilingTimePoint parse_t0 = ProfilingClock::now();
     std::ifstream in_file(workload_path, std::ios::in | std::ios::binary);
     if (!in_file.is_open()) {
         std::cerr << "Error: Cannot open workload file: " << workload_path << "\n";
@@ -430,6 +450,8 @@ int main(int argc, char* argv[]) {
 
     try {
         json::Value root_in = json::Parser::parse(input_src);
+        ProfilingTimePoint parse_t1 = ProfilingClock::now();
+        run_profiling.input_parsing_ns = std::chrono::duration_cast<ProfilingNanoseconds>(parse_t1 - parse_t0).count();
 
         std::string case_id = root_in.contains("case_id") ? root_in["case_id"].as_string() : "unknown";
         root_out["case_id"] = json::Value(case_id);
@@ -547,6 +569,7 @@ int main(int argc, char* argv[]) {
         }
 
         // 2. Initialize Data Graph from Initial Graph
+        ProfilingTimePoint init_t0 = ProfilingClock::now();
         ApxAuthoritativeGraph graph;
         if (!root_in.contains("initial_graph")) {
             throw std::invalid_argument("Workload missing required 'initial_graph' object");
@@ -582,8 +605,11 @@ int main(int argc, char* argv[]) {
         }
 
         graph.load_baseline(base_vertices, base_edges);
+        ProfilingTimePoint init_t1 = ProfilingClock::now();
+        run_profiling.graph_init_ns = std::chrono::duration_cast<ProfilingNanoseconds>(init_t1 - init_t0).count();
 
         // 3. Build Query Plan
+        ProfilingTimePoint qp_t0 = ProfilingClock::now();
         uint32_t num_q = static_cast<uint32_t>(q_ext_vids.size());
         std::vector<uint32_t> q_dense_vlabels(num_q, 0);
         for (size_t i = 0; i < q_ext_vids.size(); ++i) {
@@ -603,10 +629,13 @@ int main(int argc, char* argv[]) {
 
         ApxQueryPlan query_plan;
         query_plan.build(num_q, q_dense_vlabels, q_dense_edges, canonical_order, k);
+        ProfilingTimePoint qp_t1 = ProfilingClock::now();
+        run_profiling.query_prep_ns = std::chrono::duration_cast<ProfilingNanoseconds>(qp_t1 - qp_t0).count();
 
         // 4. Initialize Sink and Streaming Engine
         ApxTupleSink sink(codec, canonical_order);
         ApxStreamingEngine streaming_engine(graph, codec, sink, query_plan, engine_type, max_work);
+        streaming_engine.set_profiling_enabled(profiling_enabled);
 
         // Record Query Info
         json::Value q_info = json::Value::make_object();
@@ -639,6 +668,7 @@ int main(int argc, char* argv[]) {
         std::string first_failing_category = "NONE";
         ExitCode first_failing_exit = ExitCode::SUCCESS;
 
+        ProfilingTimePoint stream_t0 = ProfilingClock::now();
         for (size_t step_idx = 0; step_idx < total_steps; ++step_idx) {
             const auto& upd_val = upd_arr[step_idx];
             json::Value step_json = json::Value::make_object();
@@ -763,6 +793,18 @@ int main(int argc, char* argv[]) {
                 // Deep graph state
                 step_json["graph_state"] = build_graph_state_json(graph, codec);
 
+                if (profiling_enabled) {
+                    json::Value p_step = json::Value::make_object();
+                    p_step["step_total_ns"] = json::Value(static_cast<int64_t>(step_res.step_profiling.step_total_ns));
+                    p_step["update_maintenance_ns"] = json::Value(static_cast<int64_t>(step_res.step_profiling.update_maintenance_ns));
+                    p_step["search_ns"] = json::Value(static_cast<int64_t>(step_res.step_profiling.search_ns));
+                    p_step["neighbor_retrieval_ns"] = json::Value(static_cast<int64_t>(step_res.step_profiling.neighbor_retrieval_ns));
+                    p_step["search_core_ns"] = json::Value(static_cast<int64_t>(step_res.step_profiling.search_core_ns));
+                    p_step["tuple_commit_ns"] = json::Value(static_cast<int64_t>(step_res.step_profiling.tuple_commit_ns));
+                    p_step["tuple_sink_ns"] = json::Value(static_cast<int64_t>(step_res.step_profiling.tuple_sink_ns));
+                    step_json["profiling"] = p_step;
+                }
+
                 if (step_res.status != StepStatus::SUCCESS) {
                     any_failure = true;
                     failed_steps++;
@@ -872,6 +914,8 @@ int main(int argc, char* argv[]) {
                 break;
             }
         }
+        ProfilingTimePoint stream_t1 = ProfilingClock::now();
+        run_profiling.streaming_exec_ns = std::chrono::duration_cast<ProfilingNanoseconds>(stream_t1 - stream_t0).count();
 
         root_out["steps"] = steps_arr;
 
@@ -910,6 +954,43 @@ int main(int argc, char* argv[]) {
             cnt_json["commitment_rejections"] = json::Value(counters.commitment_rejections);
         }
         root_out["counters"] = cnt_json;
+
+        if (profiling_enabled) {
+            json::Value p_root = json::Value::make_object();
+            p_root["enabled"] = json::Value(true);
+            p_root["profiling_schema_version"] = json::Value("1.2.0");
+            p_root["input_parsing_ns"] = json::Value(static_cast<int64_t>(run_profiling.input_parsing_ns));
+            p_root["graph_init_ns"] = json::Value(static_cast<int64_t>(run_profiling.graph_init_ns));
+            p_root["query_prep_ns"] = json::Value(static_cast<int64_t>(run_profiling.query_prep_ns));
+            p_root["streaming_loop_wall_ns"] = json::Value(static_cast<int64_t>(run_profiling.streaming_exec_ns));
+            p_root["streaming_exec_ns"] = json::Value(static_cast<int64_t>(run_profiling.streaming_exec_ns)); // alias for backward compatibility
+
+            const auto& cp = streaming_engine.get_cumulative_profiling();
+            p_root["native_step_total_ns"] = json::Value(static_cast<int64_t>(cp.cumulative_step_total_ns));
+
+            json::Value p_cum = json::Value::make_object();
+            p_cum["step_total_ns"] = json::Value(static_cast<int64_t>(cp.cumulative_step_total_ns));
+            p_cum["update_maintenance_ns"] = json::Value(static_cast<int64_t>(cp.cumulative_update_maintenance_ns));
+            p_cum["search_ns"] = json::Value(static_cast<int64_t>(cp.cumulative_search_ns));
+            p_cum["neighbor_retrieval_ns"] = json::Value(static_cast<int64_t>(cp.cumulative_neighbor_retrieval_ns));
+            p_cum["search_core_ns"] = json::Value(static_cast<int64_t>(cp.cumulative_search_core_ns));
+            p_cum["tuple_commit_ns"] = json::Value(static_cast<int64_t>(cp.cumulative_tuple_sink_ns));
+            p_cum["tuple_sink_ns"] = json::Value(static_cast<int64_t>(cp.cumulative_tuple_sink_ns)); // alias for backward compatibility
+            p_root["cumulative"] = p_cum;
+
+            p_root["cumulative_step_total_ns"] = json::Value(static_cast<int64_t>(cp.cumulative_step_total_ns));
+            p_root["cumulative_update_maintenance_ns"] = json::Value(static_cast<int64_t>(cp.cumulative_update_maintenance_ns));
+            p_root["cumulative_search_ns"] = json::Value(static_cast<int64_t>(cp.cumulative_search_ns));
+            p_root["cumulative_neighbor_retrieval_ns"] = json::Value(static_cast<int64_t>(cp.cumulative_neighbor_retrieval_ns));
+            p_root["cumulative_search_core_ns"] = json::Value(static_cast<int64_t>(cp.cumulative_search_core_ns));
+            p_root["cumulative_tuple_commit_ns"] = json::Value(static_cast<int64_t>(cp.cumulative_tuple_sink_ns));
+            p_root["cumulative_tuple_sink_ns"] = json::Value(static_cast<int64_t>(cp.cumulative_tuple_sink_ns));
+            auto cur_t = ProfilingClock::now();
+            int64_t pre_output_ns = static_cast<int64_t>(std::chrono::duration_cast<ProfilingNanoseconds>(cur_t - run_wall_t0).count());
+            p_root["pre_output_wall_ns"] = json::Value(pre_output_ns);
+            p_root["total_wall_ns"] = json::Value(pre_output_ns);
+            root_out["profiling"] = p_root;
+        }
 
         if (any_failure) {
             root_out["status"] = json::Value("FAIL");
@@ -955,6 +1036,15 @@ int main(int argc, char* argv[]) {
     if (!write_json_file_safe(output_path, serialized, err_msg)) {
         std::cerr << "Error: Output write failure: " << err_msg << "\n";
         return static_cast<int>(ExitCode::IO_ERROR);
+    }
+
+    if (!profile_output_path.empty() && profiling_enabled && root_out.contains("profiling")) {
+        std::string p_serialized = json::serialize(root_out["profiling"], 2);
+        std::string p_err;
+        if (!write_json_file_safe(profile_output_path, p_serialized, p_err)) {
+            std::cerr << "Error: Profile output write failure: " << p_err << "\n";
+            return static_cast<int>(ExitCode::IO_ERROR);
+        }
     }
 
     return static_cast<int>(final_exit_code);
