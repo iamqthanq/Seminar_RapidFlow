@@ -42,11 +42,15 @@ enum class MergeFaultHook {
 };
 #endif
 
+#ifdef APX_TEST_ACCESS
 struct ApxAuthoritativeGraphTestAccess;
+#endif
 
 class ApxAuthoritativeGraph {
 public:
+#ifdef APX_TEST_ACCESS
     friend struct ApxAuthoritativeGraphTestAccess;
+#endif
 
 #ifdef APX_NEIGHBOR_TEST_TRACE
     static void set_merge_fault_hook(MergeFaultHook hook);
@@ -176,6 +180,7 @@ private:
     TxRecord tx_record_{};
 };
 
+#ifdef APX_TEST_ACCESS
 struct ApxAuthoritativeGraphTestAccess {
     static void merge_neighbor_ranges(
         const ApxAuthoritativeGraph& graph,
@@ -190,6 +195,7 @@ struct ApxAuthoritativeGraphTestAccess {
         graph.merge_neighbor_ranges(u, base_nbrs, base_count, overlay_nbrs, overlay_count, out, counters);
     }
 };
+#endif
 
 } // namespace rapidflow_apx
 

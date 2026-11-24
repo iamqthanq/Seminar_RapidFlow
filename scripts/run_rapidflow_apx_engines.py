@@ -932,6 +932,8 @@ ALL_NEIGHBOR_COUNTER_FIELDS = NEIGHBOR_COUNTER_FIELDS + NEIGHBOR_MERGE_COUNTER_F
 
 def validate_neighbor_counters(counters: Dict[str, Any], result: Dict[str, Any]) -> str:
     version = result.get("neighbor_configuration_version")
+    eff_mode = result.get("effective_neighbor_mode")
+
     if version == 2:
         for field in ALL_NEIGHBOR_COUNTER_FIELDS:
             if field not in counters:
@@ -940,21 +942,42 @@ def validate_neighbor_counters(counters: Dict[str, Any], result: Dict[str, Any])
             if value is None or type(value) is not int or isinstance(value, bool) or not 0 <= value <= 500000000000000:
                 return f"Invalid neighbor counter {field}: {value!r}"
     elif version == 1:
-        for field in ALL_NEIGHBOR_COUNTER_FIELDS:
-            value = counters.get(field)
-            if value is not None:
-                if type(value) is not int or isinstance(value, bool) or not 0 <= value <= 500000000000000:
+        if eff_mode == "merge":
+            for field in ALL_NEIGHBOR_COUNTER_FIELDS:
+                if field not in counters:
+                    return f"Missing required neighbor counter '{field}' in historical merge profile"
+                value = counters[field]
+                if value is None or type(value) is not int or isinstance(value, bool) or not 0 <= value <= 500000000000000:
                     return f"Invalid neighbor counter {field}: {value!r}"
+        elif eff_mode == "buffer":
+            for field in NEIGHBOR_COUNTER_FIELDS:
+                if field not in counters:
+                    return f"Missing required neighbor counter '{field}' in historical buffer profile"
+                value = counters[field]
+                if value is None or type(value) is not int or isinstance(value, bool) or not 0 <= value <= 500000000000000:
+                    return f"Invalid neighbor counter {field}: {value!r}"
+            for field in NEIGHBOR_MERGE_COUNTER_FIELDS:
+                if field in counters:
+                    value = counters[field]
+                    if value is not None:
+                        if type(value) is not int or isinstance(value, bool) or value != 0:
+                            return f"Nonzero or invalid merge counter '{field}' in historical buffer profile: {value!r}"
+        else:
+            for field in ALL_NEIGHBOR_COUNTER_FIELDS:
+                if field in counters:
+                    value = counters[field]
+                    if value is not None:
+                        if type(value) is not int or isinstance(value, bool) or value != 0:
+                            return f"Nonzero or invalid neighbor counter '{field}' in historical legacy profile: {value!r}"
+    elif version is None:
+        if eff_mode in ("buffer", "merge"):
+            return "Missing neighbor configuration version in buffer/merge run"
+        for field in ALL_NEIGHBOR_COUNTER_FIELDS:
+            if counters.get(field, 0) != 0:
+                return f"Nonzero neighbor counter {field} in unversioned run: {counters.get(field)}"
     else:
-        if not any(field in counters for field in ALL_NEIGHBOR_COUNTER_FIELDS):
-            return ""
-        for field in ALL_NEIGHBOR_COUNTER_FIELDS:
-            value = counters.get(field)
-            if value is not None:
-                if type(value) is not int or isinstance(value, bool) or not 0 <= value <= 500000000000000:
-                    return f"Invalid neighbor counter {field}: {value!r}"
+        return f"Unknown or invalid neighbor configuration version: {version!r}"
 
-    eff_mode = result.get("effective_neighbor_mode")
     if eff_mode not in ("buffer", "merge"):
         for field in ALL_NEIGHBOR_COUNTER_FIELDS:
             if counters.get(field, 0) != 0:
@@ -1587,11 +1610,12 @@ def validate_nlf_configuration(
     native_result: Dict[str, Any],
     is_success_run: bool,
     requested_neighbor_mode: Optional[str] = None,
+    allow_historical_version: bool = False,
 ) -> Tuple[bool, str, Dict[str, Any]]:
     """Validate actual configuration, including on initialized failures.
 
     A live runner always supplies the requested neighbor mode. Historical
-    validation callers may omit it for pre-P4b-2A records.
+    validation callers may omit it for pre-P4b-2A records or set allow_historical_version=True.
     """
     fields = (
         "requested_nlf_mode", "effective_nlf_mode", "configuration_status",
@@ -1664,7 +1688,7 @@ def validate_nlf_configuration(
     if requested_neighbor_mode is not None or version is not None or any(
         field in native_result for field in neighbor_fields
     ):
-        if requested_neighbor_mode is not None:
+        if requested_neighbor_mode is not None and not allow_historical_version:
             if version != 2 or marker is not True:
                 return reject("Missing initialized current neighbor configuration identity")
         else:
@@ -1727,6 +1751,7 @@ def run_workload_on_binary(
     address_space_mib: int = 512,
     nlf_mode: str = "none",
     neighbor_mode: str = "legacy",
+    allow_historical_version: bool = False,
 ) -> Tuple[Dict[str, Any], float, bool]:
     """Runs a single workload JSON through rapidflow_apx_native with micro-containment and strict schema validation."""
     # Preflight micro-workload containment check (P3-R3-F08)
@@ -1818,6 +1843,7 @@ def run_workload_on_binary(
             native_result=res_data,
             is_success_run=is_success_run,
             requested_neighbor_mode=neighbor_mode,
+            allow_historical_version=allow_historical_version,
         )
         res_data["configuration_valid"] = config_ok
         if not schema_ok or not config_ok:

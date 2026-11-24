@@ -1159,30 +1159,55 @@ void merge_direct_and_fallback_tests() {
         for (uint32_t i = 0; i < 4; ++i) {
             verts.emplace_back(codec.intern_data_vertex(i), 0);
         }
+        // Baseline graph: 4 vertices, edges (1, 3) and (2, 3), missing (0, 1) and (0, 2)
         g.load_baseline(verts, {{1, 3, 0}, {2, 3, 0}});
         const std::vector<QueryEdge> c4{{0, 1, 0}, {0, 2, 0}, {1, 3, 0}, {2, 3, 0}};
         std::vector<uint32_t> qorder = {0, 1, 2, 3};
         ApxQueryPlan plan;
         plan.build(4, std::vector<uint32_t>(4, 0), c4, qorder, 1);
 
-        ApxTupleSink sink(codec, qorder);
-        ApxStreamingEngine engine(g, codec, sink, plan, EngineType::M2, 500000, NlfMode::NONE, 0, NeighborMode::MERGE);
-
-        // Tentative uncommitted insert
+        // 1. Begin transaction
         g.begin_transaction();
+
+        // 2. Perform tentative INSERT of edge (0, 1)
         g.apply_insert(0, 1, 0);
 
-        // Verify BOTH endpoints see tentative neighbor in merged view
+        // 3. Keep transaction active! Verify BOTH endpoints see tentative neighbor in merged view
         std::vector<uint32_t> nbrs0, nbrs1;
         g.get_neighbors_merged_into(0, nbrs0);
         g.get_neighbors_merged_into(1, nbrs1);
-        require(std::find(nbrs0.begin(), nbrs0.end(), 1) != nbrs0.end(), "MG-G19B: Endpoint 0 sees tentative neighbor 1");
-        require(std::find(nbrs1.begin(), nbrs1.end(), 0) != nbrs1.end(), "MG-G19B: Endpoint 1 sees tentative neighbor 0");
+        require(std::find(nbrs0.begin(), nbrs0.end(), 1) != nbrs0.end(), "MG-G19B: Endpoint 0 sees tentative neighbor 1 while tx active");
+        require(std::find(nbrs1.begin(), nbrs1.end(), 0) != nbrs1.end(), "MG-G19B: Endpoint 1 sees tentative neighbor 0 while tx active");
 
-        // Rollback transaction
+        // 4. Execute actual query event WHILE tentative overlay remains active
+        ApxTupleSink sink(codec, qorder);
+        sink.start_step();
+        EngineCounters step_counters;
+        ApxM2EventEngine m2_engine;
+        m2_engine.search_event(plan, g, 0, 1, 0, sink, step_counters, nullptr, NlfMode::NONE, nullptr, nullptr, NeighborMode::MERGE);
+        auto published = sink.commit_step();
+
+        // 5. Capture event output and verify EXACT expected 8 canonical ENTERED tuples
+        require(published.size() == 8, "MG-G19B: Exactly 8 tuples emitted while tentative INSERT is active");
+
+        const std::vector<std::vector<int64_t>> expected_tuples = {
+            {0, 1, 2, 3},
+            {1, 0, 3, 2},
+            {0, 2, 1, 3},
+            {1, 3, 0, 2},
+            {2, 0, 3, 1},
+            {3, 1, 2, 0},
+            {2, 3, 0, 1},
+            {3, 2, 1, 0}
+        };
+        for (size_t i = 0; i < 8; ++i) {
+            require(published[i] == expected_tuples[i], "MG-G19B: Tuple matches canonical expected order and endpoint identity");
+        }
+
+        // 6. Rollback transaction
         g.rollback_transaction();
 
-        // Verify BOTH endpoints no longer see tentative edge
+        // 7. Verify BOTH endpoints no longer see tentative edge after rollback
         nbrs0.clear();
         nbrs1.clear();
         g.get_neighbors_merged_into(0, nbrs0);
@@ -1190,11 +1215,13 @@ void merge_direct_and_fallback_tests() {
         require(std::find(nbrs0.begin(), nbrs0.end(), 1) == nbrs0.end(), "MG-G19B: Endpoint 0 does not see 1 after rollback");
         require(std::find(nbrs1.begin(), nbrs1.end(), 0) == nbrs1.end(), "MG-G19B: Endpoint 1 does not see 0 after rollback");
 
-        // Execute query event through engine
-        const auto step = engine.execute_step({UpdateOp::INSERT, 0, 1, TypedLabel::from_int(0)}, 0);
-        require(step.status == StepStatus::SUCCESS, "MG-G19B: Event processing succeeds");
-        require(step.committed, "MG-G19B: Event committed");
-        require(!step.entered_tuples.empty(), "MG-G19B: Event produces matches");
+        // 8. Execute query again on rolled-back graph: verify NO tentative INSERT emissions remain
+        ApxTupleSink sink_after(codec, qorder);
+        sink_after.start_step();
+        EngineCounters step_counters_after;
+        m2_engine.search_event(plan, g, 0, 1, 0, sink_after, step_counters_after, nullptr, NlfMode::NONE, nullptr, nullptr, NeighborMode::MERGE);
+        auto published_after = sink_after.commit_step();
+        require(published_after.empty(), "MG-G19B: Zero emissions after rollback");
     }
 
     // -------------------------------------------------------------------------
@@ -1433,8 +1460,11 @@ void merge_direct_and_fallback_tests() {
         require(caught3, "FAIL_DURING_FALLBACK threw runtime_error");
         require(out.empty(), "FAIL_DURING_FALLBACK out vector is cleared");
 
-        // Reset hook
+        // Reset hook and verify subsequent call succeeds normally
         ApxAuthoritativeGraph::set_merge_fault_hook(MergeFaultHook::NONE);
+        out.clear();
+        ApxAuthoritativeGraphTestAccess::merge_neighbor_ranges(g, 0, unsorted, 2, nullptr, 0, out);
+        require(out.size() == 2 && out[0] == 1 && out[1] == 3, "merge_neighbor_ranges succeeds normally after resetting hook to NONE");
     }
 #endif
 

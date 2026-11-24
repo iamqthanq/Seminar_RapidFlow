@@ -301,6 +301,32 @@ class TestNeighborBuffer(unittest.TestCase):
         for f in runner.ALL_NEIGHBOR_COUNTER_FIELDS:
             self.assertIn("Nonzero neighbor counter", runner.validate_neighbor_counters({**cl, f: 1}, res_l))
 
+        # 7. Historical version 1 schema validation matrix (R1-RV04)
+        res_v1_b = {"neighbor_configuration_version": 1, "effective_neighbor_mode": "buffer"}
+        c_v1_b = {
+            "neighbor_buffer_retrieval_calls": 8,
+            "neighbor_buffer_growth_calls": 2,
+            "neighbor_buffer_no_growth_calls": 6,
+        }
+        self.assertEqual(runner.validate_neighbor_counters(c_v1_b, res_v1_b), "")
+        for f in runner.NEIGHBOR_COUNTER_FIELDS:
+            bad_v1 = {k: v for k, v in c_v1_b.items() if k != f}
+            self.assertIn("Missing required neighbor counter", runner.validate_neighbor_counters(bad_v1, res_v1_b))
+            self.assertIn("Invalid neighbor counter", runner.validate_neighbor_counters({**c_v1_b, f: True}, res_v1_b))
+        for mf in runner.NEIGHBOR_MERGE_COUNTER_FIELDS:
+            self.assertIn("Nonzero or invalid merge counter", runner.validate_neighbor_counters({**c_v1_b, mf: 1}, res_v1_b))
+
+        res_v1_m = {"neighbor_configuration_version": 1, "effective_neighbor_mode": "merge"}
+        c_v1_m = dict(c)
+        self.assertEqual(runner.validate_neighbor_counters(c_v1_m, res_v1_m), "")
+        for f in runner.ALL_NEIGHBOR_COUNTER_FIELDS:
+            bad_v1_m = {k: v for k, v in c_v1_m.items() if k != f}
+            self.assertIn("Missing required neighbor counter", runner.validate_neighbor_counters(bad_v1_m, res_v1_m))
+            self.assertIn("Invalid neighbor counter", runner.validate_neighbor_counters({**c_v1_m, f: False}, res_v1_m))
+
+        res_bad_ver = {"neighbor_configuration_version": 3, "effective_neighbor_mode": "merge"}
+        self.assertIn("Unknown or invalid neighbor configuration version", runner.validate_neighbor_counters(c, res_bad_ver))
+
     def test_subprocess_counter_mutations_and_reconciliation(self):
         actual = runner.execute_contained_subprocess
 
@@ -371,9 +397,42 @@ class TestNeighborBuffer(unittest.TestCase):
         self.assertIn("mismatch with sum of step counters", get_diag(result))
         self.assertEqual(result["native_reported_outcome"]["status"], "SUCCESS")
 
+        # Mutation 5: Historical version 1 under live run triggers downgrade protection rejection (R1-RV04)
+        def downgrade_version(cmd, **kwargs):
+            res = actual(cmd, **kwargs)
+            out = Path(cmd[cmd.index("--output") + 1])
+            body = json.loads(out.read_text())
+            body["neighbor_configuration_version"] = 1
+            out.write_text(json.dumps(body))
+            return res
+
+        with patch.object(runner, "execute_contained_subprocess", side_effect=downgrade_version):
+            result, _, accepted = runner.run_workload_on_binary(BINARY, "m2", self.workload(), neighbor_mode="merge", allow_historical_version=False)
+        self.assertFalse(accepted)
+        self.assertIn("Missing initialized current neighbor configuration identity", get_diag(result))
+
+        # Mutation 6: Historical version 1 under allow_historical_version=True with missing mandatory counter rejected (R1-RV04)
+        def hist_missing_counter(cmd, **kwargs):
+            res = actual(cmd, **kwargs)
+            out = Path(cmd[cmd.index("--output") + 1])
+            body = json.loads(out.read_text())
+            body["neighbor_configuration_version"] = 1
+            body.get("counters", {}).pop("neighbor_merge_linear_calls", None)
+            out.write_text(json.dumps(body))
+            return res
+
+        with patch.object(runner, "execute_contained_subprocess", side_effect=hist_missing_counter):
+            result, _, accepted = runner.run_workload_on_binary(BINARY, "m2", self.workload(), neighbor_mode="merge", allow_historical_version=True)
+        self.assertFalse(accepted)
+        self.assertIn("Missing required neighbor counter 'neighbor_merge_linear_calls' in historical merge profile", get_diag(result))
+
     def test_historical_p4b2a_baseline_compatibility(self):
-        baseline_bin = Path("/tmp/rapidflow-p4b2b-r1-ot7fz8/binaries/p4b2a-baseline-native")
-        if not baseline_bin.is_file():
+        candidates = [
+            Path("/tmp/rapidflow-p4b2b-r1-1/binaries/p4b2a-baseline-native"),
+            Path("/tmp/rapidflow-p4b2b-r1-ot7fz8/binaries/p4b2a-baseline-native"),
+        ]
+        baseline_bin = next((p for p in candidates if p.is_file()), None)
+        if baseline_bin is None:
             self.skipTest("Historical baseline binary not found")
         # Run workload directly on historical baseline binary
         with tempfile.TemporaryDirectory() as tmp:
@@ -391,3 +450,10 @@ class TestNeighborBuffer(unittest.TestCase):
             ok_live, diag_live, _ = runner.validate_nlf_configuration("m2", "none", hist_out, True, "buffer")
             self.assertFalse(ok_live)
             self.assertIn("Missing initialized current neighbor configuration identity", diag_live)
+            # Historical validation with allow_historical_version=True accepts version 1
+            ok_hist, diag_hist, _ = runner.validate_nlf_configuration("m2", "none", hist_out, True, "buffer", allow_historical_version=True)
+            self.assertTrue(ok_hist, diag_hist)
+
+            # Also verify run_workload_on_binary with allow_historical_version=True
+            res_dict, _, acc = runner.run_workload_on_binary(baseline_bin, "m2", self.workload(), neighbor_mode="buffer", allow_historical_version=True)
+            self.assertTrue(acc, res_dict.get("error_message"))

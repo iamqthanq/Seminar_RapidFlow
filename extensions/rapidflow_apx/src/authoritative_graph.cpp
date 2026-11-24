@@ -449,12 +449,6 @@ void ApxAuthoritativeGraph::merge_neighbor_ranges(
 
 do_fallback:
         out.clear();
-#ifdef APX_NEIGHBOR_TEST_TRACE
-        if (s_merge_fault_hook == MergeFaultHook::FAIL_DURING_FALLBACK) {
-            out.push_back(99999);
-            throw std::runtime_error("Simulated failure during fallback");
-        }
-#endif
         if (base_nbrs) {
             for (uint32_t k = 0; k < base_count; ++k) {
                 uint32_t v = base_nbrs[k];
@@ -467,6 +461,11 @@ do_fallback:
                     continue;
                 }
                 out.push_back(v);
+#ifdef APX_NEIGHBOR_TEST_TRACE
+                if (s_merge_fault_hook == MergeFaultHook::FAIL_DURING_FALLBACK && !out.empty()) {
+                    throw std::runtime_error("Simulated failure during fallback with partial output");
+                }
+#endif
             }
         }
         if (overlay_nbrs) {
@@ -476,6 +475,11 @@ do_fallback:
                     throw InvariantViolationException("merge_neighbor_ranges: invalid neighbor ID in fallback overlay");
                 }
                 out.push_back(v);
+#ifdef APX_NEIGHBOR_TEST_TRACE
+                if (s_merge_fault_hook == MergeFaultHook::FAIL_DURING_FALLBACK && !out.empty()) {
+                    throw std::runtime_error("Simulated failure during fallback with partial output");
+                }
+#endif
             }
         }
         std::sort(out.begin(), out.end());
