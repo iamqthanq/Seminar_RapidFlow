@@ -15,7 +15,9 @@ Covers Remediation Findings:
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -3058,9 +3060,8 @@ class TestRapidFlowApxP4a(unittest.TestCase):
             self.assertIn("usage:", proc_d17.stdout.lower())
 
     def test_66_r9_f01_diagnostic_isolation(self):
-        """Remediation Round 9: Tests R9-F01 diagnostic output isolation (T01..T11)."""
+        """Remediation Round 9 / Round 10: Tests R9-F01 diagnostic output isolation (T01..T11, portable fixture)."""
         summarize_script = REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"
-        raw_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
         with tempfile.TemporaryDirectory() as tmpdir:
             td = Path(tmpdir)
             target_json = td / "target_certified.json"
@@ -3071,10 +3072,14 @@ class TestRapidFlowApxP4a(unittest.TestCase):
             target_md.write_text("PREEXISTING_CERTIFIED_MD_123\n")
             initial_md_sha = compute_sha256(target_md)
 
+            # Portable synthetic ledger fixture (R10-F05: independent of ignored historical logs)
+            synthetic_ledger = td / "synthetic_ledger.jsonl"
+            synthetic_ledger.write_text(json.dumps(FIXTURE_VALID_CANONICAL_M1) + "\n")
+
             # T01: Diagnostic collides with output-json
             cmd_t01 = [
                 sys.executable, str(summarize_script),
-                "--ledger", str(raw_ledger),
+                "--ledger", str(synthetic_ledger),
                 "--output-json", str(target_json),
                 "--diagnostic-json", str(target_json),
                 "--mode", "canonical",
@@ -3087,7 +3092,7 @@ class TestRapidFlowApxP4a(unittest.TestCase):
             # T02: Diagnostic collides with output-md
             cmd_t02 = [
                 sys.executable, str(summarize_script),
-                "--ledger", str(raw_ledger),
+                "--ledger", str(synthetic_ledger),
                 "--output-json", str(target_json),
                 "--output-md", str(target_md),
                 "--diagnostic-json", str(target_md),
@@ -3101,7 +3106,7 @@ class TestRapidFlowApxP4a(unittest.TestCase):
             # T03: Diagnostic collides with official canonical summary (DEFAULT_SUMMARY_JSON)
             cmd_t03 = [
                 sys.executable, str(summarize_script),
-                "--ledger", str(raw_ledger),
+                "--ledger", str(synthetic_ledger),
                 "--output-json", str(target_json),
                 "--diagnostic-json", str(DEFAULT_SUMMARY_JSON),
                 "--mode", "canonical",
@@ -3116,7 +3121,7 @@ class TestRapidFlowApxP4a(unittest.TestCase):
                 symlink_diag.symlink_to(target_json)
                 cmd_t04 = [
                     sys.executable, str(summarize_script),
-                    "--ledger", str(raw_ledger),
+                    "--ledger", str(synthetic_ledger),
                     "--output-json", str(target_json),
                     "--diagnostic-json", str(symlink_diag),
                     "--mode", "canonical",
@@ -3132,7 +3137,7 @@ class TestRapidFlowApxP4a(unittest.TestCase):
             rel_target = os.path.relpath(target_json, start=os.getcwd())
             cmd_t05 = [
                 sys.executable, str(summarize_script),
-                "--ledger", str(raw_ledger),
+                "--ledger", str(synthetic_ledger),
                 "--output-json", str(target_json.resolve()),
                 "--diagnostic-json", str(rel_target),
                 "--mode", "canonical",
@@ -3147,7 +3152,7 @@ class TestRapidFlowApxP4a(unittest.TestCase):
             traversal_path = sub_dir / ".." / target_json.name
             cmd_t06 = [
                 sys.executable, str(summarize_script),
-                "--ledger", str(raw_ledger),
+                "--ledger", str(synthetic_ledger),
                 "--output-json", str(target_json),
                 "--diagnostic-json", str(traversal_path),
                 "--mode", "canonical",
@@ -3162,7 +3167,7 @@ class TestRapidFlowApxP4a(unittest.TestCase):
                 os.link(str(target_json), str(hardlink_diag))
                 cmd_t07 = [
                     sys.executable, str(summarize_script),
-                    "--ledger", str(raw_ledger),
+                    "--ledger", str(synthetic_ledger),
                     "--output-json", str(target_json),
                     "--diagnostic-json", str(hardlink_diag),
                     "--mode", "canonical",
@@ -3177,9 +3182,9 @@ class TestRapidFlowApxP4a(unittest.TestCase):
             # T08: Diagnostic collides with input ledger
             cmd_t08 = [
                 sys.executable, str(summarize_script),
-                "--ledger", str(raw_ledger),
+                "--ledger", str(synthetic_ledger),
                 "--output-json", str(target_json),
-                "--diagnostic-json", str(raw_ledger),
+                "--diagnostic-json", str(synthetic_ledger),
                 "--mode", "canonical",
             ]
             p_t08 = subprocess.run(cmd_t08, capture_output=True, text=True)
@@ -3189,7 +3194,7 @@ class TestRapidFlowApxP4a(unittest.TestCase):
             # T09: Diagnostic collides with manifest or evidence manifest
             cmd_t09 = [
                 sys.executable, str(summarize_script),
-                "--ledger", str(raw_ledger),
+                "--ledger", str(synthetic_ledger),
                 "--output-json", str(target_json),
                 "--diagnostic-json", str(DEFAULT_MANIFEST_PATH),
                 "--mode", "canonical",
@@ -3198,11 +3203,11 @@ class TestRapidFlowApxP4a(unittest.TestCase):
             self.assertNotEqual(p_t09.returncode, 0)
             self.assertIn("collision", p_t09.stderr.lower())
 
-            # T10: Diagnostic at safe separate path is allowed on certification failure
-            tampered_ledger = td / "tampered.jsonl"
-            with open(raw_ledger, "r") as rf, open(tampered_ledger, "w") as wf:
-                line = rf.readline()
-                wf.write(line.replace("6e4537d03a356dd9c603e452f86848cbdb1ea2cd0fcbdf31199d0e9afbf9b21b", "0" * 64))
+            # T10: Diagnostic at safe separate path is allowed on certification failure (portable fixture)
+            tampered_ledger = td / "tampered_synthetic.jsonl"
+            tampered_rec = dict(FIXTURE_VALID_CANONICAL_M1)
+            tampered_rec["binary_sha256"] = "0" * 64
+            tampered_ledger.write_text(json.dumps(tampered_rec) + "\n")
             safe_diag = td / "safe_diag.json"
             cmd_t10 = [
                 sys.executable, str(summarize_script),
@@ -3218,11 +3223,12 @@ class TestRapidFlowApxP4a(unittest.TestCase):
             self.assertEqual(compute_sha256(target_json), initial_sha, "Certified output must remain unmodified")
 
     def test_67_r9_f02_multi_artifact_staged_publication(self):
-        """Remediation Round 9: Tests R9-F02 staged multi-artifact publication and compensating rollback (T12..T24)."""
+        """Remediation Round 9 / Round 10: Tests R9-F02 staged multi-artifact publication and compensating rollback (T12..T24)."""
         summarize_script = REPO_ROOT / "scripts" / "summarize_rapidflow_apx_p4a.py"
-        raw_ledger = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_raw_ledger.jsonl"
         with tempfile.TemporaryDirectory() as tmpdir:
             td = Path(tmpdir)
+            synthetic_ledger = td / "synthetic_ledger.jsonl"
+            synthetic_ledger.write_text(json.dumps(FIXTURE_VALID_CANONICAL_M1) + "\n")
 
             # T12: Valid single JSON publication (PASS)
             out_json = td / "out.json"
@@ -3379,7 +3385,7 @@ class TestRapidFlowApxP4a(unittest.TestCase):
             # T23: Protected artifact collision (e.g. CLI rejects output-json against default protocol)
             cmd_t23 = [
                 sys.executable, str(summarize_script),
-                "--ledger", str(raw_ledger),
+                "--ledger", str(synthetic_ledger),
                 "--output-json", str(DEFAULT_PROTOCOL_PATH),
                 "--mode", "canonical",
             ]
@@ -3397,6 +3403,264 @@ class TestRapidFlowApxP4a(unittest.TestCase):
             self.assertEqual(res_t24["status"], PublicationStatus.PUBLISHED)
             self.assertTrue(retry_json.is_file())
             self.assertTrue(retry_md.is_file())
+
+    def test_68_r10_f01_recovery_backup_preservation(self):
+        """Remediation Round 10: Tests R10-F01 recovery backup preservation on rollback failure (R10-A01..A16)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            td = Path(tmpdir)
+            json_dest = td / "certified.json"
+            md_dest = td / "certified.md"
+
+            orig_json_content = "ORIGINAL_CERTIFIED_JSON_CONTENT_12345\n"
+            orig_md_content = "# ORIGINAL_CERTIFIED_REPORT_54321\n"
+            json_dest.write_text(orig_json_content)
+            md_dest.write_text(orig_md_content)
+
+            orig_json_sha = hashlib.sha256(orig_json_content.encode("utf-8")).hexdigest()
+            orig_json_size = len(orig_json_content.encode("utf-8"))
+
+            # R10-A04 & A05: Destination 1 commits, Destination 2 fails commit, Rollback on Dest 1 fails.
+            calls = [0]
+            def fail_commit_and_rollback(src, dst):
+                calls[0] += 1
+                # Call 1: stage1 -> json_dest (commit: OK)
+                # Call 2: stage2 -> md_dest (commit: FAIL)
+                # Call 3: restore_stage1 -> json_dest (rollback: FAIL)
+                if calls[0] in (2, 3):
+                    raise OSError(f"Injected replacement failure on call {calls[0]}")
+                return os.replace(src, dst)
+
+            with self.assertRaises(PublicationError) as cm:
+                publish_certified_artifacts_staged(
+                    [
+                        ArtifactTarget(target_path=json_dest, content="NEW_JSON_456\n"),
+                        ArtifactTarget(target_path=md_dest, content="NEW_MD_789\n"),
+                    ],
+                    _replace_fn=fail_commit_and_rollback,
+                )
+
+            # R10-A04: Status must be PUBLICATION_INCONSISTENT
+            self.assertEqual(cm.exception.status, PublicationStatus.PUBLICATION_INCONSISTENT)
+
+            # R10-A05 & A06 & A07: Recovery backup for json_dest MUST be retained and match original SHA/size
+            retained = cm.exception.details.get("retained_recovery_backups", [])
+            self.assertEqual(len(retained), 1, "Exactly 1 recovery backup must be retained for unrestored destination")
+            rec = retained[0]
+            self.assertEqual(rec["destination"], str(json_dest))
+            self.assertTrue(Path(rec["backup_path"]).exists(), "Retained recovery backup file must exist on disk")
+            self.assertEqual(rec["original_sha256"], orig_json_sha)
+            self.assertEqual(rec["original_size_bytes"], orig_json_size)
+            self.assertTrue(rec["sha_matches"])
+            self.assertTrue(rec["size_matches"])
+
+            # Verify actual content on disk
+            backup_bytes = Path(rec["backup_path"]).read_bytes()
+            self.assertEqual(hashlib.sha256(backup_bytes).hexdigest(), orig_json_sha)
+            self.assertEqual(len(backup_bytes), orig_json_size)
+
+            # Verify json_dest was NOT restored (still has NEW_JSON_456), justifying retention
+            self.assertIn("NEW_JSON_456", json_dest.read_text())
+
+            # Verify md_dest was never replaced (still has orig_md_content) and its backup was cleaned
+            self.assertEqual(md_dest.read_text(), orig_md_content)
+            all_backups_on_disk = [p for p in td.glob("*.tmp") if "orig_backup" in p.name]
+            self.assertEqual(len(all_backups_on_disk), 1, "Only unrestored destination backup is retained")
+
+            # R10-A08: Restoration verification failure retains backup
+            # Create a custom replace that mutates the file to simulate corruption during restoration
+            calls[0] = 0
+            def corrupting_restore_replace(src, dst):
+                calls[0] += 1
+                if calls[0] == 2:
+                    raise OSError("Injected second replacement failure")
+                if calls[0] == 3:
+                    # Write corrupted content instead of restoring original
+                    Path(dst).write_text("CORRUPTED_RESTORED_DATA\n")
+                    return
+                return os.replace(src, dst)
+
+            # Re-initialize destinations
+            json_dest.write_text(orig_json_content)
+            with self.assertRaises(PublicationError) as cm_corrupt:
+                publish_certified_artifacts_staged(
+                    [
+                        ArtifactTarget(target_path=json_dest, content="NEW_JSON_999\n"),
+                        ArtifactTarget(target_path=md_dest, content="NEW_MD_999\n"),
+                    ],
+                    _replace_fn=corrupting_restore_replace,
+                )
+            self.assertEqual(cm_corrupt.exception.status, PublicationStatus.PUBLICATION_INCONSISTENT)
+            retained_corrupt = cm_corrupt.exception.details.get("retained_recovery_backups", [])
+            self.assertEqual(len(retained_corrupt), 1)
+            self.assertTrue(Path(retained_corrupt[0]["backup_path"]).exists())
+            self.assertEqual(Path(retained_corrupt[0]["backup_path"]).read_bytes(), orig_json_content.encode("utf-8"))
+
+            # R10-A09: When rollback succeeds, all backups are cleanly unlinked
+            calls[0] = 0
+            def failing_second_replace_only(src, dst):
+                calls[0] += 1
+                if calls[0] == 2:
+                    raise OSError("Second replace fails")
+                return os.replace(src, dst)
+
+            json_dest.write_text(orig_json_content)
+            # Remove any previous retained backup from prior test scenario to verify clean slate
+            for p in td.glob("*.tmp"):
+                p.unlink()
+
+            with self.assertRaises(PublicationError) as cm_success_rb:
+                publish_certified_artifacts_staged(
+                    [
+                        ArtifactTarget(target_path=json_dest, content="NEW_JSON_SUCCESS_RB\n"),
+                        ArtifactTarget(target_path=md_dest, content="NEW_MD_SUCCESS_RB\n"),
+                    ],
+                    _replace_fn=failing_second_replace_only,
+                )
+            self.assertEqual(cm_success_rb.exception.status, PublicationStatus.PUBLICATION_FAILED_ROLLED_BACK)
+            self.assertEqual(json_dest.read_text(), orig_json_content)
+            # All backups must be cleaned up on verified rollback success
+            backups_after = list(td.glob("*.tmp"))
+            self.assertEqual(len(backups_after), 0, "No backup files must remain after verified rollback")
+
+    def test_69_r10_f02_staging_resource_lifecycle(self):
+        """Remediation Round 10: Tests R10-F02 staging resource lifecycle and leak prevention (R10-B01..B14)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            td = Path(tmpdir)
+            target1 = td / "t1.json"
+            target2 = td / "t2.md"
+            target1.write_text("PREV_1\n")
+            target2.write_text("PREV_2\n")
+            sha1_before = compute_sha256(target1)
+            sha2_before = compute_sha256(target2)
+
+            # R10-B06 & B07: Fsync failure during staging cleans up all owned temporary files
+            real_fsync = os.fsync
+            fsync_calls = [0]
+            def failing_fsync(fd):
+                fsync_calls[0] += 1
+                if fsync_calls[0] == 2:
+                    raise OSError("Injected fsync failure on stage 2")
+                return real_fsync(fd)
+
+            os.fsync = failing_fsync
+            try:
+                with self.assertRaises(PublicationError) as cm:
+                    publish_certified_artifacts_staged(
+                        [ArtifactTarget(target1, "NEW_1"), ArtifactTarget(target2, "NEW_2")]
+                    )
+                self.assertEqual(cm.exception.status, PublicationStatus.STAGING_FAILED)
+                # Verify no staging temporary files remain
+                remaining_stages = [p.name for p in td.glob(".*") if "stage" in p.name]
+                self.assertEqual(len(remaining_stages), 0, "No staging files must leak on fsync failure")
+                # Verify destinations untouched
+                self.assertEqual(compute_sha256(target1), sha1_before)
+                self.assertEqual(compute_sha256(target2), sha2_before)
+            finally:
+                os.fsync = real_fsync
+
+            # R10-B04 & B05: Write hook failure cleans up immediately
+            def fail_hook_on_stage2(target, stage):
+                if target.name == "t2.md":
+                    raise OSError("Injected stage 2 hook failure")
+
+            with self.assertRaises(PublicationError) as cm_hook:
+                publish_certified_artifacts_staged(
+                    [ArtifactTarget(target1, "NEW_1"), ArtifactTarget(target2, "NEW_2")],
+                    _stage_write_hook=fail_hook_on_stage2,
+                )
+            self.assertEqual(cm_hook.exception.status, PublicationStatus.STAGING_FAILED)
+            remaining_stages = [p.name for p in td.glob(".*") if "stage" in p.name]
+            self.assertEqual(len(remaining_stages), 0)
+            self.assertEqual(compute_sha256(target1), sha1_before)
+            self.assertEqual(compute_sha256(target2), sha2_before)
+
+    def test_70_r10_f03_backup_preparation_lifecycle(self):
+        """Remediation Round 10: Tests R10-F03 backup preparation lifecycle and leak prevention (R10-C01..C12)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            td = Path(tmpdir)
+            target1 = td / "t1.json"
+            target2 = td / "t2.md"
+            target1.write_text("PREV_1\n")
+            target2.write_text("PREV_2\n")
+            sha1_before = compute_sha256(target1)
+            sha2_before = compute_sha256(target2)
+
+            # R10-C03 & C05: Fsync failure during backup preparation
+            real_fsync = os.fsync
+            fsync_calls = [0]
+            def failing_backup_fsync(fd):
+                fsync_calls[0] += 1
+                # Calls 1, 2 are stage 1 and 2; Call 3 is backup 1
+                if fsync_calls[0] == 3:
+                    raise OSError("Injected fsync failure on backup 1")
+                return real_fsync(fd)
+
+            os.fsync = failing_backup_fsync
+            try:
+                with self.assertRaises(PublicationError) as cm:
+                    publish_certified_artifacts_staged(
+                        [ArtifactTarget(target1, "NEW_1"), ArtifactTarget(target2, "NEW_2")]
+                    )
+                self.assertEqual(cm.exception.status, PublicationStatus.STAGING_FAILED)
+                # Verify no staging or backup temporary files remain
+                remaining_temps = [p.name for p in td.glob(".*") if "stage" in p.name or "orig_backup" in p.name]
+                self.assertEqual(len(remaining_temps), 0, "No backup or staging files must leak on backup fsync failure")
+                # Verify destinations untouched
+                self.assertEqual(compute_sha256(target1), sha1_before)
+                self.assertEqual(compute_sha256(target2), sha2_before)
+            finally:
+                os.fsync = real_fsync
+
+    def test_71_r10_f04_reporting_statistical_reconciliation(self):
+        """Remediation Round 10: Tests R10-F04 scientific reporting reconciliation and quantile properties (R10-D01..D14)."""
+        summary_path = REPO_ROOT / "results" / "logs" / "rf36-p4a" / "p4a_summary_metrics.json"
+        if not summary_path.is_file():
+            self.skipTest("HISTORICAL_EVIDENCE_UNAVAILABLE: summary metrics not present on fresh checkout")
+
+        with open(summary_path) as f:
+            metrics = json.load(f)
+
+        dist = metrics["overall_speedup_distribution"]
+        pair_details = metrics.get("pair_details", [])
+
+        def linear_p90(data):
+            sorted_d = sorted(data)
+            n = len(sorted_d)
+            if n == 0:
+                return None
+            h = (n - 1) * 0.90
+            lo = int(math.floor(h))
+            hi = int(math.ceil(h))
+            return sorted_d[lo] + (h - lo) * (sorted_d[hi] - sorted_d[lo])
+
+        # R10-D02..D05: Verify exact sample counts
+        self.assertEqual(dist["search_speedup"]["count"], 84)
+        self.assertEqual(dist["native_step_speedup"]["count"], 90)
+        self.assertEqual(dist["streaming_loop_speedup"]["count"], 90)
+        self.assertEqual(dist["outer_wall_speedup"]["count"], 90)
+
+        # R10-D06..D08: Verify linear interpolation P90 and monotonic quantile ordering
+        for field, scope_name in [
+            ("speedup_search", "search_speedup"),
+            ("speedup_step_total", "native_step_speedup"),
+            ("speedup_stream_loop", "streaming_loop_speedup"),
+            ("speedup_outer", "outer_wall_speedup"),
+        ]:
+            vals = [p[field] for p in pair_details if p.get(field) is not None]
+            p90 = linear_p90(vals)
+            s = dist[scope_name]
+            # Verify Min <= Q1 <= Median <= Q3 <= P90 <= Max
+            self.assertLessEqual(s["min"], s["q1"])
+            self.assertLessEqual(s["q1"], s["median"])
+            self.assertLessEqual(s["median"], s["q3"])
+            self.assertLessEqual(s["q3"], p90)
+            self.assertLessEqual(p90, s["max"])
+
+        # Verify candidate evaluations
+        counters = metrics.get("counter_metrics", {})
+        self.assertEqual(counters["m1"]["total_candidates_evaluated"], 455148)
+        self.assertEqual(counters["m2"]["total_candidates_evaluated"], 245055)
+        self.assertAlmostEqual(counters["relative_candidate_eval_reduction_m2_vs_m1_pct"], 46.16, places=2)
 
 
 

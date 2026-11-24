@@ -1140,37 +1140,47 @@ def publish_certified_artifacts_staged(
     _replace_fn: Any = os.replace,
     _stage_write_hook: Any = None,
 ) -> Dict[str, Any]:
-    """Atomically publishes multiple certified artifacts with staging and compensating rollback (R9-F02).
+    """Atomically publishes multiple certified artifacts with staging and compensating rollback (R9-F02, R10-F01..F03).
     
     Guarantees:
-    1. Phase A (Prepare): Verifies all targets, computes SHA/size of existing files.
-    2. Phase B (Stage): Writes content to unique staging files (.{target.name}.stage.{uuid}.tmp)
-       with full fsync. If any staging fails, unlinks all staging files. No destination is modified.
-    3. Phase C (Publish & Rollback):
-       - Backs up pre-existing targets to (.{target.name}.orig_backup.{uuid}.tmp)
-       - Replaces each target via _replace_fn
+    1. Phase A (Prepare & Stage): Allocates and immediately registers staging paths before any I/O.
+       Writes content to unique staging files (.{target.name}.stage.{uuid}.tmp) with full fsync.
+       If any staging fails, unlinks all registered staging files. No destination is modified.
+    2. Phase B (Prepare & Verify Backups): Allocates and immediately registers backup paths before writing.
+       Copies pre-existing targets to (.{target.name}.orig_backup.{uuid}.tmp) with fsync.
+       Verifies backup integrity against original SHA and size. If any backup fails, unlinks all registered
+       temporary staging and backup files. No destination is modified.
+    3. Phase C (Publish Replacements with Compensating Rollback and Backup Preservation):
+       - Atomically replaces each destination via _replace_fn.
        - If ANY replacement fails:
-         - Initiates compensating rollback:
-           - Pre-existing files restored from backup via _replace_fn
-           - Newly created files unlinked
-         - If rollback succeeds: raises PublicationError with status PUBLICATION_FAILED_ROLLED_BACK
-         - If rollback fails: raises PublicationError with status PUBLICATION_INCONSISTENT
+         - Initiates compensating rollback without consuming the recovery backup:
+           copies backup to temporary restoration staging, then restores via _replace_fn.
+           Verifies restored destination against original SHA and size. Newly created files are unlinked.
+         - If rollback succeeds: unlinks backup files and raises PublicationError with PUBLICATION_FAILED_ROLLED_BACK.
+         - If rollback fails: PRESERVES recovery backups for all unrestored destinations, verifies backup
+           integrity, populates retained_recovery_backups diagnostic, and raises PublicationError with
+           PUBLICATION_INCONSISTENT.
        - If all replacements succeed:
-         - Removes backups and staging files
-         - Returns status PUBLISHED
+         - Unlinks all backup files and returns status PUBLISHED.
     """
     if not artifacts:
         return {"status": PublicationStatus.PUBLISHED, "published_paths": []}
 
     run_id = uuid.uuid4().hex
+    allocated_stage_paths: List[Path] = []
+    allocated_backup_paths: List[Path] = []
+    allocated_restore_stage_paths: List[Path] = []
     staging_records: List[Dict[str, Any]] = []
 
-    # Phase A: Prepare and Stage
+    # Phase A: Prepare and Stage (R10-F02: immediate resource ownership tracking)
     try:
         for art in artifacts:
             target_path = Path(art.target_path)
             target_path.parent.mkdir(parents=True, exist_ok=True)
             stage_path = target_path.with_name(f".{target_path.name}.stage.{run_id}.tmp")
+
+            # Track allocation BEFORE any fallible filesystem write/flush/fsync
+            allocated_stage_paths.append(stage_path)
 
             if _stage_write_hook:
                 _stage_write_hook(target_path, stage_path)
@@ -1191,69 +1201,85 @@ def publish_certified_artifacts_staged(
                 "content": art.content,
             })
     except Exception as e:
-        for rec in staging_records:
-            sp = rec.get("stage_path")
-            if sp and sp.exists():
+        cleanup_errors = []
+        for sp in allocated_stage_paths:
+            if sp.exists():
                 try:
                     sp.unlink()
-                except OSError:
-                    pass
+                except OSError as ue:
+                    cleanup_errors.append(f"Failed to unlink staging file {sp}: {ue}")
         raise PublicationError(
             f"Staging failed before any destination was modified: {e}",
             status=PublicationStatus.STAGING_FAILED,
-            details={"error": str(e)},
+            details={"error": str(e), "cleanup_errors": cleanup_errors},
         )
 
-    # Phase B: Prepare Backup Information for Rollback
+    # Phase B: Prepare and Verify Backups for Rollback (R10-F03: immediate resource tracking)
     dest_records: List[Dict[str, Any]] = []
-    for rec in staging_records:
-        t_path = rec["target_path"]
-        existed = t_path.exists()
-        backup_path = None
-        orig_sha = None
-        orig_size = None
+    try:
+        for rec in staging_records:
+            t_path = rec["target_path"]
+            existed = t_path.exists()
+            backup_path = None
+            orig_sha = None
+            orig_size = None
 
-        if existed:
-            try:
+            if existed:
                 with open(t_path, "rb") as bf:
                     data = bf.read()
                     orig_sha = hashlib.sha256(data).hexdigest()
                     orig_size = len(data)
+
                 backup_path = t_path.with_name(f".{t_path.name}.orig_backup.{run_id}.tmp")
+                # Track allocation BEFORE any fallible filesystem write/flush/fsync
+                allocated_backup_paths.append(backup_path)
+
                 with open(backup_path, "wb") as bf:
                     bf.write(data)
                     bf.flush()
                     os.fsync(bf.fileno())
-            except Exception as e:
-                for s_rec in staging_records:
-                    if s_rec["stage_path"].exists():
-                        try:
-                            s_rec["stage_path"].unlink()
-                        except OSError:
-                            pass
-                for d_rec in dest_records:
-                    bp = d_rec.get("backup_path")
-                    if bp and bp.exists():
-                        try:
-                            bp.unlink()
-                        except OSError:
-                            pass
-                raise PublicationError(
-                    f"Failed to prepare backup before publication: {e}",
-                    status=PublicationStatus.STAGING_FAILED,
-                    details={"error": str(e)},
-                )
 
-        dest_records.append({
-            "target_path": t_path,
-            "stage_path": rec["stage_path"],
-            "existed": existed,
-            "orig_sha": orig_sha,
-            "orig_size": orig_size,
-            "backup_path": backup_path,
-        })
+                # Verify backup integrity before allowing publication to proceed
+                with open(backup_path, "rb") as bf:
+                    b_data = bf.read()
+                    b_sha = hashlib.sha256(b_data).hexdigest()
+                    b_size = len(b_data)
+                if b_sha != orig_sha or b_size != orig_size:
+                    raise OSError(
+                        f"Backup verification failed for {t_path}: "
+                        f"SHA ({b_sha} vs {orig_sha}) or size ({b_size} vs {orig_size}) mismatch"
+                    )
 
-    # Phase C: Publish Replacements with Compensating Rollback
+            dest_records.append({
+                "target_path": t_path,
+                "stage_path": rec["stage_path"],
+                "existed": existed,
+                "orig_sha": orig_sha,
+                "orig_size": orig_size,
+                "backup_path": backup_path,
+                "restored": False,
+            })
+    except Exception as e:
+        cleanup_errors = []
+        for sp in allocated_stage_paths:
+            if sp.exists():
+                try:
+                    sp.unlink()
+                except OSError as ue:
+                    cleanup_errors.append(f"Failed to unlink staging file {sp}: {ue}")
+        for bp in allocated_backup_paths:
+            if bp.exists():
+                try:
+                    bp.unlink()
+                except OSError as ue:
+                    cleanup_errors.append(f"Failed to unlink backup file {bp}: {ue}")
+        raise PublicationError(
+            f"Failed to prepare backup before publication: {e}",
+            status=PublicationStatus.STAGING_FAILED,
+            details={"error": str(e), "cleanup_errors": cleanup_errors},
+        )
+
+    # Phase C: Publish Replacements with Compensating Rollback and Backup Preservation (R10-F01)
     committed_records: List[Dict[str, Any]] = []
     try:
         for d_rec in dest_records:
@@ -1262,67 +1288,148 @@ def publish_certified_artifacts_staged(
     except Exception as commit_exc:
         rollback_success = True
         rollback_errors = []
+        restored_destinations: List[str] = []
+        unrestored_destinations: List[str] = []
 
         for c_rec in reversed(committed_records):
             c_target = c_rec["target_path"]
             if c_rec["existed"]:
+                # Restoration strategy (R10-F01): Do NOT consume the recovery backup directly!
+                # Copy backup to a temporary restoration staging file, then replace into destination.
+                restore_stage = c_target.with_name(f".{c_target.name}.restore_stage.{run_id}.tmp")
+                allocated_restore_stage_paths.append(restore_stage)
                 try:
-                    _replace_fn(c_rec["backup_path"], c_target)
+                    with open(c_rec["backup_path"], "rb") as bf, open(restore_stage, "wb") as rf:
+                        b_data = bf.read()
+                        rf.write(b_data)
+                        rf.flush()
+                        os.fsync(rf.fileno())
+
+                    _replace_fn(restore_stage, c_target)
+
+                    # Verify restored destination matches pre-execution snapshot exactly
                     with open(c_target, "rb") as rf:
                         restored_data = rf.read()
                         restored_sha = hashlib.sha256(restored_data).hexdigest()
-                    if restored_sha != c_rec["orig_sha"]:
+                        restored_size = len(restored_data)
+                    if restored_sha != c_rec["orig_sha"] or restored_size != c_rec["orig_size"]:
                         rollback_success = False
-                        rollback_errors.append(f"Restored file {c_target} SHA mismatch")
+                        rollback_errors.append(
+                            f"Restored file {c_target} verification mismatch: "
+                            f"SHA ({restored_sha} vs {c_rec['orig_sha']}), size ({restored_size} vs {c_rec['orig_size']})"
+                        )
+                        unrestored_destinations.append(str(c_target))
+                    else:
+                        c_rec["restored"] = True
+                        restored_destinations.append(str(c_target))
                 except Exception as rb_e:
                     rollback_success = False
                     rollback_errors.append(f"Failed to restore {c_target} from backup: {rb_e}")
+                    unrestored_destinations.append(str(c_target))
             else:
                 try:
                     if c_target.exists():
                         c_target.unlink()
+                    c_rec["restored"] = True
+                    restored_destinations.append(str(c_target))
                 except Exception as rb_e:
                     rollback_success = False
                     rollback_errors.append(f"Failed to unlink newly created file {c_target}: {rb_e}")
+                    unrestored_destinations.append(str(c_target))
 
-        # Cleanup uncommitted staging files
-        for d_rec in dest_records:
-            sp = d_rec.get("stage_path")
-            if sp and sp.exists():
+        # Cleanup uncommitted staging files and temporary restore staging files
+        cleanup_errors = []
+        for sp in allocated_stage_paths:
+            if sp.exists():
                 try:
                     sp.unlink()
-                except OSError:
-                    pass
-
-        # Cleanup remaining backups
-        for d_rec in dest_records:
-            bp = d_rec.get("backup_path")
-            if bp and bp.exists():
+                except OSError as ue:
+                    cleanup_errors.append(f"Failed to unlink staging file {sp}: {ue}")
+        for rsp in allocated_restore_stage_paths:
+            if rsp.exists():
                 try:
-                    bp.unlink()
-                except OSError:
-                    pass
+                    rsp.unlink()
+                except OSError as ue:
+                    cleanup_errors.append(f"Failed to unlink restore stage file {rsp}: {ue}")
 
+        # CRITICAL BACKUP PRESERVATION (R10-F01):
+        # If rollback succeeded: all modified destinations are verified restored, safe to clean backups.
+        # If rollback FAILED: PRESERVE recovery backups for all unrestored destinations!
+        retained_recovery_backups: List[Dict[str, Any]] = []
         if rollback_success:
+            for bp in allocated_backup_paths:
+                if bp.exists():
+                    try:
+                        bp.unlink()
+                    except OSError as ue:
+                        cleanup_errors.append(f"Failed to unlink backup file {bp}: {ue}")
             raise PublicationError(
                 f"Publication failed during atomic replacement ({commit_exc}); "
                 f"all modified destinations have been safely rolled back to pre-execution state.",
                 status=PublicationStatus.PUBLICATION_FAILED_ROLLED_BACK,
-                details={"error": str(commit_exc)},
+                details={
+                    "transaction_id": run_id,
+                    "publication_status": PublicationStatus.PUBLICATION_FAILED_ROLLED_BACK,
+                    "commit_error": str(commit_exc),
+                    "restored_destinations": restored_destinations,
+                    "cleanup_errors": cleanup_errors,
+                },
             )
         else:
+            committed_targets = {d["target_path"] for d in committed_records}
+            for d_rec in dest_records:
+                bp = d_rec.get("backup_path")
+                if bp and bp.exists():
+                    # Only retain recovery backups for destinations that WERE modified (committed) and failed rollback.
+                    # Destinations that were never replaced remain untouched in their original state.
+                    if d_rec["target_path"] in committed_targets and not d_rec.get("restored", False):
+                        try:
+                            b_bytes = bp.read_bytes()
+                            b_sha = hashlib.sha256(b_bytes).hexdigest()
+                            b_size = len(b_bytes)
+                            retained_recovery_backups.append({
+                                "destination": str(d_rec["target_path"]),
+                                "backup_path": str(bp),
+                                "original_sha256": d_rec["orig_sha"],
+                                "original_size_bytes": d_rec["orig_size"],
+                                "backup_sha256": b_sha,
+                                "backup_size_bytes": b_size,
+                                "sha_matches": (b_sha == d_rec["orig_sha"]),
+                                "size_matches": (b_size == d_rec["orig_size"]),
+                            })
+                        except Exception as b_err:
+                            retained_recovery_backups.append({
+                                "destination": str(d_rec["target_path"]),
+                                "backup_path": str(bp),
+                                "error": str(b_err),
+                            })
+                    else:
+                        try:
+                            bp.unlink()
+                        except OSError as ue:
+                            cleanup_errors.append(f"Failed to unlink backup file {bp}: {ue}")
+
             raise PublicationError(
                 f"Publication failed during atomic replacement ({commit_exc}) "
                 f"AND compensating rollback failed: {'; '.join(rollback_errors)}. "
-                f"Output destination state is inconsistent.",
+                f"Output destination state is inconsistent. Recovery backups retained.",
                 status=PublicationStatus.PUBLICATION_INCONSISTENT,
-                details={"commit_error": str(commit_exc), "rollback_errors": rollback_errors},
+                details={
+                    "transaction_id": run_id,
+                    "publication_status": PublicationStatus.PUBLICATION_INCONSISTENT,
+                    "commit_error": str(commit_exc),
+                    "rollback_errors": rollback_errors,
+                    "affected_destinations": [str(d["target_path"]) for d in dest_records],
+                    "restored_destinations": restored_destinations,
+                    "unrestored_destinations": unrestored_destinations,
+                    "retained_recovery_backups": retained_recovery_backups,
+                    "cleanup_errors": cleanup_errors,
+                },
             )
 
     # Success: Cleanup all backups
-    for d_rec in dest_records:
-        bp = d_rec.get("backup_path")
-        if bp and bp.exists():
+    for bp in allocated_backup_paths:
+        if bp.exists():
             try:
                 bp.unlink()
             except OSError:
@@ -1618,6 +1725,13 @@ def main():
     try:
         pub_result = publish_certified_artifacts_staged(artifacts_to_publish)
     except PublicationError as pe:
+        if pe.status == PublicationStatus.PUBLICATION_INCONSISTENT:
+            print("Publication failed. Compensating rollback could not restore all destinations.", file=sys.stderr)
+            print(f"Publication status: {pe.status}", file=sys.stderr)
+            for rec in pe.details.get("retained_recovery_backups", []):
+                print(f"Affected destination: {rec.get('destination')}", file=sys.stderr)
+                print(f"Recovery backup preserved at: {rec.get('backup_path')}", file=sys.stderr)
+                print(f"Expected original SHA-256: {rec.get('original_sha256')}", file=sys.stderr)
         print(f"Publication failed: {pe} (status={pe.status})", file=sys.stderr)
         sys.exit(1)
     except Exception as e:
