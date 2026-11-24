@@ -172,11 +172,12 @@ def check_git_provenance() -> Tuple[Dict[str, Any], bool]:
                     allowed = False
                     break
                 fpath = parts[1].strip()
-                # Only execution reports under reports/rapidflow_apx_engines/ and the validation report are allowed during runs
+                # Only execution reports under reports/rapidflow_apx_engines/ and validation/implementation reports are allowed during runs
                 if not (
                     fpath.startswith("reports/rapidflow_apx_engines/")
                     or fpath.startswith("reports\\rapidflow_apx_engines\\")
                     or fpath == "docs/rapidflow_apx_native_engines_validation_report.md"
+                    or fpath == "docs/rapidflow_apx_p4b_1a_implementation_report.md"
                 ):
                     allowed = False
                     break
@@ -1473,6 +1474,133 @@ def validate_native_output_schema(
     return True, ""
 
 
+def validate_nlf_configuration(
+    requested_engine: str,
+    requested_nlf_mode: str,
+    native_result: Dict[str, Any],
+    is_success_run: bool,
+) -> Tuple[bool, str, Dict[str, Any]]:
+    """
+    Validates requested vs effective NLF configuration integrity (P4B-1A-F01).
+    Distinguishes process exit validity, schema validity, configuration identity,
+    and eligibility for optimization evidence.
+    """
+    meta_info: Dict[str, Any] = {
+        "configuration_valid": True,
+        "eligible_for_requested_variant": False,
+        "configuration_error": "",
+        "requested_nlf_mode": requested_nlf_mode,
+        "effective_nlf_mode": "none",
+        "configuration_status": "NONE",
+    }
+
+    # If execution failed early before successful run (e.g. invalid query, negative case, schema error)
+    if not is_success_run:
+        if "requested_nlf_mode" in native_result:
+            val = native_result["requested_nlf_mode"]
+            if not isinstance(val, str) or val not in ("none", "static"):
+                meta_info["configuration_valid"] = False
+                meta_info["configuration_error"] = f"Invalid requested_nlf_mode type/value: {val}"
+                return False, meta_info["configuration_error"], meta_info
+            meta_info["requested_nlf_mode"] = val
+        if "effective_nlf_mode" in native_result:
+            val = native_result["effective_nlf_mode"]
+            if not isinstance(val, str) or val not in ("none", "static"):
+                meta_info["configuration_valid"] = False
+                meta_info["configuration_error"] = f"Invalid effective_nlf_mode type/value: {val}"
+                return False, meta_info["configuration_error"], meta_info
+            meta_info["effective_nlf_mode"] = val
+        if "configuration_status" in native_result:
+            val = native_result["configuration_status"]
+            if not isinstance(val, str):
+                meta_info["configuration_valid"] = False
+                meta_info["configuration_error"] = f"Invalid configuration_status type: {val}"
+                return False, meta_info["configuration_error"], meta_info
+            meta_info["configuration_status"] = val
+        return True, "", meta_info
+
+    # For SUCCESSFUL positive execution:
+    # 1. Required metadata fields must exist
+    for field in ("requested_nlf_mode", "effective_nlf_mode", "configuration_status"):
+        if field not in native_result:
+            err = f"[CONFIG_INTEGRITY] Missing required NLF metadata field '{field}' in positive run"
+            meta_info["configuration_valid"] = False
+            meta_info["configuration_error"] = err
+            return False, err, meta_info
+        if not isinstance(native_result[field], str):
+            err = f"[CONFIG_INTEGRITY] NLF metadata field '{field}' must be a string (got {type(native_result[field]).__name__})"
+            meta_info["configuration_valid"] = False
+            meta_info["configuration_error"] = err
+            return False, err, meta_info
+
+    native_req = native_result["requested_nlf_mode"]
+    native_eff = native_result["effective_nlf_mode"]
+    native_cfg_status = native_result["configuration_status"]
+
+    meta_info["requested_nlf_mode"] = native_req
+    meta_info["effective_nlf_mode"] = native_eff
+    meta_info["configuration_status"] = native_cfg_status
+
+    if native_req not in ("none", "static"):
+        err = f"[CONFIG_INTEGRITY] Unknown requested_nlf_mode '{native_req}'"
+        meta_info["configuration_valid"] = False
+        meta_info["configuration_error"] = err
+        return False, err, meta_info
+
+    if native_eff not in ("none", "static"):
+        err = f"[CONFIG_INTEGRITY] Unknown effective_nlf_mode '{native_eff}'"
+        meta_info["configuration_valid"] = False
+        meta_info["configuration_error"] = err
+        return False, err, meta_info
+
+    # 2. Check requested mode matches runner requested mode
+    if native_req != requested_nlf_mode:
+        err = f"[CONFIG_INTEGRITY] Requested mode mismatch: runner requested '{requested_nlf_mode}', native binary received '{native_req}'"
+        meta_info["configuration_valid"] = False
+        meta_info["configuration_error"] = err
+        return False, err, meta_info
+
+    # 3. Mode-specific contracts
+    if requested_nlf_mode == "none":
+        if native_eff != "none":
+            err = f"[CONFIG_INTEGRITY] Effective mode mismatch for NONE: expected 'none', got '{native_eff}'"
+            meta_info["configuration_valid"] = False
+            meta_info["configuration_error"] = err
+            return False, err, meta_info
+        if native_cfg_status != "SUCCESS":
+            err = f"[CONFIG_INTEGRITY] Configuration status mismatch for NONE: expected 'SUCCESS', got '{native_cfg_status}'"
+            meta_info["configuration_valid"] = False
+            meta_info["configuration_error"] = err
+            return False, err, meta_info
+        meta_info["eligible_for_requested_variant"] = True
+        return True, "", meta_info
+
+    elif requested_nlf_mode == "static":
+        if native_cfg_status == "SUCCESS":
+            if native_eff != "static":
+                err = f"[CONFIG_INTEGRITY] Inconsistent configuration: status is 'SUCCESS' but effective mode is '{native_eff}' (must be 'static')"
+                meta_info["configuration_valid"] = False
+                meta_info["configuration_error"] = err
+                return False, err, meta_info
+            meta_info["eligible_for_requested_variant"] = True
+            return True, "", meta_info
+        elif native_cfg_status == "REQUESTED_CONFIGURATION_UNAVAILABLE":
+            # Fallback occurred. The workload ran with Bare M2, so it is NOT eligible for Static certification!
+            fallback_reason = native_result.get("fallback_reason", "UNKNOWN_REASON")
+            err = f"[CONFIG_UNAVAILABLE] Requested static optimization unavailable (fallback_reason: {fallback_reason})"
+            meta_info["configuration_valid"] = False
+            meta_info["eligible_for_requested_variant"] = False
+            meta_info["configuration_error"] = err
+            return False, err, meta_info
+        else:
+            err = f"[CONFIG_INTEGRITY] Unknown configuration status '{native_cfg_status}' for static request"
+            meta_info["configuration_valid"] = False
+            meta_info["configuration_error"] = err
+            return False, err, meta_info
+
+    return True, "", meta_info
+
+
 def run_workload_on_binary(
     binary_path: Path,
     engine: str,
@@ -1559,13 +1687,29 @@ def run_workload_on_binary(
         res_data["schema_valid"] = schema_ok
         res_data["contract_valid"] = schema_ok
 
+        # Validate NLF configuration integrity (P4B-1A-F01)
+        config_ok, config_diag, config_meta = validate_nlf_configuration(
+            requested_engine=engine,
+            requested_nlf_mode=nlf_mode,
+            native_result=res_data,
+            is_success_run=is_success_run,
+        )
+        res_data["configuration_valid"] = config_ok
+        res_data["eligible_for_requested_variant"] = config_meta.get("eligible_for_requested_variant", False)
+        if not config_ok:
+            res_data["configuration_error"] = config_diag
+            if is_success_run:
+                res_data["status"] = "CONFIGURATION_ERROR"
+                res_data["error_category"] = "CONFIGURATION_ERROR"
+                res_data["error_message"] = config_diag
+
         try:
             os.remove(wf.name)
             os.remove(of.name)
         except OSError:
             pass
 
-        final_ok = is_success_run and schema_ok
+        final_ok = is_success_run and schema_ok and config_ok
         return res_data, duration_ms, final_ok
 
 
@@ -3035,6 +3179,31 @@ def main():
     is_diagnostic = (args.case is not None or args.stage != "all" or args.engine != "all" or args.nlf_mode != "none")
     output_path = Path(args.output) if args.output else (DIAGNOSTIC_SUMMARY_PATH if is_diagnostic else CANONICAL_SUMMARY_PATH)
     output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Reject unsupported or ambiguous M1 / all engine combinations with NLF mode (P4B-1A-F01)
+    if args.engine == "m1" and args.nlf_mode != "none":
+        print(f"ERROR: NLF optimization mode '{args.nlf_mode}' is not supported for M1 engine (P4B-1A-F01)!", file=sys.stderr)
+        fail_summary = {
+            "runner_mode": "DIAGNOSTIC_SUBSET_RUN",
+            "overall_status": "UNSUPPORTED_CONFIGURATION",
+            "error_category": "CONFIGURATION_ERROR",
+            "error_message": f"NLF mode '{args.nlf_mode}' is not supported for M1 engine",
+            "stages": {},
+        }
+        atomic_write_json(output_path, fail_summary)
+        sys.exit(1)
+
+    if args.engine == "all" and args.nlf_mode != "none":
+        print(f"ERROR: NLF optimization mode '{args.nlf_mode}' cannot be combined with '--engine all' because M1 does not support NLF optimization. Run with '--engine m2 --nlf-mode {args.nlf_mode}' (P4B-1A-F01)!", file=sys.stderr)
+        fail_summary = {
+            "runner_mode": "DIAGNOSTIC_SUBSET_RUN",
+            "overall_status": "UNSUPPORTED_CONFIGURATION",
+            "error_category": "CONFIGURATION_ERROR",
+            "error_message": f"NLF mode '{args.nlf_mode}' cannot be combined with '--engine all'",
+            "stages": {},
+        }
+        atomic_write_json(output_path, fail_summary)
+        sys.exit(1)
 
     print("================================================================================")
     print("      RapidFlow-APX Native Engines Verification Runner (Phase P3 / D-INT-03)     ")

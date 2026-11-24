@@ -81,7 +81,10 @@ StepResult ApxTransactionManager::execute_update(
     const UpdateOperation& update,
     SearchCallback callback
 ) {
-    // 0. Reentrancy Guard
+    // 0. Fail-closed session poison guard & Reentrancy Guard
+    if (session_poisoned_) {
+        return {StepStatus::INVARIANT_VIOLATION, "Transaction manager session poisoned due to previous invariant violation", {}, 0, 0};
+    }
     if (is_in_transaction_) {
         return {StepStatus::REENTRANCY_BLOCKED, "Reentrancy detected: cannot execute transaction within an active transaction", {}};
     }
@@ -144,6 +147,9 @@ StepResult ApxTransactionManager::execute_update(
                 graph_, *signatures_, dense_u, dense_v, dense_label, true,
                 prepared_insert, tx_scope.nlf_undo()
             );
+        } catch (const InvariantViolationException& ex) {
+            session_poisoned_ = true;
+            return abort_and_rollback(StepStatus::INVARIANT_VIOLATION, std::string("NLF internal invariant violation on insert prepare: ") + ex.what());
         } catch (const std::exception& ex) {
             return abort_and_rollback(StepStatus::PREVALIDATION_FAILED, std::string("NLF prepare insert failure: ") + ex.what());
         }
@@ -250,6 +256,9 @@ StepResult ApxTransactionManager::execute_update(
                     graph_, *signatures_, dense_u, dense_v, dense_label, false,
                     prepared_delete, tx_scope.nlf_undo()
                 );
+            } catch (const InvariantViolationException& ex) {
+                session_poisoned_ = true;
+                return abort_and_rollback(StepStatus::INVARIANT_VIOLATION, std::string("NLF internal invariant violation on delete prepare: ") + ex.what());
             } catch (const std::exception& ex) {
                 return abort_and_rollback(StepStatus::PREVALIDATION_FAILED, std::string("NLF prepare delete failure: ") + ex.what());
             }

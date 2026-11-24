@@ -43,6 +43,9 @@ struct SignatureRequirement {
     bool operator!=(const SignatureRequirement& o) const noexcept {
         return !(*this == o);
     }
+    bool operator<(const SignatureRequirement& o) const noexcept {
+        return sig_id < o.sig_id;
+    }
 };
 
 struct QueryEdgeSignatures {
@@ -72,6 +75,15 @@ public:
     // Per-query-vertex requirements (sorted by sig_id, unique positive counts)
     const std::vector<SignatureRequirement>& get_vertex_requirements(uint32_t u) const {
         return vertex_requirements_.at(u);
+    }
+
+    uint32_t sum_requirements(uint32_t u) const noexcept {
+        if (u >= vertex_requirements_.size()) return 0;
+        uint32_t sum = 0;
+        for (const auto& req : vertex_requirements_[u]) {
+            sum += req.required_count;
+        }
+        return sum;
     }
 
     // Per-canonical-query-edge signatures

@@ -2,12 +2,13 @@
 tests/test_rapidflow_apx_p4b.py — Comprehensive Python verification suite for Phase P4b-1A.
 
 Verifies:
-1. Native P4b-1A Test Suite: Invokes rapidflow_apx_native --test-p4b (SIG, NUM, INIT, TX, A1-A7).
-2. Property-Based Differential Verification: Seeds 1, 7, 42 comparing M0, Bare M2, and A-static step-by-step.
-3. Frozen Bare M2 Baseline Parity: Verifies nlf_mode=none preserves baseline behavior and counters.
-4. M1 Baseline Regression: Verifies M1 works and rejects --nlf-mode static.
-5. Counterexamples A1-A7, Chord fixture, and k=2 coverage.
-6. Memory Budget & Fallback: Verifies transparent fallback to Bare M2 when limit is exceeded.
+1. Native P4b-1A Test Suite: Invokes rapidflow_apx_native --test-p4b (SIG, NUM, HD, INIT, TX, CNT, A1-A7).
+2. Property-Based Differential Verification: Seeds 1, 7, 42 comparing M0, Bare M2, and A-static step-by-step
+   across K2, Triangle, C4, Diamond, K4, Triangular Prism, with mixed typed labels and zero-event churn.
+3. Configuration Integrity (Finding P4B-1A-F01): Requested vs effective matching, subprocess substitution rejection.
+4. Numeric Safety & Memory Limits (Finding P4B-1A-F02): 256 MiB default, overflow rejection, duplicate flag rejection.
+5. Diagnostic Counter Accuracy (Finding P4B-1A-F04): Independent counter verification.
+6. Test Dispatcher Fail-Closed Selector Rejection (Finding P4B-1A-F06).
 """
 
 from __future__ import annotations
@@ -36,6 +37,7 @@ from scripts.dstar_oracle import (
 from scripts.run_rapidflow_apx_engines import (
     run_workload_on_binary,
     build_hand_workloads,
+    validate_nlf_configuration,
 )
 
 BINARY_PATH = REPO_ROOT / "build" / "rapidflow_apx_native"
@@ -50,7 +52,7 @@ class TestRapidFlowApxP4b1A(unittest.TestCase):
             raise RuntimeError(f"Binary not found at {BINARY_PATH}. Please build it first.")
 
     def test_01_native_p4b_test_suite(self):
-        """Runs the native C++ test suite covering SIG-01..10, NUM-01..18, INIT-01..12, TX-01..25, A1..A7."""
+        """Runs the native C++ test suite covering SIG-01..10, NUM-01..18, HD, INIT-01..12, TX-01..25, CNT, A1..A7."""
         res = subprocess.run(
             [str(BINARY_PATH), "--test-p4b", "all"],
             cwd=str(REPO_ROOT),
@@ -59,9 +61,9 @@ class TestRapidFlowApxP4b1A(unittest.TestCase):
             text=True,
             timeout=60,
         )
-        print("\n" + res.stdout)
         self.assertEqual(res.returncode, 0, f"Native p4b tests failed:\n{res.stdout}")
         self.assertIn("P4b-1A Native Tests Result: ALL TESTS PASSED", res.stdout)
+        self.assertIn("P4b-1A Native Tests Groups Executed: 7", res.stdout)
 
     def test_02_fixture_a1_and_chord(self):
         """Verifies Original A1 (8 ENTERED / 8 EXITED) and Chord fixture (16 ENTERED / 16 EXITED)."""
@@ -192,98 +194,419 @@ class TestRapidFlowApxP4b1A(unittest.TestCase):
         self.assertEqual(sorted(res_stat["steps"][0]["entered_tuples"]), exp_ent, "A-static matches M0 on k=2 K4")
 
     def test_06_property_based_differential(self):
-        """Property-based differential verification over deterministic seeds 1, 7, 42 comparing M0, Bare M2, and A-static."""
+        """
+        Property-based differential verification over deterministic seeds 1, 7, 42.
+        Covers 13 topological configurations x 2 variants x 3 seeds = 78 streams, 780 updates.
+        Topologies: K2 (k=0), Triangle (k=0,1), C4 (k=0,1), Diamond (k=0,1), K4 (k=0,1,2), Prism (k=0,1,2).
+        Includes mixed typed labels (int and str) and zero-event churn updates.
+        100% agreement between M0, Bare M2, and A-static.
+        """
         seeds = [1, 7, 42]
         total_streams = 0
         total_steps = 0
 
         # Query topologies with lambda > k
-        # Triangle: lambda=2, k in {0, 1}
-        # C4: lambda=2, k in {0, 1}
+        # 1. K2: lambda=1, k=0
+        # 2. Triangle: lambda=2, k in {0, 1}
+        # 3. C4: lambda=2, k in {0, 1}
+        # 4. Diamond: lambda=2, k in {0, 1}
+        # 5. K4: lambda=3, k in {0, 1, 2}
+        # 6. Triangular Prism: lambda=3, k in {0, 1, 2}
         queries = [
+            ("K2", 2, [(0, 1, 0)], [0]),
             ("Triangle", 3, [(0, 1, 0), (1, 2, 0), (0, 2, 0)], [0, 1]),
             ("C4", 4, [(0, 1, 0), (1, 2, 0), (2, 3, 0), (3, 0, 0)], [0, 1]),
             ("Diamond", 4, [(0, 1, 0), (0, 2, 0), (1, 2, 0), (1, 3, 0), (2, 3, 0)], [0, 1]),
+            ("K4", 4, [
+                (0, 1, 0), (0, 2, 0), (0, 3, 0), (1, 2, 0), (1, 3, 0), (2, 3, 0)
+            ], [0, 1, 2]),
+            ("Prism", 6, [
+                (0, 1, 0), (1, 2, 0), (2, 0, 0),
+                (3, 4, 0), (4, 5, 0), (5, 3, 0),
+                (0, 3, 0), (1, 4, 0), (2, 5, 0)
+            ], [0, 1, 2]),
         ]
 
         for s in seeds:
             rng = random.Random(s)
             for q_name, num_q, q_edges, valid_ks in queries:
                 for k in valid_ks:
-                    total_streams += 1
-                    # Generate random data graph with num_d vertices
-                    num_d = 6
-                    # Start with random spanning tree or random edges
-                    all_possible_edges = [(u, v) for u in range(num_d) for v in range(u + 1, num_d)]
-                    rng.shuffle(all_possible_edges)
+                    # Run 2 variants per configuration:
+                    # Variant 0: Uniform labels (all 0)
+                    # Variant 1: Mixed typed labels (int 0, str "0", int 1, str "1", "irrel")
+                    for variant in (0, 1):
+                        total_streams += 1
+                        num_d = max(num_q + 2, 6)
 
-                    init_edges = all_possible_edges[:4]
-                    stream_updates = []
-                    curr_edges = set(init_edges)
-
-                    # Generate 6 stream updates
-                    for step_idx in range(6):
-                        can_insert = [e for e in all_possible_edges if e not in curr_edges]
-                        can_delete = list(curr_edges)
-                        op = "+" if (can_insert and (rng.random() < 0.6 or not can_delete)) else "-"
-                        if op == "+":
-                            e = rng.choice(can_insert)
-                            curr_edges.add(e)
-                            stream_updates.append({"op": "+", "u": e[0], "v": e[1], "label": 0})
+                        if variant == 0:
+                            q_vlabels = [0] * num_q
+                            q_elabels = [0] * len(q_edges)
+                            d_vlabels = [0] * num_d
+                            rel_edge_label = 0
+                            irrel_edge_label = 99
                         else:
-                            e = rng.choice(can_delete)
-                            curr_edges.remove(e)
-                            stream_updates.append({"op": "-", "u": e[0], "v": e[1], "label": 0})
+                            # Mixed typed labels: int and string
+                            q_vlabels = [0 if (i % 2 == 0) else "0" for i in range(num_q)]
+                            q_elabels = [0 if (i % 2 == 0) else "1" for i in range(len(q_edges))]
+                            d_vlabels = [0 if (i % 2 == 0) else "0" for i in range(num_d)]
+                            rel_edge_label = 0
+                            irrel_edge_label = "irrel"
 
-                    workload = {
-                        "case_id": f"pbt_s{s}_{q_name}_k{k}",
-                        "k": k,
-                        "query": {
-                            "vertices": [{"id": i, "label": 0} for i in range(num_q)],
-                            "edges": [{"u": e[0], "v": e[1], "label": e[2]} for e in q_edges]
-                        },
-                        "initial_graph": {
-                            "vertices": [{"id": i, "label": 0} for i in range(num_d)],
-                            "edges": [{"u": e[0], "v": e[1], "label": 0} for e in init_edges]
-                        },
-                        "updates": stream_updates
-                    }
+                        # Build query edges with assigned labels
+                        labeled_q_edges = []
+                        for idx, e in enumerate(q_edges):
+                            labeled_q_edges.append((e[0], e[1], q_elabels[idx]))
 
-                    # M0 Oracle
-                    Q_m0 = DStarGraph()
-                    for v in workload["query"]["vertices"]: Q_m0.add_vertex(v["id"], v["label"])
-                    for e in workload["query"]["edges"]: Q_m0.add_edge(e["u"], e["v"], e["label"])
-                    G_m0 = DStarGraph()
-                    for v in workload["initial_graph"]["vertices"]: G_m0.add_vertex(v["id"], v["label"])
-                    for e in workload["initial_graph"]["edges"]: G_m0.add_edge(e["u"], e["v"], e["label"])
+                        all_possible_edges = [(u, v) for u in range(num_d) for v in range(u + 1, num_d)]
+                        rng.shuffle(all_possible_edges)
 
-                    oracle = DStarDynamicOracle(Q_m0, G_m0, k=k)
-                    m0_entered = []
-                    m0_exited = []
-                    for upd in stream_updates:
-                        delta = oracle.apply_update(DStarUpdate("INSERT" if upd["op"] == "+" else "DELETE", upd["u"], upd["v"], upd["label"]))
-                        m0_entered.append(sorted([list(t) for t in delta.entered]))
-                        m0_exited.append(sorted([list(t) for t in delta.exited]))
+                        # Start with initial edges
+                        init_edges = [(e[0], e[1], rel_edge_label) for e in all_possible_edges[:min(4, len(all_possible_edges))]]
+                        curr_edges: Dict[Tuple[int, int], Any] = {(e[0], e[1]): e[2] for e in init_edges}
+                        stream_updates = []
 
-                    res_bare, _, ok_b = run_workload_on_binary(BINARY_PATH, "m2", workload, nlf_mode="none")
-                    res_stat, _, ok_s = run_workload_on_binary(BINARY_PATH, "m2", workload, nlf_mode="static")
+                        # Generate 10 stream updates (mix of event-bearing and zero-event churn)
+                        for step_idx in range(10):
+                            can_insert = [e for e in all_possible_edges if e not in curr_edges]
+                            can_delete = list(curr_edges.keys())
 
-                    self.assertTrue(ok_b, f"Bare M2 failed on {workload['case_id']}: {res_bare.get('error_message')}")
-                    self.assertTrue(ok_s, f"A-static failed on {workload['case_id']}: {res_stat.get('error_message')}")
+                            # 20% chance of zero-event churn with irrelevant label
+                            if rng.random() < 0.2 and can_insert:
+                                e = rng.choice(can_insert)
+                                curr_edges[e] = irrel_edge_label
+                                stream_updates.append({"op": "+", "u": e[0], "v": e[1], "label": irrel_edge_label})
+                            elif can_insert and (rng.random() < 0.55 or not can_delete):
+                                e = rng.choice(can_insert)
+                                # Choose a query edge label if endpoints match query vertices
+                                chosen_lbl = rel_edge_label
+                                for qe in labeled_q_edges:
+                                    if (e[0] == qe[0] and e[1] == qe[1]) or (e[0] == qe[1] and e[1] == qe[0]):
+                                        chosen_lbl = qe[2]
+                                        break
+                                curr_edges[e] = chosen_lbl
+                                stream_updates.append({"op": "+", "u": e[0], "v": e[1], "label": chosen_lbl})
+                            elif can_delete:
+                                e = rng.choice(can_delete)
+                                lbl = curr_edges.pop(e)
+                                stream_updates.append({"op": "-", "u": e[0], "v": e[1], "label": lbl})
 
-                    for step_idx in range(len(stream_updates)):
-                        total_steps += 1
-                        bare_ent = sorted(res_bare["steps"][step_idx].get("entered_tuples", []))
-                        bare_ext = sorted(res_bare["steps"][step_idx].get("exited_tuples", []))
-                        stat_ent = sorted(res_stat["steps"][step_idx].get("entered_tuples", []))
-                        stat_ext = sorted(res_stat["steps"][step_idx].get("exited_tuples", []))
+                        workload = {
+                            "case_id": f"pbt_s{s}_{q_name}_k{k}_v{variant}",
+                            "k": k,
+                            "query": {
+                                "vertices": [{"id": i, "label": q_vlabels[i]} for i in range(num_q)],
+                                "edges": [{"u": e[0], "v": e[1], "label": e[2]} for e in labeled_q_edges]
+                            },
+                            "initial_graph": {
+                                "vertices": [{"id": i, "label": d_vlabels[i]} for i in range(num_d)],
+                                "edges": [{"u": e[0], "v": e[1], "label": e[2]} for e in init_edges]
+                            },
+                            "updates": stream_updates
+                        }
 
-                        self.assertEqual(stat_ent, m0_entered[step_idx], f"PBT entered mismatch with M0 at step {step_idx} in {workload['case_id']}")
-                        self.assertEqual(stat_ext, m0_exited[step_idx], f"PBT exited mismatch with M0 at step {step_idx} in {workload['case_id']}")
-                        self.assertEqual(stat_ent, bare_ent, f"PBT entered mismatch between A-static and Bare M2 at step {step_idx} in {workload['case_id']}")
-                        self.assertEqual(stat_ext, bare_ext, f"PBT exited mismatch between A-static and Bare M2 at step {step_idx} in {workload['case_id']}")
+                        # M0 Oracle
+                        Q_m0 = DStarGraph()
+                        for v in workload["query"]["vertices"]: Q_m0.add_vertex(v["id"], v["label"])
+                        for e in workload["query"]["edges"]: Q_m0.add_edge(e["u"], e["v"], e["label"])
+                        G_m0 = DStarGraph()
+                        for v in workload["initial_graph"]["vertices"]: G_m0.add_vertex(v["id"], v["label"])
+                        for e in workload["initial_graph"]["edges"]: G_m0.add_edge(e["u"], e["v"], e["label"])
+
+                        oracle = DStarDynamicOracle(Q_m0, G_m0, k=k)
+                        m0_entered = []
+                        m0_exited = []
+                        for upd in stream_updates:
+                            delta = oracle.apply_update(DStarUpdate("INSERT" if upd["op"] == "+" else "DELETE", upd["u"], upd["v"], upd["label"]))
+                            m0_entered.append(sorted([list(t) for t in delta.entered]))
+                            m0_exited.append(sorted([list(t) for t in delta.exited]))
+
+                        res_bare, _, ok_b = run_workload_on_binary(BINARY_PATH, "m2", workload, nlf_mode="none")
+                        res_stat, _, ok_s = run_workload_on_binary(BINARY_PATH, "m2", workload, nlf_mode="static")
+
+                        self.assertTrue(ok_b, f"Bare M2 failed on {workload['case_id']}: {res_bare.get('error_message')}")
+                        self.assertTrue(ok_s, f"A-static failed on {workload['case_id']}: {res_stat.get('error_message')}")
+
+                        for step_idx in range(len(stream_updates)):
+                            total_steps += 1
+                            bare_ent = sorted(res_bare["steps"][step_idx].get("entered_tuples", []))
+                            bare_ext = sorted(res_bare["steps"][step_idx].get("exited_tuples", []))
+                            stat_ent = sorted(res_stat["steps"][step_idx].get("entered_tuples", []))
+                            stat_ext = sorted(res_stat["steps"][step_idx].get("exited_tuples", []))
+
+                            self.assertEqual(stat_ent, m0_entered[step_idx], f"PBT entered mismatch with M0 at step {step_idx} in {workload['case_id']}")
+                            self.assertEqual(stat_ext, m0_exited[step_idx], f"PBT exited mismatch with M0 at step {step_idx} in {workload['case_id']}")
+                            self.assertEqual(stat_ent, bare_ent, f"PBT entered mismatch between A-static and Bare M2 at step {step_idx} in {workload['case_id']}")
+                            self.assertEqual(stat_ext, bare_ext, f"PBT exited mismatch between A-static and Bare M2 at step {step_idx} in {workload['case_id']}")
 
         print(f"  [PBT] Successfully verified {total_streams} generated streams ({total_steps} stream updates) across seeds {seeds}!")
+        self.assertGreaterEqual(total_streams, 60, "Must verify at least 60 streams")
+        self.assertGreaterEqual(total_steps, 720, "Must verify at least 720 stream updates")
+
+    def test_07_configuration_integrity(self):
+        """
+        Verifies Configuration Integrity (Finding P4B-1A-F01):
+        1. validate_nlf_configuration unit checks for none/static matrix.
+        2. Rejection of fallback runs (REQUESTED_CONFIGURATION_UNAVAILABLE) from static certification.
+        3. Reviewer subprocess substitution attack reproducer rejection.
+        4. Negative test cases preservation.
+        5. CLI fail-closed rejection for M1 and ALL engines with --nlf-mode static.
+        """
+        # CFG-01: Requested none, native output none, SUCCESS -> Valid, Eligible
+        mock_none = {
+            "requested_nlf_mode": "none",
+            "effective_nlf_mode": "none",
+            "configuration_status": "SUCCESS"
+        }
+        ok, err, meta = validate_nlf_configuration("m2", "none", mock_none, is_success_run=True)
+        self.assertTrue(ok)
+        self.assertTrue(meta["eligible_for_requested_variant"])
+        self.assertTrue(meta["configuration_valid"])
+
+        # CFG-02: Requested none, native output static -> Inconsistent, Rejected
+        mock_mismatch = {
+            "requested_nlf_mode": "none",
+            "effective_nlf_mode": "static",
+            "configuration_status": "SUCCESS"
+        }
+        ok, err, meta = validate_nlf_configuration("m2", "none", mock_mismatch, is_success_run=True)
+        self.assertFalse(ok)
+        self.assertFalse(meta["eligible_for_requested_variant"])
+
+        # CFG-03: Requested static, native output static, SUCCESS -> Valid, Eligible
+        mock_static = {
+            "requested_nlf_mode": "static",
+            "effective_nlf_mode": "static",
+            "configuration_status": "SUCCESS"
+        }
+        ok, err, meta = validate_nlf_configuration("m2", "static", mock_static, is_success_run=True)
+        self.assertTrue(ok)
+        self.assertTrue(meta["eligible_for_requested_variant"])
+
+        # CFG-04: Requested static, native fallback to none (REQUESTED_CONFIGURATION_UNAVAILABLE)
+        # MUST be marked NOT eligible for static certification and runner must fail validation
+        mock_fallback = {
+            "requested_nlf_mode": "static",
+            "effective_nlf_mode": "none",
+            "configuration_status": "REQUESTED_CONFIGURATION_UNAVAILABLE",
+            "fallback_reason": "NLF_INDEX_MEMORY_LIMIT"
+        }
+        ok, err, meta = validate_nlf_configuration("m2", "static", mock_fallback, is_success_run=True)
+        self.assertFalse(ok, "Fallback run must be rejected from static certification")
+        self.assertFalse(meta["eligible_for_requested_variant"], "Must not be eligible for static variant")
+        self.assertFalse(meta["configuration_valid"])
+        self.assertIn("CONFIG_UNAVAILABLE", err)
+
+        # CFG-05: Reviewer subprocess substitution attack reproducer:
+        # Requested static, but executable actually ran none and returned SUCCESS (inconsistent spoof)
+        mock_spoof = {
+            "requested_nlf_mode": "static",
+            "effective_nlf_mode": "none",
+            "configuration_status": "SUCCESS"
+        }
+        ok, err, meta = validate_nlf_configuration("m2", "static", mock_spoof, is_success_run=True)
+        self.assertFalse(ok, "Spoofed/inconsistent run must be rejected")
+        self.assertFalse(meta["eligible_for_requested_variant"])
+        self.assertFalse(meta["configuration_valid"])
+
+        # CFG-06: Negative test case (e.g. prevalidation failed)
+        mock_neg = {
+            "status": "FAIL",
+            "error_category": "PREVALIDATION_ERROR",
+            "error_message": "Unknown vertex ID",
+            "requested_nlf_mode": "static",
+            "effective_nlf_mode": "none",
+            "configuration_status": "NONE"
+        }
+        ok, err, meta = validate_nlf_configuration("m2", "static", mock_neg, is_success_run=False)
+        self.assertTrue(ok, "Negative runs preserve expected failure category without configuration false-alarm")
+
+        # CFG-07: CLI fail-closed rejection: M1 with static
+        res_m1 = subprocess.run(
+            [sys.executable, str(REPO_ROOT / "scripts" / "run_rapidflow_apx_engines.py"), "--engine", "m1", "--nlf-mode", "static", "--stage", "hand"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        self.assertNotEqual(res_m1.returncode, 0, "CLI must reject --engine m1 --nlf-mode static with non-zero exit")
+        self.assertIn("not supported for M1 engine", res_m1.stderr + res_m1.stdout)
+
+        # CFG-08: CLI fail-closed rejection: ALL with static
+        res_all = subprocess.run(
+            [sys.executable, str(REPO_ROOT / "scripts" / "run_rapidflow_apx_engines.py"), "--engine", "all", "--nlf-mode", "static", "--stage", "hand"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        self.assertNotEqual(res_all.returncode, 0, "CLI must reject --engine all --nlf-mode static with non-zero exit")
+
+    def test_08_memory_safety_and_cli_guards(self):
+        """
+        Verifies Numeric Safety & Memory Limits (Finding P4B-1A-F02):
+        1. Default memory limit in native output is 256 MiB (268,435,456 bytes).
+        2. CLI rejection of overflow memory limit (2^44 MiB) with exit code 1 (CLI_ARG_ERROR).
+        3. CLI rejection of zero memory limit (0) with exit code 1 (CLI_ARG_ERROR).
+        4. CLI rejection of negative memory limit with exit code 1 (CLI_ARG_ERROR).
+        5. CLI rejection of duplicate --nlf-mode and duplicate --max-nlf-memory-mib with exit code 1 (CLI_ARG_ERROR).
+        6. Low-memory fallback witness and rejection from static certification.
+        """
+        # MEM-01: Verify default memory budget is 256 MiB (268,435,456 bytes)
+        w_simple = {
+            "case_id": "mem_default_check",
+            "k": 0,
+            "query": {
+                "vertices": [{"id": 0, "label": 0}, {"id": 1, "label": 0}],
+                "edges": [{"u": 0, "v": 1, "label": 0}]
+            },
+            "initial_graph": {
+                "vertices": [{"id": 0, "label": 0}, {"id": 1, "label": 0}],
+                "edges": [{"u": 0, "v": 1, "label": 0}]
+            },
+            "updates": [{"op": "-", "u": 0, "v": 1, "label": 0}]
+        }
+        res_stat, _, ok = run_workload_on_binary(BINARY_PATH, "m2", w_simple, nlf_mode="static")
+        self.assertTrue(ok)
+        self.assertEqual(res_stat["nlf_memory_limit_bytes"], 256 * 1024 * 1024, "Default limit must be exactly 256 MiB")
+
+        # MEM-02: 2^44 MiB overflow rejection
+        res_overflow = subprocess.run(
+            [str(BINARY_PATH), "--max-nlf-memory-mib", "17592186044416"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        self.assertEqual(res_overflow.returncode, 1, f"Overflow budget must exit 1 (CLI_ARG_ERROR), got {res_overflow.returncode}")
+        self.assertIn("exceeds maximum representable memory limit", res_overflow.stderr + res_overflow.stdout)
+
+        # MEM-03: Zero budget rejection
+        res_zero = subprocess.run(
+            [str(BINARY_PATH), "--max-nlf-memory-mib", "0"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        self.assertEqual(res_zero.returncode, 1, f"Zero budget must exit 1 (CLI_ARG_ERROR), got {res_zero.returncode}")
+        self.assertIn("positive", res_zero.stderr + res_zero.stdout)
+
+        # MEM-04: Negative budget rejection
+        res_neg = subprocess.run(
+            [str(BINARY_PATH), "--max-nlf-memory-mib", "-50"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        self.assertEqual(res_neg.returncode, 1, f"Negative budget must exit 1 (CLI_ARG_ERROR), got {res_neg.returncode}")
+
+        # MEM-05: Duplicate --nlf-mode flag
+        res_dup_mode = subprocess.run(
+            [str(BINARY_PATH), "--nlf-mode", "none", "--nlf-mode", "static"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        self.assertEqual(res_dup_mode.returncode, 1, f"Duplicate --nlf-mode must exit 1 (CLI_ARG_ERROR), got {res_dup_mode.returncode}")
+        self.assertIn("Duplicate --nlf-mode", res_dup_mode.stderr + res_dup_mode.stdout)
+
+        # MEM-06: Duplicate --max-nlf-memory-mib flag
+        res_dup_mem = subprocess.run(
+            [str(BINARY_PATH), "--max-nlf-memory-mib", "256", "--max-nlf-memory-mib", "512"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        self.assertEqual(res_dup_mem.returncode, 1, f"Duplicate --max-nlf-memory-mib must exit 1 (CLI_ARG_ERROR), got {res_dup_mem.returncode}")
+        self.assertIn("Duplicate --max-nlf-memory-mib", res_dup_mem.stderr + res_dup_mem.stdout)
+
+        # MEM-07: Low-memory fallback witness (exceeds budget -> falls back to none -> rejected from static cert)
+        # Create a workload requiring > 1 MiB (262,144 cells * 4 bytes)
+        # e.g., 30,000 vertices and a query with 10 signatures -> 300,000 cells * 4 bytes = 1,200,000 bytes > 1 MiB
+        num_v = 30000
+        # Query: 11-star (center 0, leaves 1..10 with distinct labels -> 10 signatures)
+        q_star_verts = [{"id": 0, "label": 0}] + [{"id": i, "label": i} for i in range(1, 11)]
+        q_star_edges = [{"u": 0, "v": i, "label": 0} for i in range(1, 11)]
+        w_large = {
+            "case_id": "mem_fallback_witness",
+            "k": 0,
+            "query": {
+                "vertices": q_star_verts,
+                "edges": q_star_edges
+            },
+            "initial_graph": {
+                "vertices": [{"id": i, "label": 0} for i in range(num_v)],
+                "edges": []
+            },
+            "updates": [{"op": "+", "u": 0, "v": 1, "label": 0}]
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            in_file = Path(tmpdir) / "in.json"
+            out_file = Path(tmpdir) / "out.json"
+            in_file.write_text(json.dumps(w_large))
+
+            # Run with --max-nlf-memory-mib 1 and --nlf-mode static
+            res_fb = subprocess.run(
+                [
+                    str(BINARY_PATH),
+                    "--engine", "m2",
+                    "--workload", str(in_file),
+                    "--output", str(out_file),
+                    "--nlf-mode", "static",
+                    "--max-nlf-memory-mib", "1"
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            self.assertEqual(res_fb.returncode, 0, f"Binary must complete via fallback: {res_fb.stderr}")
+            native_out = json.loads(out_file.read_text())
+            self.assertEqual(native_out["requested_nlf_mode"], "static")
+            self.assertEqual(native_out["effective_nlf_mode"], "none", "Must fall back to none")
+            self.assertEqual(native_out["configuration_status"], "REQUESTED_CONFIGURATION_UNAVAILABLE")
+            self.assertEqual(native_out["fallback_reason"], "NLF_INDEX_MEMORY_LIMIT")
+
+            # Validate that runner rejects it from static certification
+            ok_cert, err_cert, meta_cert = validate_nlf_configuration("m2", "static", native_out, is_success_run=True)
+            self.assertFalse(ok_cert, "Runner must reject fallback from static certification")
+            self.assertFalse(meta_cert["eligible_for_requested_variant"])
+
+    def test_09_dispatcher_selector_rejection(self):
+        """
+        Verifies Test Dispatcher Selector Fail-Closed Behavior (Finding P4B-1A-F06):
+        Unknown or invalid suite selectors must return exit code 1.
+        Valid selectors must return exit code 0.
+        """
+        # DISP-01: Unknown selector 'nonexisting'
+        res_nonexist = subprocess.run(
+            [str(BINARY_PATH), "--test-p4b", "nonexisting"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        self.assertEqual(res_nonexist.returncode, 1, f"Unknown selector must exit 1, got {res_nonexist.returncode}")
+        self.assertIn("Unknown P4b test suite selector 'nonexisting'", res_nonexist.stderr)
+
+        # DISP-02: Unknown selector 'foobar'
+        res_foobar = subprocess.run(
+            [str(BINARY_PATH), "--test-p4b", "foobar"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        self.assertEqual(res_foobar.returncode, 1, f"Unknown selector must exit 1, got {res_foobar.returncode}")
+
+        # DISP-03 to DISP-10: Valid selectors
+        valid_selectors = [
+            "signatures", "numeric", "high_degree", "initialization",
+            "transactions", "counters", "counterexamples"
+        ]
+        for sel in valid_selectors:
+            res_sel = subprocess.run(
+                [str(BINARY_PATH), "--test-p4b", sel],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            self.assertEqual(res_sel.returncode, 0, f"Valid selector '{sel}' failed:\n{res_sel.stdout}\n{res_sel.stderr}")
+            self.assertIn("ALL TESTS PASSED", res_sel.stdout)
 
 
 if __name__ == "__main__":

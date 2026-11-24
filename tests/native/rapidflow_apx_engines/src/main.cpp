@@ -291,7 +291,8 @@ int run_native_empty_frontier_test() {
 int main(int argc, char* argv[]) {
     std::string engine_str = "m2";
     std::string nlf_mode_str = "none";
-    uint64_t max_nlf_memory_mib = 0;
+    uint64_t max_nlf_memory_mib = DEFAULT_NLF_MEMORY_MIB; // 256 MiB default
+    bool cli_max_nlf_memory_mib_set = false;
     std::string workload_path = "";
     std::string output_path = "";
     bool cli_max_work_set = false;
@@ -302,6 +303,8 @@ int main(int argc, char* argv[]) {
     bool seen_workload = false;
     bool seen_output = false;
     bool seen_max_work = false;
+    bool seen_nlf_mode = false;
+    bool seen_max_nlf_memory_mib = false;
     bool profiling_enabled = false;
     std::string profile_output_path = "";
     RunProfiling run_profiling;
@@ -369,6 +372,11 @@ int main(int argc, char* argv[]) {
         } else if (arg == "--continue-on-error") {
             continue_on_error = true;
         } else if (arg == "--nlf-mode") {
+            if (seen_nlf_mode) {
+                std::cerr << "Error: Duplicate --nlf-mode argument\n";
+                return static_cast<int>(ExitCode::CLI_ARG_ERROR);
+            }
+            seen_nlf_mode = true;
             if (i + 1 >= argc) {
                 std::cerr << "Error: Missing argument for --nlf-mode\n";
                 return static_cast<int>(ExitCode::CLI_ARG_ERROR);
@@ -379,15 +387,31 @@ int main(int argc, char* argv[]) {
                 return static_cast<int>(ExitCode::CLI_ARG_ERROR);
             }
         } else if (arg == "--max-nlf-memory-mib") {
+            if (seen_max_nlf_memory_mib) {
+                std::cerr << "Error: Duplicate --max-nlf-memory-mib argument\n";
+                return static_cast<int>(ExitCode::CLI_ARG_ERROR);
+            }
+            seen_max_nlf_memory_mib = true;
             if (i + 1 >= argc) {
                 std::cerr << "Error: Missing argument for --max-nlf-memory-mib\n";
                 return static_cast<int>(ExitCode::CLI_ARG_ERROR);
             }
             std::string parse_err;
-            if (!parse_positive_uint64_exact(argv[++i], max_nlf_memory_mib, parse_err)) {
+            uint64_t val = 0;
+            if (!parse_positive_uint64_exact(argv[++i], val, parse_err)) {
                 std::cerr << "Error: Invalid --max-nlf-memory-mib: " << parse_err << "\n";
                 return static_cast<int>(ExitCode::CLI_ARG_ERROR);
             }
+            if (val == 0) {
+                std::cerr << "Error: Invalid --max-nlf-memory-mib: value must be positive (got 0)\n";
+                return static_cast<int>(ExitCode::CLI_ARG_ERROR);
+            }
+            if (val > MAX_REPRESENTABLE_NLF_MIB) {
+                std::cerr << "Error: Invalid --max-nlf-memory-mib: value " << val << " exceeds maximum representable memory limit\n";
+                return static_cast<int>(ExitCode::CLI_ARG_ERROR);
+            }
+            max_nlf_memory_mib = val;
+            cli_max_nlf_memory_mib_set = true;
         } else if (arg == "--profile") {
             profiling_enabled = true;
         } else if (arg == "--profile-output") {
@@ -669,7 +693,7 @@ int main(int argc, char* argv[]) {
 
         // 4. Initialize Sink and Streaming Engine
         NlfMode nlf_mode = (nlf_mode_str == "static") ? NlfMode::STATIC : NlfMode::NONE;
-        size_t max_nlf_memory_bytes = static_cast<size_t>(max_nlf_memory_mib) * 1024ULL * 1024ULL;
+        size_t max_nlf_memory_bytes = static_cast<size_t>(max_nlf_memory_mib) * BYTES_PER_MIB;
         ApxTupleSink sink(codec, canonical_order);
         ApxStreamingEngine streaming_engine(graph, codec, sink, query_plan, engine_type, max_work, nlf_mode, max_nlf_memory_bytes);
         streaming_engine.set_profiling_enabled(profiling_enabled);
@@ -679,6 +703,12 @@ int main(int argc, char* argv[]) {
         root_out["configuration_status"] = json::Value(streaming_engine.get_configuration_status());
         if (!streaming_engine.get_fallback_reason().empty()) {
             root_out["fallback_reason"] = json::Value(streaming_engine.get_fallback_reason());
+        }
+        root_out["nlf_memory_limit_bytes"] = json::Value(static_cast<int64_t>(max_nlf_memory_bytes));
+        if (streaming_engine.get_effective_nlf_mode() == NlfMode::STATIC && streaming_engine.get_nlf_index()) {
+            root_out["nlf_index_logical_bytes"] = json::Value(static_cast<int64_t>(streaming_engine.get_nlf_index()->logical_bytes()));
+        } else {
+            root_out["nlf_index_logical_bytes"] = json::Value(static_cast<int64_t>(0));
         }
 
         // Record Query Info

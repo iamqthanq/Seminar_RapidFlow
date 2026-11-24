@@ -29,7 +29,8 @@ enum class StepStatus {
     PREVALIDATION_FAILED,
     CALLBACK_ABORTED,
     FAULT_INJECTED,
-    REENTRANCY_BLOCKED
+    REENTRANCY_BLOCKED,
+    INVARIANT_VIOLATION
 };
 
 inline const char* step_status_to_string(StepStatus s) {
@@ -39,6 +40,7 @@ inline const char* step_status_to_string(StepStatus s) {
         case StepStatus::CALLBACK_ABORTED: return "CALLBACK_ABORTED";
         case StepStatus::FAULT_INJECTED: return "FAULT_INJECTED";
         case StepStatus::REENTRANCY_BLOCKED: return "REENTRANCY_BLOCKED";
+        case StepStatus::INVARIANT_VIOLATION: return "INVARIANT_VIOLATION";
     }
     return "UNKNOWN";
 }
@@ -95,6 +97,8 @@ public:
     EngineCounters* get_counters() const noexcept { return counters_; }
 
     bool is_in_transaction() const noexcept { return is_in_transaction_; }
+    bool is_session_poisoned() const noexcept { return session_poisoned_; }
+    void reset_poison_for_testing() noexcept { session_poisoned_ = false; }
 
 private:
     ApxAuthoritativeGraph& graph_;
@@ -102,6 +106,7 @@ private:
     ApxTupleSink& sink_;
     FaultPoint fault_point_{FaultPoint::NONE};
     bool is_in_transaction_{false};
+    bool session_poisoned_{false};
     bool profiling_enabled_{false};
     ApxNlfIndex* nlf_index_{nullptr};
     const ApxQuerySignatures* signatures_{nullptr};

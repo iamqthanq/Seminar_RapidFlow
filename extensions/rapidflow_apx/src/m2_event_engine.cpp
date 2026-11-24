@@ -117,13 +117,15 @@ uint64_t ApxM2EventEngine::search_event(
             }
 
             if (nlf_mode == NlfMode::STATIC && nlf_index && signatures) {
-                counters.nlf_static_checks += 2;
-                counters.nlf_anchor_checks += 2;
+                counters.nlf_static_checks++;
+                counters.nlf_anchor_checks++;
                 if (!static_nlf_allows(*signatures, *nlf_index, qa, pa, query_plan.get_k(), counters)) {
                     counters.nlf_static_pruned++;
                     counters.nlf_anchor_pruned++;
                     continue;
                 }
+                counters.nlf_static_checks++;
+                counters.nlf_anchor_checks++;
                 if (!static_nlf_allows(*signatures, *nlf_index, qb, pb, query_plan.get_k(), counters)) {
                     counters.nlf_static_pruned++;
                     counters.nlf_anchor_pruned++;

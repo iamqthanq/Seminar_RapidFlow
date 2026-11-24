@@ -13,6 +13,11 @@
 
 namespace rapidflow_apx {
 
+inline constexpr size_t DEFAULT_NLF_MEMORY_BYTES = size_t{256} * size_t{1024} * size_t{1024}; // 256 MiB
+inline constexpr uint64_t DEFAULT_NLF_MEMORY_MIB = 256;
+inline constexpr uint64_t BYTES_PER_MIB = 1024ULL * 1024ULL;
+inline constexpr uint64_t MAX_REPRESENTABLE_NLF_MIB = std::numeric_limits<size_t>::max() / BYTES_PER_MIB;
+
 class NlfMemoryLimitException : public EngineException {
 public:
     explicit NlfMemoryLimitException(const std::string& msg) : EngineException(msg) {}
@@ -124,10 +129,9 @@ public:
         table_[static_cast<size_t>(data_vertex) * num_signatures_ + sig_id] = val;
     }
 
-    // Clear state
+    // Clear state safely without throwing (guaranteed non-allocating release)
     void clear() noexcept {
-        table_.clear();
-        table_.shrink_to_fit();
+        std::vector<NlfCount>().swap(table_);
         num_vertices_ = 0;
         num_signatures_ = 0;
         initialized_ = false;

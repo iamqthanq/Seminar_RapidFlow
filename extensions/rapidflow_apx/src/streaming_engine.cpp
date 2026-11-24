@@ -34,6 +34,9 @@ ApxStreamingEngine::ApxStreamingEngine(
         effective_nlf_mode_ = NlfMode::NONE;
     } else {
         if (requested_nlf_mode_ == NlfMode::STATIC) {
+            if (max_nlf_memory_bytes_ == 0) {
+                max_nlf_memory_bytes_ = DEFAULT_NLF_MEMORY_BYTES;
+            }
             try {
                 query_signatures_.build(query_plan_);
                 auto idx = std::make_unique<ApxNlfIndex>();
