@@ -1,0 +1,2288 @@
+{
+  "approval_gates": 2,
+  "engineering_gates": 78,
+  "gates": [
+    {
+      "evidence": [
+        {
+          "observed": "Verify exact baseline branch and upstream",
+          "pass": true,
+          "path": "baseline-preflight.json",
+          "sha256": "e6e406014208c0ae2bb53602cf7d71eaf0ae0717c2da1291b51f3a8c5662ef7e"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-A01",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Starting HEAD verified",
+      "source_location": "git / p4b_correctness_registry.py",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "Verify exact baseline branch and upstream"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "Verify exact baseline branch and upstream",
+          "pass": true,
+          "path": "baseline-preflight.json",
+          "sha256": "e6e406014208c0ae2bb53602cf7d71eaf0ae0717c2da1291b51f3a8c5662ef7e"
+        },
+        {
+          "observed": "Verify draft PR head equal to baseline",
+          "pass": true,
+          "path": "pr-before.json",
+          "sha256": "2489ee32d42167a80c2c1729555b92d0dca0a356424da7bce341caa12cbf653a"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-A02",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Official branch and remote verified",
+      "source_location": "git / p4b_correctness_registry.py",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "Verify exact baseline branch and upstream",
+        "Verify draft PR head equal to baseline"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "Verify exact baseline branch and upstream",
+          "pass": true,
+          "path": "baseline-preflight.json",
+          "sha256": "e6e406014208c0ae2bb53602cf7d71eaf0ae0717c2da1291b51f3a8c5662ef7e"
+        },
+        {
+          "observed": "Recompute release, protocol, schedule, fixture and archive identities after test",
+          "pass": true,
+          "path": "preservation-final.json",
+          "sha256": "82943e6b4a26b29a6d93e034e55f9cfc4b8d73bd02e9dd98157f2a9eaf58b087"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-A03",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Upstream pristine and pinned",
+      "source_location": "git / p4b_correctness_registry.py",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "Verify exact baseline branch and upstream",
+        "Recompute release, protocol, schedule, fixture and archive identities after test"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "Recompute release, protocol, schedule, fixture and archive identities after test",
+          "pass": true,
+          "path": "preservation-final.json",
+          "sha256": "82943e6b4a26b29a6d93e034e55f9cfc4b8d73bd02e9dd98157f2a9eaf58b087"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-A04",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Native source and binary identity preserved",
+      "source_location": "git / p4b_correctness_registry.py",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "Recompute release, protocol, schedule, fixture and archive identities after test"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "Verify all fixture digests and frozen plan identities",
+          "pass": true,
+          "path": "frozen-artifact-verification.json",
+          "sha256": "ac97263b5a106c950f25ba409f503dfb9e8b70b6d977ce08224fde9300cdf23c"
+        },
+        {
+          "observed": "Recompute release, protocol, schedule, fixture and archive identities after test",
+          "pass": true,
+          "path": "preservation-final.json",
+          "sha256": "82943e6b4a26b29a6d93e034e55f9cfc4b8d73bd02e9dd98157f2a9eaf58b087"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-A05",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "All 50 frozen workload hashes preserved",
+      "source_location": "git / p4b_correctness_registry.py",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "Verify all fixture digests and frozen plan identities",
+        "Recompute release, protocol, schedule, fixture and archive identities after test"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "Verify all fixture digests and frozen plan identities",
+          "pass": true,
+          "path": "frozen-artifact-verification.json",
+          "sha256": "ac97263b5a106c950f25ba409f503dfb9e8b70b6d977ce08224fde9300cdf23c"
+        },
+        {
+          "observed": "Independent exact frozen order and artifact check",
+          "pass": true,
+          "path": "schedule-journal-audit.json",
+          "sha256": "f7d05fffba99bbb092e2ed3f5a54a3079a5d287689488f364322db9fc60146d1"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-A06",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Schedule and generator integrity verified",
+      "source_location": "git / p4b_correctness_registry.py",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "Verify all fixture digests and frozen plan identities",
+        "Independent exact frozen order and artifact check"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "Size and hash check all required historical evidence",
+          "pass": true,
+          "path": "historical-integrity-verification.json",
+          "sha256": "79a51da8d7037fff31fad3bc4e43d5149547245d879ab08dbb314a47324b1b3f"
+        },
+        {
+          "observed": "Recompute release, protocol, schedule, fixture and archive identities after test",
+          "pass": true,
+          "path": "preservation-final.json",
+          "sha256": "82943e6b4a26b29a6d93e034e55f9cfc4b8d73bd02e9dd98157f2a9eaf58b087"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-A07",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Historical P4a/P4b evidence preserved",
+      "source_location": "git / p4b_correctness_registry.py",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "Size and hash check all required historical evidence",
+        "Recompute release, protocol, schedule, fixture and archive identities after test"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "Size and hash check all required historical evidence",
+          "pass": true,
+          "path": "historical-integrity-verification.json",
+          "sha256": "79a51da8d7037fff31fad3bc4e43d5149547245d879ab08dbb314a47324b1b3f"
+        },
+        {
+          "observed": "test_registry_reconstructs_from_trusted_raw_archive",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-A08",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "R1 archive and manifest verified",
+      "source_location": "git / p4b_correctness_registry.py",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "Size and hash check all required historical evidence",
+        "test_registry_reconstructs_from_trusted_raw_archive"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "Reconstruct all 250 entries and verify certification counts",
+          "pass": true,
+          "path": "registry-build.log",
+          "sha256": "ddf0a5f346596e2919a323087af333f95ef327cdfcce68a61972e7624c15588f"
+        },
+        {
+          "observed": "test_registry_reconstructs_from_trusted_raw_archive",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-B01",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Exact 250-entry inventory",
+      "source_location": "scripts/p4b_correctness_registry.py::rebuild_from_store",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "Reconstruct all 250 entries and verify certification counts",
+        "test_registry_reconstructs_from_trusted_raw_archive"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "Size and hash check all required historical evidence",
+          "pass": true,
+          "path": "historical-integrity-verification.json",
+          "sha256": "79a51da8d7037fff31fad3bc4e43d5149547245d879ab08dbb314a47324b1b3f"
+        },
+        {
+          "observed": "test_registry_reconstructs_from_trusted_raw_archive",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-B02",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Trusted archive binding",
+      "source_location": "scripts/p4b_correctness_registry.py::rebuild_from_store",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "Size and hash check all required historical evidence",
+        "test_registry_reconstructs_from_trusted_raw_archive"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_registry_reconstructs_from_trusted_raw_archive",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Size and hash check all required historical evidence",
+          "pass": true,
+          "path": "historical-integrity-verification.json",
+          "sha256": "79a51da8d7037fff31fad3bc4e43d5149547245d879ab08dbb314a47324b1b3f"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-B03",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Compressed/uncompressed raw digest binding",
+      "source_location": "scripts/p4b_correctness_registry.py::rebuild_from_store",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_registry_reconstructs_from_trusted_raw_archive",
+        "Size and hash check all required historical evidence"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_registry_reconstructs_from_trusted_raw_archive",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Verify all fixture digests and frozen plan identities",
+          "pass": true,
+          "path": "frozen-artifact-verification.json",
+          "sha256": "ac97263b5a106c950f25ba409f503dfb9e8b70b6d977ce08224fde9300cdf23c"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-B04",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Workload identity binding",
+      "source_location": "scripts/p4b_correctness_registry.py::rebuild_from_store",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_registry_reconstructs_from_trusted_raw_archive",
+        "Verify all fixture digests and frozen plan identities"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_registry_reconstructs_from_trusted_raw_archive",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_bounded_real_three_purposes_and_artifact_revalidation",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-B05",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Same-variant identity binding",
+      "source_location": "scripts/p4b_correctness_registry.py::rebuild_from_store",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_registry_reconstructs_from_trusted_raw_archive",
+        "test_bounded_real_three_purposes_and_artifact_revalidation"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_registry_reconstructs_from_trusted_raw_archive",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Recompute release, protocol, schedule, fixture and archive identities after test",
+          "pass": true,
+          "path": "preservation-final.json",
+          "sha256": "82943e6b4a26b29a6d93e034e55f9cfc4b8d73bd02e9dd98157f2a9eaf58b087"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-B06",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Native binary/source identity binding",
+      "source_location": "scripts/p4b_correctness_registry.py::rebuild_from_store",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_registry_reconstructs_from_trusted_raw_archive",
+        "Recompute release, protocol, schedule, fixture and archive identities after test"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "Reconstruct all 250 entries and verify certification counts",
+          "pass": true,
+          "path": "registry-build.log",
+          "sha256": "ddf0a5f346596e2919a323087af333f95ef327cdfcce68a61972e7624c15588f"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-B07",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "160 C1 reference classifications verified",
+      "source_location": "scripts/p4b_correctness_registry.py::rebuild_from_store",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "Reconstruct all 250 entries and verify certification counts"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "Reconstruct all 250 entries and verify certification counts",
+          "pass": true,
+          "path": "registry-build.log",
+          "sha256": "ddf0a5f346596e2919a323087af333f95ef327cdfcce68a61972e7624c15588f"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-B08",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "64 C3 optimized reference classifications verified",
+      "source_location": "scripts/p4b_correctness_registry.py::rebuild_from_store",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "Reconstruct all 250 entries and verify certification counts"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "Reconstruct all 250 entries and verify certification counts",
+          "pass": true,
+          "path": "registry-build.log",
+          "sha256": "ddf0a5f346596e2919a323087af333f95ef327cdfcce68a61972e7624c15588f"
+        },
+        {
+          "observed": "test_detached_approval_requires_trusted_hash_and_all_bindings",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-B09",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "16 C3 BARE references not self-certified",
+      "source_location": "scripts/p4b_correctness_registry.py::rebuild_from_store",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "Reconstruct all 250 entries and verify certification counts",
+        "test_detached_approval_requires_trusted_hash_and_all_bindings"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "Reconstruct all 250 entries and verify certification counts",
+          "pass": true,
+          "path": "registry-build.log",
+          "sha256": "ddf0a5f346596e2919a323087af333f95ef327cdfcce68a61972e7624c15588f"
+        },
+        {
+          "observed": "Offline archived DISC-07 prefix validation",
+          "pass": true,
+          "path": "offline-censor-result.json",
+          "sha256": "cf7863cce7f1869cde598fe08d7321b596ec848d59a664e00a1cb9bf43010b40"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-B10",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "10 censored references ineligible for successful timing",
+      "source_location": "scripts/p4b_correctness_registry.py::rebuild_from_store",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "Reconstruct all 250 entries and verify certification counts",
+        "Offline archived DISC-07 prefix validation"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_registry_reconstructs_from_trusted_raw_archive",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-B11",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Duplicate/missing/substitution mutations rejected",
+      "source_location": "scripts/p4b_correctness_registry.py::rebuild_from_store",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_registry_reconstructs_from_trusted_raw_archive"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "Reconstruct all 250 entries and verify certification counts",
+          "pass": true,
+          "path": "registry-build.log",
+          "sha256": "ddf0a5f346596e2919a323087af333f95ef327cdfcce68a61972e7624c15588f"
+        },
+        {
+          "observed": "test_registry_reconstructs_from_trusted_raw_archive",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-B12",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Registry generation deterministic and reproducible",
+      "source_location": "scripts/p4b_correctness_registry.py::rebuild_from_store",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "Reconstruct all 250 entries and verify certification counts",
+        "test_registry_reconstructs_from_trusted_raw_archive"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_detached_approval_requires_trusted_hash_and_all_bindings",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_native_cannot_launch_from_direct_unverified_calls",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-C01",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Explicit authorization state machine",
+      "source_location": "scripts/p4b_activation.py::authorize",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_detached_approval_requires_trusted_hash_and_all_bindings",
+        "test_native_cannot_launch_from_direct_unverified_calls"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_detached_approval_requires_trusted_hash_and_all_bindings",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-C02",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": "Actual external anchors are empty pending review. Verified only with isolated test trust.",
+      "requirement": "Trusted activation identity binding",
+      "source_location": "scripts/p4b_activation.py::authorize",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_detached_approval_requires_trusted_hash_and_all_bindings"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_detached_approval_requires_trusted_hash_and_all_bindings",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-C03",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Source/binary/protocol/registry binding",
+      "source_location": "scripts/p4b_activation.py::authorize",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_detached_approval_requires_trusted_hash_and_all_bindings"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_detached_approval_requires_trusted_hash_and_all_bindings",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_native_cannot_launch_from_direct_unverified_calls",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Direct CLI denies forged detached envelopes without session creation",
+          "pass": true,
+          "path": "cli-lock-verification.json",
+          "sha256": "ad509ea884a08932bad5dca5cbdf03a810f64deb9712ca21284ec6076a6803a6"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-C04",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Missing or fake approval rejected",
+      "source_location": "scripts/p4b_activation.py::authorize",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_detached_approval_requires_trusted_hash_and_all_bindings",
+        "test_native_cannot_launch_from_direct_unverified_calls",
+        "Direct CLI denies forged detached envelopes without session creation"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_native_cannot_launch_from_direct_unverified_calls",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_shared_core_resumes_all_phases_and_ingests_synthetic_only",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-C05",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Synthetic context cannot authorize production",
+      "source_location": "scripts/p4b_activation.py::authorize",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_native_cannot_launch_from_direct_unverified_calls",
+        "test_shared_core_resumes_all_phases_and_ingests_synthetic_only"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_native_cannot_launch_from_direct_unverified_calls",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_production_adapter_wiring_uses_only_fake_child",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Direct raw adapter and active-attempt binding tests",
+          "pass": true,
+          "path": "low-level-guard-tests.log",
+          "sha256": "6c6f704d764cbe904053e8611f796e3e7402e122c9438b862153eda981fbf5f6"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-C06",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Direct native production launch guarded",
+      "source_location": "scripts/p4b_activation.py::authorize",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_native_cannot_launch_from_direct_unverified_calls",
+        "test_production_adapter_wiring_uses_only_fake_child",
+        "Direct raw adapter and active-attempt binding tests"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_detached_approval_requires_trusted_hash_and_all_bindings",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-C07",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Unauthorized diagnostic execution blocked",
+      "source_location": "scripts/p4b_activation.py::authorize",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_detached_approval_requires_trusted_hash_and_all_bindings"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "Verify lock fields in dry run with zero launch",
+          "pass": true,
+          "path": "dry-run.json",
+          "sha256": "ac1faed7a05a6d45c324c10ddfc6b6569011b0f7d00744659dd6a07fe664c460"
+        },
+        {
+          "observed": "Inspect empty anchor and frozen authorization",
+          "pass": true,
+          "path": "baseline-preflight.json",
+          "sha256": "e6e406014208c0ae2bb53602cf7d71eaf0ae0717c2da1291b51f3a8c5662ef7e"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-C08",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Actual execution authorization remains false",
+      "source_location": "scripts/p4b_activation.py::authorize",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "Verify lock fields in dry run with zero launch",
+        "Inspect empty anchor and frozen authorization"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "Rehearse and resume all 1450 slots",
+          "pass": true,
+          "path": "synthetic-rehearsal-summary.json",
+          "sha256": "b1193b6ba8702ea3be117e2736429b6b395a4536f6490acfb66b9b6e5e1b46ef"
+        },
+        {
+          "observed": "Retained three native functional purposes",
+          "pass": true,
+          "path": "bounded-witness-final-summary.json",
+          "sha256": "751f5b8da66ce394bb7dac5f4c6e051c379bb5add287b37faeb68ac899de3b75"
+        },
+        {
+          "observed": "test_production_adapter_wiring_uses_only_fake_child",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-D01",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Shared execution core",
+      "source_location": "scripts/p4b_experiment_session.py::session",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "Rehearse and resume all 1450 slots",
+        "Retained three native functional purposes",
+        "test_production_adapter_wiring_uses_only_fake_child"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_production_adapter_wiring_uses_only_fake_child",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Invoke runner main under test-only activation and fake child",
+          "pass": true,
+          "path": "production-entry-verification.json",
+          "sha256": "66b64074855f7599baacdd6c7243e28680802e42f38a5bbfd6a464d4ed88301a"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-D02",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": "Production route exercised with a fake child. Native integration exercised on a bounded witness.",
+      "requirement": "Production backend integrated with scheduler",
+      "source_location": "scripts/p4b_experiment_session.py::session",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_production_adapter_wiring_uses_only_fake_child",
+        "Invoke runner main under test-only activation and fake child"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "Independent exact frozen order and artifact check",
+          "pass": true,
+          "path": "schedule-journal-audit.json",
+          "sha256": "f7d05fffba99bbb092e2ed3f5a54a3079a5d287689488f364322db9fc60146d1"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-D03",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Exact frozen execution order",
+      "source_location": "scripts/p4b_experiment_session.py::session",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "Independent exact frozen order and artifact check"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "Independent exact frozen order and artifact check",
+          "pass": true,
+          "path": "schedule-journal-audit.json",
+          "sha256": "f7d05fffba99bbb092e2ed3f5a54a3079a5d287689488f364322db9fc60146d1"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-D04",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Warm-up policy preserved",
+      "source_location": "scripts/p4b_experiment_session.py::session",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "Independent exact frozen order and artifact check"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "Independent exact frozen order and artifact check",
+          "pass": true,
+          "path": "schedule-journal-audit.json",
+          "sha256": "f7d05fffba99bbb092e2ed3f5a54a3079a5d287689488f364322db9fc60146d1"
+        },
+        {
+          "observed": "test_bounded_real_three_purposes_and_artifact_revalidation",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-D05",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Diagnostic isolation",
+      "source_location": "scripts/p4b_experiment_session.py::session",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "Independent exact frozen order and artifact check",
+        "test_bounded_real_three_purposes_and_artifact_revalidation"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_os_lock_releases_after_process_exit_and_pending_child_is_reported",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-D06",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Exclusive session ownership",
+      "source_location": "scripts/p4b_experiment_session.py::session",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_os_lock_releases_after_process_exit_and_pending_child_is_reported"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "Independent exact frozen order and artifact check",
+          "pass": true,
+          "path": "schedule-journal-audit.json",
+          "sha256": "f7d05fffba99bbb092e2ed3f5a54a3079a5d287689488f364322db9fc60146d1"
+        },
+        {
+          "observed": "test_ledger_corruption_lock_recovery_and_cross_session_records",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-D07",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Unique session and attempt identity",
+      "source_location": "scripts/p4b_experiment_session.py::session",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "Independent exact frozen order and artifact check",
+        "test_ledger_corruption_lock_recovery_and_cross_session_records"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_recovery_boundaries_never_relaunch_pending_attempt",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_production_adapter_wiring_uses_only_fake_child",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-D08",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "START persisted before launch",
+      "source_location": "scripts/p4b_experiment_session.py::session",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_recovery_boundaries_never_relaunch_pending_attempt",
+        "test_production_adapter_wiring_uses_only_fake_child"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "Independent exact frozen order and artifact check",
+          "pass": true,
+          "path": "schedule-journal-audit.json",
+          "sha256": "f7d05fffba99bbb092e2ed3f5a54a3079a5d287689488f364322db9fc60146d1"
+        },
+        {
+          "observed": "test_recovery_boundaries_never_relaunch_pending_attempt",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-D09",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Raw output persisted before FINISH",
+      "source_location": "scripts/p4b_experiment_session.py::session",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "Independent exact frozen order and artifact check",
+        "test_recovery_boundaries_never_relaunch_pending_attempt"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_recovery_boundaries_never_relaunch_pending_attempt",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_semantic_halt_cannot_be_retried_or_hidden_by_resume",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_production_adapter_wiring_uses_only_fake_child",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-D10",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Terminal outcome computed before cursor advance",
+      "source_location": "scripts/p4b_experiment_session.py::session",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_recovery_boundaries_never_relaunch_pending_attempt",
+        "test_semantic_halt_cannot_be_retried_or_hidden_by_resume",
+        "test_production_adapter_wiring_uses_only_fake_child"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "Independent exact frozen order and artifact check",
+          "pass": true,
+          "path": "schedule-journal-audit.json",
+          "sha256": "f7d05fffba99bbb092e2ed3f5a54a3079a5d287689488f364322db9fc60146d1"
+        },
+        {
+          "observed": "test_ledger_corruption_lock_recovery_and_cross_session_records",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-E01",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Append-only ledger",
+      "source_location": "scripts/p4b_experiment_session.py::_read_journal",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "Independent exact frozen order and artifact check",
+        "test_ledger_corruption_lock_recovery_and_cross_session_records"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "Independent exact frozen order and artifact check",
+          "pass": true,
+          "path": "schedule-journal-audit.json",
+          "sha256": "f7d05fffba99bbb092e2ed3f5a54a3079a5d287689488f364322db9fc60146d1"
+        },
+        {
+          "observed": "test_ledger_corruption_lock_recovery_and_cross_session_records",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-E02",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Unique raw evidence locations",
+      "source_location": "scripts/p4b_experiment_session.py::_read_journal",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "Independent exact frozen order and artifact check",
+        "test_ledger_corruption_lock_recovery_and_cross_session_records"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_recovery_boundaries_never_relaunch_pending_attempt",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Independent exact frozen order and artifact check",
+          "pass": true,
+          "path": "schedule-journal-audit.json",
+          "sha256": "f7d05fffba99bbb092e2ed3f5a54a3079a5d287689488f364322db9fc60146d1"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-E03",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": "Crash points injected. No physical power outage or filesystem fault certification.",
+      "requirement": "Atomic/durable artifact publication",
+      "source_location": "scripts/p4b_experiment_session.py::_read_journal",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_recovery_boundaries_never_relaunch_pending_attempt",
+        "Independent exact frozen order and artifact check"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_ledger_corruption_lock_recovery_and_cross_session_records",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-E04",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Torn ledger detection",
+      "source_location": "scripts/p4b_experiment_session.py::_read_journal",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_ledger_corruption_lock_recovery_and_cross_session_records"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_ledger_corruption_lock_recovery_and_cross_session_records",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_semantic_halt_cannot_be_retried_or_hidden_by_resume",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-E05",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Missing/duplicate journal event rejection",
+      "source_location": "scripts/p4b_experiment_session.py::_read_journal",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_ledger_corruption_lock_recovery_and_cross_session_records",
+        "test_semantic_halt_cannot_be_retried_or_hidden_by_resume"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_ledger_corruption_lock_recovery_and_cross_session_records",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_bounded_real_three_purposes_and_artifact_revalidation",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-E06",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Cross-slot/cross-session artifact rejection",
+      "source_location": "scripts/p4b_experiment_session.py::_read_journal",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_ledger_corruption_lock_recovery_and_cross_session_records",
+        "test_bounded_real_three_purposes_and_artifact_revalidation"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "Rehearse and resume all 1450 slots",
+          "pass": true,
+          "path": "synthetic-rehearsal-summary.json",
+          "sha256": "b1193b6ba8702ea3be117e2736429b6b395a4536f6490acfb66b9b6e5e1b46ef"
+        },
+        {
+          "observed": "test_shared_core_resumes_all_phases_and_ingests_synthetic_only",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-E07",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Resume without repeated completed slots",
+      "source_location": "scripts/p4b_experiment_session.py::_read_journal",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "Rehearse and resume all 1450 slots",
+        "test_shared_core_resumes_all_phases_and_ingests_synthetic_only"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_recovery_boundaries_never_relaunch_pending_attempt",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_os_lock_releases_after_process_exit_and_pending_child_is_reported",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-E08",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Ambiguous interrupted attempts blocked",
+      "source_location": "scripts/p4b_experiment_session.py::_read_journal",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_recovery_boundaries_never_relaunch_pending_attempt",
+        "test_os_lock_releases_after_process_exit_and_pending_child_is_reported"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_04_ledger_no_silent_overwrite_and_incomplete_history_preserved",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Offline archived DISC-07 prefix validation",
+          "pass": true,
+          "path": "offline-censor-result.json",
+          "sha256": "cf7863cce7f1869cde598fe08d7321b596ec848d59a664e00a1cb9bf43010b40"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-E09",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Retry policy preserves valid scientific failures",
+      "source_location": "scripts/p4b_experiment_session.py::_read_journal",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_04_ledger_no_silent_overwrite_and_incomplete_history_preserved",
+        "Offline archived DISC-07 prefix validation"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_semantic_halt_cannot_be_retried_or_hidden_by_resume",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_04_ledger_no_silent_overwrite_and_incomplete_history_preserved",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-E10",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Prior semantic discrepancy cannot be erased",
+      "source_location": "scripts/p4b_experiment_session.py::_read_journal",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_semantic_halt_cannot_be_retried_or_hidden_by_resume",
+        "test_04_ledger_no_silent_overwrite_and_incomplete_history_preserved"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_monitored_child_dies_when_supervisor_is_killed",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_r10_native_child_resource_outcome_and_stale_output",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-F01",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": "Linux kills the monitored direct child on supervisor death. Actual locked native does not spawn workers.",
+      "requirement": "Native process containment",
+      "source_location": "scripts/p4b_experiment_session.py::_validate_native; scripts/run_rapidflow_apx_p4b.py::execute_p4b_native_slot",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_monitored_child_dies_when_supervisor_is_killed",
+        "test_r10_native_child_resource_outcome_and_stale_output"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_bounded_real_three_purposes_and_artifact_revalidation",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Offline archived DISC-07 prefix validation",
+          "pass": true,
+          "path": "offline-censor-result.json",
+          "sha256": "cf7863cce7f1869cde598fe08d7321b596ec848d59a664e00a1cb9bf43010b40"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-F02",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Registered resource caps",
+      "source_location": "scripts/p4b_experiment_session.py::_validate_native; scripts/run_rapidflow_apx_p4b.py::execute_p4b_native_slot",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_bounded_real_three_purposes_and_artifact_revalidation",
+        "Offline archived DISC-07 prefix validation"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_bounded_real_three_purposes_and_artifact_revalidation",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Retained three native functional purposes",
+          "pass": true,
+          "path": "bounded-witness-final-summary.json",
+          "sha256": "751f5b8da66ce394bb7dac5f4c6e051c379bb5add287b37faeb68ac899de3b75"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-F03",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Actual process outcome binding",
+      "source_location": "scripts/p4b_experiment_session.py::_validate_native; scripts/run_rapidflow_apx_p4b.py::execute_p4b_native_slot",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_bounded_real_three_purposes_and_artifact_revalidation",
+        "Retained three native functional purposes"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_bounded_real_three_purposes_and_artifact_revalidation",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Offline archived DISC-07 prefix validation",
+          "pass": true,
+          "path": "offline-censor-result.json",
+          "sha256": "cf7863cce7f1869cde598fe08d7321b596ec848d59a664e00a1cb9bf43010b40"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-F04",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Strict lifecycle validation",
+      "source_location": "scripts/p4b_experiment_session.py::_validate_native; scripts/run_rapidflow_apx_p4b.py::execute_p4b_native_slot",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_bounded_real_three_purposes_and_artifact_revalidation",
+        "Offline archived DISC-07 prefix validation"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_bounded_real_three_purposes_and_artifact_revalidation",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_registry_reconstructs_from_trusted_raw_archive",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-F05",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Same-variant correctness-reference comparison",
+      "source_location": "scripts/p4b_experiment_session.py::_validate_native; scripts/run_rapidflow_apx_p4b.py::execute_p4b_native_slot",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_bounded_real_three_purposes_and_artifact_revalidation",
+        "test_registry_reconstructs_from_trusted_raw_archive"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_bounded_real_three_purposes_and_artifact_revalidation",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Retained three native functional purposes",
+          "pass": true,
+          "path": "bounded-witness-final-summary.json",
+          "sha256": "751f5b8da66ce394bb7dac5f4c6e051c379bb5add287b37faeb68ac899de3b75"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-F06",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Raw primary timing binding",
+      "source_location": "scripts/p4b_experiment_session.py::_validate_native; scripts/run_rapidflow_apx_p4b.py::execute_p4b_native_slot",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_bounded_real_three_purposes_and_artifact_revalidation",
+        "Retained three native functional purposes"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_bounded_real_three_purposes_and_artifact_revalidation",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Retained three native functional purposes",
+          "pass": true,
+          "path": "bounded-witness-final-summary.json",
+          "sha256": "751f5b8da66ce394bb7dac5f4c6e051c379bb5add287b37faeb68ac899de3b75"
+        },
+        {
+          "observed": "Reread actual bounded raw and detect rehashed mutations",
+          "pass": true,
+          "path": "bounded-mutations.json",
+          "sha256": "e4c8d877ebfa1264f5120575f1e38d9d1189f70b7b24f785c7834a133eba8d15"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-F07",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Secondary timing and supervisor evidence binding",
+      "source_location": "scripts/p4b_experiment_session.py::_validate_native; scripts/run_rapidflow_apx_p4b.py::execute_p4b_native_slot",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_bounded_real_three_purposes_and_artifact_revalidation",
+        "Retained three native functional purposes",
+        "Reread actual bounded raw and detect rehashed mutations"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_bounded_real_three_purposes_and_artifact_revalidation",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_f05_exact_rss_and_priority",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-F08",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "RSS method/unit validation",
+      "source_location": "scripts/p4b_experiment_session.py::_validate_native; scripts/run_rapidflow_apx_p4b.py::execute_p4b_native_slot",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_bounded_real_three_purposes_and_artifact_revalidation",
+        "test_f05_exact_rss_and_priority"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "Offline archived DISC-07 prefix validation",
+          "pass": true,
+          "path": "offline-censor-result.json",
+          "sha256": "cf7863cce7f1869cde598fe08d7321b596ec848d59a664e00a1cb9bf43010b40"
+        },
+        {
+          "observed": "test_r10_native_child_resource_outcome_and_stale_output",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_statistical_candidate_boundaries_and_shared_failure",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-F09",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Scientific censoring versus integrity failure",
+      "source_location": "scripts/p4b_experiment_session.py::_validate_native; scripts/run_rapidflow_apx_p4b.py::execute_p4b_native_slot",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "Offline archived DISC-07 prefix validation",
+        "test_r10_native_child_resource_outcome_and_stale_output",
+        "test_statistical_candidate_boundaries_and_shared_failure"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "Retained three native functional purposes",
+          "pass": true,
+          "path": "bounded-witness-final-summary.json",
+          "sha256": "751f5b8da66ce394bb7dac5f4c6e051c379bb5add287b37faeb68ac899de3b75"
+        },
+        {
+          "observed": "test_bounded_real_three_purposes_and_artifact_revalidation",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-F10",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Performance/correctness/diagnostic isolation",
+      "source_location": "scripts/p4b_experiment_session.py::_validate_native; scripts/run_rapidflow_apx_p4b.py::execute_p4b_native_slot",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "Retained three native functional purposes",
+        "test_bounded_real_three_purposes_and_artifact_revalidation"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_production_adapter_wiring_uses_only_fake_child",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Invoke runner main under test-only activation and fake child",
+          "pass": true,
+          "path": "production-entry-verification.json",
+          "sha256": "66b64074855f7599baacdd6c7243e28680802e42f38a5bbfd6a464d4ed88301a"
+        },
+        {
+          "observed": "Retained three native functional purposes",
+          "pass": true,
+          "path": "bounded-witness-final-summary.json",
+          "sha256": "751f5b8da66ce394bb7dac5f4c6e051c379bb5add287b37faeb68ac899de3b75"
+        },
+        {
+          "observed": "test_bounded_real_three_purposes_and_artifact_revalidation",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-G01",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": "Authorized complete confirmatory execution remains pending. Real raw ingestion verified on bounded data.",
+      "requirement": "Verified real ingestion path implemented",
+      "source_location": "scripts/summarize_rapidflow_apx_p4b.py::_analyze_observations; scripts/p4b_experiment_session.py::production_command",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_production_adapter_wiring_uses_only_fake_child",
+        "Invoke runner main under test-only activation and fake child",
+        "Retained three native functional purposes",
+        "test_bounded_real_three_purposes_and_artifact_revalidation"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_production_adapter_wiring_uses_only_fake_child",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_native_cannot_launch_from_direct_unverified_calls",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Direct CLI denies forged detached envelopes without session creation",
+          "pass": true,
+          "path": "cli-lock-verification.json",
+          "sha256": "ad509ea884a08932bad5dca5cbdf03a810f64deb9712ca21284ec6076a6803a6"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-G02",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Real ingestion cannot issue unauthorized analysis",
+      "source_location": "scripts/summarize_rapidflow_apx_p4b.py::_analyze_observations; scripts/p4b_experiment_session.py::production_command",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_production_adapter_wiring_uses_only_fake_child",
+        "test_native_cannot_launch_from_direct_unverified_calls",
+        "Direct CLI denies forged detached envelopes without session creation"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_shared_core_resumes_all_phases_and_ingests_synthetic_only",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Verify all scenario outcomes",
+          "pass": true,
+          "path": "statistical-scenario-final.json",
+          "sha256": "31b059e924077fcc9276cfc4f7817277714eba802eb17cb19bff9232cf120af4"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-G03",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Synthetic evidence isolation",
+      "source_location": "scripts/summarize_rapidflow_apx_p4b.py::_analyze_observations; scripts/p4b_experiment_session.py::production_command",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_shared_core_resumes_all_phases_and_ingests_synthetic_only",
+        "Verify all scenario outcomes"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_bounded_real_three_purposes_and_artifact_revalidation",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_production_adapter_wiring_uses_only_fake_child",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-G04",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Computed eligibility independent of supplied status",
+      "source_location": "scripts/summarize_rapidflow_apx_p4b.py::_analyze_observations; scripts/p4b_experiment_session.py::production_command",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_bounded_real_three_purposes_and_artifact_revalidation",
+        "test_production_adapter_wiring_uses_only_fake_child"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_statistical_candidate_boundaries_and_shared_failure",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Independently recompute seeded workload bootstrap",
+          "pass": true,
+          "path": "statistical-recomputation.json",
+          "sha256": "d4ac5e7f3fb6ff2f28d2f495f0e5d73a65fe64adda507cb50feeeaa355d02612"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-G05",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Primary point/bootstrap cohort consistency",
+      "source_location": "scripts/summarize_rapidflow_apx_p4b.py::_analyze_observations; scripts/p4b_experiment_session.py::production_command",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_statistical_candidate_boundaries_and_shared_failure",
+        "Independently recompute seeded workload bootstrap"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_symmetric_disc07_censor_coverage_and_exact_jitter",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Independently recompute seeded workload bootstrap",
+          "pass": true,
+          "path": "statistical-recomputation.json",
+          "sha256": "d4ac5e7f3fb6ff2f28d2f495f0e5d73a65fe64adda507cb50feeeaa355d02612"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-G06",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Complete DISC block resampling",
+      "source_location": "scripts/summarize_rapidflow_apx_p4b.py::_analyze_observations; scripts/p4b_experiment_session.py::production_command",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_symmetric_disc07_censor_coverage_and_exact_jitter",
+        "Independently recompute seeded workload bootstrap"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_symmetric_disc07_censor_coverage_and_exact_jitter",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Offline archived DISC-07 prefix validation",
+          "pass": true,
+          "path": "offline-censor-result.json",
+          "sha256": "cf7863cce7f1869cde598fe08d7321b596ec848d59a664e00a1cb9bf43010b40"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-G07",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Coverage and censoring semantics",
+      "source_location": "scripts/summarize_rapidflow_apx_p4b.py::_analyze_observations; scripts/p4b_experiment_session.py::production_command",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_symmetric_disc07_censor_coverage_and_exact_jitter",
+        "Offline archived DISC-07 prefix validation"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "Verify all scenario outcomes",
+          "pass": true,
+          "path": "statistical-scenario-final.json",
+          "sha256": "31b059e924077fcc9276cfc4f7817277714eba802eb17cb19bff9232cf120af4"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-G08",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Zero-pair/no-estimate handling",
+      "source_location": "scripts/summarize_rapidflow_apx_p4b.py::_analyze_observations; scripts/p4b_experiment_session.py::production_command",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "Verify all scenario outcomes"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_f05_exact_rss_and_priority",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Verify all scenario outcomes",
+          "pass": true,
+          "path": "statistical-scenario-final.json",
+          "sha256": "31b059e924077fcc9276cfc4f7817277714eba802eb17cb19bff9232cf120af4"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-G09",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Exact RSS gate",
+      "source_location": "scripts/summarize_rapidflow_apx_p4b.py::_analyze_observations; scripts/p4b_experiment_session.py::production_command",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_f05_exact_rss_and_priority",
+        "Verify all scenario outcomes"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_statistical_candidate_boundaries_and_shared_failure",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_symmetric_disc07_censor_coverage_and_exact_jitter",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Verify all scenario outcomes",
+          "pass": true,
+          "path": "statistical-scenario-final.json",
+          "sha256": "31b059e924077fcc9276cfc4f7817277714eba802eb17cb19bff9232cf120af4"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-G10",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Noise and resource decision precedence",
+      "source_location": "scripts/summarize_rapidflow_apx_p4b.py::_analyze_observations; scripts/p4b_experiment_session.py::production_command",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_statistical_candidate_boundaries_and_shared_failure",
+        "test_symmetric_disc07_censor_coverage_and_exact_jitter",
+        "Verify all scenario outcomes"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_statistical_candidate_boundaries_and_shared_failure",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Verify all scenario outcomes",
+          "pass": true,
+          "path": "statistical-scenario-final.json",
+          "sha256": "31b059e924077fcc9276cfc4f7817277714eba802eb17cb19bff9232cf120af4"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-G11",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Strata and multiplicity candidate amendments",
+      "source_location": "scripts/summarize_rapidflow_apx_p4b.py::_analyze_observations; scripts/p4b_experiment_session.py::production_command",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_statistical_candidate_boundaries_and_shared_failure",
+        "Verify all scenario outcomes"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_01_all_19_synthetic_decision_boundary_cases",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Verify all scenario outcomes",
+          "pass": true,
+          "path": "statistical-scenario-final.json",
+          "sha256": "31b059e924077fcc9276cfc4f7817277714eba802eb17cb19bff9232cf120af4"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-G12",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "All 11 decision priorities and 19 DEC cases preserved",
+      "source_location": "scripts/summarize_rapidflow_apx_p4b.py::_analyze_observations; scripts/p4b_experiment_session.py::production_command",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_01_all_19_synthetic_decision_boundary_cases",
+        "Verify all scenario outcomes"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "Rehearse and resume all 1450 slots",
+          "pass": true,
+          "path": "synthetic-rehearsal-summary.json",
+          "sha256": "b1193b6ba8702ea3be117e2736429b6b395a4536f6490acfb66b9b6e5e1b46ef"
+        },
+        {
+          "observed": "Independent exact frozen order and artifact check",
+          "pass": true,
+          "path": "schedule-journal-audit.json",
+          "sha256": "f7d05fffba99bbb092e2ed3f5a54a3079a5d287689488f364322db9fc60146d1"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-H01",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Full 1,450-slot synthetic execution",
+      "source_location": "Evidence commands, reports and git status",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "Rehearse and resume all 1450 slots",
+        "Independent exact frozen order and artifact check"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "Rehearse and resume all 1450 slots",
+          "pass": true,
+          "path": "synthetic-rehearsal-summary.json",
+          "sha256": "b1193b6ba8702ea3be117e2736429b6b395a4536f6490acfb66b9b6e5e1b46ef"
+        },
+        {
+          "observed": "test_shared_core_resumes_all_phases_and_ingests_synthetic_only",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-H02",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Full synthetic pause/resume verification",
+      "source_location": "Evidence commands, reports and git status",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "Rehearse and resume all 1450 slots",
+        "test_shared_core_resumes_all_phases_and_ingests_synthetic_only"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "test_recovery_boundaries_never_relaunch_pending_attempt",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_ledger_corruption_lock_recovery_and_cross_session_records",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_monitored_child_dies_when_supervisor_is_killed",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-H03",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Crash and fault-injection coverage",
+      "source_location": "Evidence commands, reports and git status",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "test_recovery_boundaries_never_relaunch_pending_attempt",
+        "test_ledger_corruption_lock_recovery_and_cross_session_records",
+        "test_monitored_child_dies_when_supervisor_is_killed"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "Retained three native functional purposes",
+          "pass": true,
+          "path": "bounded-witness-final-summary.json",
+          "sha256": "751f5b8da66ce394bb7dac5f4c6e051c379bb5add287b37faeb68ac899de3b75"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-H04",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Bounded actual native functional witnesses",
+      "source_location": "Evidence commands, reports and git status",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "Retained three native functional purposes"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "Compare current available resources and sizing analogue",
+          "pass": true,
+          "path": "storage-environment-review.json",
+          "sha256": "02192ffcc83aabb507dcec420c8447e21579c083e6dc7fef8fc8c84e36edb77d"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-H05",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": "Hardware compatible for rehearsal. Actual activation host conditions need Coordinator approval.",
+      "requirement": "Environment and storage readiness",
+      "source_location": "Evidence commands, reports and git status",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "Compare current available resources and sizing analogue"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "Full unittest discovery at the tested clean revision",
+          "pass": true,
+          "path": "regression-summary.json",
+          "sha256": "e7aa0ef52c7a9700334ca0eef21398029b1364cfdede6db280912830b7adebd6"
+        },
+        {
+          "observed": "Check definitive tested source, clean status and upstream",
+          "pass": true,
+          "path": "clean-regression-git.log",
+          "sha256": "9fd8e69f840967858c298d8ca4efb73d4e7b686727cf31cd9763bc636fafd809"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-H06",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Clean-revision full regression",
+      "source_location": "Evidence commands, reports and git status",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "Full unittest discovery at the tested clean revision",
+        "Check definitive tested source, clean status and upstream"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "Hash-check a tar view of all captured evidence members",
+          "pass": true,
+          "path": "archive-preverification.json",
+          "sha256": "be95145492e970a642f2b8cf77df79f61a304ae41f1543d9e72ebe4bbe3f4892"
+        },
+        {
+          "observed": "Reject missing, extra, duplicate, corrupt and escaping members",
+          "pass": true,
+          "path": "archive-mutation-results.json",
+          "sha256": "68fd01af0af8a2ab2cc5dfad5a28f8a8e6a139f5d5013b32c4f5a22ae3946e87"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-H07",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "Complete evidence archive and hash verification",
+      "source_location": "Evidence commands, reports and git status",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "Hash-check a tar view of all captured evidence members",
+        "Reject missing, extra, duplicate, corrupt and escaping members"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "observed": "Inspect empty anchor and frozen authorization",
+          "pass": true,
+          "path": "baseline-preflight.json",
+          "sha256": "e6e406014208c0ae2bb53602cf7d71eaf0ae0717c2da1291b51f3a8c5662ef7e"
+        },
+        {
+          "observed": "Verify lock fields in dry run with zero launch",
+          "pass": true,
+          "path": "dry-run.json",
+          "sha256": "ac1faed7a05a6d45c324c10ddfc6b6569011b0f7d00744659dd6a07fe664c460"
+        },
+        {
+          "observed": "Rehearse and resume all 1450 slots",
+          "pass": true,
+          "path": "synthetic-rehearsal-summary.json",
+          "sha256": "b1193b6ba8702ea3be117e2736429b6b395a4536f6490acfb66b9b6e5e1b46ef"
+        }
+      ],
+      "expected_result": "All listed checks pass",
+      "gate_id": "B30-H08",
+      "observed_result": "All listed checks passed",
+      "remaining_limitation": null,
+      "requirement": "No unauthorized benchmark, ranking, winner or phase transition",
+      "source_location": "Evidence commands, reports and git status",
+      "status": "PASS",
+      "test_method": "Verify each listed observed check at the indicated evidence member",
+      "test_names": [
+        "Inspect empty anchor and frozen authorization",
+        "Verify lock fields in dry run with zero launch",
+        "Rehearse and resume all 1450 slots"
+      ],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "path": "baseline-preflight.json",
+          "sha256": "e6e406014208c0ae2bb53602cf7d71eaf0ae0717c2da1291b51f3a8c5662ef7e"
+        }
+      ],
+      "expected_result": "Separate external action",
+      "gate_id": "B30-APP01",
+      "observed_result": "Pending",
+      "remaining_limitation": "Implementation did not issue approval",
+      "requirement": "Independent Technical Lead acceptance",
+      "source_location": "Committed activation trust anchor",
+      "status": "PENDING_INDEPENDENT_REVIEW",
+      "test_method": "External review only",
+      "test_names": [],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    },
+    {
+      "evidence": [
+        {
+          "path": "baseline-preflight.json",
+          "sha256": "e6e406014208c0ae2bb53602cf7d71eaf0ae0717c2da1291b51f3a8c5662ef7e"
+        }
+      ],
+      "expected_result": "Separate external action",
+      "gate_id": "B30-APP02",
+      "observed_result": "Pending",
+      "remaining_limitation": "Implementation did not issue approval",
+      "requirement": "Explicit Coordinator confirmatory execution authorization",
+      "source_location": "Committed activation trust anchor",
+      "status": "PENDING_COORDINATOR_APPROVAL",
+      "test_method": "External review only",
+      "test_names": [],
+      "tested_revision": "ef64048d1789acef70f8444ce9f5f064b1ad0fdf"
+    }
+  ],
+  "status_counts": {
+    "PASS": 78,
+    "PENDING_COORDINATOR_APPROVAL": 1,
+    "PENDING_INDEPENDENT_REVIEW": 1
+  }
+}
