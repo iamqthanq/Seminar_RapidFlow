@@ -1,4 +1,10 @@
 {
-  "approved_envelopes": {},
+  "approved_envelopes": {
+    "d7a5843431da902650e35d03048fb2111bde4272b0189956e3c54bc25fd6094f": {
+      "coordinator_approval_ref": "COORDINATOR_DECISION:Thien:2026-11-26:~/p4b_approval/acceptance.md",
+      "experiment_id": "p4b3b1_primary_001",
+      "reviewer_approval_ref": "COORDINATOR_SELF_REVIEW_NO_INDEPENDENT_SECOND_REVIEWER:Thien:2026-11-26"
+    }
+  },
   "schema": "p4b-reviewed-activation-anchors-v1"
 }
