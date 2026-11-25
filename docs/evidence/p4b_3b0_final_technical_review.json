@@ -1,0 +1,110 @@
+{
+  "schema": "rapidflow-apx/p4b-3b0-final-technical-review/v1",
+  "phase": "P4b-3B.0",
+  "task": "Final Technical Acceptance & Documentation Errata Closure",
+  "repository": "iamqthanq/Seminar_RapidFlow",
+  "issue": 38,
+  "draft_pr": 39,
+  "feature_branch": "feature/rf38-p4b-optimization",
+  "target_integration_branch": "QuangThang",
+  "pre_errata_head": "2219f2cb194eadf16e426b9a26fa897675103c2f",
+  "tested_logic_commit": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+  "native_source_commit": "115ce2844d91f6a6588fe0ac50b1179bc3b38012",
+  "registered_replay_revision": "115ce2844d91f6a6588fe0ac50b1179bc3b38012",
+  "upstream_rapidflow_commit": "2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1",
+  "independent_review": {
+    "verdict": "STATIC_ACCEPT",
+    "r21_findings_closed": ["R21-AUD-01", "R21-AUD-02", "R21-AUD-03", "R21-AUD-04"],
+    "new_critical": 0,
+    "new_high": 0,
+    "new_medium": 0,
+    "new_low_errata_remediated": ["R211-AUD-01", "R211-AUD-02", "R211-AUD-03", "R211-AUD-04"],
+    "independent_technical_acceptance": "RECOMMENDED_IN_SUPPLIED_STATIC_EVIDENCE_SCOPE_ONLY"
+  },
+  "decisions_and_locks": {
+    "local_errata_closure": "COMPLETE",
+    "formal_technical_acceptance": "PENDING_COORDINATOR_DECISION",
+    "host_readiness_assessment": "PENDING_SEPARATE_COORDINATOR_TASK",
+    "coordinator_execution_authorization": "PENDING",
+    "execution_authorization": "P4B_3B_1_NOT_AUTHORIZED",
+    "official_slots_executed": 0,
+    "approved_envelopes": {}
+  },
+  "binaries": {
+    "production_candidate": {
+      "path": "tests/native/rapidflow_apx_engines/build/rapidflow_apx_native",
+      "sha256": "3fa35111acd7e7527a80bae6b0caa6d51d1e283d9848747a62c2517d696d1876",
+      "size_bytes": 970632,
+      "measurement_eligible": true
+    },
+    "historical_r2_1_witness_preserved": {
+      "path": "/home/iamqthanq/Desktop/P4b3B0_R2_1_1_Independent_Review_2026-11-25/historical-preserved/rapidflow_apx_r21_resource_witness_historical_fcdd9c5e",
+      "sha256": "fcdd9c5efd97bf59604d4d3204db03e28bb93f0b42488aa02d252b0a4aa8c7a9",
+      "size_bytes": 850608,
+      "measurement_eligible": false
+    },
+    "current_r2_1_1_witness": {
+      "path": "tests/native/rapidflow_apx_engines/build/rapidflow_apx_r21_resource_witness",
+      "sha256": "86c23d7994de4bbdd5c6aedcb7a1572a6792081faf956a25e6b7ba96f5650247",
+      "size_bytes": 875928,
+      "measurement_eligible": false
+    }
+  },
+  "frozen_configs_and_registries_sha256": {
+    "configs/rapidflow_apx_p4b_r2_1_candidate_registry.json": "40a28b4d963d8c652bc49ab231aa2ccb6626e3de9b4badc3b3a13a03620fe0b4",
+    "configs/rapidflow_apx_p4b_correctness_registry.json": "a122454b3cdd5b00c221a3f3d47aea372c7e1f9889c4fb1314017c16d4e2117",
+    "configs/rapidflow_apx_p4b_r2_candidate_registry.json": "90fc2f3ee1e8c4bcf210603caeb218190a294b168377858cd4be276ebb662118",
+    "configs/rapidflow_apx_p4b_protocol.json": "70836770663c32a1a53e52e048be1dd8268fd2e3f02f66859737eef308c4acbb",
+    "configs/rapidflow_apx_p4b_manifest.json": "09c78158d541c22f91b48aa484e3fd5e494910c2885635de1fa79bbed1784869",
+    "configs/rapidflow_apx_p4b_schedule.json": "824d4b09f31432fde355597aee877f38cae3f267b66dd658d8fc82c3cac05e6f",
+    "configs/rapidflow_apx_p4b_activation_anchors.json": "b74e48dc8ab3ab00d31581ec944e9e8a6743dd729f63d938f3645d82e146408e"
+  },
+  "local_archive_identity_verification": {
+    "verification_label": "LOCAL_ARCHIVE_IDENTITY_VERIFICATION",
+    "r2_1_1_delta_archive": {
+      "path": "/home/iamqthanq/Desktop/P4b3B0_R2_1_1_Independent_Review_2026-11-25/review-evidence-p4b3b0-r2-1-1.tar.gz",
+      "sha256": "b2ef3b52f9a1fc077744ab3c2ed599b770e437dd78ebae7474836e0c46990e55",
+      "size_bytes": 469810,
+      "status": "PASS"
+    },
+    "candidate_reference_bundle": {
+      "path": "/home/iamqthanq/Desktop/P4b3B0_R2_1_Independent_Review_2026-11-25/candidate-reference-bundle/p4b-r2-correctness-reference-bundle.tar.gz",
+      "sha256": "8efd7c65856c675773249d19b20165106d92917af56913be3730b5a2de044464",
+      "size_bytes": 33681113,
+      "status": "PASS"
+    }
+  },
+  "gate_counts": {
+    "historical_and_r2_1_reconciliation": {
+      "path": "docs/rapidflow_apx_p4b_3b0_r2_1_gate_reconciliation.json",
+      "total_technical_gates": 98,
+      "technical_status_counts": {"PASS": 98},
+      "verification_basis_counts": {
+        "CURRENT_TARGETED_VERIFIED": 28,
+        "HISTORICAL_RUNTIME_VERIFIED": 46,
+        "STATIC_RECONCILED": 24
+      },
+      "external_approval_gates": 2,
+      "external_status_counts": {"PENDING_EXTERNAL_APPROVAL": 2}
+    },
+    "r2_1_1_acceptance_matrix": {
+      "path": "docs/rapidflow_apx_p4b_3b0_r2_1_1_acceptance_matrix.json",
+      "total_gates": 54,
+      "status_counts": {
+        "PASS": 52,
+        "PENDING_EXTERNAL_APPROVAL": 2
+      }
+    }
+  },
+  "errata_closure": {
+    "R211-AUD-01": "CLOSED",
+    "R211-AUD-02": "CLOSED",
+    "R211-AUD-03": "CLOSED",
+    "R211-AUD-04": "CLOSED (ACKNOWLEDGED_NON_BLOCKING_LIMITATION; 0 source edits)"
+  },
+  "acknowledged_non_blocking_limitations": [
+    "r21_resource_witness.cpp contains an unhit P4B_CONT_07 branch in the test-only harness",
+    "resolve_trusted_bundle(bundle=None, default_id=...) could accept an untrusted default_id if misused internally (all active callers verified safe)",
+    "resolve_trusted_bundle() returns a shallow dict reference (zero mutating callers verified statically)"
+  ]
+}

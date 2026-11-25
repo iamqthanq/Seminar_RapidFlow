@@ -4,7 +4,15 @@
 
 Production binary source files under `extensions/rapidflow_apx/` and `tests/native/rapidflow_apx_engines/src/harness_runner.cpp` are **unchanged** in R2.1 (`NATIVE_SOURCE_COMMIT = 115ce2844d91f6a6588fe0ac50b1179bc3b38012`, binary SHA-256 `3fa35111acd7e7527a80bae6b0caa6d51d1e283d9848747a62c2517d696d1876`).
 
-To exercise genuine C++ `std::bad_alloc` inside active step transactions without mutating production code, R2.1 introduces a dedicated **test-only** executable target `rapidflow_apx_r21_resource_witness` (`tests/native/rapidflow_apx_engines/src/r21_resource_witness.cpp`, SHA-256 `fcdd9c5efd97bf59604d4d3204db03e28bb93f0b42488aa02d252b0a4aa8c7a9`):
+To exercise genuine C++ `std::bad_alloc` inside active step transactions without mutating production code, R2.1 introduced a dedicated **test-only** executable target `rapidflow_apx_r21_resource_witness` (`tests/native/rapidflow_apx_engines/src/r21_resource_witness.cpp`, originally SHA-256 `fcdd9c5efd97bf59604d4d3204db03e28bb93f0b42488aa02d252b0a4aa8c7a9` in R2.1, rebuilt in R2.1.1 for `B-W03b` and late-search witnesses with SHA-256 `86c23d7994de4bbdd5c6aedcb7a1572a6792081faf56a25e6b7ba96f5650247`):
+
+### 1.1 Native Binary & Test-Only Witness Identity Table
+
+| Role / Version | Path / Preserved Location | SHA-256 | Size (bytes) | `measurement_eligible` | Bound Scope |
+|---|---|---|---|---|---|
+| **Production Candidate (`R2 / R2.1 / R2.1.1`)** | `tests/native/rapidflow_apx_engines/build/rapidflow_apx_native` (identical to `build-r2-candidate/rapidflow_apx_native`) | `3fa35111acd7e7527a80bae6b0caa6d51d1e283d9848747a62c2517d696d1876` | `970632` | `true` (confirmatory locked; `0` slots executed) | Frozen production C++ at `115ce2844d91f6a6588fe0ac50b1179bc3b38012` |
+| **Historical R2.1 Test Witness (Superseded)** | `/home/iamqthanq/Desktop/P4b3B0_R2_1_1_Independent_Review_2026-11-25/historical-preserved/rapidflow_apx_r21_resource_witness_historical_fcdd9c5e` | `fcdd9c5efd97bf59604d4d3204db03e28bb93f0b42488aa02d252b0a4aa8c7a9` | `850608` | `false` | Historical R2.1 `B-W01..B-W04` & early-search archive only |
+| **Current R2.1.1 Test Witness (Active)** | `tests/native/rapidflow_apx_engines/build/rapidflow_apx_r21_resource_witness` (identical to `build-r2-candidate/rapidflow_apx_r21_resource_witness`) | `86c23d7994de4bbdd5c6aedcb7a1572a6792081faf56a25e6b7ba96f5650247` | `875928` | `false` | Active `B-W01..B-W04`, `B-W03b` post-callback DELETE mutation, CLI early-search, and CLI late-search diagnostic/performance (`test_05..test_07`, `r2_1_1::test_03..test_04`) |
 
 - **Mechanism:** Overrides `::operator new` / `::operator new[]` (both throwing and `std::nothrow_t` forms) backed by an atomic allocation countdown armed cleanly via `ScopedOomAfter` and the existing `BoundaryObserverFn` (`MeasurementStage::STEP_EXECUTE_START` / `STEP_EXECUTE_END`) hook in `harness_runner`.
 - **Direct Code Paths Witnessed (`--verify-paths`):**
@@ -15,6 +23,8 @@ To exercise genuine C++ `std::bad_alloc` inside active step transactions without
   - `B-W04`: `execute_update` encounters `std::bad_alloc` after tuple emission has begun (`raw_emissions > 0 || discarded_emissions > 0`); `ApxTupleSink::abort_step` discards pending tuples with zero leaked committed emissions and full graph rollback (precise site within tuple emission vs staging vector growth is not narrowed further).
 
 ## 2. Live CLI Witness & Shared Validator Ingestion (`test_05..test_07`, `test_rapidflow_apx_p4b_3b0_r2_1_1`)
+
+All `B-W03b` and `CLI_LATE_SEARCH_ALLOCATION_WITNESS` runs below were executed on the current R2.1.1 test-only witness binary (`86c23d7994de4bbdd5c6aedcb7a1572a6792081faf56a25e6b7ba96f5650247`, `875928` bytes, `measurement_eligible = false`), while `fcdd9c5e...` (`850608` bytes) remains strictly in historical R2.1 provenance.
 
 - **CLI Early-Search & Late-Search Witnesses (`P4B_CONT_01`, `BARE`):**
   - **Early-search (`inject_after = 10` on step 1):** exit code `5` (`ExitCode::RESOURCE_LIMIT_ERROR`), `status = "FAIL"`, `error_category = "RESOURCE_LIMIT_ERROR"`, `error_message = "std::bad_alloc"`, `first_failing_step_index = 1`, `steps[0].status = "SUCCESS"`, `steps[1].status = "RESOURCE_EXHAUSTED"` (`NOT_COMMITTED`, `entered_tuples = []`), `work_units = 0`, `neighbor_retrieval_ns = 0`, `search_ns >= search_core_ns`.

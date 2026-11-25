@@ -39,18 +39,20 @@
       "applicability": "APPLICABLE",
       "verification_method": "Git SHA & clean worktree preflight",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "101272cf85087df621d5e77118ab12a774720a4e",
+      "tested_revision": "2219f2cb194eadf16e426b9a26fa897675103c2f",
       "expected_result": "Baseline matches registered SHA",
       "observed_result": "Verified clean R2 & R2.1 baseline SHAs",
       "evidence_paths": [
-        "r21-preflight.json"
+        "r211-preflight.json",
+        "git-state.json"
       ],
       "evidence_sha256": {
-        "r21-preflight.json": "0189e9cebbc8afa03dbf8737919a8398d228b29199b3739a012a2583e545dc8b"
+        "r211-preflight.json": "a55a6e418a6501aaca569b2ced55d9f26b8adb66f25fe450f7c074a27416a732",
+        "git-state.json": "1a592345b48a12aacf92323328bdcca978fd2742b9015d59c33d3d282a298981"
       },
       "status": "PASS",
       "remaining_limitation": null,
-      "verification_basis": "CURRENT_TARGETED_VERIFIED"
+      "verification_basis": "STATIC_RECONCILED"
     },
     {
       "original_gate_id": "R2-A02",
@@ -59,20 +61,20 @@
       "applicability": "APPLICABLE",
       "verification_method": "gh pr view 39 / git branch",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "2219f2cb194eadf16e426b9a26fa897675103c2f",
       "expected_result": "PR #39 OPEN/DRAFT on feature/rf38-p4b-optimization",
       "observed_result": "PR #39 OPEN isDraft=true on feature/rf38-p4b-optimization",
       "evidence_paths": [
-        "r21-preflight.json",
-        "r21-github-state.json"
+        "r211-preflight.json",
+        "git-state.json"
       ],
       "evidence_sha256": {
-        "r21-preflight.json": "0189e9cebbc8afa03dbf8737919a8398d228b29199b3739a012a2583e545dc8b",
-        "r21-github-state.json": "e78b17ac543598eaa7d4e1736367bd0f031162281567c11c9afeb0bc9b228fc1"
+        "r211-preflight.json": "a55a6e418a6501aaca569b2ced55d9f26b8adb66f25fe450f7c074a27416a732",
+        "git-state.json": "1a592345b48a12aacf92323328bdcca978fd2742b9015d59c33d3d282a298981"
       },
       "status": "PASS",
       "remaining_limitation": null,
-      "verification_basis": "CURRENT_TARGETED_VERIFIED"
+      "verification_basis": "STATIC_RECONCILED"
     },
     {
       "original_gate_id": "R2-A03",
@@ -81,18 +83,20 @@
       "applicability": "APPLICABLE",
       "verification_method": "git -C baselines/rapidflow/source rev-parse/status",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "2219f2cb194eadf16e426b9a26fa897675103c2f",
       "expected_result": "Pristine at 2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1",
       "observed_result": "Verified clean at 2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1",
       "evidence_paths": [
-        "r21-preflight.json"
+        "r211-preflight.json",
+        "git-state.json"
       ],
       "evidence_sha256": {
-        "r21-preflight.json": "0189e9cebbc8afa03dbf8737919a8398d228b29199b3739a012a2583e545dc8b"
+        "r211-preflight.json": "a55a6e418a6501aaca569b2ced55d9f26b8adb66f25fe450f7c074a27416a732",
+        "git-state.json": "1a592345b48a12aacf92323328bdcca978fd2742b9015d59c33d3d282a298981"
       },
       "status": "PASS",
       "remaining_limitation": null,
-      "verification_basis": "CURRENT_TARGETED_VERIFIED"
+      "verification_basis": "STATIC_RECONCILED"
     },
     {
       "original_gate_id": "R2-A04",
@@ -101,20 +105,18 @@
       "applicability": "APPLICABLE",
       "verification_method": "SHA-256 baseline snapshot across artifacts",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "2219f2cb194eadf16e426b9a26fa897675103c2f",
       "expected_result": "Zero unexpected drift across historical inventory",
       "observed_result": "102 preserved R2 baseline + R2.1 before/after verified",
       "evidence_paths": [
-        "r21-preflight.json",
-        "r21-preservation-result.json"
+        "r211-preservation-result.json"
       ],
       "evidence_sha256": {
-        "r21-preflight.json": "0189e9cebbc8afa03dbf8737919a8398d228b29199b3739a012a2583e545dc8b",
-        "r21-preservation-result.json": "88c59cefd6615571760232a28f807107cc3baee5402aecda84b344b1b7c33100"
+        "r211-preservation-result.json": "e3430f6ba4a54405e631a65d166127ba8edf3e7d9f861c0cdd642110b754da6f"
       },
       "status": "PASS",
       "remaining_limitation": null,
-      "verification_basis": "CURRENT_TARGETED_VERIFIED"
+      "verification_basis": "STATIC_RECONCILED"
     },
     {
       "original_gate_id": "R2-B01",
@@ -229,16 +231,20 @@
       "applicability": "APPLICABLE",
       "verification_method": "Real 512 MiB RLIMIT_AS init OOM + in-step witness",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
       "expected_result": "exit 5 + RESOURCE_LIMIT_ERROR + std::bad_alloc",
-      "observed_result": "Verified on init OOM (R2) and in-step OOM (R2.1)",
+      "observed_result": "In-step OOM verified on R2.1.1 witness 86c23d79... in test_05..test_07 & r2_1_1::test_03..test_04 (9f7701b); historical 512 MiB init OOM verified at R2 (101272cf).",
       "evidence_paths": [
-        "r2/green/python_and_harness_green.txt",
-        "native-resource-witnesses/cli_diag_oom.json"
+        "tests/native/rapidflow_apx_engines/build-r2-candidate/rapidflow_apx_r21_resource_witness",
+        "native-witnesses/early-search/native-output.json",
+        "native-witnesses/late-search-diagnostic/native-output.json",
+        "green/targeted_tests.log"
       ],
       "evidence_sha256": {
-        "r2/green/python_and_harness_green.txt": "2d4aede4a7595cba8a49d407cee2b1b67b4689efb3218b6403d494bca053d291",
-        "native-resource-witnesses/cli_diag_oom.json": "cbc9c89d04027ab72d2d4aaf6939ae5de9396ac061b69dbf768789bee39fae9c"
+        "tests/native/rapidflow_apx_engines/build-r2-candidate/rapidflow_apx_r21_resource_witness": "86c23d7994de4bbdd5c6aedcb7a1572a6792081faf956a25e6b7ba96f5650247",
+        "native-witnesses/early-search/native-output.json": "4ef64ab140db646019e2de72aa3a1bec39939710150694b745b948b8da65924a",
+        "native-witnesses/late-search-diagnostic/native-output.json": "9a642b7a3ddb58881eeba60d1059efff21a8e9839fccfb7e0740359a4a83201e",
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
       },
       "status": "PASS",
       "remaining_limitation": null,
@@ -251,18 +257,24 @@
       "applicability": "APPLICABLE",
       "verification_method": "E2E witness through supervisor, _validate_native, journal",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
       "expected_result": "Producer exit 5/RESOURCE_EXHAUSTED accepted by validator",
-      "observed_result": "Closed in R2.1 via rapidflow_apx_r21_resource_witness",
+      "observed_result": "PASS B-W01..B-W04 + B-W03b on R2.1.1 witness 86c23d79... + CLI early/late-search exit 5 through _validate_native().",
       "evidence_paths": [
         "tests/native/rapidflow_apx_engines/build-r2-candidate/rapidflow_apx_r21_resource_witness",
-        "native-resource-witnesses/cli_diag_oom.json",
-        "regression/full-regression.log"
+        "native-witnesses/verify_paths.json",
+        "native-witnesses/delete-post-callback/delete-post-callback-witness.json",
+        "native-witnesses/early-search/native-output.json",
+        "native-witnesses/late-search-diagnostic/native-output.json",
+        "green/targeted_tests.log"
       ],
       "evidence_sha256": {
-        "tests/native/rapidflow_apx_engines/build-r2-candidate/rapidflow_apx_r21_resource_witness": "fcdd9c5efd97bf59604d4d3204db03e28bb93f0b42488aa02d252b0a4aa8c7a9",
-        "native-resource-witnesses/cli_diag_oom.json": "cbc9c89d04027ab72d2d4aaf6939ae5de9396ac061b69dbf768789bee39fae9c",
-        "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
+        "tests/native/rapidflow_apx_engines/build-r2-candidate/rapidflow_apx_r21_resource_witness": "86c23d7994de4bbdd5c6aedcb7a1572a6792081faf956a25e6b7ba96f5650247",
+        "native-witnesses/verify_paths.json": "12dfb7cea88d110c578cce157e0e3e2217b747678e843f52fb5c978f84c62282",
+        "native-witnesses/delete-post-callback/delete-post-callback-witness.json": "bc840e90e5871bacb27e2b0af20a3e549102811458a15e2ab48ebbcc590c7981",
+        "native-witnesses/early-search/native-output.json": "4ef64ab140db646019e2de72aa3a1bec39939710150694b745b948b8da65924a",
+        "native-witnesses/late-search-diagnostic/native-output.json": "9a642b7a3ddb58881eeba60d1059efff21a8e9839fccfb7e0740359a4a83201e",
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
       },
       "status": "PASS",
       "remaining_limitation": null,
@@ -275,16 +287,20 @@
       "applicability": "APPLICABLE",
       "verification_method": "Operator-new injection across B-W01..B-W04",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
       "expected_result": "Graph, codec, NLF, sink rolled back cleanly",
-      "observed_result": "All 4 paths PASS in --verify-paths & ASan/tx suites",
+      "observed_result": "All paths B-W01..B-W04 & B-W03b PASS with exact rollback verification on witness 86c23d79... (targeted_tests.log at 9f7701b).",
       "evidence_paths": [
         "tests/native/rapidflow_apx_engines/build-r2-candidate/rapidflow_apx_r21_resource_witness",
-        "regression/full-regression.log"
+        "native-witnesses/verify_paths.json",
+        "native-witnesses/delete-post-callback/delete-post-callback-witness.json",
+        "green/targeted_tests.log"
       ],
       "evidence_sha256": {
-        "tests/native/rapidflow_apx_engines/build-r2-candidate/rapidflow_apx_r21_resource_witness": "fcdd9c5efd97bf59604d4d3204db03e28bb93f0b42488aa02d252b0a4aa8c7a9",
-        "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
+        "tests/native/rapidflow_apx_engines/build-r2-candidate/rapidflow_apx_r21_resource_witness": "86c23d7994de4bbdd5c6aedcb7a1572a6792081faf956a25e6b7ba96f5650247",
+        "native-witnesses/verify_paths.json": "12dfb7cea88d110c578cce157e0e3e2217b747678e843f52fb5c978f84c62282",
+        "native-witnesses/delete-post-callback/delete-post-callback-witness.json": "bc840e90e5871bacb27e2b0af20a3e549102811458a15e2ab48ebbcc590c7981",
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
       },
       "status": "PASS",
       "remaining_limitation": "Fixed error payload relies on libstdc++ SSO (14 <= 15 bytes)",
@@ -297,16 +313,14 @@
       "applicability": "APPLICABLE",
       "verification_method": "Stderr-only std::bad_alloc & R2.1 negative resource matrix",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
       "expected_result": "Rejected as MISSING_RESULT / INVALID, never censored",
       "observed_result": "PASS in test_03 (R2), test_r10 (R1 updated), test_07 (R2.1)",
       "evidence_paths": [
-        "r2/green/python_and_harness_green.txt",
-        "regression/full-regression.log"
+        "green/targeted_tests.log"
       ],
       "evidence_sha256": {
-        "r2/green/python_and_harness_green.txt": "2d4aede4a7595cba8a49d407cee2b1b67b4689efb3218b6403d494bca053d291",
-        "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
       },
       "status": "PASS",
       "remaining_limitation": null,
@@ -319,16 +333,14 @@
       "applicability": "APPLICABLE",
       "verification_method": "ALLOCATION_FAILURE_MUTATION & test-only witness checks",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
       "expected_result": "Exit 6 EXECUTION_FAILURE / VALIDATION_RESOURCE_WITNESS rejected by stats",
       "observed_result": "PASS in test_03 (R2) and test_06 (R2.1)",
       "evidence_paths": [
-        "r2/green/python_and_harness_green.txt",
-        "regression/full-regression.log"
+        "green/targeted_tests.log"
       ],
       "evidence_sha256": {
-        "r2/green/python_and_harness_green.txt": "2d4aede4a7595cba8a49d407cee2b1b67b4689efb3218b6403d494bca053d291",
-        "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
       },
       "status": "PASS",
       "remaining_limitation": null,
@@ -517,7 +529,7 @@
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
       "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
       "expected_result": "Non-dict / malformed root returns INVALID",
-      "observed_result": "PASS in test_rapidflow_apx_p4b_3b0_r2",
+      "observed_result": "PASS in test_rapidflow_apx_p4b_3b0_r2 (historical 896-test full regression at 39396c14; NOT rerun in R2.1.1 targeted campaign).",
       "evidence_paths": [
         "regression/full-regression.log"
       ],
@@ -526,7 +538,7 @@
       },
       "status": "PASS",
       "remaining_limitation": null,
-      "verification_basis": "CURRENT_TARGETED_VERIFIED"
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R2-F02",
@@ -535,17 +547,15 @@
       "applicability": "APPLICABLE",
       "verification_method": "process.json={supervisor:null} RED->GREEN",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
       "expected_result": "INVALID / MEASUREMENT_ERROR without AttributeError",
-      "observed_result": "CONFIRMED RED->PASS",
+      "observed_result": "process.json={supervisor:null} RED->GREEN verified at 39396c14 and re-verified in r2_1::test_09 at 9f7701b.",
       "evidence_paths": [
-        "r2/red/python_and_harness_red.txt",
-        "r2/green/python_and_harness_green.txt",
+        "green/targeted_tests.log",
         "regression/full-regression.log"
       ],
       "evidence_sha256": {
-        "r2/red/python_and_harness_red.txt": "5319a566024be06aa1ed2dc4ebe1487fa856fc57472ee8f3ebee7617ef32d4c1",
-        "r2/green/python_and_harness_green.txt": "2d4aede4a7595cba8a49d407cee2b1b67b4689efb3218b6403d494bca053d291",
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf",
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
@@ -561,16 +571,18 @@
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
       "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
       "expected_result": "All fail cleanly as INVALID / MEASUREMENT_ERROR",
-      "observed_result": "PASS in test_04_new_find_05",
+      "observed_result": "PASS in R2 test_04_new_find_05 full 8-case null matrix at 39396c14 (partial null_macro also re-verified in r2_1::test_09 at 9f7701b).",
       "evidence_paths": [
-        "regression/full-regression.log"
+        "regression/full-regression.log",
+        "green/targeted_tests.log"
       ],
       "evidence_sha256": {
-        "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
+        "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788",
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
       },
       "status": "PASS",
       "remaining_limitation": null,
-      "verification_basis": "CURRENT_TARGETED_VERIFIED"
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R2-G01",
@@ -581,20 +593,16 @@
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
       "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
       "expected_result": "Array trailing comma without '}' and bad separators rejected",
-      "observed_result": "CONFIRMED partial RED->GREEN PASS in test_05",
+      "observed_result": "PASS in R2 p4b_native_evidence.interrupted_output unit tests at 39396c14 (NOT rerun in R2.1.1 targeted campaign).",
       "evidence_paths": [
-        "r2/red/python_and_harness_red.txt",
-        "r2/green/python_and_harness_green.txt",
         "regression/full-regression.log"
       ],
       "evidence_sha256": {
-        "r2/red/python_and_harness_red.txt": "5319a566024be06aa1ed2dc4ebe1487fa856fc57472ee8f3ebee7617ef32d4c1",
-        "r2/green/python_and_harness_green.txt": "2d4aede4a7595cba8a49d407cee2b1b67b4689efb3218b6403d494bca053d291",
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
       "remaining_limitation": null,
-      "verification_basis": "CURRENT_TARGETED_VERIFIED"
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R2-G02",
@@ -605,7 +613,7 @@
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
       "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
       "expected_result": "Cleanly classified ABSENT/PARTIAL without rejecting valid cuts",
-      "observed_result": "PASS in test_05_new_find_06",
+      "observed_result": "PASS in R2 test_05_new_find_06 byte-cut prefix tests at 39396c14 (NOT rerun in R2.1.1 targeted campaign).",
       "evidence_paths": [
         "regression/full-regression.log"
       ],
@@ -614,7 +622,7 @@
       },
       "status": "PASS",
       "remaining_limitation": null,
-      "verification_basis": "CURRENT_TARGETED_VERIFIED"
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R2-G03",
@@ -625,20 +633,18 @@
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
       "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
       "expected_result": "Leaked root/step profiling rejected in performance mode",
-      "observed_result": "PASS RED->GREEN in test_05 & test_09",
+      "observed_result": "PASS in R2 test_05 partial JSON leak tests at 39396c14; leaked profiling JSON also re-verified in r2_1::test_09 at 9f7701b.",
       "evidence_paths": [
-        "r2/red/python_and_harness_red.txt",
-        "r2/green/python_and_harness_green.txt",
-        "regression/full-regression.log"
+        "regression/full-regression.log",
+        "green/targeted_tests.log"
       ],
       "evidence_sha256": {
-        "r2/red/python_and_harness_red.txt": "5319a566024be06aa1ed2dc4ebe1487fa856fc57472ee8f3ebee7617ef32d4c1",
-        "r2/green/python_and_harness_green.txt": "2d4aede4a7595cba8a49d407cee2b1b67b4689efb3218b6403d494bca053d291",
-        "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
+        "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788",
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
       },
       "status": "PASS",
       "remaining_limitation": null,
-      "verification_basis": "CURRENT_TARGETED_VERIFIED"
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R2-G04",
@@ -647,13 +653,17 @@
       "applicability": "APPLICABLE",
       "verification_method": "B30-FIND-04 + resource/budget suffix checks",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
       "expected_result": "Wrong ops, committed suffix or contradictory first failure rejected",
-      "observed_result": "PASS in test_f04, test_02, test_07",
+      "observed_result": "Resource/budget suffix & strict profiling absence verified in r2_1::test_07 + r2_1_1::test_04 at 9f7701b (and R2 full regression at 39396c14).",
       "evidence_paths": [
+        "native-witnesses/late-search-performance/native-output.json",
+        "green/targeted_tests.log",
         "regression/full-regression.log"
       ],
       "evidence_sha256": {
+        "native-witnesses/late-search-performance/native-output.json": "c3c9424756a5a4cdebf5d0784adca69902b311d6c8b0e01c5ed8962571a41d3f",
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf",
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
@@ -779,20 +789,20 @@
       "applicability": "APPLICABLE",
       "verification_method": "CMake release build & SHA-256 match against 115ce284",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "2219f2cb194eadf16e426b9a26fa897675103c2f",
       "expected_result": "3fa35111acd7e7527a80bae6b0caa6d51d1e283d9848747a62c2517d696d1876 (970632 bytes)",
       "observed_result": "Bit-for-bit preserved and verified in R2.1 without rebuild",
       "evidence_paths": [
         "tests/native/rapidflow_apx_engines/build-r2-candidate/rapidflow_apx_native",
-        "r21-preflight.json"
+        "r211-preflight.json"
       ],
       "evidence_sha256": {
         "tests/native/rapidflow_apx_engines/build-r2-candidate/rapidflow_apx_native": "3fa35111acd7e7527a80bae6b0caa6d51d1e283d9848747a62c2517d696d1876",
-        "r21-preflight.json": "0189e9cebbc8afa03dbf8737919a8398d228b29199b3739a012a2583e545dc8b"
+        "r211-preflight.json": "a55a6e418a6501aaca569b2ced55d9f26b8adb66f25fe450f7c074a27416a732"
       },
       "status": "PASS",
       "remaining_limitation": null,
-      "verification_basis": "CURRENT_TARGETED_VERIFIED"
+      "verification_basis": "STATIC_RECONCILED"
     },
     {
       "original_gate_id": "R2-I03",
@@ -825,18 +835,18 @@
       "applicability": "APPLICABLE",
       "verification_method": "refs.validate_registry on R2_CANDIDATE_BUNDLE",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
       "expected_result": "Canonical JSON matches reconstructed archive byte-for-byte",
       "observed_result": "Verified in R2.1 test_02 (SHA 40a28b4d...)",
       "evidence_paths": [
         "configs/rapidflow_apx_p4b_r2_1_candidate_registry.json",
         "candidate-reference-bundle/p4b-r2-correctness-reference-bundle.tar.gz",
-        "regression/full-regression.log"
+        "green/targeted_tests.log"
       ],
       "evidence_sha256": {
         "configs/rapidflow_apx_p4b_r2_1_candidate_registry.json": "40a28b4d963d8c652bc49ab231aa2ccb6626e3de9b4badc3b3a13a03620fe0b4",
         "candidate-reference-bundle/p4b-r2-correctness-reference-bundle.tar.gz": "8efd7c65856c675773249d19b20165106d92917af56913be3730b5a2de044464",
-        "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
       },
       "status": "PASS",
       "remaining_limitation": null,
@@ -849,14 +859,14 @@
       "applicability": "APPLICABLE",
       "verification_method": "Negative cross-bundle & provenance matrix A-N01..A-N10",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
       "expected_result": "Any binary/registry/archive swap raises BINARY/ARCHIVE/REGISTRY mismatch",
       "observed_result": "PASS in test_04_negative_matrix_a_n01_through_a_n20",
       "evidence_paths": [
-        "regression/full-regression.log"
+        "green/targeted_tests.log"
       ],
       "evidence_sha256": {
-        "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
       },
       "status": "PASS",
       "remaining_limitation": null,
@@ -933,7 +943,7 @@
       "applicability": "APPLICABLE",
       "verification_method": "Interrupted after START / after artifacts resume check",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
       "expected_result": "Fail closed with state=SESSION_INTERRUPTED and recovery=STARTED_WITHOUT_FINISH_REVIEW_REQUIRED without relaunch",
       "observed_result": "PASS in test_09_journal_interruption_tamper_and_r2_failure_mutations on R2.1.1 tested revision 9f7701b",
       "evidence_paths": [
@@ -1021,18 +1031,18 @@
       "applicability": "APPLICABLE",
       "verification_method": "run_rapidflow_apx_p4b.py --execute-primary/--diagnostic/--analyze without anchor",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
       "expected_result": "Exit 2 MEASUREMENT_NOT_AUTHORIZED, no session created",
       "observed_result": "PASS in CLI test & test_direct_cli_rejects_forged",
       "evidence_paths": [
         "green/dry_run.json",
         "green/unauth_neg_ctrl.log",
-        "regression/full-regression.log"
+        "green/targeted_tests_3b0.log"
       ],
       "evidence_sha256": {
         "green/dry_run.json": "7511aafe683da7c84852d5e408fe1a6811f2619b64b275e7897fc9a12030d308",
         "green/unauth_neg_ctrl.log": "1d603023a6021fd711f927bae396d601ebb9803cf0f6490d7e9a5ce551bf2855",
-        "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
+        "green/targeted_tests_3b0.log": "116b5385c3c9b22479d6f6dc4e94fa3e9bc193be2a6dfeaad1390d38731afbc1"
       },
       "status": "PASS",
       "remaining_limitation": null,
@@ -1105,20 +1115,20 @@
       "applicability": "APPLICABLE",
       "verification_method": "SHA-256 of 50 fixtures & manifest",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "2219f2cb194eadf16e426b9a26fa897675103c2f",
       "expected_result": "manifest sha 09c78158..., 50/50 fixtures unchanged",
       "observed_result": "0 unexpected drifts in r21-preservation-result.json",
       "evidence_paths": [
-        "configs/rapidflow_apx_p4b_manifest.json",
-        "r21-preservation-result.json"
+        "r211-preservation-result.json",
+        "configs/rapidflow_apx_p4b_manifest.json"
       ],
       "evidence_sha256": {
-        "configs/rapidflow_apx_p4b_manifest.json": "09c78158d541c22f91b48aa484e3fd5e494910c2885635de1fa79bbed1784869",
-        "r21-preservation-result.json": "88c59cefd6615571760232a28f807107cc3baee5402aecda84b344b1b7c33100"
+        "r211-preservation-result.json": "e3430f6ba4a54405e631a65d166127ba8edf3e7d9f861c0cdd642110b754da6f",
+        "configs/rapidflow_apx_p4b_manifest.json": "09c78158d541c22f91b48aa484e3fd5e494910c2885635de1fa79bbed1784869"
       },
       "status": "PASS",
       "remaining_limitation": null,
-      "verification_basis": "CURRENT_TARGETED_VERIFIED"
+      "verification_basis": "STATIC_RECONCILED"
     },
     {
       "original_gate_id": "R2-M02",
@@ -1127,20 +1137,20 @@
       "applicability": "APPLICABLE",
       "verification_method": "SHA-256 of configs/rapidflow_apx_p4b_schedule.json",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "2219f2cb194eadf16e426b9a26fa897675103c2f",
       "expected_result": "schedule sha 824d4b09...",
       "observed_result": "Preserved identically",
       "evidence_paths": [
-        "configs/rapidflow_apx_p4b_schedule.json",
-        "r21-preservation-result.json"
+        "r211-preservation-result.json",
+        "configs/rapidflow_apx_p4b_schedule.json"
       ],
       "evidence_sha256": {
-        "configs/rapidflow_apx_p4b_schedule.json": "824d4b09f31432fde355597aee877f38cae3f267b66dd658d8fc82c3cac05e6f",
-        "r21-preservation-result.json": "88c59cefd6615571760232a28f807107cc3baee5402aecda84b344b1b7c33100"
+        "r211-preservation-result.json": "e3430f6ba4a54405e631a65d166127ba8edf3e7d9f861c0cdd642110b754da6f",
+        "configs/rapidflow_apx_p4b_schedule.json": "824d4b09f31432fde355597aee877f38cae3f267b66dd658d8fc82c3cac05e6f"
       },
       "status": "PASS",
       "remaining_limitation": null,
-      "verification_basis": "CURRENT_TARGETED_VERIFIED"
+      "verification_basis": "STATIC_RECONCILED"
     },
     {
       "original_gate_id": "R2-M03",
@@ -1149,18 +1159,18 @@
       "applicability": "APPLICABLE",
       "verification_method": "SHA-256 of summarize_rapidflow_apx_p4b.py & amendment JSON",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "2219f2cb194eadf16e426b9a26fa897675103c2f",
       "expected_result": "061d90bd... & 100467a2... unchanged",
       "observed_result": "Preserved identically",
       "evidence_paths": [
-        "r21-preservation-result.json"
+        "r211-preservation-result.json"
       ],
       "evidence_sha256": {
-        "r21-preservation-result.json": "88c59cefd6615571760232a28f807107cc3baee5402aecda84b344b1b7c33100"
+        "r211-preservation-result.json": "e3430f6ba4a54405e631a65d166127ba8edf3e7d9f861c0cdd642110b754da6f"
       },
       "status": "PASS",
       "remaining_limitation": null,
-      "verification_basis": "CURRENT_TARGETED_VERIFIED"
+      "verification_basis": "STATIC_RECONCILED"
     },
     {
       "original_gate_id": "R2-M04",
@@ -1169,22 +1179,20 @@
       "applicability": "APPLICABLE",
       "verification_method": "Verify R1/P4b-3A/R2 archives, registries, binaries intact",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "2219f2cb194eadf16e426b9a26fa897675103c2f",
       "expected_result": "R1 archive 22b5245d, R1 reg a122454b, R2 tar f1dcbaff untouched",
       "observed_result": "All preserved verified",
       "evidence_paths": [
-        "configs/rapidflow_apx_p4b_correctness_registry.json",
-        "review-evidence-p4b3b0-r2.tar.gz",
-        "r21-preservation-result.json"
+        "r211-preservation-result.json",
+        "configs/rapidflow_apx_p4b_correctness_registry.json"
       ],
       "evidence_sha256": {
-        "configs/rapidflow_apx_p4b_correctness_registry.json": "a122454b3cdd5b00c221a3f3d847aea372c7e1f9889c4fb1314017c16d4e2117",
-        "review-evidence-p4b3b0-r2.tar.gz": "f1dcbaff61663e256abc95c5e74c04aa212292978b5ed642e1b9fd632c5ea50b",
-        "r21-preservation-result.json": "88c59cefd6615571760232a28f807107cc3baee5402aecda84b344b1b7c33100"
+        "r211-preservation-result.json": "e3430f6ba4a54405e631a65d166127ba8edf3e7d9f861c0cdd642110b754da6f",
+        "configs/rapidflow_apx_p4b_correctness_registry.json": "a122454b3cdd5b00c221a3f3d847aea372c7e1f9889c4fb1314017c16d4e2117"
       },
       "status": "PASS",
       "remaining_limitation": null,
-      "verification_basis": "CURRENT_TARGETED_VERIFIED"
+      "verification_basis": "STATIC_RECONCILED"
     },
     {
       "original_gate_id": "R2-M05",
@@ -1193,22 +1201,22 @@
       "applicability": "APPLICABLE",
       "verification_method": "Clean fresh extraction manifest & member verification",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "2219f2cb194eadf16e426b9a26fa897675103c2f",
       "expected_result": "Candidate bundle (8efd7c65..., 302 data members) and outer review archive verified cleanly against detached manifests",
       "observed_result": "Candidate bundle unpacked/reconstructed; R2.1 outer archive (4201ac0b..., 10577 data / 10578 total members) verified cleanly",
       "evidence_paths": [
         "candidate-reference-bundle/p4b-r2-correctness-reference-bundle.tar.gz",
-        "P4b3B0_R2_1_Independent_Review/archive-verification.json",
-        "P4b3B0_R2_1_Independent_Review/SHA256SUMS"
+        "archive-verification.json",
+        "SHA256SUMS"
       ],
       "evidence_sha256": {
         "candidate-reference-bundle/p4b-r2-correctness-reference-bundle.tar.gz": "8efd7c65856c675773249d19b20165106d92917af56913be3730b5a2de044464",
-        "P4b3B0_R2_1_Independent_Review/archive-verification.json": "d423ba5519fe487c9a8d6f7084778a5142ba0bee6ff573aec91e64494963b79c",
-        "P4b3B0_R2_1_Independent_Review/SHA256SUMS": "93c4430ac852ffb7064685cb9fcea3da016b07b3e36ae4d207bcd28bd3e45faa"
+        "archive-verification.json": "4c75be642e4f16530e303b1886ea795ae9a4d881e931611d770d251df6f88031",
+        "SHA256SUMS": "056ba62c54cc1382c30857a38655332a38c1fb11b99238f19089a39c75c21c9d"
       },
       "status": "PASS",
       "remaining_limitation": null,
-      "verification_basis": "CURRENT_TARGETED_VERIFIED"
+      "verification_basis": "STATIC_RECONCILED"
     },
     {
       "original_gate_id": "R2-N01",
@@ -1217,7 +1225,7 @@
       "applicability": "APPLICABLE",
       "verification_method": "SHA-256 & approved_envelopes=={} check",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "2219f2cb194eadf16e426b9a26fa897675103c2f",
       "expected_result": "b74e48dc..., empty {}",
       "observed_result": "Preserved empty",
       "evidence_paths": [
@@ -1228,7 +1236,7 @@
       },
       "status": "PASS",
       "remaining_limitation": null,
-      "verification_basis": "CURRENT_TARGETED_VERIFIED"
+      "verification_basis": "STATIC_RECONCILED"
     },
     {
       "original_gate_id": "R2-N02",
@@ -1237,7 +1245,7 @@
       "applicability": "APPLICABLE",
       "verification_method": "dry-run & CLI guard + session checks",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
       "expected_result": "0 official benchmark slots executed",
       "observed_result": "0 confirmatory/warmup/diagnostic official slots",
       "evidence_paths": [
@@ -1259,20 +1267,20 @@
       "applicability": "APPLICABLE",
       "verification_method": "gh issue view 38",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "2219f2cb194eadf16e426b9a26fa897675103c2f",
       "expected_result": "OPEN",
-      "observed_result": "Verified OPEN",
+      "observed_result": "Issue #38 OPEN confirmed at pre-errata snapshot (r211-preflight.json, git-state.json).",
       "evidence_paths": [
-        "r21-preflight.json",
-        "r21-github-state.json"
+        "r211-preflight.json",
+        "git-state.json"
       ],
       "evidence_sha256": {
-        "r21-preflight.json": "0189e9cebbc8afa03dbf8737919a8398d228b29199b3739a012a2583e545dc8b",
-        "r21-github-state.json": "e78b17ac543598eaa7d4e1736367bd0f031162281567c11c9afeb0bc9b228fc1"
+        "r211-preflight.json": "a55a6e418a6501aaca569b2ced55d9f26b8adb66f25fe450f7c074a27416a732",
+        "git-state.json": "1a592345b48a12aacf92323328bdcca978fd2742b9015d59c33d3d282a298981"
       },
       "status": "PASS",
       "remaining_limitation": null,
-      "verification_basis": "CURRENT_TARGETED_VERIFIED"
+      "verification_basis": "STATIC_RECONCILED"
     },
     {
       "original_gate_id": "R2-N04",
@@ -1281,20 +1289,20 @@
       "applicability": "APPLICABLE",
       "verification_method": "gh pr view 39",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "2219f2cb194eadf16e426b9a26fa897675103c2f",
       "expected_result": "OPEN, isDraft=true",
-      "observed_result": "Verified OPEN / DRAFT",
+      "observed_result": "Draft PR #39 OPEN / isDraft=true confirmed (r211-preflight.json, git-state.json).",
       "evidence_paths": [
-        "r21-preflight.json",
-        "r21-github-state.json"
+        "r211-preflight.json",
+        "git-state.json"
       ],
       "evidence_sha256": {
-        "r21-preflight.json": "0189e9cebbc8afa03dbf8737919a8398d228b29199b3739a012a2583e545dc8b",
-        "r21-github-state.json": "e78b17ac543598eaa7d4e1736367bd0f031162281567c11c9afeb0bc9b228fc1"
+        "r211-preflight.json": "a55a6e418a6501aaca569b2ced55d9f26b8adb66f25fe450f7c074a27416a732",
+        "git-state.json": "1a592345b48a12aacf92323328bdcca978fd2742b9015d59c33d3d282a298981"
       },
       "status": "PASS",
       "remaining_limitation": null,
-      "verification_basis": "CURRENT_TARGETED_VERIFIED"
+      "verification_basis": "STATIC_RECONCILED"
     },
     {
       "original_gate_id": "R2-N05",
@@ -1303,7 +1311,7 @@
       "applicability": "APPLICABLE",
       "verification_method": "Protocol approval_state & external gates",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "2219f2cb194eadf16e426b9a26fa897675103c2f",
       "expected_result": "P4B_3B_1_NOT_AUTHORIZED",
       "observed_result": "Enforced across code, CLI and docs",
       "evidence_paths": [
@@ -1318,7 +1326,7 @@
       },
       "status": "PASS",
       "remaining_limitation": null,
-      "verification_basis": "CURRENT_TARGETED_VERIFIED"
+      "verification_basis": "STATIC_RECONCILED"
     },
     {
       "original_gate_id": "R21-A01",
@@ -1329,16 +1337,16 @@
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
       "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
       "expected_result": "Candidate registry/archive mismatch on old path confirmed",
-      "observed_result": "Confirmed before edits in red_findings.json",
+      "observed_result": "Historical RED baseline reproduction on 90c059e / R2.1 review artifacts (historical R2.1 baseline evidence).",
       "evidence_paths": [
-        "red/red_findings.json"
+        "P4b3B0_R2_1_Independent_Review/red/red_findings.json"
       ],
       "evidence_sha256": {
-        "red/red_findings.json": "9ef80fa67e602ddff80e3fbf6b6234ba7dc9dea9e78ae6da2c82606c6ce1aaf0"
+        "P4b3B0_R2_1_Independent_Review/red/red_findings.json": "9ef80fa67e602ddff80e3fbf6b6234ba7dc9dea9e78ae6da2c82606c6ce1aaf0"
       },
       "status": "PASS",
       "remaining_limitation": null,
-      "verification_basis": "CURRENT_TARGETED_VERIFIED"
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R21-A02",
@@ -1347,20 +1355,22 @@
       "applicability": "APPLICABLE",
       "verification_method": "Reviewable TRUSTED_BUNDLES spec in p4b_correctness_registry.py",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "2219f2cb194eadf16e426b9a26fa897675103c2f",
       "expected_result": "13-field R2_CANDIDATE_BUNDLE locked",
       "observed_result": "Defined & enforced without self-reference",
       "evidence_paths": [
         "candidate-reference-bundle/p4b-r2-correctness-reference-bundle.tar.gz",
-        "configs/rapidflow_apx_p4b_r2_1_candidate_registry.json"
+        "configs/rapidflow_apx_p4b_r2_1_candidate_registry.json",
+        "docs/rapidflow_apx_p4b_3b0_r2_1_candidate_binding_contract.md"
       ],
       "evidence_sha256": {
         "candidate-reference-bundle/p4b-r2-correctness-reference-bundle.tar.gz": "8efd7c65856c675773249d19b20165106d92917af56913be3730b5a2de044464",
-        "configs/rapidflow_apx_p4b_r2_1_candidate_registry.json": "40a28b4d963d8c652bc49ab231aa2ccb6626e3de9b4badc3b3a13a03620fe0b4"
+        "configs/rapidflow_apx_p4b_r2_1_candidate_registry.json": "40a28b4d963d8c652bc49ab231aa2ccb6626e3de9b4badc3b3a13a03620fe0b4",
+        "docs/rapidflow_apx_p4b_3b0_r2_1_candidate_binding_contract.md": "af5d2dac4a3755e100a7ad108f2bf7a93793c1626128dad139c4a7504eac5a1f"
       },
       "status": "PASS",
       "remaining_limitation": null,
-      "verification_basis": "CURRENT_TARGETED_VERIFIED"
+      "verification_basis": "STATIC_RECONCILED"
     },
     {
       "original_gate_id": "R21-A03",
@@ -1369,16 +1379,16 @@
       "applicability": "APPLICABLE",
       "verification_method": "p4b-r2-correctness-reference-bundle.tar.gz unpacked & checked",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
       "expected_result": "302 regular artifacts + evidence-manifest match SHA 8efd7c65",
       "observed_result": "Verified in test_02 & fresh archive extraction",
       "evidence_paths": [
         "candidate-reference-bundle/p4b-r2-correctness-reference-bundle.tar.gz",
-        "regression/full-regression.log"
+        "green/targeted_tests.log"
       ],
       "evidence_sha256": {
         "candidate-reference-bundle/p4b-r2-correctness-reference-bundle.tar.gz": "8efd7c65856c675773249d19b20165106d92917af56913be3730b5a2de044464",
-        "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
       },
       "status": "PASS",
       "remaining_limitation": null,
@@ -1391,18 +1401,18 @@
       "applicability": "APPLICABLE",
       "verification_method": "refs.validate_registry on R2_CANDIDATE_BUNDLE",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
       "expected_result": "160/64/16/10, 250 entries match 40a28b4d...",
       "observed_result": "Exact byte equality verified",
       "evidence_paths": [
         "configs/rapidflow_apx_p4b_r2_1_candidate_registry.json",
         "candidate-reference-bundle/p4b-r2-correctness-reference-bundle.tar.gz",
-        "regression/full-regression.log"
+        "green/targeted_tests.log"
       ],
       "evidence_sha256": {
         "configs/rapidflow_apx_p4b_r2_1_candidate_registry.json": "40a28b4d963d8c652bc49ab231aa2ccb6626e3de9b4badc3b3a13a03620fe0b4",
         "candidate-reference-bundle/p4b-r2-correctness-reference-bundle.tar.gz": "8efd7c65856c675773249d19b20165106d92917af56913be3730b5a2de044464",
-        "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
       },
       "status": "PASS",
       "remaining_limitation": null,
@@ -1415,16 +1425,18 @@
       "applicability": "APPLICABLE",
       "verification_method": "Check all 250 entries bind 3fa35111 & 115ce284",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
       "expected_result": "100% entries bind R2 binary & C++ commit",
       "observed_result": "Verified in test_02 & validate_registry",
       "evidence_paths": [
         "configs/rapidflow_apx_p4b_r2_1_candidate_registry.json",
-        "tests/native/rapidflow_apx_engines/build-r2-candidate/rapidflow_apx_native"
+        "tests/native/rapidflow_apx_engines/build-r2-candidate/rapidflow_apx_native",
+        "green/targeted_tests.log"
       ],
       "evidence_sha256": {
         "configs/rapidflow_apx_p4b_r2_1_candidate_registry.json": "40a28b4d963d8c652bc49ab231aa2ccb6626e3de9b4badc3b3a13a03620fe0b4",
-        "tests/native/rapidflow_apx_engines/build-r2-candidate/rapidflow_apx_native": "3fa35111acd7e7527a80bae6b0caa6d51d1e283d9848747a62c2517d696d1876"
+        "tests/native/rapidflow_apx_engines/build-r2-candidate/rapidflow_apx_native": "3fa35111acd7e7527a80bae6b0caa6d51d1e283d9848747a62c2517d696d1876",
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
       },
       "status": "PASS",
       "remaining_limitation": null,
@@ -1437,14 +1449,16 @@
       "applicability": "APPLICABLE",
       "verification_method": "p4b-detached-activation-v2 + R2_CANDIDATE_BUNDLE in authorize() & production_command()",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
       "expected_result": "Binds binary/archive/registry/bundle cleanly",
       "observed_result": "Verified in test_03 & test_detached_approval",
       "evidence_paths": [
-        "regression/full-regression.log"
+        "green/targeted_tests.log",
+        "green/targeted_tests_3b0.log"
       ],
       "evidence_sha256": {
-        "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf",
+        "green/targeted_tests_3b0.log": "116b5385c3c9b22479d6f6dc4e94fa3e9bc193be2a6dfeaad1390d38731afbc1"
       },
       "status": "PASS",
       "remaining_limitation": null,
@@ -1457,16 +1471,16 @@
       "applicability": "APPLICABLE",
       "verification_method": "HISTORICAL_R1_BUNDLE validation test",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
       "expected_result": "250 R1 entries verify against DURABLE_ARCHIVE",
       "observed_result": "PASS in test_01 & test_registry_reconstructs",
       "evidence_paths": [
         "configs/rapidflow_apx_p4b_correctness_registry.json",
-        "regression/full-regression.log"
+        "green/targeted_tests.log"
       ],
       "evidence_sha256": {
         "configs/rapidflow_apx_p4b_correctness_registry.json": "a122454b3cdd5b00c221a3f3d847aea372c7e1f9889c4fb1314017c16d4e2117",
-        "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
       },
       "status": "PASS",
       "remaining_limitation": null,
@@ -1479,14 +1493,14 @@
       "applicability": "APPLICABLE",
       "verification_method": "Isolated anchor/env mock at trust boundary -> authorize -> validate_registry -> ProductionBackend -> stop_after=0",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
       "expected_result": "Reaches pre-launch boundary with 0 Popen calls",
       "observed_result": "PASS in test_03",
       "evidence_paths": [
-        "regression/full-regression.log"
+        "green/targeted_tests.log"
       ],
       "evidence_sha256": {
-        "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
       },
       "status": "PASS",
       "remaining_limitation": null,
@@ -1499,14 +1513,14 @@
       "applicability": "APPLICABLE",
       "verification_method": "20-case negative matrix A-N01..A-N20 + v1 deprecation",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
       "expected_result": "All cross-bundle/tampered/unapproved cases fail closed",
       "observed_result": "PASS in test_04_negative_matrix_a_n01_through_a_n20",
       "evidence_paths": [
-        "regression/full-regression.log"
+        "green/targeted_tests.log"
       ],
       "evidence_sha256": {
-        "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
       },
       "status": "PASS",
       "remaining_limitation": null,
@@ -1519,20 +1533,20 @@
       "applicability": "APPLICABLE",
       "verification_method": "Inspect configs/rapidflow_apx_p4b_activation_anchors.json",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "2219f2cb194eadf16e426b9a26fa897675103c2f",
       "expected_result": "approved_envelopes == {}",
       "observed_result": "SHA b74e48dc... unchanged",
       "evidence_paths": [
         "configs/rapidflow_apx_p4b_activation_anchors.json",
-        "regression/full-regression.log"
+        "r211-preflight.json"
       ],
       "evidence_sha256": {
         "configs/rapidflow_apx_p4b_activation_anchors.json": "b74e48dc8ab3ab00d31581ec944e9e8a6743dd729f63d938f3645d82e146408e",
-        "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
+        "r211-preflight.json": "a55a6e418a6501aaca569b2ced55d9f26b8adb66f25fe450f7c074a27416a732"
       },
       "status": "PASS",
       "remaining_limitation": null,
-      "verification_basis": "CURRENT_TARGETED_VERIFIED"
+      "verification_basis": "STATIC_RECONCILED"
     },
     {
       "original_gate_id": "R21-B01",
@@ -1541,18 +1555,24 @@
       "applicability": "APPLICABLE",
       "verification_method": "rapidflow_apx_r21_resource_witness (--verify-paths + P4B_CONT_01 CLI)",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
       "expected_result": "Genuine operator new -> std::bad_alloc inside B-W01..B-W04 & M2 search",
-      "observed_result": "PASS B-W01..B-W04 & CLI exit 5",
+      "observed_result": "PASS B-W01..B-W04 + B-W03b on R2.1.1 witness 86c23d79... + CLI early/late-search exit 5 through _validate_native().",
       "evidence_paths": [
         "tests/native/rapidflow_apx_engines/build-r2-candidate/rapidflow_apx_r21_resource_witness",
-        "native-resource-witnesses/cli_diag_oom.json",
-        "regression/full-regression.log"
+        "native-witnesses/verify_paths.json",
+        "native-witnesses/delete-post-callback/delete-post-callback-witness.json",
+        "native-witnesses/early-search/native-output.json",
+        "native-witnesses/late-search-diagnostic/native-output.json",
+        "green/targeted_tests.log"
       ],
       "evidence_sha256": {
-        "tests/native/rapidflow_apx_engines/build-r2-candidate/rapidflow_apx_r21_resource_witness": "fcdd9c5efd97bf59604d4d3204db03e28bb93f0b42488aa02d252b0a4aa8c7a9",
-        "native-resource-witnesses/cli_diag_oom.json": "cbc9c89d04027ab72d2d4aaf6939ae5de9396ac061b69dbf768789bee39fae9c",
-        "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
+        "tests/native/rapidflow_apx_engines/build-r2-candidate/rapidflow_apx_r21_resource_witness": "86c23d7994de4bbdd5c6aedcb7a1572a6792081faf956a25e6b7ba96f5650247",
+        "native-witnesses/verify_paths.json": "12dfb7cea88d110c578cce157e0e3e2217b747678e843f52fb5c978f84c62282",
+        "native-witnesses/delete-post-callback/delete-post-callback-witness.json": "bc840e90e5871bacb27e2b0af20a3e549102811458a15e2ab48ebbcc590c7981",
+        "native-witnesses/early-search/native-output.json": "4ef64ab140db646019e2de72aa3a1bec39939710150694b745b948b8da65924a",
+        "native-witnesses/late-search-diagnostic/native-output.json": "9a642b7a3ddb58881eeba60d1059efff21a8e9839fccfb7e0740359a4a83201e",
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
       },
       "status": "PASS",
       "remaining_limitation": null,
@@ -1565,16 +1585,18 @@
       "applicability": "APPLICABLE",
       "verification_method": "Inspect CLI witness output JSON",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
       "expected_result": "RESOURCE_EXHAUSTED, RESOURCE_LIMIT_ERROR, std::bad_alloc; timing invariant: work_units>=0 (early) / work_units>0 & neighbor_retrieval_ns>0 (late), search_ns>=neighbor_retrieval_ns, search_ns>=search_core_ns, step_total_ns>=search_ns",
-      "observed_result": "Verified in early-search (work=0, search_ns=49737, step_total_ns=56962), late-search-diagnostic (work=40, nbr_ns=2356, search_ns=101339, core_ns=98983, total_ns=112041), late-search-performance (prof absent), and historical R2.1 diagnostic (search_ns=38947)",
+      "observed_result": "Verified on witness 86c23d79...: early-search (work=0, search_ns=49737, total_ns=56962), late-search-diagnostic (work=40, nbr_ns=2356, search_ns=101339, core_ns=98983, total_ns=112041), late-search-performance (prof absent).",
       "evidence_paths": [
+        "tests/native/rapidflow_apx_engines/build-r2-candidate/rapidflow_apx_r21_resource_witness",
         "native-witnesses/early-search/native-output.json",
         "native-witnesses/late-search-diagnostic/native-output.json",
         "native-witnesses/late-search-performance/native-output.json",
         "green/targeted_tests.log"
       ],
       "evidence_sha256": {
+        "tests/native/rapidflow_apx_engines/build-r2-candidate/rapidflow_apx_r21_resource_witness": "86c23d7994de4bbdd5c6aedcb7a1572a6792081faf956a25e6b7ba96f5650247",
         "native-witnesses/early-search/native-output.json": "4ef64ab140db646019e2de72aa3a1bec39939710150694b745b948b8da65924a",
         "native-witnesses/late-search-diagnostic/native-output.json": "9a642b7a3ddb58881eeba60d1059efff21a8e9839fccfb7e0740359a4a83201e",
         "native-witnesses/late-search-performance/native-output.json": "c3c9424756a5a4cdebf5d0784adca69902b311d6c8b0e01c5ed8962571a41d3f",
@@ -1591,16 +1613,20 @@
       "applicability": "APPLICABLE",
       "verification_method": "Verify B-W01..B-W04 graph/codec/NLF/sink post-OOM",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
       "expected_result": "Zero committed mutations/tuples on failed step",
-      "observed_result": "PASS in test_05 & test_06",
+      "observed_result": "All paths B-W01..B-W04 & B-W03b PASS with exact rollback verification on witness 86c23d79... (targeted_tests.log at 9f7701b).",
       "evidence_paths": [
         "tests/native/rapidflow_apx_engines/build-r2-candidate/rapidflow_apx_r21_resource_witness",
-        "regression/full-regression.log"
+        "native-witnesses/verify_paths.json",
+        "native-witnesses/delete-post-callback/delete-post-callback-witness.json",
+        "green/targeted_tests.log"
       ],
       "evidence_sha256": {
-        "tests/native/rapidflow_apx_engines/build-r2-candidate/rapidflow_apx_r21_resource_witness": "fcdd9c5efd97bf59604d4d3204db03e28bb93f0b42488aa02d252b0a4aa8c7a9",
-        "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
+        "tests/native/rapidflow_apx_engines/build-r2-candidate/rapidflow_apx_r21_resource_witness": "86c23d7994de4bbdd5c6aedcb7a1572a6792081faf956a25e6b7ba96f5650247",
+        "native-witnesses/verify_paths.json": "12dfb7cea88d110c578cce157e0e3e2217b747678e843f52fb5c978f84c62282",
+        "native-witnesses/delete-post-callback/delete-post-callback-witness.json": "bc840e90e5871bacb27e2b0af20a3e549102811458a15e2ab48ebbcc590c7981",
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
       },
       "status": "PASS",
       "remaining_limitation": null,
@@ -1613,14 +1639,18 @@
       "applicability": "APPLICABLE",
       "verification_method": "ResourceWitnessBackend -> session() -> _validate_native()",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
       "expected_result": "CENSORED / MEMORY_LIMIT_FAILURE via shared validator",
       "observed_result": "PASS in test_06",
       "evidence_paths": [
-        "regression/full-regression.log"
+        "tests/native/rapidflow_apx_engines/build-r2-candidate/rapidflow_apx_r21_resource_witness",
+        "native-witnesses/late-search-diagnostic/native-output.json",
+        "green/targeted_tests.log"
       ],
       "evidence_sha256": {
-        "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
+        "tests/native/rapidflow_apx_engines/build-r2-candidate/rapidflow_apx_r21_resource_witness": "86c23d7994de4bbdd5c6aedcb7a1572a6792081faf956a25e6b7ba96f5650247",
+        "native-witnesses/late-search-diagnostic/native-output.json": "9a642b7a3ddb58881eeba60d1059efff21a8e9839fccfb7e0740359a4a83201e",
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
       },
       "status": "PASS",
       "remaining_limitation": null,
@@ -1633,14 +1663,14 @@
       "applicability": "APPLICABLE",
       "verification_method": "Offline session() reread on witness journal",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
       "expected_result": "Offline reread == live execution outcome",
       "observed_result": "PASS in test_06",
       "evidence_paths": [
-        "regression/full-regression.log"
+        "green/targeted_tests.log"
       ],
       "evidence_sha256": {
-        "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
       },
       "status": "PASS",
       "remaining_limitation": null,
@@ -1653,14 +1683,14 @@
       "applicability": "APPLICABLE",
       "verification_method": "analyze_p4b_ledger on VALIDATION_RESOURCE_WITNESS record",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
       "expected_result": "Rejected by confirmatory & synthetic stats analyzers",
       "observed_result": "PASS in test_06",
       "evidence_paths": [
-        "regression/full-regression.log"
+        "green/targeted_tests.log"
       ],
       "evidence_sha256": {
-        "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
       },
       "status": "PASS",
       "remaining_limitation": null,
@@ -1673,14 +1703,14 @@
       "applicability": "APPLICABLE",
       "verification_method": "test_07 8-case invalid resource matrix",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
       "expected_result": "All malformed/contradictory/relabelled witnesses INVALID",
       "observed_result": "PASS in test_07",
       "evidence_paths": [
-        "regression/full-regression.log"
+        "green/targeted_tests.log"
       ],
       "evidence_sha256": {
-        "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
       },
       "status": "PASS",
       "remaining_limitation": null,
@@ -1757,19 +1787,19 @@
       "scope": "r2_1",
       "original_requirement": "Resume/interruption scenarios verified",
       "applicability": "APPLICABLE",
-      "verification_method": "Warm-up/primary/diagnostic pauses + 20 journal fault scenarios",
+      "verification_method": "13 direct journal and evidence scenarios in test_09_journal_interruption_tamper_and_r2_failure_mutations at 9f7701b, with separately identified historical R1/R2 cross-references and inherited test_08 pause-resume checkpoints at 39396c14",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
       "expected_result": "Warm-up/primary/diagnostic pauses plus 13 direct journal/tamper/provenance/malformed scenarios and historical R1/R2 fault coverage verified",
-      "observed_result": "Durable 1450-slot pause/resume historical PASS (39396c14); 13 direct scenarios PASS in renamed test_09_journal_interruption_tamper_and_r2_failure_mutations at 9f7701b",
+      "observed_result": "13 direct journal/tamper/provenance/malformed scenarios PASS in test_09 at 9f7701b; durable 1,450-slot pause/resume stops (9, 205, 1450) inherited from historical test_08 at 39396c14.",
       "evidence_paths": [
-        "historical-evidence-projections/r21_simulation_summary.json",
         "green/targeted_tests.log",
+        "historical-evidence-projections/r21_simulation_summary.json",
         "regression/full-regression.log"
       ],
       "evidence_sha256": {
-        "historical-evidence-projections/r21_simulation_summary.json": "d8ad5e15c608e7f6f635a268518676481cc27d3b97e2a777ca4ad02cd742f142",
         "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf",
+        "historical-evidence-projections/r21_simulation_summary.json": "d8ad5e15c608e7f6f635a268518676481cc27d3b97e2a777ca4ad02cd742f142",
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
@@ -1894,16 +1924,16 @@
       "applicability": "APPLICABLE",
       "verification_method": "Programmatic inventory of R2-A01..R2-N05",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "2219f2cb194eadf16e426b9a26fa897675103c2f",
       "expected_result": "59 unique R2 technical gates present & individually mapped",
       "observed_result": "59 / 59 mapped cleanly",
       "evidence_paths": [
-        "docs/rapidflow_apx_p4b_3b0_r2_acceptance_matrix.json",
-        "findings-register.json"
+        "docs/rapidflow_apx_p4b_3b0_r2_1_1_acceptance_matrix.json",
+        "r211-preservation-result.json"
       ],
       "evidence_sha256": {
-        "docs/rapidflow_apx_p4b_3b0_r2_acceptance_matrix.json": "f1cc00154b7dcbd7872cc951d98ce7678137f62cbfc1841a5fcacb546db150d8",
-        "findings-register.json": "bb737d5da380bb1303f91f5122b6ddf4514bda8b1c9f8e22e1d39c8f2cec18a5"
+        "docs/rapidflow_apx_p4b_3b0_r2_1_1_acceptance_matrix.json": "b9f272e7fb897e8d2efbe02a3e5eb437ac1192b1f811f87f4acb13979d50230e",
+        "r211-preservation-result.json": "e3430f6ba4a54405e631a65d166127ba8edf3e7d9f861c0cdd642110b754da6f"
       },
       "status": "PASS",
       "remaining_limitation": null,
@@ -1916,16 +1946,16 @@
       "applicability": "APPLICABLE",
       "verification_method": "Automated check requiring non-empty evidence_paths/hashes or verified report",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "2219f2cb194eadf16e426b9a26fa897675103c2f",
       "expected_result": "All technical PASS rows cite verified artifacts",
       "observed_result": "Verified",
       "evidence_paths": [
-        "findings-register.json",
-        "candidate-reference-bundle/p4b-r2-correctness-reference-bundle.tar.gz"
+        "docs/rapidflow_apx_p4b_3b0_r2_1_1_acceptance_matrix.json",
+        "r211-preservation-result.json"
       ],
       "evidence_sha256": {
-        "findings-register.json": "bb737d5da380bb1303f91f5122b6ddf4514bda8b1c9f8e22e1d39c8f2cec18a5",
-        "candidate-reference-bundle/p4b-r2-correctness-reference-bundle.tar.gz": "8efd7c65856c675773249d19b20165106d92917af56913be3730b5a2de044464"
+        "docs/rapidflow_apx_p4b_3b0_r2_1_1_acceptance_matrix.json": "b9f272e7fb897e8d2efbe02a3e5eb437ac1192b1f811f87f4acb13979d50230e",
+        "r211-preservation-result.json": "e3430f6ba4a54405e631a65d166127ba8edf3e7d9f861c0cdd642110b754da6f"
       },
       "status": "PASS",
       "remaining_limitation": null,
@@ -1938,16 +1968,16 @@
       "applicability": "APPLICABLE",
       "verification_method": "Status discipline check",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "2219f2cb194eadf16e426b9a26fa897675103c2f",
       "expected_result": "Only directly verified gates marked PASS",
       "observed_result": "Verified",
       "evidence_paths": [
-        "findings-register.json",
-        "r21-preservation-result.json"
+        "docs/rapidflow_apx_p4b_3b0_r2_1_1_acceptance_matrix.json",
+        "r211-preservation-result.json"
       ],
       "evidence_sha256": {
-        "findings-register.json": "bb737d5da380bb1303f91f5122b6ddf4514bda8b1c9f8e22e1d39c8f2cec18a5",
-        "r21-preservation-result.json": "88c59cefd6615571760232a28f807107cc3baee5402aecda84b344b1b7c33100"
+        "docs/rapidflow_apx_p4b_3b0_r2_1_1_acceptance_matrix.json": "b9f272e7fb897e8d2efbe02a3e5eb437ac1192b1f811f87f4acb13979d50230e",
+        "r211-preservation-result.json": "e3430f6ba4a54405e631a65d166127ba8edf3e7d9f861c0cdd642110b754da6f"
       },
       "status": "PASS",
       "remaining_limitation": null,
@@ -1960,7 +1990,7 @@
       "applicability": "APPLICABLE",
       "verification_method": "Check external_approval_gates array",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "2219f2cb194eadf16e426b9a26fa897675103c2f",
       "expected_result": "Independent Acceptance & Coordinator Authorization = PENDING_EXTERNAL_APPROVAL",
       "observed_result": "Verified",
       "evidence_paths": [
@@ -2044,20 +2074,20 @@
       "applicability": "APPLICABLE",
       "verification_method": "sha256sum comparison before/after R2.1 edits",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "2219f2cb194eadf16e426b9a26fa897675103c2f",
       "expected_result": "3fa35111acd7e7527a80bae6b0caa6d51d1e283d9848747a62c2517d696d1876 unchanged",
       "observed_result": "Zero production native source edits; hash identical",
       "evidence_paths": [
-        "tests/native/rapidflow_apx_engines/build-r2-candidate/rapidflow_apx_native",
-        "r21-preflight.json"
+        "r211-preservation-result.json",
+        "tests/native/rapidflow_apx_engines/build-r2-candidate/rapidflow_apx_native"
       ],
       "evidence_sha256": {
-        "tests/native/rapidflow_apx_engines/build-r2-candidate/rapidflow_apx_native": "3fa35111acd7e7527a80bae6b0caa6d51d1e283d9848747a62c2517d696d1876",
-        "r21-preflight.json": "0189e9cebbc8afa03dbf8737919a8398d228b29199b3739a012a2583e545dc8b"
+        "r211-preservation-result.json": "e3430f6ba4a54405e631a65d166127ba8edf3e7d9f861c0cdd642110b754da6f",
+        "tests/native/rapidflow_apx_engines/build-r2-candidate/rapidflow_apx_native": "3fa35111acd7e7527a80bae6b0caa6d51d1e283d9848747a62c2517d696d1876"
       },
       "status": "PASS",
       "remaining_limitation": null,
-      "verification_basis": "CURRENT_TARGETED_VERIFIED"
+      "verification_basis": "STATIC_RECONCILED"
     },
     {
       "original_gate_id": "R21-E05",
@@ -2066,24 +2096,18 @@
       "applicability": "APPLICABLE",
       "verification_method": "r21-preservation-result.json byte comparison",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "2219f2cb194eadf16e426b9a26fa897675103c2f",
       "expected_result": "0 unexpected drifts across protocol, manifest, schedule, 50 fixtures",
       "observed_result": "Verified unchanged",
       "evidence_paths": [
-        "r21-preservation-result.json",
-        "configs/rapidflow_apx_p4b_manifest.json",
-        "configs/rapidflow_apx_p4b_schedule.json",
-        "configs/rapidflow_apx_p4b_protocol.json"
+        "r211-preservation-result.json"
       ],
       "evidence_sha256": {
-        "r21-preservation-result.json": "88c59cefd6615571760232a28f807107cc3baee5402aecda84b344b1b7c33100",
-        "configs/rapidflow_apx_p4b_manifest.json": "09c78158d541c22f91b48aa484e3fd5e494910c2885635de1fa79bbed1784869",
-        "configs/rapidflow_apx_p4b_schedule.json": "824d4b09f31432fde355597aee877f38cae3f267b66dd658d8fc82c3cac05e6f",
-        "configs/rapidflow_apx_p4b_protocol.json": "70836770663c32a1a53e52e048be1dd8268fd2e3f02f66859737eef308c4acbb"
+        "r211-preservation-result.json": "e3430f6ba4a54405e631a65d166127ba8edf3e7d9f861c0cdd642110b754da6f"
       },
       "status": "PASS",
       "remaining_limitation": null,
-      "verification_basis": "CURRENT_TARGETED_VERIFIED"
+      "verification_basis": "STATIC_RECONCILED"
     },
     {
       "original_gate_id": "R21-E06",
@@ -2092,20 +2116,20 @@
       "applicability": "APPLICABLE",
       "verification_method": "Verify P4a, P4b-3A-R1, P4b-3B0-R1, P4b-3B0-R2 archives",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "2219f2cb194eadf16e426b9a26fa897675103c2f",
       "expected_result": "All SHA-256 unchanged",
       "observed_result": "Verified unchanged",
       "evidence_paths": [
-        "r21-preservation-result.json",
-        "review-evidence-p4b3b0-r2.tar.gz"
+        "r211-preservation-result.json",
+        "configs/rapidflow_apx_p4b_correctness_registry.json"
       ],
       "evidence_sha256": {
-        "r21-preservation-result.json": "88c59cefd6615571760232a28f807107cc3baee5402aecda84b344b1b7c33100",
-        "review-evidence-p4b3b0-r2.tar.gz": "f1dcbaff61663e256abc95c5e74c04aa212292978b5ed642e1b9fd632c5ea50b"
+        "r211-preservation-result.json": "e3430f6ba4a54405e631a65d166127ba8edf3e7d9f861c0cdd642110b754da6f",
+        "configs/rapidflow_apx_p4b_correctness_registry.json": "a122454b3cdd5b00c221a3f3d847aea372c7e1f9889c4fb1314017c16d4e2117"
       },
       "status": "PASS",
       "remaining_limitation": null,
-      "verification_basis": "CURRENT_TARGETED_VERIFIED"
+      "verification_basis": "STATIC_RECONCILED"
     },
     {
       "original_gate_id": "R21-E07",
@@ -2114,9 +2138,9 @@
       "applicability": "APPLICABLE",
       "verification_method": "Fresh clean extraction verifying manifest, hashes, sizes, paths",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "a7cbbd24c4ae3a0239501b1e76b84a7b3cf81926",
       "expected_result": "R2.1 outer archive (10577 data members, 10578 total, 205039363 bytes, 0 errors) verified via detached verification record",
-      "observed_result": "Detached archive-verification.json & SHA256SUMS confirm clean extraction PASS on review-evidence-p4b3b0-r2-1.tar.gz (4201ac0b...)",
+      "observed_result": "Historical R2.1 archive review-evidence-p4b3b0-r2-1.tar.gz (4201ac0b...) verified PASS at a7cbbd2 (and R2.1.1 delta archive b2ef3b52... verified separately in R211-F07).",
       "evidence_paths": [
         "P4b3B0_R2_1_Independent_Review/archive-verification.json",
         "P4b3B0_R2_1_Independent_Review/SHA256SUMS",
@@ -2129,7 +2153,7 @@
       },
       "status": "PASS",
       "remaining_limitation": null,
-      "verification_basis": "CURRENT_TARGETED_VERIFIED"
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R21-E08",
@@ -2138,7 +2162,7 @@
       "applicability": "APPLICABLE",
       "verification_method": "CLI dry-run & negative control checks",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
       "expected_result": "0 official benchmark slots launched",
       "observed_result": "Verified",
       "evidence_paths": [
@@ -2160,18 +2184,20 @@
       "applicability": "APPLICABLE",
       "verification_method": "gh pr view 39 & gh issue view 38",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
-      "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+      "tested_revision": "2219f2cb194eadf16e426b9a26fa897675103c2f",
       "expected_result": "PR #39 OPEN/DRAFT; Issue #38 OPEN",
-      "observed_result": "Verified",
+      "observed_result": "Draft PR #39 OPEN/DRAFT and Issue #38 OPEN verified cleanly.",
       "evidence_paths": [
-        "r21-github-state.json"
+        "r211-preflight.json",
+        "git-state.json"
       ],
       "evidence_sha256": {
-        "r21-github-state.json": "e78b17ac543598eaa7d4e1736367bd0f031162281567c11c9afeb0bc9b228fc1"
+        "r211-preflight.json": "a55a6e418a6501aaca569b2ced55d9f26b8adb66f25fe450f7c074a27416a732",
+        "git-state.json": "1a592345b48a12aacf92323328bdcca978fd2742b9015d59c33d3d282a298981"
       },
       "status": "PASS",
       "remaining_limitation": null,
-      "verification_basis": "CURRENT_TARGETED_VERIFIED"
+      "verification_basis": "STATIC_RECONCILED"
     }
   ],
   "errata_lineage": {
@@ -2179,11 +2205,13 @@
     "historical_r2_1_matrix_sha256": "ac545baa550837df4df0e4767b0f980b4185fe44f42ace836746fb93df5fb609",
     "historical_r2_1_tested_logic_commit": "39396c1463c2feabfd53cf7ee5480060755a4b47",
     "r2_1_1_targeted_tested_commit": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
-    "note": "Post-review errata closure for R21-AUD-03 (R21-C02 call accounting, R21-B02 timer invariant, R2-J04 recovery literal, R21-C04 13-scenario reconciliation, R2-M05/R21-E07 detached archive verification, and gate verification_basis classification)."
+    "note": "Post-review errata closure for R21-AUD-03 (R21-C02 call accounting, R21-B02 timer invariant, R2-J04 recovery literal, R21-C04 13-scenario reconciliation, R2-M05/R21-E07 detached archive verification, and gate verification_basis classification).",
+    "final_technical_review_reconciliation_commit": "FINAL_DOCS_ERRATA_CLOSURE_PENDING_COMMIT",
+    "final_reconciliation_note": "R211-AUD-03 closure: reclassified pure hash/git/preservation/anchor/static checks as STATIC_RECONCILED, reverted un-rerun R2/R2.1 gates (R2-F01, R2-F03, R2-G01..G03, R21-A01, R21-E07) to HISTORICAL_RUNTIME_VERIFIED, rebound current R2.1.1 targeted runtime gates to 9f7701b with witness 86c23d79... and targeted_tests.log, and updated R21-C04 wording to distinguish 13 direct scenarios from historical R1/R2 cross-references."
   },
   "verification_basis_counts": {
-    "CURRENT_TARGETED_VERIFIED": 55,
-    "HISTORICAL_RUNTIME_VERIFIED": 39,
-    "STATIC_RECONCILED": 4
+    "STATIC_RECONCILED": 24,
+    "HISTORICAL_RUNTIME_VERIFIED": 46,
+    "CURRENT_TARGETED_VERIFIED": 28
   }
 }

@@ -127,10 +127,14 @@
       "expected_result": "Matches 115ce2844d91f6a6588fe0ac50b1179bc3b38012",
       "actual_result": "Updated docs match CANDIDATE_REPLAY_REV and 250/250 rows",
       "evidence_paths": [
-        "red/red_findings.json"
+        "docs/rapidflow_apx_p4b_3b0_r2_1_candidate_binding_contract.md",
+        "configs/rapidflow_apx_p4b_r2_1_candidate_registry.json",
+        "green/targeted_tests.log"
       ],
       "evidence_sha256": {
-        "red/red_findings.json": "f320ac342e02ead9cb5845832abb2544a57a16609c88df3ba74cd08a8cc2b2d4"
+        "docs/rapidflow_apx_p4b_3b0_r2_1_candidate_binding_contract.md": "af5d2dac4a3755e100a7ad108f2bf7a93793c1626128dad139c4a7504eac5a1f",
+        "configs/rapidflow_apx_p4b_r2_1_candidate_registry.json": "40a28b4d963d8c652bc49ab231aa2ccb6626e3de9b4badc3b3a13a03620fe0b4",
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
       },
       "status": "PASS",
       "limitations": null
@@ -143,10 +147,10 @@
       "expected_result": "Distinguish native build, registered replay rev, R2/R2.1 tested commits",
       "actual_result": "Explicit three-role provenance distinction added",
       "evidence_paths": [
-        "red/red_findings.json"
+        "docs/rapidflow_apx_p4b_3b0_r2_1_candidate_binding_contract.md"
       ],
       "evidence_sha256": {
-        "red/red_findings.json": "f320ac342e02ead9cb5845832abb2544a57a16609c88df3ba74cd08a8cc2b2d4"
+        "docs/rapidflow_apx_p4b_3b0_r2_1_candidate_binding_contract.md": "af5d2dac4a3755e100a7ad108f2bf7a93793c1626128dad139c4a7504eac5a1f"
       },
       "status": "PASS",
       "limitations": null
@@ -207,14 +211,14 @@
       "verification_method": "B-W03b in r21_resource_witness.cpp + test_03",
       "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
       "expected_result": "PASS post-callback DELETE witness",
-      "actual_result": "PASS in --verify-paths, CLI delete-post-callback & test_03",
+      "actual_result": "PASS in --verify-paths (B-W03b), CLI delete-post-callback, and r2_1_1::test_03 on current witness binary rapidflow_apx_r21_resource_witness (SHA-256 86c23d7994de4bbdd5c6aedcb7a1572a6792081faf956a25e6b7ba96f5650247, 875928 bytes, measurement_eligible=false).",
       "evidence_paths": [
-        "tests/native/rapidflow_apx_engines/build/rapidflow_apx_r21_resource_witness",
+        "tests/native/rapidflow_apx_engines/build-r2-candidate/rapidflow_apx_r21_resource_witness",
         "native-witnesses/delete-post-callback/delete-post-callback-witness.json",
         "green/targeted_tests.log"
       ],
       "evidence_sha256": {
-        "tests/native/rapidflow_apx_engines/build/rapidflow_apx_r21_resource_witness": "86c23d7994de4bbdd5c6aedcb7a1572a6792081faf956a25e6b7ba96f5650247",
+        "tests/native/rapidflow_apx_engines/build-r2-candidate/rapidflow_apx_r21_resource_witness": "86c23d7994de4bbdd5c6aedcb7a1572a6792081faf956a25e6b7ba96f5650247",
         "native-witnesses/delete-post-callback/delete-post-callback-witness.json": "bc840e90e5871bacb27e2b0af20a3e549102811458a15e2ab48ebbcc590c7981",
         "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
       },
@@ -541,10 +545,10 @@
       "expected_result": "Matches p4b_correctness_registry.py:122",
       "actual_result": "Corrected & cross-checked related identifiers",
       "evidence_paths": [
-        "red/red_findings.json"
+        "docs/rapidflow_apx_p4b_3b0_r2_1_candidate_binding_contract.md"
       ],
       "evidence_sha256": {
-        "red/red_findings.json": "f320ac342e02ead9cb5845832abb2544a57a16609c88df3ba74cd08a8cc2b2d4"
+        "docs/rapidflow_apx_p4b_3b0_r2_1_candidate_binding_contract.md": "af5d2dac4a3755e100a7ad108f2bf7a93793c1626128dad139c4a7504eac5a1f"
       },
       "status": "PASS",
       "limitations": null
@@ -773,10 +777,12 @@
       "expected_result": "All SOURCE_PATHS cleanly hashed; zero non-docs drift",
       "actual_result": "Verified after docs commit (see closure report)",
       "evidence_paths": [
-        "r211-test-impact-analysis.json"
+        "activation-contract/source_state_verified.json",
+        "docs/rapidflow_apx_p4b_3b0_r2_1_1_closure_report.md"
       ],
       "evidence_sha256": {
-        "r211-test-impact-analysis.json": "03efa071d7bca6db3633ea3be99e6ee3af26f7966cc962f4b489377af9800dd0"
+        "activation-contract/source_state_verified.json": "4fde0f5462fdd4ee2171de583c2e1ab427715b52557b1c8efa9698b35d74a003",
+        "docs/rapidflow_apx_p4b_3b0_r2_1_1_closure_report.md": "82f2ff288e15f699701de853add75ba905195bf645a4a1d1f6bb1621f4ae3c85"
       },
       "status": "PASS",
       "limitations": null
@@ -789,10 +795,14 @@
       "expected_result": "0 missing/extra/duplicate/unsafe/hash mismatch",
       "actual_result": "Verified via detached archive-verification.json & SHA256SUMS",
       "evidence_paths": [
-        "r211-test-impact-analysis.json"
+        "archive-verification.json",
+        "SHA256SUMS",
+        "review-evidence-p4b3b0-r2-1-1.tar.gz"
       ],
       "evidence_sha256": {
-        "r211-test-impact-analysis.json": "03efa071d7bca6db3633ea3be99e6ee3af26f7966cc962f4b489377af9800dd0"
+        "archive-verification.json": "4c75be642e4f16530e303b1886ea795ae9a4d881e931611d770d251df6f88031",
+        "SHA256SUMS": "056ba62c54cc1382c30857a38655332a38c1fb11b99238f19089a39c75c21c9d",
+        "review-evidence-p4b3b0-r2-1-1.tar.gz": "b2ef3b52f9a1fc077744ab3c2ed599b770e437dd78ebae7474836e0c46990e55"
       },
       "status": "PASS",
       "limitations": null
@@ -895,9 +905,11 @@
       "expected_result": "OPEN, isDraft=true",
       "actual_result": "Verified OPEN / isDraft=true",
       "evidence_paths": [
+        "git-state.json",
         "r211-preflight.json"
       ],
       "evidence_sha256": {
+        "git-state.json": "1a592345b48a12aacf92323328bdcca978fd2742b9015d59c33d3d282a298981",
         "r211-preflight.json": "a55a6e418a6501aaca569b2ced55d9f26b8adb66f25fe450f7c074a27416a732"
       },
       "status": "PASS",
@@ -911,9 +923,11 @@
       "expected_result": "OPEN",
       "actual_result": "Verified OPEN",
       "evidence_paths": [
+        "git-state.json",
         "r211-preflight.json"
       ],
       "evidence_sha256": {
+        "git-state.json": "1a592345b48a12aacf92323328bdcca978fd2742b9015d59c33d3d282a298981",
         "r211-preflight.json": "a55a6e418a6501aaca569b2ced55d9f26b8adb66f25fe450f7c074a27416a732"
       },
       "status": "PASS",
