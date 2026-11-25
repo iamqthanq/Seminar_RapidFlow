@@ -108,6 +108,9 @@ class NativeBackend:
 
     def execute(self, slot, entry, path):
         self.authorize(slot)
+        require(entry["workload_id"] == slot["workload_id"], "INVOCATION_WORKLOAD_MISMATCH")
+        if self.origin == NativeBackend.origin:
+            require(entry["fixture_sha256"] == p4b.BOUNDED_FIXTURE_SHA256, "WITNESS_FIXTURE_MISMATCH")
         out = p4b.execute_p4b_native_slot(
             self.binary, p4b.REPO_ROOT / entry["fixture_path"], slot["variant_id"],
             slot["execution_purpose"], path / "native-output.json",
@@ -121,6 +124,7 @@ class NativeBackend:
                 "save_streams": lambda out, err: (
                     publish(path / "stdout.log", out), publish(path / "stderr.log", err)),
             },
+            production_attempt=self if self.origin == ProductionBackend.origin else None,
         )
         return {k: v for k, v in out.items() if k not in ("output_data", "raw_stdout", "raw_stderr")}
 
@@ -137,6 +141,19 @@ class ProductionBackend(NativeBackend):
                 and held["identity"]["activation_sha256"] == self.context.digest,
                 "PRODUCTION_START_IDENTITY_MISMATCH")
         return super().execute(slot, entry, path)
+
+    def verify_launch(self, binary, fixture, fixture_sha, variant, purpose, output, limits):
+        active = getattr(self, "_active_attempt", None)
+        if active is None:
+            raise p4b.AuthorizationBlockedError("PRODUCTION_LAUNCH_OUTSIDE_ACTIVE_SESSION")
+        slot, entry, path = active
+        self.authorize(slot)
+        expected_limits = tuple(self.policy[key] for key in (
+            "wall_timeout_seconds", "address_space_limit_mib", "logical_work_cap", "max_nlf_memory_mib"))
+        expected = (self.binary, p4b.REPO_ROOT / entry["fixture_path"], entry["fixture_sha256"],
+                    slot["variant_id"], slot["execution_purpose"], path / "native-output.json", expected_limits)
+        if (binary, fixture, fixture_sha, variant, purpose, output, limits) != expected:
+            raise p4b.AuthorizationBlockedError("PRODUCTION_INVOCATION_DOES_NOT_MATCH_ACTIVE_ATTEMPT")
 
     def authorize(self, slot):
         if type(self.context) is not auth.Activation:

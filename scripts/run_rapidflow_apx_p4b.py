@@ -60,6 +60,11 @@ LEDGER_SCHEMA_VERSION = "p4b-ledger-v1.0"
 PROTOCOL_VERSION = "1.0.0"
 PROTOCOL_SHA256 = "70836770663c32a1a53e52e048be1dd8268fd2e3f02f66859737eef308c4acbb"
 NATIVE_SHA256 = "f02e6ff99c707407d88fa16ebd370e9c43d4359b8192247e394b95cd607d3d75"
+BOUNDED_FIXTURE_SHA256 = "e72dfe854a22f327d32cc73c5aa1149b8009b4414d56d1621fb919b476841ca3"
+BOUNDED_MEASUREMENT_VARIANTS = {
+    "performance": frozenset({"BARE", "A_STATIC", "A_RESIDUAL", "B_MERGE"}),
+    "diagnostic": frozenset({"BARE", "B_MERGE"}),
+}
 NATIVE_SOURCE_COMMIT = "97d8636b9567d53d3e083c48d61b46feb40ae540"
 SCHEDULE_SESSION = "P4B_PLANNED_SESSION_01"
 
@@ -503,6 +508,7 @@ def execute_p4b_native_slot(
     expected_binary_sha256: Optional[str] = None,
     expected_fixture_sha256: Optional[str] = None,
     evidence=None,
+    production_attempt=None,
 ) -> Dict[str, Any]:
     """
     Execute one P4b slot on the frozen fixture bytes directly using POSIX wait4 rusage
@@ -516,6 +522,16 @@ def execute_p4b_native_slot(
     vspec = ALL_VARIANTS[variant_id]
     fixture_bytes = fixture_path.read_bytes()
     fixture_sha = sha256_bytes(fixture_bytes)
+    if production_attempt is not None:
+        from scripts.p4b_experiment_session import ProductionBackend
+        if type(production_attempt) is not ProductionBackend:
+            raise AuthorizationBlockedError("VERIFIED_PRODUCTION_CONTEXT_REQUIRED")
+        production_attempt.verify_launch(binary_path, fixture_path, fixture_sha, variant_id, execution_purpose,
+                                         output_path, (timeout_s, as_limit_mib, max_work, max_nlf_memory_mib))
+    elif execution_purpose != "correctness" and (
+        fixture_sha != BOUNDED_FIXTURE_SHA256 or variant_id not in BOUNDED_MEASUREMENT_VARIANTS[execution_purpose]
+    ):
+        raise AuthorizationBlockedError("MEASUREMENT_NOT_AUTHORIZED: fixture or variant outside bounded inventory")
     if expected_fixture_sha256 is not None and fixture_sha != expected_fixture_sha256:
         raise LedgerIntegrityError("WORKLOAD_HASH_MISMATCH")
     binary_sha = compute_sha256(binary_path)

@@ -61,6 +61,24 @@ class TestP4b3b0(unittest.TestCase):
                 stats.analyze_p4b_ledger(result["records"])
             spawn.assert_not_called()
 
+        outside = next(entry for entry in self.manifest["workloads"] if entry["workload_id"] != exp.BOUNDED_CASE)
+        fixture = runner.REPO_ROOT / outside["fixture_path"]
+        with tempfile.TemporaryDirectory() as tmp, patch.object(runner.subprocess, "Popen") as child:
+            output = Path(tmp) / "native.json"
+            for purpose in ("performance", "diagnostic"):
+                with self.subTest(purpose=purpose), self.assertRaisesRegex(
+                    runner.AuthorizationBlockedError, "outside bounded inventory"
+                ):
+                    runner.execute_p4b_native_slot(runner.DEFAULT_BINARY_PATH, fixture, "BARE", purpose, output)
+            with self.assertRaisesRegex(runner.AuthorizationBlockedError, "OUTSIDE_ACTIVE_SESSION"):
+                runner.execute_p4b_native_slot(runner.DEFAULT_BINARY_PATH, fixture, "BARE", "performance", output,
+                                               production_attempt=adapter)
+            with self.assertRaisesRegex(runner.AuthorizationBlockedError, "VERIFIED_PRODUCTION_CONTEXT_REQUIRED"):
+                runner.execute_p4b_native_slot(runner.DEFAULT_BINARY_PATH, fixture, "BARE", "performance", output,
+                                               production_attempt=object())
+            self.assertFalse(output.exists())
+            child.assert_not_called()
+
     def test_recovery_boundaries_never_relaunch_pending_attempt(self):
         checkpoints = ("before_start", "after_start", "before_launch", "after_exit", "after_raw",
                        "before_validation", "before_publication", "before_finish", "after_finish", "before_resume")
@@ -349,6 +367,12 @@ execute_p4b_native_slot(binary, fixture, "BARE", "correctness", base/"unused.jso
             def fake(binary, fixture, variant, purpose, dest, **kwargs):
                 slot = plan[0]
                 ref = ref_map[slot["workload_id"], variant]
+                limits = tuple(kwargs[name] for name in ("timeout_s", "as_limit_mib", "max_work", "max_nlf_memory_mib"))
+                adapter = kwargs["production_attempt"]
+                adapter.verify_launch(binary, fixture, ref["fixture_sha256"], variant, purpose, dest, limits)
+                for modified in (("f" * 64, dest), (ref["fixture_sha256"], dest.with_name("wrong.json"))):
+                    with self.assertRaisesRegex(runner.AuthorizationBlockedError, "DOES_NOT_MATCH_ACTIVE_ATTEMPT"):
+                        adapter.verify_launch(binary, fixture, modified[0], variant, purpose, modified[1], limits)
                 output = runner.load_json_bytes(refs.read_reference(store, ref))
                 output.update(execution_purpose=purpose, deep_diagnostics_enabled=False)
                 for step in output["steps"]:
