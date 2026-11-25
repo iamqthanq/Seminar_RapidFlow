@@ -30,7 +30,8 @@ enum class StepStatus {
     CALLBACK_ABORTED,
     FAULT_INJECTED,
     REENTRANCY_BLOCKED,
-    INVARIANT_VIOLATION
+    INVARIANT_VIOLATION,
+    RESOURCE_EXHAUSTED
 };
 
 inline const char* step_status_to_string(StepStatus s) {
@@ -41,6 +42,7 @@ inline const char* step_status_to_string(StepStatus s) {
         case StepStatus::FAULT_INJECTED: return "FAULT_INJECTED";
         case StepStatus::REENTRANCY_BLOCKED: return "REENTRANCY_BLOCKED";
         case StepStatus::INVARIANT_VIOLATION: return "INVARIANT_VIOLATION";
+        case StepStatus::RESOURCE_EXHAUSTED: return "RESOURCE_EXHAUSTED";
     }
     return "UNKNOWN";
 }

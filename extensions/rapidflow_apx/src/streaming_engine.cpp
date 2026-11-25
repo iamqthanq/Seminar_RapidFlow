@@ -2,6 +2,38 @@
 
 namespace rapidflow_apx {
 
+namespace {
+class SearchTimingGuard {
+public:
+    SearchTimingGuard(StepProfiling& prof, bool enabled) noexcept
+        : prof_(prof),
+          enabled_(enabled),
+          t0_(enabled ? ProfilingClock::now() : ProfilingTimePoint{}) {}
+
+    SearchTimingGuard(const SearchTimingGuard&) = delete;
+    SearchTimingGuard& operator=(const SearchTimingGuard&) = delete;
+
+    ~SearchTimingGuard() noexcept {
+        if (enabled_) {
+            const auto dt = std::chrono::duration_cast<ProfilingNanoseconds>(
+                ProfilingClock::now() - t0_
+            ).count();
+            prof_.search_ns = dt > 0 ? static_cast<uint64_t>(dt) : 0ULL;
+            if (prof_.search_ns >= prof_.neighbor_retrieval_ns) {
+                prof_.search_core_ns = prof_.search_ns - prof_.neighbor_retrieval_ns;
+            } else {
+                prof_.search_core_ns = 0ULL;
+            }
+        }
+    }
+
+private:
+    StepProfiling& prof_;
+    bool enabled_;
+    ProfilingTimePoint t0_;
+};
+} // namespace
+
 ApxStreamingEngine::ApxStreamingEngine(
     ApxAuthoritativeGraph& graph,
     ApxTypedCodec& codec,
@@ -161,10 +193,7 @@ StreamStepResult ApxStreamingEngine::execute_step(const UpdateOperation& update,
 
         try {
             StepProfiling* prof_ptr = profiling_enabled_ ? &step_prof : nullptr;
-            ProfilingTimePoint search_t0;
-            if (profiling_enabled_) {
-                search_t0 = ProfilingClock::now();
-            }
+            SearchTimingGuard search_timing(step_prof, profiling_enabled_);
             if (engine_type_ == EngineType::M1) {
                 m1_engine_.search_event(query_plan_, snapshot, du, dv, dlbl, sink_, step_counters_, prof_ptr);
             } else {
@@ -173,17 +202,8 @@ StreamStepResult ApxStreamingEngine::execute_step(const UpdateOperation& update,
                     effective_nlf_mode_, nlf_index_.get(), &query_signatures_, neighbor_mode_
                 );
             }
-            if (profiling_enabled_) {
-                auto search_t1 = ProfilingClock::now();
-                step_prof.search_ns = std::chrono::duration_cast<ProfilingNanoseconds>(search_t1 - search_t0).count();
-                if (step_prof.search_ns >= step_prof.neighbor_retrieval_ns) {
-                    step_prof.search_core_ns = step_prof.search_ns - step_prof.neighbor_retrieval_ns;
-                } else {
-                    step_prof.search_core_ns = 0;
-                }
-            }
         } catch (const EngineException& e) {
-            // Re-throw to trigger transaction abort
+            // Re-throw to trigger transaction abort (SearchTimingGuard closes timer on unwind)
             throw;
         }
         return true;

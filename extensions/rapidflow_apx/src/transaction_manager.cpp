@@ -101,6 +101,18 @@ StepResult ApxTransactionManager::execute_update(
         return {status, err, {}, 0, 0};
     };
 
+    auto abort_oom_noalloc = [&]() noexcept -> StepResult {
+        tx_scope.rollback_if_needed();
+        StepResult res;
+        res.status = StepStatus::RESOURCE_EXHAUSTED;
+        try {
+            res.error_message = "std::bad_alloc"; // Fits within SSO buffer (14 <= 15) on libstdc++
+        } catch (...) {
+        }
+        res.committed = false;
+        return res;
+    };
+
     // 2. Prevalidation: Vertex existence & endpoints
     if (!codec_.has_data_vertex(update.ext_u)) {
         return abort_and_rollback(StepStatus::PREVALIDATION_FAILED, "Data vertex u not registered in codec: " + std::to_string(update.ext_u));
@@ -120,6 +132,8 @@ StepResult ApxTransactionManager::execute_update(
         dense_u = codec_.get_data_vertex(update.ext_u);
         dense_v = codec_.get_data_vertex(update.ext_v);
         dense_label = codec_.intern_edge_label(update.label);
+    } catch (const std::bad_alloc&) {
+        return abort_oom_noalloc();
     } catch (const std::exception& ex) {
         return abort_and_rollback(StepStatus::PREVALIDATION_FAILED, std::string("Codec exception: ") + ex.what());
     }
@@ -152,6 +166,8 @@ StepResult ApxTransactionManager::execute_update(
         } catch (const InvariantViolationException& ex) {
             session_poisoned_ = true;
             return abort_and_rollback(StepStatus::INVARIANT_VIOLATION, std::string("NLF internal invariant violation on insert prepare: ") + ex.what());
+        } catch (const std::bad_alloc&) {
+            return abort_oom_noalloc();
         } catch (const std::exception& ex) {
             return abort_and_rollback(StepStatus::PREVALIDATION_FAILED, std::string("NLF prepare insert failure: ") + ex.what());
         }
@@ -188,6 +204,11 @@ StepResult ApxTransactionManager::execute_update(
             } else {
                 applied = graph_.apply_insert(dense_u, dense_v, dense_label, sim_rev_fail);
             }
+        } catch (const InvariantViolationException& ex) {
+            session_poisoned_ = true;
+            return abort_and_rollback(StepStatus::INVARIANT_VIOLATION, std::string("Insert mutation invariant violation: ") + ex.what());
+        } catch (const std::bad_alloc&) {
+            return abort_oom_noalloc();
         } catch (const std::exception& ex) {
             return abort_and_rollback(StepStatus::FAULT_INJECTED, std::string("Insert mutation exception: ") + ex.what());
         }
@@ -233,12 +254,17 @@ StepResult ApxTransactionManager::execute_update(
     } catch (const ResidualInvariantViolation& ex) {
         session_poisoned_ = true;
         return abort_and_rollback(StepStatus::INVARIANT_VIOLATION, std::string("Residual NLF invariant violation: ") + ex.what());
+    } catch (const InvariantViolationException& ex) {
+        session_poisoned_ = true;
+        return abort_and_rollback(StepStatus::INVARIANT_VIOLATION, std::string("Internal invariant violation: ") + ex.what());
     } catch (const DuplicateEmissionException& ex) {
         return abort_and_rollback(StepStatus::CALLBACK_ABORTED, std::string("Duplicate raw emission detected in callback: ") + ex.what());
     } catch (const NonInjectiveMappingException& ex) {
         return abort_and_rollback(StepStatus::CALLBACK_ABORTED, std::string("Non-injective mapping detected in callback: ") + ex.what());
     } catch (const WorkBudgetExceededException& ex) {
         return abort_and_rollback(StepStatus::CALLBACK_ABORTED, std::string("Work budget exceeded in callback: ") + ex.what());
+    } catch (const std::bad_alloc&) {
+        return abort_oom_noalloc();
     } catch (const std::exception& ex) {
         return abort_and_rollback(StepStatus::CALLBACK_ABORTED, std::string("Callback exception: ") + ex.what());
     } catch (...) {
@@ -267,6 +293,8 @@ StepResult ApxTransactionManager::execute_update(
             } catch (const InvariantViolationException& ex) {
                 session_poisoned_ = true;
                 return abort_and_rollback(StepStatus::INVARIANT_VIOLATION, std::string("NLF internal invariant violation on delete prepare: ") + ex.what());
+            } catch (const std::bad_alloc&) {
+                return abort_oom_noalloc();
             } catch (const std::exception& ex) {
                 return abort_and_rollback(StepStatus::PREVALIDATION_FAILED, std::string("NLF prepare delete failure: ") + ex.what());
             }
@@ -293,6 +321,11 @@ StepResult ApxTransactionManager::execute_update(
             } else {
                 applied = graph_.apply_delete(dense_u, dense_v, dense_label);
             }
+        } catch (const InvariantViolationException& ex) {
+            session_poisoned_ = true;
+            return abort_and_rollback(StepStatus::INVARIANT_VIOLATION, std::string("Delete mutation invariant violation: ") + ex.what());
+        } catch (const std::bad_alloc&) {
+            return abort_oom_noalloc();
         } catch (const std::exception& ex) {
             return abort_and_rollback(StepStatus::FAULT_INJECTED, std::string("Delete mutation exception: ") + ex.what());
         }

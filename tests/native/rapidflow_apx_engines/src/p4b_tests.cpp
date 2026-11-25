@@ -1153,6 +1153,74 @@ bool test_transactions_and_fault_injection() {
         TEST_ASSERT(verify_index_reconstruction(graph, sigs, idx), "TX-Codec: reconstruction holds");
     }
 
+    // R2 (NEW-FIND-02 & NEW-FIND-03): Base InvariantViolationException poisons session + real std::bad_alloc yields RESOURCE_EXHAUSTED
+    {
+        ApxAuthoritativeGraph graph;
+        std::vector<std::pair<uint32_t, uint32_t>> verts = {{0, 0}, {1, 0}, {2, 0}};
+        std::vector<std::tuple<uint32_t, uint32_t, uint32_t>> edges = {{1, 2, 0}};
+        graph.load_baseline(verts, edges);
+
+        ApxTypedCodec codec;
+        codec.intern_data_vertex(0);
+        codec.intern_data_vertex(1);
+        codec.intern_data_vertex(2);
+        codec.intern_vertex_label(TypedLabel::from_int(0));
+        codec.intern_edge_label(TypedLabel::from_int(0));
+
+        ApxQueryPlan qp;
+        std::vector<uint32_t> qv = {0, 0, 0};
+        std::vector<QueryEdge> qe = {{0, 1, 0}, {1, 2, 0}, {0, 2, 0}};
+        std::vector<uint32_t> can = {0, 1, 2};
+        qp.build(3, qv, qe, can, 0);
+
+        ApxQuerySignatures sigs;
+        sigs.build(qp);
+        ApxNlfIndex idx;
+        idx.initialize(graph, sigs);
+        ApxTupleSink sink(codec, can);
+        ApxTransactionManager tx_mgr(graph, codec, sink);
+        tx_mgr.set_nlf_context(&idx, &sigs);
+
+        // 1. Real std::bad_alloc during callback: RESOURCE_EXHAUSTED, non-poisoned, complete rollback
+        UpdateOperation ins_new_lbl{UpdateOp::INSERT, 0, 1, TypedLabel::from_string("r2_oom_temp_label")};
+        auto r_oom = tx_mgr.execute_update(ins_new_lbl, [](const ApxAuthoritativeGraph&, const UpdateOperation&, uint32_t, uint32_t, uint32_t) -> bool {
+            throw std::bad_alloc();
+        });
+        TEST_ASSERT(r_oom.status == StepStatus::RESOURCE_EXHAUSTED, "R2-OOM: status is RESOURCE_EXHAUSTED");
+        TEST_ASSERT(!r_oom.committed, "R2-OOM: transaction not committed");
+        TEST_ASSERT(r_oom.error_message == "std::bad_alloc", "R2-OOM: exact std::bad_alloc identity");
+        TEST_ASSERT(!tx_mgr.is_session_poisoned(), "R2-OOM: non-invariant OOM does not poison session");
+        TEST_ASSERT(!graph.has_edge(0, 1), "R2-OOM: graph insert rolled back");
+        TEST_ASSERT(!codec.has_edge_label(TypedLabel::from_string("r2_oom_temp_label")), "R2-OOM: codec checkpoint restored");
+        TEST_ASSERT(verify_index_reconstruction(graph, sigs, idx), "R2-OOM: NLF index reconstructed cleanly");
+
+        // 2. Real std::bad_alloc on DELETE path during callback
+        UpdateOperation del_base{UpdateOp::DELETE, 1, 2, TypedLabel::from_int(0)};
+        auto r_oom_del = tx_mgr.execute_update(del_base, [](const ApxAuthoritativeGraph&, const UpdateOperation&, uint32_t, uint32_t, uint32_t) -> bool {
+            throw std::bad_alloc();
+        });
+        TEST_ASSERT(r_oom_del.status == StepStatus::RESOURCE_EXHAUSTED, "R2-OOM-Del: status is RESOURCE_EXHAUSTED");
+        TEST_ASSERT(graph.has_edge(1, 2), "R2-OOM-Del: base edge retained");
+        TEST_ASSERT(verify_index_reconstruction(graph, sigs, idx), "R2-OOM-Del: NLF index reconstructed cleanly");
+
+        // 3. Base InvariantViolationException thrown from callback MUST poison session
+        UpdateOperation ins_ok{UpdateOp::INSERT, 0, 1, TypedLabel::from_int(0)};
+        auto r_base_inv = tx_mgr.execute_update(ins_ok, [](const ApxAuthoritativeGraph&, const UpdateOperation&, uint32_t, uint32_t, uint32_t) -> bool {
+            throw InvariantViolationException("R2 base invariant violation from callback");
+        });
+        TEST_ASSERT(r_base_inv.status == StepStatus::INVARIANT_VIOLATION, "R2-InvBase: status is INVARIANT_VIOLATION");
+        TEST_ASSERT(!r_base_inv.committed, "R2-InvBase: not committed");
+        TEST_ASSERT(tx_mgr.is_session_poisoned(), "R2-InvBase: session poisoned by base InvariantViolationException");
+        TEST_ASSERT(!graph.has_edge(0, 1), "R2-InvBase: graph rolled back");
+        TEST_ASSERT(verify_index_reconstruction(graph, sigs, idx), "R2-InvBase: NLF index intact");
+
+        auto r_blocked = tx_mgr.execute_update(ins_ok, [](const ApxAuthoritativeGraph&, const UpdateOperation&, uint32_t, uint32_t, uint32_t) -> bool {
+            return true;
+        });
+        TEST_ASSERT(r_blocked.status == StepStatus::INVARIANT_VIOLATION, "R2-InvBase: subsequent update blocked fail-closed");
+        TEST_ASSERT(!r_blocked.committed && !graph.has_edge(0, 1), "R2-InvBase: subsequent update never mutated graph");
+    }
+
     return true;
 }
 

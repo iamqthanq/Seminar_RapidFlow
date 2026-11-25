@@ -246,6 +246,72 @@ int run_measurement_seam_tests() {
             throw std::runtime_error("Expected CLI_ARG_ERROR when combining performance mode and --profile");
         }
 
+        // Test 4 (R2 NEW-FIND-01): Exception-safe diagnostic search timer on WorkBudgetExceededException
+        // across M1 (NONE/LEGACY) and all 5 M2 variants (BARE, A_STATIC k=0, A_RESIDUAL, B_MERGE, B_BUFFER)
+        const std::string wl_budget_k0_path = "/tmp/p4b_meas_seam_bk0_" + std::to_string(pid) + ".json";
+        const std::string out_bk0 = "/tmp/p4b_meas_seam_out_bk0_" + std::to_string(pid) + ".json";
+        const std::string wl_budget_k0_json = R"({
+  "case_id": "SEAM_R2_FIND01_K0_BUDGET",
+  "k": 0,
+  "max_work": 2,
+  "query": {
+    "vertices": [{"id": 0, "label": 1}, {"id": 1, "label": 1}, {"id": 2, "label": 1}],
+    "edges": [{"u": 0, "v": 1, "label": 1}, {"u": 1, "v": 2, "label": 1}, {"u": 0, "v": 2, "label": 1}]
+  },
+  "initial_graph": {
+    "vertices": [{"id": 0, "label": 1}, {"id": 1, "label": 1}, {"id": 2, "label": 1}, {"id": 3, "label": 1}],
+    "edges": [{"u": 0, "v": 1, "label": 1}, {"u": 1, "v": 2, "label": 1}, {"u": 2, "v": 3, "label": 1}]
+  },
+  "updates": [
+    {"op": "+", "u": 0, "v": 2, "label": 1}
+  ]
+})";
+        {
+            std::ofstream ofs(wl_budget_k0_path);
+            ofs << wl_budget_k0_json;
+        }
+
+        struct SeamCfg { const char* eng; NlfMode nlf; NeighborMode nbr; const char* src; };
+        for (const auto& cfg : std::vector<SeamCfg>{
+            {"m1", NlfMode::NONE, NeighborMode::LEGACY, wl_budget_k0_path.c_str()},
+            {"m2", NlfMode::NONE, NeighborMode::LEGACY, wl_budget_k0_path.c_str()},
+            {"m2", NlfMode::STATIC, NeighborMode::LEGACY, wl_budget_k0_path.c_str()},
+            {"m2", NlfMode::RESIDUAL, NeighborMode::LEGACY, wl_path.c_str()},
+            {"m2", NlfMode::NONE, NeighborMode::MERGE, wl_budget_k0_path.c_str()},
+            {"m2", NlfMode::NONE, NeighborMode::BUFFER, wl_budget_k0_path.c_str()},
+        }) {
+            HarnessOptions o_diag_abort;
+            o_diag_abort.engine_str = cfg.eng;
+            o_diag_abort.workload_path = cfg.src;
+            o_diag_abort.output_path = out_bk0;
+            o_diag_abort.nlf_mode = cfg.nlf;
+            o_diag_abort.neighbor_mode = cfg.nbr;
+            o_diag_abort.cli_max_work_set = true;
+            o_diag_abort.cli_max_work = 2;
+            o_diag_abort.execution_purpose = ExecutionPurpose::DIAGNOSTIC;
+            o_diag_abort.explicit_execution_purpose = true;
+            o_diag_abort.apply_process_limits = false;
+
+            int rc = run_workload_with_options(o_diag_abort);
+            if (rc != static_cast<int>(ExitCode::WORK_BUDGET_EXCEEDED)) {
+                throw std::runtime_error("Expected WORK_BUDGET_EXCEEDED for diagnostic timing unwind test");
+            }
+            json::Value j = json::Parser::parse(read_text(out_bk0));
+            const auto& sp = j["steps"][0]["profiling"];
+            int64_t nbr_ns = sp["neighbor_retrieval_ns"].as_int();
+            int64_t core_ns = sp["search_core_ns"].as_int();
+            int64_t search_ns = sp["search_ns"].as_int();
+            int64_t total_ns = sp["step_total_ns"].as_int();
+            if (!(nbr_ns <= search_ns && core_ns <= search_ns && search_ns <= total_ns && search_ns > 0)) {
+                throw std::runtime_error("Exception-safe profiling containment invariant failed on failed step");
+            }
+            if (j["profiling"]["cumulative"]["search_ns"].as_int() != search_ns) {
+                throw std::runtime_error("Cumulative search_ns mismatch after aborted diagnostic step");
+            }
+        }
+        std::remove(wl_budget_k0_path.c_str());
+        std::remove(out_bk0.c_str());
+
         cleanup();
         std::cout << "{\"test\": \"p4b_measurement_seam\", \"status\": \"PASS\"}\n";
         return 0;

@@ -97,6 +97,9 @@ bool ApxAuthoritativeGraph::has_edge(uint32_t u, uint32_t v) const {
         return false;
     }
     uint64_t key = make_edge_key(u, v);
+    if (is_key_tentatively_deleted(key)) {
+        return false;
+    }
     if (overlay_labels_.find(key) != overlay_labels_.end()) {
         return true;
     }
@@ -114,6 +117,9 @@ EdgeLookupResult ApxAuthoritativeGraph::get_edge_label(uint32_t u, uint32_t v) c
         return {false, 0};
     }
     uint64_t key = make_edge_key(u, v);
+    if (is_key_tentatively_deleted(key)) {
+        return {false, 0};
+    }
     auto it = overlay_labels_.find(key);
     if (it != overlay_labels_.end()) {
         return {true, it->second};
@@ -153,6 +159,9 @@ std::vector<uint32_t> ApxAuthoritativeGraph::get_neighbors(uint32_t u) const {
     uint32_t overlay_count = 0;
     uint32_t* overlay_nbrs = self->fwd_overlay_.get_neighbor(u, overlay_count);
     for (uint32_t i = 0; i < overlay_count; ++i) {
+        if (is_key_tentatively_deleted(make_edge_key(u, overlay_nbrs[i]))) {
+            continue;
+        }
         neighbors.push_back(overlay_nbrs[i]);
     }
 
@@ -187,6 +196,9 @@ void ApxAuthoritativeGraph::get_neighbors_into(uint32_t u, std::vector<uint32_t>
     uint32_t overlay_count = 0;
     const uint32_t* overlay_nbrs = self->fwd_overlay_.get_neighbor(u, overlay_count);
     for (uint32_t i = 0; i < overlay_count; ++i) {
+        if (is_key_tentatively_deleted(make_edge_key(u, overlay_nbrs[i]))) {
+            continue;
+        }
         out.push_back(overlay_nbrs[i]);
     }
     std::sort(out.begin(), out.end());
@@ -270,8 +282,8 @@ void ApxAuthoritativeGraph::merge_neighbor_ranges(
             return;
         }
 
-        // Fast Path 2: Empty base, nonempty overlay
-        if (base_count == 0 && overlay_count > 0) {
+        // Fast Path 2: Empty base, nonempty overlay (no pending overlay deletion at u)
+        if (base_count == 0 && overlay_count > 0 && !has_tentative_overlay_delete(u)) {
             for (uint32_t k = 0; k < overlay_count; ++k) {
                 if (!is_valid_neighbor(overlay_nbrs[k])) {
                     throw InvariantViolationException("merge_neighbor_ranges: invalid neighbor ID in overlay");
@@ -336,17 +348,6 @@ void ApxAuthoritativeGraph::merge_neighbor_ranges(
 
         // Linear 2-way sorted merge with Strategy B fused validation
         {
-            for (uint32_t k = 0; k < overlay_count; ++k) {
-                if (!is_valid_neighbor(overlay_nbrs[k])) {
-                    throw InvariantViolationException("merge_neighbor_ranges: invalid neighbor ID in overlay");
-                }
-            }
-            for (uint32_t k = 1; k < overlay_count; ++k) {
-                if (overlay_nbrs[k] <= overlay_nbrs[k - 1]) {
-                    goto do_fallback;
-                }
-            }
-
             uint32_t i = 0; // index in base_nbrs
             uint32_t j = 0; // index in overlay_nbrs
 
@@ -370,7 +371,24 @@ void ApxAuthoritativeGraph::merge_neighbor_ranges(
                 return true;
             };
 
-            if (!advance_base()) goto do_fallback;
+            auto advance_overlay = [&]() -> bool {
+                while (j < overlay_count) {
+                    uint32_t o = overlay_nbrs[j];
+                    if (!is_valid_neighbor(o)) {
+                        throw InvariantViolationException("merge_neighbor_ranges: invalid neighbor ID in overlay");
+                    }
+                    if (j > 0 && overlay_nbrs[j] <= overlay_nbrs[j - 1]) {
+                        return false; // raw overlay not strictly ascending
+                    }
+                    if (!is_key_tentatively_deleted(make_edge_key(u, o))) {
+                        return true;
+                    }
+                    ++j;
+                }
+                return true;
+            };
+
+            if (!advance_base() || !advance_overlay()) goto do_fallback;
 
             while (i < base_count && j < overlay_count) {
                 uint32_t b = base_nbrs[i];
@@ -395,6 +413,7 @@ void ApxAuthoritativeGraph::merge_neighbor_ranges(
                     }
 #endif
                     ++j;
+                    if (!advance_overlay()) goto do_fallback;
                 } else { // b == o: defensive equality handling
                     if (!out.empty() && o <= out.back()) goto do_fallback;
                     out.push_back(o);
@@ -405,7 +424,7 @@ void ApxAuthoritativeGraph::merge_neighbor_ranges(
 #endif
                     ++i;
                     ++j;
-                    if (!advance_base()) goto do_fallback;
+                    if (!advance_base() || !advance_overlay()) goto do_fallback;
                 }
             }
 
@@ -438,6 +457,7 @@ void ApxAuthoritativeGraph::merge_neighbor_ranges(
                 }
 #endif
                 ++j;
+                if (!advance_overlay()) goto do_fallback;
             }
 
             if (counters) {
@@ -473,6 +493,9 @@ do_fallback:
                 uint32_t v = overlay_nbrs[k];
                 if (!is_valid_neighbor(v)) {
                     throw InvariantViolationException("merge_neighbor_ranges: invalid neighbor ID in fallback overlay");
+                }
+                if (is_key_tentatively_deleted(make_edge_key(u, v))) {
+                    continue;
                 }
                 out.push_back(v);
 #ifdef APX_NEIGHBOR_TEST_TRACE

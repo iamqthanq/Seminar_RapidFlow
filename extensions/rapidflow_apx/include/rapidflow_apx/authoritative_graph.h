@@ -176,6 +176,15 @@ private:
     // Active transaction state
     bool in_tx_{false};
     TxRecord tx_record_{};
+
+    bool is_key_tentatively_deleted(uint64_t key) const noexcept {
+        return in_tx_ && tx_record_.op == TxOpType::DELETE && tx_record_.key == key;
+    }
+
+    bool has_tentative_overlay_delete(uint32_t u) const noexcept {
+        return in_tx_ && tx_record_.op == TxOpType::DELETE && tx_record_.was_in_overlay
+            && (tx_record_.u == u || tx_record_.v == u);
+    }
 };
 
 #ifdef APX_TEST_ACCESS

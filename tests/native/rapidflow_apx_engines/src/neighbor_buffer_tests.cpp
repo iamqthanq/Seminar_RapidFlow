@@ -139,6 +139,76 @@ void graph_test() {
     require(graph.apply_delete(0, 4, new_label), "Tentative delete");
     graph.rollback_transaction();
     verify_snapshot(graph, ref, out, direct);
+
+    // R2 (NEW-FIND-04): Full tentative DELETE/INSERT visibility matrix (Work Package D)
+    {
+        ApxAuthoritativeGraph td;
+        td.load_baseline({{0, 0}, {1, 0}, {2, 0}}, {{1, 2, left_label}});
+        EdgeMap td_ref{{{1, 2}, left_label}};
+        // 1. Overlay-only INSERT (committed), then tentative DELETE -> inspect ALL APIs -> rollback -> inspect -> commit
+        td.begin_transaction();
+        require(td.apply_insert(0, 1, new_label), "R2-D: overlay insert");
+        EdgeMap td_after_ins = td_ref;
+        td_after_ins[{0, 1}] = new_label;
+        verify_snapshot(td, td_after_ins, out, direct);
+        td.commit_transaction();
+        td_ref = td_after_ins;
+        verify_snapshot(td, td_ref, out, direct);
+
+        // Tentative overlay DELETE (with vertex 0 having zero base edges -> tests Fast Path 2 bypass too!)
+        td.begin_transaction();
+        require(td.apply_delete(0, 1, new_label), "R2-D: tentative overlay delete");
+        EdgeMap td_after_del = td_ref;
+        td_after_del.erase({0, 1});
+        verify_snapshot(td, td_after_del, out, direct);
+        td.rollback_transaction();
+        verify_snapshot(td, td_ref, out, direct);
+
+        // Re-do tentative overlay DELETE and commit
+        td.begin_transaction();
+        require(td.apply_delete(0, 1, new_label), "R2-D: tentative overlay delete commit");
+        verify_snapshot(td, td_after_del, out, direct);
+        td.commit_transaction();
+        td_ref = td_after_del;
+        verify_snapshot(td, td_ref, out, direct);
+
+        // 2. Base edge DELETE -> commit -> reinsert new label -> rollback (tombstone kept!) -> reinsert & commit
+        td.begin_transaction();
+        require(td.apply_delete(1, 2, left_label), "R2-D: tentative base delete");
+        EdgeMap td_no_base = td_ref;
+        td_no_base.erase({1, 2});
+        verify_snapshot(td, td_no_base, out, direct);
+        td.commit_transaction();
+        td_ref = td_no_base;
+        verify_snapshot(td, td_ref, out, direct);
+
+        td.begin_transaction();
+        require(td.apply_insert(1, 2, str_zero), "R2-D: tentative reinsert of tombstoned base edge");
+        EdgeMap td_reins = td_ref;
+        td_reins[{1, 2}] = str_zero;
+        verify_snapshot(td, td_reins, out, direct);
+        td.rollback_transaction();
+        verify_snapshot(td, td_ref, out, direct);
+
+        td.begin_transaction();
+        require(td.apply_insert(1, 2, str_zero), "R2-D: commit reinsert with new label");
+        verify_snapshot(td, td_reins, out, direct);
+        td.commit_transaction();
+        td_ref = td_reins;
+        verify_snapshot(td, td_ref, out, direct);
+
+        // Delete the reinserted (was base, now in overlay) edge tentatively, inspect, rollback, then commit
+        td.begin_transaction();
+        require(td.apply_delete(1, 2, str_zero), "R2-D: tentative delete of reinserted base/overlay edge");
+        verify_snapshot(td, td_no_base, out, direct);
+        td.rollback_transaction();
+        verify_snapshot(td, td_ref, out, direct);
+        td.begin_transaction();
+        require(td.apply_delete(1, 2, str_zero), "R2-D: commit delete of reinserted edge");
+        verify_snapshot(td, td_no_base, out, direct);
+        td.commit_transaction();
+        verify_snapshot(td, td_no_base, out, direct);
+    }
     for (auto u : {1u, 2u, 4u}) {
         require(graph.apply_delete(0, u, ref.at({0,u})), "Delete all effective neighbors");
         ref.erase({0,u});
@@ -198,11 +268,13 @@ void graph_test() {
                 ++generated.aborted;
             } else {
                 require(valid_insert ? test.apply_insert(u, v, label) : test.apply_delete(u, v, label), "Valid update failed");
+                auto tentative = model;
                 if (valid_insert) {
-                    auto tentative = model;
                     tentative[key] = label;
-                    verify_snapshot(test, tentative, out, generated);
+                } else {
+                    tentative.erase(key);
                 }
+                verify_snapshot(test, tentative, out, generated);
                 if (rollback) {
                     test.rollback_transaction();
                     ++generated.aborted;

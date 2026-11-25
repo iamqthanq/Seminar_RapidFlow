@@ -241,6 +241,8 @@ struct StepFailure {
 StepFailure step_failure(StepStatus status, const std::string& error) noexcept {
     if (status == StepStatus::PREVALIDATION_FAILED) return {"PREVALIDATION_ERROR", ExitCode::STEP_FAILURE};
     if (status == StepStatus::FAULT_INJECTED) return {"FAULT_INJECTED", ExitCode::STEP_FAILURE};
+    if (status == StepStatus::INVARIANT_VIOLATION) return {"INVARIANT_VIOLATION", ExitCode::STEP_FAILURE};
+    if (status == StepStatus::RESOURCE_EXHAUSTED) return {"RESOURCE_LIMIT_ERROR", ExitCode::RESOURCE_LIMIT_ERROR};
     if (status == StepStatus::CALLBACK_ABORTED && error.find("Work budget exceeded") != std::string::npos) {
         return {"WORK_BUDGET_EXCEEDED", ExitCode::WORK_BUDGET_EXCEEDED};
     }
@@ -1061,9 +1063,9 @@ int run_workload_with_options(
                 else ++completed_steps;
                 notify_observer(observer, MeasurementStage::STEP_EXECUTE_END, step_idx, observer_ctx);
 
-                const bool poisoned_optimized = (opts.nlf_mode == NlfMode::RESIDUAL || opts.neighbor_mode == NeighborMode::BUFFER || opts.neighbor_mode == NeighborMode::MERGE)
-                    && streaming_engine.get_tx_manager().is_session_poisoned();
-                if (delivery_failed || (failed && !continue_on_error) || poisoned_optimized) {
+                const bool poisoned_or_oom = streaming_engine.get_tx_manager().is_session_poisoned()
+                    || (first_failing_exit == ExitCode::RESOURCE_LIMIT_ERROR);
+                if (delivery_failed || (failed && !continue_on_error) || poisoned_or_oom) {
                     for (size_t rem = step_idx + 1; rem < total_steps; ++rem) {
                         serialized_steps.push_back(json::serialize(unattempted_update(rem, upd_arr[rem]), 0));
                     }
@@ -1237,9 +1239,9 @@ int run_workload_with_options(
                 retained_steps.push_back(std::move(outcome));
                 notify_observer(observer, MeasurementStage::STEP_EXECUTE_END, step_idx, observer_ctx);
 
-                const bool poisoned_optimized = (opts.nlf_mode == NlfMode::RESIDUAL || opts.neighbor_mode == NeighborMode::BUFFER || opts.neighbor_mode == NeighborMode::MERGE)
-                    && streaming_engine.get_tx_manager().is_session_poisoned();
-                if (stop_for_delivery_fault || (failed && !continue_on_error) || poisoned_optimized) {
+                const bool poisoned_or_oom = streaming_engine.get_tx_manager().is_session_poisoned()
+                    || (first_failing_exit == ExitCode::RESOURCE_LIMIT_ERROR);
+                if (stop_for_delivery_fault || (failed && !continue_on_error) || poisoned_or_oom) {
                     break;
                 }
             }
@@ -1432,6 +1434,15 @@ int run_workload_with_options(
         root_out["error_category"] = json::Value("INPUT_SCHEMA_ERROR");
         root_out["error_message"] = json::Value(e.what());
         final_exit_code = ExitCode::INPUT_PARSE_ERROR;
+    } catch (const std::bad_alloc&) {
+        if (attempted_steps != 0) {
+            fatal_delivery("std::bad_alloc");
+            return static_cast<int>(ExitCode::RESULT_DELIVERY_ERROR);
+        }
+        root_out["status"] = json::Value("FAIL");
+        root_out["error_category"] = json::Value("RESOURCE_LIMIT_ERROR");
+        root_out["error_message"] = json::Value("std::bad_alloc");
+        final_exit_code = ExitCode::RESOURCE_LIMIT_ERROR;
     } catch (const std::exception& e) {
         if (attempted_steps != 0) {
             fatal_delivery(e.what());
