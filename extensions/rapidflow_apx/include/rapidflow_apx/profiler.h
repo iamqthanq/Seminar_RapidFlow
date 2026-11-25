@@ -67,8 +67,19 @@ struct RunProfiling {
     uint64_t input_parsing_ns{0};
     uint64_t graph_init_ns{0};
     uint64_t query_prep_ns{0};
+    uint64_t engine_and_nlf_init_ns{0};
     uint64_t streaming_exec_ns{0};
     uint64_t output_serialization_ns{0};
+};
+
+struct MacroTiming {
+    uint64_t input_parsing_ns{0};
+    uint64_t initialization_wall_ns{0};
+    uint64_t graph_init_ns{0};
+    uint64_t query_prep_ns{0};
+    uint64_t engine_and_nlf_init_ns{0};
+    uint64_t streaming_loop_wall_ns{0};
+    uint64_t reporting_wall_ns{0};
 };
 
 } // namespace rapidflow_apx

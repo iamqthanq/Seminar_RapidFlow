@@ -1,0 +1,184 @@
+{
+  "approval_state": "PREREGISTRATION_CANDIDATE",
+  "auxiliary_variants": {
+    "B_BUFFER": {
+      "engine": "m2",
+      "included_in_primary_confirmatory": false,
+      "neighbor_mode": "buffer",
+      "nlf_mode": "none",
+      "role": "diagnostic_attribution_only"
+    }
+  },
+  "coverage_and_noise_policy": {
+    "cell_jitter_flag_threshold": 1.5,
+    "max_noisy_pair_fraction_exclusive": 0.2,
+    "min_complete_disc_blocks": 9,
+    "min_continuity_eligible_fraction": 0.9,
+    "min_discrimination_eligible_fraction": 0.9,
+    "min_overall_eligible_fraction": 0.9,
+    "min_stratum_eligible_count": 10,
+    "variant_only_resource_regression_min_reps": 2
+  },
+  "decision_thresholds": {
+    "advantage_min_speedup": 1.15,
+    "conditional_ab_min_speedup": 1.05,
+    "conditional_ab_requires_ci_lower_gt": 1.0,
+    "marginal_lower": 1.05,
+    "marginal_upper": 1.15,
+    "max_rss_overhead": 0.2,
+    "null_effect_boundary": 1.0,
+    "parity_lower": 0.95,
+    "parity_upper": 1.05,
+    "regression_upper": 0.95
+  },
+  "execution_authorized": false,
+  "ledger_schema_version": "p4b-ledger-v1.0",
+  "manifest_path": "configs/rapidflow_apx_p4b_manifest.json",
+  "manifest_sha256": "09c78158d541c22f91b48aa484e3fd5e494910c2885635de1fa79bbed1784869",
+  "measurement_contract": {
+    "clock_source": "std::chrono::steady_clock",
+    "deep_diagnostics_enabled_primary": false,
+    "diagnostic_execution_purpose": "diagnostic",
+    "measurement_schema_version": 1,
+    "neighbor_configuration_version": 2,
+    "primary_execution_purpose": "performance",
+    "primary_metric": "streaming_loop_wall_ns",
+    "profiling_enabled_primary": false,
+    "rss_conversion_factor_bytes": 1024,
+    "rss_fallback_method": "linux_wait4_rusage_ru_maxrss",
+    "rss_method": "linux_proc_self_status_vmhwm",
+    "rss_original_unit": "KiB"
+  },
+  "memory_policy": {
+    "max_workload_median_rss_overhead": 0.2,
+    "rss_gate_scope": "every_eligible_workload_in_intended_scope"
+  },
+  "pending_approvals": [
+    "INDEPENDENT_TECHNICAL_LEAD_REVIEW",
+    "PROJECT_COORDINATOR_EXECUTION_AUTHORIZATION"
+  ],
+  "planned_slot_totals": {
+    "diagnostic": 250,
+    "primary": 1000,
+    "total_planned": 1450,
+    "warmup": 200
+  },
+  "predeclared_strata": {
+    "churn_regime": {
+      "has_deletes": 40,
+      "high_churn_del_gt_25pct": 34,
+      "insert_only": 10,
+      "low_churn_del_le_25pct": 16
+    },
+    "k_budget": {
+      "k0": 15,
+      "k1": 27,
+      "k2_descriptive_only": 8,
+      "k_ge_1": 35
+    },
+    "label_regime": {
+      "mixed": 15,
+      "uniform": 35
+    },
+    "size_band": {
+      "large_ge_65_descriptive_only": 4,
+      "medium_17_to_64": 14,
+      "small_le_16": 32
+    },
+    "suite": {
+      "continuity": 30,
+      "discrimination": 20
+    }
+  },
+  "primary_variants": {
+    "A_RESIDUAL": {
+      "engine": "m2",
+      "neighbor_mode": "legacy",
+      "nlf_mode": "residual",
+      "role": "isolated_option_a_residual"
+    },
+    "A_STATIC": {
+      "engine": "m2",
+      "neighbor_mode": "legacy",
+      "nlf_mode": "static",
+      "role": "isolated_option_a_static"
+    },
+    "BARE": {
+      "engine": "m2",
+      "neighbor_mode": "legacy",
+      "nlf_mode": "none",
+      "role": "primary_control"
+    },
+    "B_MERGE": {
+      "engine": "m2",
+      "neighbor_mode": "merge",
+      "nlf_mode": "none",
+      "role": "isolated_option_b_final"
+    }
+  },
+  "protocol_version": "1.0.0",
+  "repetitions": {
+    "diagnostic_per_workload_variant": 1,
+    "primary_proposed_r": 5,
+    "warmup_per_workload_variant": 1
+  },
+  "resource_policy": {
+    "address_space_limit_mib": 512,
+    "logical_work_cap": 500000,
+    "max_nlf_memory_mib": 256,
+    "resource_policy_id": "P4B_STD_RES_V1",
+    "wall_timeout_seconds": 60.0
+  },
+  "schedule_path": "configs/rapidflow_apx_p4b_schedule.json",
+  "schedule_sha256": "824d4b09f31432fde355597aee877f38cae3f267b66dd658d8fc82c3cac05e6f",
+  "seeds": {
+    "bootstrap_seed": 380302,
+    "diagnostic_schedule_seed": 380303,
+    "schedule_seed": 380301
+  },
+  "statistical_policy": {
+    "across_workload_primary_estimator": "median",
+    "across_workload_secondary_estimator": "geometric_mean",
+    "bootstrap_method": "stratified_block_bootstrap",
+    "bootstrap_resamples": 10000,
+    "ci_percentiles": [
+      0.025,
+      0.975
+    ],
+    "confidence_level": 0.95,
+    "continuity_bootstrap_unit": "workload_id",
+    "discrimination_bootstrap_unit": "complete_group_id_k_pair",
+    "experimental_unit": "workload",
+    "multiplicity_policy": "unadjusted_per_comparison_with_holm_sensitivity_reported",
+    "pair_inclusion_policy": "strict_complete_5_of_5_pairs",
+    "quantile_interpolation": "linear",
+    "speedup_direction": "bare_median_divided_by_variant_median",
+    "within_workload_aggregator": "median"
+  },
+  "williams_sequences": {
+    "S1": [
+      "BARE",
+      "A_STATIC",
+      "B_MERGE",
+      "A_RESIDUAL"
+    ],
+    "S2": [
+      "A_STATIC",
+      "A_RESIDUAL",
+      "BARE",
+      "B_MERGE"
+    ],
+    "S3": [
+      "A_RESIDUAL",
+      "B_MERGE",
+      "A_STATIC",
+      "BARE"
+    ],
+    "S4": [
+      "B_MERGE",
+      "BARE",
+      "A_RESIDUAL",
+      "A_STATIC"
+    ]
+  }
+}

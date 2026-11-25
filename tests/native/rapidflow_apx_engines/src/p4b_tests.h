@@ -15,6 +15,7 @@ bool verify_index_reconstruction(
 
 int run_residual_native_tests(const char* suite_name);
 int run_neighbor_buffer_tests(const char* suite_name);
+int run_measurement_seam_tests();
 int run_p4b_native_tests(const char* suite_name = "all");
 
 } // namespace rapidflow_apx

@@ -23,6 +23,8 @@ find_package(OpenSSL REQUIRED COMPONENTS Crypto)
 
 add_executable(rapidflow_apx_native
     src/main.cpp
+    src/harness_runner.cpp
+    src/measurement_seam_tests.cpp
     src/p4b_tests.cpp
     src/residual_tests.cpp
     src/neighbor_buffer_tests.cpp

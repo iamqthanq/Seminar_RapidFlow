@@ -1,0 +1,194 @@
+{
+  "case_id": "P4A_WL_10",
+  "description": "Diamond k=1 delete-heavy stream",
+  "initial_graph": {
+    "edges": [
+      {
+        "label": 1,
+        "u": 0,
+        "v": 1
+      },
+      {
+        "label": 1,
+        "u": 0,
+        "v": 2
+      },
+      {
+        "label": 1,
+        "u": 1,
+        "v": 3
+      },
+      {
+        "label": 1,
+        "u": 2,
+        "v": 3
+      },
+      {
+        "label": 1,
+        "u": 4,
+        "v": 5
+      },
+      {
+        "label": 1,
+        "u": 4,
+        "v": 6
+      },
+      {
+        "label": 1,
+        "u": 5,
+        "v": 7
+      },
+      {
+        "label": 1,
+        "u": 6,
+        "v": 7
+      },
+      {
+        "label": 1,
+        "u": 0,
+        "v": 4
+      },
+      {
+        "label": 1,
+        "u": 1,
+        "v": 5
+      }
+    ],
+    "vertices": [
+      {
+        "id": 0,
+        "label": 1
+      },
+      {
+        "id": 1,
+        "label": 1
+      },
+      {
+        "id": 2,
+        "label": 1
+      },
+      {
+        "id": 3,
+        "label": 1
+      },
+      {
+        "id": 4,
+        "label": 1
+      },
+      {
+        "id": 5,
+        "label": 1
+      },
+      {
+        "id": 6,
+        "label": 1
+      },
+      {
+        "id": 7,
+        "label": 1
+      }
+    ]
+  },
+  "k": 1,
+  "max_work": 500000,
+  "query": {
+    "edges": [
+      {
+        "label": 1,
+        "u": 0,
+        "v": 1
+      },
+      {
+        "label": 1,
+        "u": 0,
+        "v": 2
+      },
+      {
+        "label": 1,
+        "u": 1,
+        "v": 3
+      },
+      {
+        "label": 1,
+        "u": 2,
+        "v": 3
+      },
+      {
+        "label": 1,
+        "u": 1,
+        "v": 2
+      }
+    ],
+    "vertices": [
+      {
+        "id": 0,
+        "label": 1
+      },
+      {
+        "id": 1,
+        "label": 1
+      },
+      {
+        "id": 2,
+        "label": 1
+      },
+      {
+        "id": 3,
+        "label": 1
+      }
+    ]
+  },
+  "query_type": "diamond",
+  "regime": "uniform",
+  "topology": "micro",
+  "updates": [
+    {
+      "label": 1,
+      "op": "-",
+      "u": 0,
+      "v": 1
+    },
+    {
+      "label": 1,
+      "op": "-",
+      "u": 1,
+      "v": 3
+    },
+    {
+      "label": 1,
+      "op": "+",
+      "u": 0,
+      "v": 1
+    },
+    {
+      "label": 1,
+      "op": "+",
+      "u": 1,
+      "v": 3
+    },
+    {
+      "label": 1,
+      "op": "-",
+      "u": 4,
+      "v": 5
+    },
+    {
+      "label": 1,
+      "op": "-",
+      "u": 5,
+      "v": 7
+    },
+    {
+      "label": 1,
+      "op": "+",
+      "u": 4,
+      "v": 5
+    },
+    {
+      "label": 1,
+      "op": "+",
+      "u": 5,
+      "v": 7
+    }
+  ]
+}
