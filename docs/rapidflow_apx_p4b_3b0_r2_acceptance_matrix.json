@@ -1,0 +1,149 @@
+{
+  "schema": "p4b-3b0-r2-acceptance-matrix-v1",
+  "phase": "P4b-3B.0-R2",
+  "handoff_status": "P4B_3B0_R2_READY_FOR_INDEPENDENT_REVIEW",
+  "execution_authorization": "P4B_3B_1_NOT_AUTHORIZED",
+  "starting_commit": "322e77ae62064da145a965ea59518ab8b0133080",
+  "native_source_commit": "115ce2844d91f6a6588fe0ac50b1179bc3b38012",
+  "tested_logic_commit": "101272cf85087df621d5e77118ab12a774720a4e",
+  "upstream_commit": "2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1",
+  "historical_r1_binary_sha256": "f02e6ff99c707407d88fa16ebd370e9c43d4359b8192247e394b95cd607d3d75",
+  "candidate_r2_binary_sha256": "3fa35111acd7e7527a80bae6b0caa6d51d1e283d9848747a62c2517d696d1876",
+  "candidate_registry_sha256": "90fc2f3ee1e8c4bcf210603caeb218190a294b168377858cd4be276ebb662118",
+  "external_approval_gates": [
+    {
+      "gate_id": "R2-EXT-01",
+      "name": "Independent Technical Acceptance",
+      "status": "PENDING_INDEPENDENT_REVIEW",
+      "owner": "Independent Technical Lead"
+    },
+    {
+      "gate_id": "R2-EXT-02",
+      "name": "Coordinator Execution Authorization",
+      "status": "PENDING_COORDINATOR_APPROVAL",
+      "owner": "Project Coordinator"
+    }
+  ],
+  "engineering_gates": [
+    {
+      "gate_id": "R2-A01",
+      "category": "Preflight & Preservation",
+      "requirement": "Clean R2 baseline 322e77a, pristine upstream 2ea4f4c, Draft PR #39 and empty activation anchors verified before edits",
+      "status": "PASS",
+      "tested_revision": "101272cf85087df621d5e77118ab12a774720a4e",
+      "evidence": "python3 scripts/run_rapidflow_apx_p4b.py --dry-run; git status; activation_anchors sha256 b74e48dc8ab3ab00d31581ec944e9e8a6743dd729f63d938f3645d82e146408e"
+    },
+    {
+      "gate_id": "R2-A02",
+      "category": "Preflight & Preservation",
+      "requirement": "Historical R1 binary f02e6ff9..., R1 registry a122454b..., and R1 evidence archive 22b5245d... preserved intact",
+      "status": "PASS",
+      "tested_revision": "101272cf85087df621d5e77118ab12a774720a4e",
+      "evidence": "historical-r1-binary/rapidflow_apx_native; test_registry_reconstructs_from_trusted_raw_archive"
+    },
+    {
+      "gate_id": "R2-F01",
+      "category": "RED -> GREEN Findings",
+      "requirement": "NEW-FIND-01: Diagnostic timing unwind closes search_ns & search_core_ns on WORK_BUDGET_EXCEEDED for P4B_CONT_01 and real DISC_07_K0",
+      "status": "PASS",
+      "tested_revision": "101272cf85087df621d5e77118ab12a774720a4e",
+      "evidence": "test_02_new_find_01_real_native_diagnostic_work_cap_and_disc07; test_07_real_native_bounded_session_resume_and_replay"
+    },
+    {
+      "gate_id": "R2-F02",
+      "category": "RED -> GREEN Findings",
+      "requirement": "NEW-FIND-02: Real std::bad_alloc maps to exit 5 / RESOURCE_LIMIT_ERROR / MEMORY_LIMIT_FAILURE; fault hook keeps FAULT_INJECTED (exit 6); stderr std::bad_alloc bypass removed",
+      "status": "PASS",
+      "tested_revision": "101272cf85087df621d5e77118ab12a774720a4e",
+      "evidence": "test_03_new_find_02_resource_failure_contract_end_to_end; test_r10_native_child_resource_outcome_and_stale_output"
+    },
+    {
+      "gate_id": "R2-F03",
+      "category": "RED -> GREEN Findings",
+      "requirement": "NEW-FIND-03: Base InvariantViolationException in callback returns StepStatus::INVARIANT_VIOLATION, poisons session and stops loop",
+      "status": "PASS",
+      "tested_revision": "101272cf85087df621d5e77118ab12a774720a4e",
+      "evidence": "test_01_native_suites_cover_r2_findings (--test-p4b transactions); p4b_tests.cpp"
+    },
+    {
+      "gate_id": "R2-F04",
+      "category": "RED -> GREEN Findings",
+      "requirement": "NEW-FIND-04: Committed overlay insert followed by tentative delete hides edge across all AuthoritativeGraph accessors, Fast Path 2, merge and fallback while restoring cleanly on abort",
+      "status": "PASS",
+      "tested_revision": "101272cf85087df621d5e77118ab12a774720a4e",
+      "evidence": "test_01_native_suites_cover_r2_findings (--test-p4b-neighbor graph); neighbor_buffer_tests.cpp"
+    },
+    {
+      "gate_id": "R2-F05",
+      "category": "RED -> GREEN Findings",
+      "requirement": "NEW-FIND-05: Null supervisor or non-dict nested fields in process.json/native-output.json fail cleanly as INVALID / MEASUREMENT_ERROR without uncaught AttributeError/TypeError",
+      "status": "PASS",
+      "tested_revision": "101272cf85087df621d5e77118ab12a774720a4e",
+      "evidence": "test_04_new_find_05_structured_malformed_evidence"
+    },
+    {
+      "gate_id": "R2-F06",
+      "category": "RED -> GREEN Findings",
+      "requirement": "NEW-FIND-06: Interrupted JSON parser rejects array trailing comma without '}' and session rejects leaked profiling in partial/complete performance outputs",
+      "status": "PASS",
+      "tested_revision": "101272cf85087df621d5e77118ab12a774720a4e",
+      "evidence": "test_05_new_find_06_interrupted_parser_and_profiling_purpose"
+    },
+    {
+      "gate_id": "R2-S01",
+      "category": "Source Lock & Governance",
+      "requirement": "p4b_activation.SOURCE_PATHS covers comparator, p4a contract, replay and dstar oracle",
+      "status": "PASS",
+      "tested_revision": "101272cf85087df621d5e77118ab12a774720a4e",
+      "evidence": "test_06_source_lock_covers_comparator_oracle_replay_and_contract"
+    },
+    {
+      "gate_id": "R2-C01",
+      "category": "Candidate Recertification",
+      "requirement": "Clean R2 candidate binary 3fa35111... built deterministically and passes all 5 P3 matrix variants (hand 25/25, corpus 840, 56 streams / 672 updates)",
+      "status": "PASS",
+      "tested_revision": "101272cf85087df621d5e77118ab12a774720a4e",
+      "evidence": "p3_recert_summary.json; docs/rapidflow_apx_p4b_3b0_r2_candidate_recertification.md"
+    },
+    {
+      "gate_id": "R2-C02",
+      "category": "Candidate Recertification",
+      "requirement": "250-run candidate replay regenerates configs/rapidflow_apx_p4b_r2_candidate_registry.json matching 160 M0_VERIFIED, 64 DIFFERENTIAL_M2_VERIFIED, 16 CORRECTNESS_NOT_FULLY_CERTIFIED, 10 C3_BUDGET_UNAVAILABLE",
+      "status": "PASS",
+      "tested_revision": "101272cf85087df621d5e77118ab12a774720a4e",
+      "evidence": "configs/rapidflow_apx_p4b_r2_candidate_registry.json (sha256 90fc2f3ee1e8c4bcf210603caeb218190a294b168377858cd4be276ebb662118)"
+    },
+    {
+      "gate_id": "R2-V01",
+      "category": "Sanitizers & Regression",
+      "requirement": "ASan + UBSan build passes all 6 native verification suites and json string harness",
+      "status": "PASS",
+      "tested_revision": "101272cf85087df621d5e77118ab12a774720a4e",
+      "evidence": "sanitizer.log (SANITIZERS_PASS)"
+    },
+    {
+      "gate_id": "R2-V02",
+      "category": "Sanitizers & Regression",
+      "requirement": "Full repository unittest discover passes cleanly on tested logic commit with 0 failures, 0 errors, 0 skips",
+      "status": "PASS",
+      "tested_revision": "101272cf85087df621d5e77118ab12a774720a4e",
+      "evidence": "full-regression.log: Ran 887 tests in 745.101s -> OK (exit 0)"
+    },
+    {
+      "gate_id": "R2-V03",
+      "category": "Sanitizers & Regression",
+      "requirement": "Full 1,450-slot synthetic production-format rehearsal and unauthorized statistical failure verified without launching production benchmark",
+      "status": "PASS",
+      "tested_revision": "101272cf85087df621d5e77118ab12a774720a4e",
+      "evidence": "test_08_full_1450_synthetic_rehearsal_isolation; run_rapidflow_apx_p4b.py --dry-run (launched_subprocess_count=0); --execute-primary (exit 2)"
+    },
+    {
+      "gate_id": "R2-N05",
+      "category": "Scope Boundary",
+      "requirement": "Zero confirmatory benchmark execution, zero trust-anchor additions, Draft PR #39 open/draft and Issue #38 open",
+      "status": "PASS",
+      "tested_revision": "101272cf85087df621d5e77118ab12a774720a4e",
+      "evidence": "configs/rapidflow_apx_p4b_activation_anchors.json; gh pr view 39; gh issue view 38"
+    }
+  ]
+}
