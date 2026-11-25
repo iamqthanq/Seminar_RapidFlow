@@ -340,7 +340,7 @@ class TestP4b3b0(unittest.TestCase):
             run_bounded_witness(Path(tmp), self.protocol, self.manifest, self.schedule, self)
 
     def test_statistical_candidate_boundaries_and_shared_failure(self):
-        records = list(self.synthetic.values())
+        records = [dict(row) for row in self.synthetic.values()]
         # Mixed genuine resource categories do not trigger same-category regression.
         for row in records:
             if row["variant_id"] == "A_STATIC" and row["workload_id"] == "DISC_07_K0" and row["repeat_id"] in (1, 2):
@@ -365,7 +365,7 @@ class TestP4b3b0(unittest.TestCase):
 
 
     def test_symmetric_disc07_censor_coverage_and_exact_jitter(self):
-        records = list(self.synthetic.values())
+        records = [dict(row) for row in self.synthetic.values()]
         for row in records:
             if row["workload_id"].startswith("DISC_07_"):
                 row.update(attempt_outcome="CENSORED", censoring_reason="WORK_BUDGET_EXCEEDED")
