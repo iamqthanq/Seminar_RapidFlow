@@ -1,0 +1,955 @@
+{
+  "schema": "p4b-3b0-r2-1-1-acceptance-matrix-v1",
+  "phase": "P4b-3B.0-R2.1.1",
+  "handoff_status": "P4B_3B0_R2_1_1_READY_FOR_FINAL_INDEPENDENT_REVIEW",
+  "execution_authorization": "P4B_3B_1_NOT_AUTHORIZED",
+  "baseline_revision": "a7cbbd24c4ae3a0239501b1e76b84a7b3cf81926",
+  "tested_logic_commit": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+  "native_source_commit": "115ce2844d91f6a6588fe0ac50b1179bc3b38012",
+  "production_binary_sha256": "3fa35111acd7e7527a80bae6b0caa6d51d1e283d9848747a62c2517d696d1876",
+  "historical_witness_binary_sha256": "fcdd9c5efd97bf59604d4d3204db03e28bb93f0b42488aa02d252b0a4aa8c7a9",
+  "new_witness_binary_sha256": "86c23d7994de4bbdd5c6aedcb7a1572a6792081faf956a25e6b7ba96f5650247",
+  "total_gates": 54,
+  "status_counts": {
+    "PASS": 52,
+    "PENDING_EXTERNAL_APPROVAL": 2
+  },
+  "gates": [
+    {
+      "gate_id": "R211-A01",
+      "requirement": "Exact baseline verified",
+      "verification_method": "Git rev-parse & status preflight",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+      "expected_result": "HEAD starts cleanly from a7cbbd2",
+      "actual_result": "Verified clean baseline a7cbbd24c4ae3a0239501b1e76b84a7b3cf81926",
+      "evidence_paths": [
+        "r211-preflight.json"
+      ],
+      "evidence_sha256": {
+        "r211-preflight.json": "a55a6e418a6501aaca569b2ced55d9f26b8adb66f25fe450f7c074a27416a732"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-A02",
+      "requirement": "Existing branch, Issue and Draft PR preserved",
+      "verification_method": "gh issue/pr view & git branch",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+      "expected_result": "PR #39 OPEN/DRAFT, Issue #38 OPEN on feature/rf38-p4b-optimization",
+      "actual_result": "Verified PR #39 OPEN/isDraft=true and Issue #38 OPEN",
+      "evidence_paths": [
+        "r211-preflight.json"
+      ],
+      "evidence_sha256": {
+        "r211-preflight.json": "a55a6e418a6501aaca569b2ced55d9f26b8adb66f25fe450f7c074a27416a732"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-A03",
+      "requirement": "Upstream source unchanged",
+      "verification_method": "git -C baselines/rapidflow/source rev-parse/status",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+      "expected_result": "Pristine at 2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1",
+      "actual_result": "Verified clean at 2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1",
+      "evidence_paths": [
+        "r211-preflight.json"
+      ],
+      "evidence_sha256": {
+        "r211-preflight.json": "a55a6e418a6501aaca569b2ced55d9f26b8adb66f25fe450f7c074a27416a732"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-A04",
+      "requirement": "Production binary preserved bit-for-bit",
+      "verification_method": "sha256sum of build/ and build-r2-candidate/ rapidflow_apx_native",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+      "expected_result": "3fa35111acd7e7527a80bae6b0caa6d51d1e283d9848747a62c2517d696d1876",
+      "actual_result": "Both binaries remain exact 3fa35111... (970632 bytes)",
+      "evidence_paths": [
+        "tests/native/rapidflow_apx_engines/build/rapidflow_apx_native",
+        "r211-preflight.json"
+      ],
+      "evidence_sha256": {
+        "tests/native/rapidflow_apx_engines/build/rapidflow_apx_native": "3fa35111acd7e7527a80bae6b0caa6d51d1e283d9848747a62c2517d696d1876",
+        "r211-preflight.json": "a55a6e418a6501aaca569b2ced55d9f26b8adb66f25fe450f7c074a27416a732"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-A05",
+      "requirement": "Historical evidence preserved",
+      "verification_method": "Verify R1/R2/R2.1 archives, historical witness, original R2.1 matrix",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+      "expected_result": "All preserved SHA-256 unchanged",
+      "actual_result": "All preserved verified including historical fcdd9c5e witness & ac545baa matrix",
+      "evidence_paths": [
+        "review-evidence-p4b3a-r1.tar.gz",
+        "review-evidence-p4b3b0-r2.tar.gz",
+        "P4b3B0_R2_1_Independent_Review/SHA256SUMS",
+        "historical-preserved/r2_1_gate_reconciliation_a7cbbd2.json"
+      ],
+      "evidence_sha256": {
+        "review-evidence-p4b3a-r1.tar.gz": "22b5245d24d47b00fec6f3ab7b0960a6d6a27636759cc9c7c1259a343882cfe9",
+        "review-evidence-p4b3b0-r2.tar.gz": "f1dcbaff61663e256abc95c5e74c04aa212292978b5ed642e1b9fd632c5ea50b",
+        "P4b3B0_R2_1_Independent_Review/SHA256SUMS": "93c4430ac852ffb7064685cb9fcea3da016b07b3e36ae4d207bcd28bd3e45faa",
+        "historical-preserved/r2_1_gate_reconciliation_a7cbbd2.json": "ac545baa550837df4df0e4767b0f980b4185fe44f42ace836746fb93df5fb609"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-B01",
+      "requirement": "Replay revision contradiction reproduced",
+      "verification_method": "Compare R2.1 doc vs CANDIDATE_REPLAY_REV & 250 replay rows",
+      "tested_revision": "a7cbbd24c4ae3a0239501b1e76b84a7b3cf81926",
+      "expected_result": "Confirm 101272cf doc vs 115ce284 source/bundle mismatch",
+      "actual_result": "Reproduced in red/red_findings.json on a7cbbd2",
+      "evidence_paths": [
+        "red/red_findings.json"
+      ],
+      "evidence_sha256": {
+        "red/red_findings.json": "f320ac342e02ead9cb5845832abb2544a57a16609c88df3ba74cd08a8cc2b2d4"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-B02",
+      "requirement": "Documentation matches registered replay revision",
+      "verification_method": "Inspect updated candidate_binding_contract.md",
+      "tested_revision": "HEAD",
+      "expected_result": "Matches 115ce2844d91f6a6588fe0ac50b1179bc3b38012",
+      "actual_result": "Updated docs match CANDIDATE_REPLAY_REV and 250/250 rows",
+      "evidence_paths": [
+        "red/red_findings.json"
+      ],
+      "evidence_sha256": {
+        "red/red_findings.json": "f320ac342e02ead9cb5845832abb2544a57a16609c88df3ba74cd08a8cc2b2d4"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-B03",
+      "requirement": "Native/replay/tested-logic identities distinguished",
+      "verification_method": "Inspect commit provenance role table in binding contract",
+      "tested_revision": "HEAD",
+      "expected_result": "Distinguish native build, registered replay rev, R2/R2.1 tested commits",
+      "actual_result": "Explicit three-role provenance distinction added",
+      "evidence_paths": [
+        "red/red_findings.json"
+      ],
+      "evidence_sha256": {
+        "red/red_findings.json": "f320ac342e02ead9cb5845832abb2544a57a16609c88df3ba74cd08a8cc2b2d4"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-B04",
+      "requirement": "Incorrect replay revision rejected by activation contract",
+      "verification_method": "r2_1_1::test_02 replay_revision=101272cf mutation",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+      "expected_result": "ACTIVATION_IDENTITY_MISMATCH: correctness_bundle",
+      "actual_result": "Confirmed exact rejection in targeted_tests.log",
+      "evidence_paths": [
+        "green/targeted_tests.log"
+      ],
+      "evidence_sha256": {
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-B05",
+      "requirement": "Candidate registry/archive unchanged",
+      "verification_method": "sha256sum of candidate archive & registry",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+      "expected_result": "8efd7c65... & 40a28b4d... unchanged",
+      "actual_result": "Both SHA-256 preserved identically",
+      "evidence_paths": [
+        "candidate-reference-bundle/p4b-r2-correctness-reference-bundle.tar.gz",
+        "configs/rapidflow_apx_p4b_r2_1_candidate_registry.json"
+      ],
+      "evidence_sha256": {
+        "candidate-reference-bundle/p4b-r2-correctness-reference-bundle.tar.gz": "8efd7c65856c675773249d19b20165106d92917af56913be3730b5a2de044464",
+        "configs/rapidflow_apx_p4b_r2_1_candidate_registry.json": "40a28b4d963d8c652bc49ab231aa2ccb6626e3de9b4badc3b3a13a03620fe0b4"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-C01",
+      "requirement": "Original B-W03 evidence limitation documented",
+      "verification_method": "Red baseline audit + doc update",
+      "tested_revision": "a7cbbd24c4ae3a0239501b1e76b84a7b3cf81926",
+      "expected_result": "Document that prior B-W03 did not isolate post-callback apply_delete",
+      "actual_result": "Recorded in red_findings.json and R2.1/R2.1.1 docs",
+      "evidence_paths": [
+        "red/red_findings.json"
+      ],
+      "evidence_sha256": {
+        "red/red_findings.json": "f320ac342e02ead9cb5845832abb2544a57a16609c88df3ba74cd08a8cc2b2d4"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-C02",
+      "requirement": "Post-callback DELETE allocation witness implemented",
+      "verification_method": "B-W03b in r21_resource_witness.cpp + test_03",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+      "expected_result": "PASS post-callback DELETE witness",
+      "actual_result": "PASS in --verify-paths, CLI delete-post-callback & test_03",
+      "evidence_paths": [
+        "tests/native/rapidflow_apx_engines/build/rapidflow_apx_r21_resource_witness",
+        "native-witnesses/delete-post-callback/delete-post-callback-witness.json",
+        "green/targeted_tests.log"
+      ],
+      "evidence_sha256": {
+        "tests/native/rapidflow_apx_engines/build/rapidflow_apx_r21_resource_witness": "86c23d7994de4bbdd5c6aedcb7a1572a6792081faf956a25e6b7ba96f5650247",
+        "native-witnesses/delete-post-callback/delete-post-callback-witness.json": "bc840e90e5871bacb27e2b0af20a3e549102811458a15e2ab48ebbcc590c7981",
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-C03",
+      "requirement": "Allocation trigger occurs after callback completes",
+      "verification_method": "Check callback_reached, callback_completed, allocation_armed_after_search, allocation_triggered",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+      "expected_result": "All true / >0",
+      "actual_result": "callback_reached=true, callback_completed=true, armed_after_search=true, triggered=1",
+      "evidence_paths": [
+        "native-witnesses/delete-post-callback/delete-post-callback-witness.json",
+        "green/targeted_tests.log"
+      ],
+      "evidence_sha256": {
+        "native-witnesses/delete-post-callback/delete-post-callback-witness.json": "bc840e90e5871bacb27e2b0af20a3e549102811458a15e2ab48ebbcc590c7981",
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-C04",
+      "requirement": "Actual graph mutation failure boundary established",
+      "verification_method": "Execute tx_manager(DELETE) with NlfMode::NONE bypassing NLF prepare into apply_delete",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+      "expected_result": "Failure isolated to post_callback_apply_delete_tombstones_insert_key",
+      "actual_result": "Confirmed allocation #1 hits tombstones_.insert(key) inside apply_delete()",
+      "evidence_paths": [
+        "native-witnesses/delete-post-callback/delete-post-callback-witness.json",
+        "native-witnesses/verify_paths.json"
+      ],
+      "evidence_sha256": {
+        "native-witnesses/delete-post-callback/delete-post-callback-witness.json": "bc840e90e5871bacb27e2b0af20a3e549102811458a15e2ab48ebbcc590c7981",
+        "native-witnesses/verify_paths.json": "12dfb7cea88d110c578cce157e0e3e2217b747678e843f52fb5c978f84c62282"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-C05",
+      "requirement": "Graph/codec/sink rollback verified",
+      "verification_method": "Check all 7 graph read APIs, overlay/tombstone, codec, tuple_sink",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+      "expected_result": "rollback_equal=true, 0 leaked tuples",
+      "actual_result": "All 7 APIs parity-checked, rollback_equal=true, committed_emissions unchanged",
+      "evidence_paths": [
+        "native-witnesses/delete-post-callback/delete-post-callback-witness.json",
+        "green/targeted_tests.log"
+      ],
+      "evidence_sha256": {
+        "native-witnesses/delete-post-callback/delete-post-callback-witness.json": "bc840e90e5871bacb27e2b0af20a3e549102811458a15e2ab48ebbcc590c7981",
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-C06",
+      "requirement": "Subsequent DELETE positive control passes",
+      "verification_method": "Re-run DELETE with OOM disarmed after rollback",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+      "expected_result": "SUCCESS and edge deleted cleanly",
+      "actual_result": "positive_control_status=SUCCESS, edges_count 3->2, has_edge_02=false",
+      "evidence_paths": [
+        "native-witnesses/delete-post-callback/delete-post-callback-witness.json",
+        "green/targeted_tests.log"
+      ],
+      "evidence_sha256": {
+        "native-witnesses/delete-post-callback/delete-post-callback-witness.json": "bc840e90e5871bacb27e2b0af20a3e549102811458a15e2ab48ebbcc590c7981",
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-C07",
+      "requirement": "Late-search native allocation witness executed",
+      "verification_method": "P4B_CONT_01 late-search CLI/session witness (inject_after=60)",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+      "expected_result": "RESOURCE_EXHAUSTED, exit 5, std::bad_alloc",
+      "actual_result": "Verified in durable artifact & r2_1_1::test_04",
+      "evidence_paths": [
+        "native-witnesses/late-search-diagnostic/native-output.json",
+        "green/targeted_tests.log"
+      ],
+      "evidence_sha256": {
+        "native-witnesses/late-search-diagnostic/native-output.json": "9a642b7a3ddb58881eeba60d1059efff21a8e9839fccfb7e0740359a4a83201e",
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-C08",
+      "requirement": "Actual work and neighbor retrieval observed",
+      "verification_method": "Inspect late-search diagnostic step_counters & profiling",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+      "expected_result": "work_units > 0 and neighbor_retrieval_ns > 0",
+      "actual_result": "Observed work_units=40, neighbor_retrieval_ns=2356",
+      "evidence_paths": [
+        "native-witnesses/late-search-diagnostic/native-output.json",
+        "green/targeted_tests.log"
+      ],
+      "evidence_sha256": {
+        "native-witnesses/late-search-diagnostic/native-output.json": "9a642b7a3ddb58881eeba60d1059efff21a8e9839fccfb7e0740359a4a83201e",
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-C09",
+      "requirement": "Exception-safe timing hierarchy preserved",
+      "verification_method": "Check SearchTimingGuard metrics on unwind",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+      "expected_result": "search_ns>=neighbor_retrieval_ns, search_ns>=search_core_ns, step_total_ns>=search_ns",
+      "actual_result": "Observed 101339>=2356, 101339>=98983, 112041>=101339",
+      "evidence_paths": [
+        "native-witnesses/late-search-diagnostic/native-output.json",
+        "green/targeted_tests.log"
+      ],
+      "evidence_sha256": {
+        "native-witnesses/late-search-diagnostic/native-output.json": "9a642b7a3ddb58881eeba60d1059efff21a8e9839fccfb7e0740359a4a83201e",
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-C10",
+      "requirement": "Native output ingested by shared validator",
+      "verification_method": "ResourceWitnessBackend -> session() -> _validate_native()",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+      "expected_result": "CENSORED / MEMORY_LIMIT_FAILURE",
+      "actual_result": "PASS in both diagnostic and primary modes",
+      "evidence_paths": [
+        "native-witnesses/late-search-diagnostic/replay-summary.json",
+        "green/targeted_tests.log"
+      ],
+      "evidence_sha256": {
+        "native-witnesses/late-search-diagnostic/replay-summary.json": "0d55aa95b0126c889a8c512381bbbc13f04e7786f01b27f49fef893c63d2733b",
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-C11",
+      "requirement": "Journal and offline replay agree",
+      "verification_method": "session(..., execute=False) == live session",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+      "expected_result": "replay_equal=true",
+      "actual_result": "Exact match verified across early & late search witnesses",
+      "evidence_paths": [
+        "native-witnesses/late-search-diagnostic/replay-summary.json",
+        "green/targeted_tests.log"
+      ],
+      "evidence_sha256": {
+        "native-witnesses/late-search-diagnostic/replay-summary.json": "0d55aa95b0126c889a8c512381bbbc13f04e7786f01b27f49fef893c63d2733b",
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-C12",
+      "requirement": "Test-only witness excluded from official measurement",
+      "verification_method": "analyze_p4b_ledger on witness record + measurement_eligible check",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+      "expected_result": "measurement_eligible=False; raises CONFIRMATORY_ANALYSIS_NOT_AUTHORIZED / SLOT_IDENTITY_MISMATCH",
+      "actual_result": "PASS in r2_1_1::test_04 & r2_1::test_06",
+      "evidence_paths": [
+        "green/targeted_tests.log"
+      ],
+      "evidence_sha256": {
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-C13",
+      "requirement": "Performance profiling isolation preserved",
+      "verification_method": "Run late-search counterpart under primary/performance purpose",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+      "expected_result": "No root or step profiling keys emitted",
+      "actual_result": "Verified absence of profiling in late-search-performance/native-output.json",
+      "evidence_paths": [
+        "native-witnesses/late-search-performance/native-output.json",
+        "green/targeted_tests.log"
+      ],
+      "evidence_sha256": {
+        "native-witnesses/late-search-performance/native-output.json": "c3c9424756a5a4cdebf5d0784adca69902b311d6c8b0e01c5ed8962571a41d3f",
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-D01",
+      "requirement": "Validation call counts corrected",
+      "verification_method": "Audit R21-C02 against simulation-summary.json & test_08",
+      "tested_revision": "HEAD",
+      "expected_result": "2869+1450=4319 (durable) and 1664+1450=3114 (test_08)",
+      "actual_result": "Corrected without double-counting replay",
+      "evidence_paths": [
+        "historical-evidence-projections/r21_simulation_summary.json"
+      ],
+      "evidence_sha256": {
+        "historical-evidence-projections/r21_simulation_summary.json": "d8ad5e15c608e7f6f635a268518676481cc27d3b97e2a777ca4ad02cd742f142"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-D02",
+      "requirement": "Timing expectation expressed as invariant",
+      "verification_method": "Audit R21-B02 expected vs observed fields",
+      "tested_revision": "HEAD",
+      "expected_result": "Invariant bounds in expected; concrete observed metrics bound to artifacts",
+      "actual_result": "Corrected in gate_reconciliation.json",
+      "evidence_paths": [
+        "native-witnesses/late-search-diagnostic/native-output.json",
+        "native-witnesses/early-search/native-output.json"
+      ],
+      "evidence_sha256": {
+        "native-witnesses/late-search-diagnostic/native-output.json": "9a642b7a3ddb58881eeba60d1059efff21a8e9839fccfb7e0740359a4a83201e",
+        "native-witnesses/early-search/native-output.json": "4ef64ab140db646019e2de72aa3a1bec39939710150694b745b948b8da65924a"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-D03",
+      "requirement": "Recovery status literal corrected",
+      "verification_method": "Audit R2-J04 against p4b_experiment_session.py:845",
+      "tested_revision": "HEAD",
+      "expected_result": "STARTED_WITHOUT_FINISH_REVIEW_REQUIRED",
+      "actual_result": "Corrected from bogus string literal",
+      "evidence_paths": [
+        "green/targeted_tests.log"
+      ],
+      "evidence_sha256": {
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-D04",
+      "requirement": "Actual journal scenario coverage reconciled",
+      "verification_method": "Audit R21-C04 vs test_09 body",
+      "tested_revision": "HEAD",
+      "expected_result": "13 direct scenarios documented accurately + historical cross-ref",
+      "actual_result": "Method renamed & reconciled cleanly",
+      "evidence_paths": [
+        "green/targeted_tests.log"
+      ],
+      "evidence_sha256": {
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-D05",
+      "requirement": "Candidate and outer archive evidence distinguished",
+      "verification_method": "Audit R2-M05 & R21-E07 paths",
+      "tested_revision": "HEAD",
+      "expected_result": "Bind candidate archive 8efd7c65 + detached outer archive verification",
+      "actual_result": "Separated clearly with detached verification hashes",
+      "evidence_paths": [
+        "P4b3B0_R2_1_Independent_Review/archive-verification.json",
+        "candidate-reference-bundle/p4b-r2-correctness-reference-bundle.tar.gz"
+      ],
+      "evidence_sha256": {
+        "P4b3B0_R2_1_Independent_Review/archive-verification.json": "d423ba5519fe487c9a8d6f7084778a5142ba0bee6ff573aec91e64494963b79c",
+        "candidate-reference-bundle/p4b-r2-correctness-reference-bundle.tar.gz": "8efd7c65856c675773249d19b20165106d92917af56913be3730b5a2de044464"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-D06",
+      "requirement": "Historical matrix preserved",
+      "verification_method": "Hash check original R2.1 matrix before editing",
+      "tested_revision": "a7cbbd24c4ae3a0239501b1e76b84a7b3cf81926",
+      "expected_result": "Original ac545baa... preserved cleanly",
+      "actual_result": "Copied verbatim into historical-preserved/",
+      "evidence_paths": [
+        "historical-preserved/r2_1_gate_reconciliation_a7cbbd2.json"
+      ],
+      "evidence_sha256": {
+        "historical-preserved/r2_1_gate_reconciliation_a7cbbd2.json": "ac545baa550837df4df0e4767b0f980b4185fe44f42ace836746fb93df5fb609"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-D07",
+      "requirement": "All 59+39 original technical gate IDs preserved",
+      "verification_method": "Automated gate count & ID invariance check",
+      "tested_revision": "HEAD",
+      "expected_result": "59 original_r2 + 39 r2_1 = 98 unique IDs preserved",
+      "actual_result": "All 98 gate IDs preserved & verified",
+      "evidence_paths": [
+        "historical-preserved/r2_1_gate_reconciliation_a7cbbd2.json"
+      ],
+      "evidence_sha256": {
+        "historical-preserved/r2_1_gate_reconciliation_a7cbbd2.json": "ac545baa550837df4df0e4767b0f980b4185fe44f42ace836746fb93df5fb609"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-E01",
+      "requirement": "Documentation error identifier corrected",
+      "verification_method": "Replace UNSAFE_ARCHIVE_MEMBER -> UNSAFE_ARCHIVE_PATH in binding doc",
+      "tested_revision": "HEAD",
+      "expected_result": "Matches p4b_correctness_registry.py:122",
+      "actual_result": "Corrected & cross-checked related identifiers",
+      "evidence_paths": [
+        "red/red_findings.json"
+      ],
+      "evidence_sha256": {
+        "red/red_findings.json": "f320ac342e02ead9cb5845832abb2544a57a16609c88df3ba74cd08a8cc2b2d4"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-E02",
+      "requirement": "Missing bundle fields rejected structurally",
+      "verification_method": "r2_1_1::test_01 missing_field subtest",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+      "expected_result": "LedgerIntegrityError MISSING_BUNDLE_IDENTITY_FIELD",
+      "actual_result": "PASS (eliminated baseline KeyError)",
+      "evidence_paths": [
+        "red/red_findings.json",
+        "green/targeted_tests.log"
+      ],
+      "evidence_sha256": {
+        "red/red_findings.json": "f320ac342e02ead9cb5845832abb2544a57a16609c88df3ba74cd08a8cc2b2d4",
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-E03",
+      "requirement": "Invalid/unhashable bundle identifiers rejected structurally",
+      "verification_method": "r2_1_1::test_01 list/dict/None/bool/int subtests",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+      "expected_result": "LedgerIntegrityError INVALID_TRUST_BUNDLE_SHAPE",
+      "actual_result": "PASS (eliminated baseline TypeError)",
+      "evidence_paths": [
+        "red/red_findings.json",
+        "green/targeted_tests.log"
+      ],
+      "evidence_sha256": {
+        "red/red_findings.json": "f320ac342e02ead9cb5845832abb2544a57a16609c88df3ba74cd08a8cc2b2d4",
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-E04",
+      "requirement": "Valid historical and candidate resolution preserved",
+      "verification_method": "r2_1_1::test_01 & r2_1::test_01..02",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+      "expected_result": "Resolve cleanly without altering returned spec",
+      "actual_result": "PASS including extra-key immutability test",
+      "evidence_paths": [
+        "green/targeted_tests.log"
+      ],
+      "evidence_sha256": {
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-E05",
+      "requirement": "Cross-bundle identity mismatch remains rejected",
+      "verification_method": "r2_1::test_04 A-N01..A-N20",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+      "expected_result": "All cross-bundle/tampered cases fail closed",
+      "actual_result": "PASS in targeted_tests.log",
+      "evidence_paths": [
+        "green/targeted_tests.log"
+      ],
+      "evidence_sha256": {
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-E06",
+      "requirement": "A-N07a exact outer archive rejection",
+      "verification_method": "r2_1_1::test_02 & r2_1::test_04 [A-N07a]",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+      "expected_result": "^ARCHIVE_IDENTITY_MISMATCH$",
+      "actual_result": "Exact match verified",
+      "evidence_paths": [
+        "green/targeted_tests.log"
+      ],
+      "evidence_sha256": {
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-E07",
+      "requirement": "A-N07b exact inner manifest rejection",
+      "verification_method": "r2_1_1::test_02 & r2_1::test_04 [A-N07b] isolated patch.dict",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+      "expected_result": "^MANIFEST_HASH_MISMATCH$",
+      "actual_result": "Bypassed outer SHA check and hit inner manifest rejection",
+      "evidence_paths": [
+        "green/targeted_tests.log"
+      ],
+      "evidence_sha256": {
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-E08",
+      "requirement": "Actual production trust constants unchanged",
+      "verification_method": "Inspect TRUSTED_BUNDLES SHA constants",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+      "expected_result": "CANDIDATE_* constants unchanged",
+      "actual_result": "Verified identical archive/manifest/registry/replay hashes",
+      "evidence_paths": [
+        "candidate-reference-bundle/p4b-r2-correctness-reference-bundle.tar.gz",
+        "configs/rapidflow_apx_p4b_r2_1_candidate_registry.json"
+      ],
+      "evidence_sha256": {
+        "candidate-reference-bundle/p4b-r2-correctness-reference-bundle.tar.gz": "8efd7c65856c675773249d19b20165106d92917af56913be3730b5a2de044464",
+        "configs/rapidflow_apx_p4b_r2_1_candidate_registry.json": "40a28b4d963d8c652bc49ab231aa2ccb6626e3de9b4badc3b3a13a03620fe0b4"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-F01",
+      "requirement": "Test impact analysis completed",
+      "verification_method": "Inspect r211-test-impact-analysis.json",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+      "expected_result": "Document every modified file/function & campaign non-rerun rationale",
+      "actual_result": "Created & verified",
+      "evidence_paths": [
+        "r211-test-impact-analysis.json"
+      ],
+      "evidence_sha256": {
+        "r211-test-impact-analysis.json": "03efa071d7bca6db3633ea3be99e6ee3af26f7966cc962f4b489377af9800dd0"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-F02",
+      "requirement": "Required targeted tests pass",
+      "verification_method": "targeted_tests.log & targeted_tests_3b0.log on 9f7701b",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+      "expected_result": "0 failures, 0 errors",
+      "actual_result": "All executed targeted tests PASS on 9f7701b",
+      "evidence_paths": [
+        "green/targeted_tests.log",
+        "green/targeted_tests_3b0.log"
+      ],
+      "evidence_sha256": {
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf",
+        "green/targeted_tests_3b0.log": "116b5385c3c9b22479d6f6dc4e94fa3e9bc193be2a6dfeaad1390d38731afbc1"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-F03",
+      "requirement": "Historical regression provenance accurately reported",
+      "verification_method": "Document 896/896 PASS at 39396c14 & R2.1.1 full regression=NOT_RUN",
+      "tested_revision": "HEAD",
+      "expected_result": "No historical/current conflation",
+      "actual_result": "Documented clearly across docs & matrix",
+      "evidence_paths": [
+        "regression/historical_896_test_inventory.txt",
+        "r211-test-impact-analysis.json"
+      ],
+      "evidence_sha256": {
+        "regression/historical_896_test_inventory.txt": "bb19b1a630f9ed340e104575f6564f4cbc8367ac2fdc1715386e6bc7cb5a99d5",
+        "r211-test-impact-analysis.json": "03efa071d7bca6db3633ea3be99e6ee3af26f7966cc962f4b489377af9800dd0"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-F04",
+      "requirement": "Durable new witness evidence preserved",
+      "verification_method": "Verify 4 durable witness folders on Desktop",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+      "expected_result": "All 11 files in CLI/Session witness dirs + delete-post-callback",
+      "actual_result": "Verified all files present outside TemporaryDirectory",
+      "evidence_paths": [
+        "native-witnesses/delete-post-callback/delete-post-callback-witness.json",
+        "native-witnesses/early-search/native-output.json",
+        "native-witnesses/late-search-diagnostic/native-output.json",
+        "native-witnesses/late-search-performance/native-output.json"
+      ],
+      "evidence_sha256": {
+        "native-witnesses/delete-post-callback/delete-post-callback-witness.json": "bc840e90e5871bacb27e2b0af20a3e549102811458a15e2ab48ebbcc590c7981",
+        "native-witnesses/early-search/native-output.json": "4ef64ab140db646019e2de72aa3a1bec39939710150694b745b948b8da65924a",
+        "native-witnesses/late-search-diagnostic/native-output.json": "9a642b7a3ddb58881eeba60d1059efff21a8e9839fccfb7e0740359a4a83201e",
+        "native-witnesses/late-search-performance/native-output.json": "c3c9424756a5a4cdebf5d0784adca69902b311d6c8b0e01c5ed8962571a41d3f"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-F05",
+      "requirement": "Missing historical evidence supplied",
+      "verification_method": "Populate r211-reviewer-evidence-map.json, 896-test list, 250-row projection, R2 logs & source excerpts",
+      "tested_revision": "HEAD",
+      "expected_result": "All MISSING_EVIDENCE items mapped & included",
+      "actual_result": "Verified cleanly in evidence dir & Gemini packet",
+      "evidence_paths": [
+        "r211-reviewer-evidence-map.json",
+        "regression/historical_896_test_inventory.txt",
+        "historical-evidence-projections/r2_p3_recert_summary.json",
+        "historical-evidence-projections/r2_sanitizer.log",
+        "historical-evidence-projections/final-nonconfirmatory-analysis.json"
+      ],
+      "evidence_sha256": {
+        "r211-reviewer-evidence-map.json": "bb2f163228a272e9dd5b86e94133420fb4721fadd77fd59bfb026403bd318dc6",
+        "regression/historical_896_test_inventory.txt": "bb19b1a630f9ed340e104575f6564f4cbc8367ac2fdc1715386e6bc7cb5a99d5",
+        "historical-evidence-projections/r2_p3_recert_summary.json": "d264a414202012ef8f279d3917fa57e8018913226ad17f7d9b7810cd76392c2a",
+        "historical-evidence-projections/r2_sanitizer.log": "43a884d668a8e6aa68418f4b20342f2e7e920c2c89035eb254108a0ce6ef1283",
+        "historical-evidence-projections/final-nonconfirmatory-analysis.json": "3ce6b3771513560ef010bfc5e6ac01af9d5b486778e60c1309a4894db50ada04"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-F06",
+      "requirement": "Source-lock compatibility verified",
+      "verification_method": "Call auth._source_state(9f7701b) after final docs commit",
+      "tested_revision": "HEAD",
+      "expected_result": "All SOURCE_PATHS cleanly hashed; zero non-docs drift",
+      "actual_result": "Verified after docs commit (see closure report)",
+      "evidence_paths": [
+        "r211-test-impact-analysis.json"
+      ],
+      "evidence_sha256": {
+        "r211-test-impact-analysis.json": "03efa071d7bca6db3633ea3be99e6ee3af26f7966cc962f4b489377af9800dd0"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-F07",
+      "requirement": "R2.1.1 evidence archive verified",
+      "verification_method": "Pack & verify review-evidence-p4b3b0-r2-1-1.tar.gz",
+      "tested_revision": "HEAD",
+      "expected_result": "0 missing/extra/duplicate/unsafe/hash mismatch",
+      "actual_result": "Verified via detached archive-verification.json & SHA256SUMS",
+      "evidence_paths": [
+        "r211-test-impact-analysis.json"
+      ],
+      "evidence_sha256": {
+        "r211-test-impact-analysis.json": "03efa071d7bca6db3633ea3be99e6ee3af26f7966cc962f4b489377af9800dd0"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-F08",
+      "requirement": "Reviewer packet contains at most 9 TXT files",
+      "verification_method": "Count *.txt & verify SHA256SUMS in Gemini Web folder",
+      "tested_revision": "HEAD",
+      "expected_result": "<= 9 TXT files",
+      "actual_result": "Strictly 9 TXT files verified OK",
+      "evidence_paths": [
+        "r211-reviewer-evidence-map.json"
+      ],
+      "evidence_sha256": {
+        "r211-reviewer-evidence-map.json": "bb2f163228a272e9dd5b86e94133420fb4721fadd77fd59bfb026403bd318dc6"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-G01",
+      "requirement": "Frozen workload and schedule unchanged",
+      "verification_method": "Preservation inventory SHA-256 check",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+      "expected_result": "manifest 09c78158, schedule 824d4b09, 50/50 fixtures unchanged",
+      "actual_result": "0 unexpected drifts",
+      "evidence_paths": [
+        "configs/rapidflow_apx_p4b_manifest.json",
+        "configs/rapidflow_apx_p4b_schedule.json",
+        "r211-preflight.json"
+      ],
+      "evidence_sha256": {
+        "configs/rapidflow_apx_p4b_manifest.json": "09c78158d541c22f91b48aa484e3fd5e494910c2885635de1fa79bbed1784869",
+        "configs/rapidflow_apx_p4b_schedule.json": "824d4b09f31432fde355597aee877f38cae3f267b66dd658d8fc82c3cac05e6f",
+        "r211-preflight.json": "a55a6e418a6501aaca569b2ced55d9f26b8adb66f25fe450f7c074a27416a732"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-G02",
+      "requirement": "Scientific protocol unchanged",
+      "verification_method": "Preservation check on protocol JSON",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+      "expected_result": "protocol sha 70836770 unchanged",
+      "actual_result": "Preserved identically",
+      "evidence_paths": [
+        "configs/rapidflow_apx_p4b_protocol.json",
+        "r211-preflight.json"
+      ],
+      "evidence_sha256": {
+        "configs/rapidflow_apx_p4b_protocol.json": "70836770663c32a1a53e52e048be1dd8268fd2e3f02f66859737eef308c4acbb",
+        "r211-preflight.json": "a55a6e418a6501aaca569b2ced55d9f26b8adb66f25fe450f7c074a27416a732"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-G03",
+      "requirement": "No official native benchmark executed",
+      "verification_method": "CLI --dry-run & --execute-primary exit 2",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+      "expected_result": "0 official slots executed",
+      "actual_result": "launched_subprocess_count=0; --execute-primary exited 2",
+      "evidence_paths": [
+        "green/dry_run.json",
+        "green/unauth_neg_ctrl.log"
+      ],
+      "evidence_sha256": {
+        "green/dry_run.json": "7511aafe683da7c84852d5e408fe1a6811f2619b64b275e7897fc9a12030d308",
+        "green/unauth_neg_ctrl.log": "1d603023a6021fd711f927bae396d601ebb9803cf0f6490d7e9a5ce551bf2855"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-G04",
+      "requirement": "Actual activation anchors unchanged",
+      "verification_method": "Inspect configs/rapidflow_apx_p4b_activation_anchors.json",
+      "tested_revision": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+      "expected_result": "approved_envelopes=={}, sha b74e48dc",
+      "actual_result": "Verified empty",
+      "evidence_paths": [
+        "configs/rapidflow_apx_p4b_activation_anchors.json",
+        "r211-preflight.json"
+      ],
+      "evidence_sha256": {
+        "configs/rapidflow_apx_p4b_activation_anchors.json": "b74e48dc8ab3ab00d31581ec944e9e8a6743dd729f63d938f3645d82e146408e",
+        "r211-preflight.json": "a55a6e418a6501aaca569b2ced55d9f26b8adb66f25fe450f7c074a27416a732"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-G05",
+      "requirement": "Draft PR remains OPEN/DRAFT",
+      "verification_method": "gh pr view 39",
+      "tested_revision": "HEAD",
+      "expected_result": "OPEN, isDraft=true",
+      "actual_result": "Verified OPEN / isDraft=true",
+      "evidence_paths": [
+        "r211-preflight.json"
+      ],
+      "evidence_sha256": {
+        "r211-preflight.json": "a55a6e418a6501aaca569b2ced55d9f26b8adb66f25fe450f7c074a27416a732"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-G06",
+      "requirement": "Issue #38 remains OPEN",
+      "verification_method": "gh issue view 38",
+      "tested_revision": "HEAD",
+      "expected_result": "OPEN",
+      "actual_result": "Verified OPEN",
+      "evidence_paths": [
+        "r211-preflight.json"
+      ],
+      "evidence_sha256": {
+        "r211-preflight.json": "a55a6e418a6501aaca569b2ced55d9f26b8adb66f25fe450f7c074a27416a732"
+      },
+      "status": "PASS",
+      "limitations": null
+    },
+    {
+      "gate_id": "R211-G07",
+      "requirement": "Independent technical acceptance remains pending",
+      "verification_method": "External review gate status check",
+      "tested_revision": "HEAD",
+      "expected_result": "PENDING_EXTERNAL_APPROVAL",
+      "actual_result": "Held strictly PENDING_EXTERNAL_APPROVAL",
+      "evidence_paths": [
+        "configs/rapidflow_apx_p4b_activation_anchors.json"
+      ],
+      "evidence_sha256": {
+        "configs/rapidflow_apx_p4b_activation_anchors.json": "b74e48dc8ab3ab00d31581ec944e9e8a6743dd729f63d938f3645d82e146408e"
+      },
+      "status": "PENDING_EXTERNAL_APPROVAL",
+      "limitations": "Requires external review/coordinator sign-off"
+    },
+    {
+      "gate_id": "R211-G08",
+      "requirement": "Coordinator execution authorization remains pending",
+      "verification_method": "External authorization gate status check",
+      "tested_revision": "HEAD",
+      "expected_result": "PENDING_EXTERNAL_APPROVAL (P4B_3B_1_NOT_AUTHORIZED)",
+      "actual_result": "Held strictly PENDING_EXTERNAL_APPROVAL",
+      "evidence_paths": [
+        "configs/rapidflow_apx_p4b_activation_anchors.json"
+      ],
+      "evidence_sha256": {
+        "configs/rapidflow_apx_p4b_activation_anchors.json": "b74e48dc8ab3ab00d31581ec944e9e8a6743dd729f63d938f3645d82e146408e"
+      },
+      "status": "PENDING_EXTERNAL_APPROVAL",
+      "limitations": "Requires external review/coordinator sign-off"
+    }
+  ]
+}

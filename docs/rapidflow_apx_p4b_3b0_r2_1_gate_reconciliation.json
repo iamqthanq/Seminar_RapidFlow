@@ -1,12 +1,12 @@
 {
   "schema": "p4b-3b0-r2-1-gate-reconciliation-v1",
-  "phase": "P4b-3B.0-R2.1",
+  "phase": "P4b-3B.0-R2.1.1",
   "authoritative_predecessor_matrix": "docs/rapidflow_apx_p4b_3b0_r2_acceptance_matrix.json",
-  "handoff_status": "P4B_3B0_R2_1_READY_FOR_INDEPENDENT_REVIEW",
+  "handoff_status": "P4B_3B0_R2_1_1_READY_FOR_FINAL_INDEPENDENT_REVIEW",
   "execution_authorization": "P4B_3B_1_NOT_AUTHORIZED",
   "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
   "native_source_commit": "115ce2844d91f6a6588fe0ac50b1179bc3b38012",
-  "tested_logic_commit": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+  "tested_logic_commit": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
   "original_r2_gate_count": 59,
   "r2_1_gate_count": 39,
   "total_technical_gates": 98,
@@ -49,7 +49,8 @@
         "r21-preflight.json": "0189e9cebbc8afa03dbf8737919a8398d228b29199b3739a012a2583e545dc8b"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R2-A02",
@@ -70,7 +71,8 @@
         "r21-github-state.json": "e78b17ac543598eaa7d4e1736367bd0f031162281567c11c9afeb0bc9b228fc1"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R2-A03",
@@ -89,7 +91,8 @@
         "r21-preflight.json": "0189e9cebbc8afa03dbf8737919a8398d228b29199b3739a012a2583e545dc8b"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R2-A04",
@@ -110,7 +113,8 @@
         "r21-preservation-result.json": "88c59cefd6615571760232a28f807107cc3baee5402aecda84b344b1b7c33100"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R2-B01",
@@ -129,7 +133,8 @@
         "r2/red/python_and_harness_red.txt": "5319a566024be06aa1ed2dc4ebe1487fa856fc57472ee8f3ebee7617ef32d4c1"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R2-B02",
@@ -150,7 +155,8 @@
         "r2/green/sanitizer.log": "43a884d668a8e6aa68418f4b20342f2e7e920c2c89035eb254108a0ce6ef1283"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R2-B03",
@@ -171,7 +177,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R2-B04",
@@ -190,7 +197,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R2-C01",
@@ -211,7 +219,8 @@
         "r2/green/python_and_harness_green.txt": "2d4aede4a7595cba8a49d407cee2b1b67b4689efb3218b6403d494bca053d291"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R2-C02",
@@ -232,7 +241,8 @@
         "native-resource-witnesses/cli_diag_oom.json": "cbc9c89d04027ab72d2d4aaf6939ae5de9396ac061b69dbf768789bee39fae9c"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R2-C03",
@@ -255,7 +265,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R2-C04",
@@ -276,7 +287,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": "Fixed error payload relies on libstdc++ SSO (14 <= 15 bytes)"
+      "remaining_limitation": "Fixed error payload relies on libstdc++ SSO (14 <= 15 bytes)",
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R2-C05",
@@ -297,7 +309,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R2-C06",
@@ -318,7 +331,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R2-D01",
@@ -339,7 +353,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R2-D02",
@@ -360,7 +375,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R2-D03",
@@ -381,7 +397,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R2-E01",
@@ -402,7 +419,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R2-E02",
@@ -423,7 +441,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R2-E03",
@@ -444,7 +463,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R2-E04",
@@ -463,7 +483,8 @@
         "r2/green/sanitizer.log": "43a884d668a8e6aa68418f4b20342f2e7e920c2c89035eb254108a0ce6ef1283"
       },
       "status": "PASS",
-      "remaining_limitation": "Error string zero-allocation assumption is specific to libstdc++ SSO"
+      "remaining_limitation": "Error string zero-allocation assumption is specific to libstdc++ SSO",
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R2-E05",
@@ -484,7 +505,8 @@
         "r2/green/sanitizer.log": "43a884d668a8e6aa68418f4b20342f2e7e920c2c89035eb254108a0ce6ef1283"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R2-F01",
@@ -503,7 +525,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R2-F02",
@@ -526,7 +549,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R2-F03",
@@ -545,7 +569,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R2-G01",
@@ -568,7 +593,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R2-G02",
@@ -587,7 +613,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R2-G03",
@@ -610,7 +637,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R2-G04",
@@ -629,7 +657,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R2-H01",
@@ -650,7 +679,8 @@
         "configs/rapidflow_apx_p4b_r2_1_candidate_registry.json": "40a28b4d963d8c652bc49ab231aa2ccb6626e3de9b4badc3b3a13a03620fe0b4"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R2-H02",
@@ -671,7 +701,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R2-H03",
@@ -694,7 +725,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R2-H04",
@@ -715,7 +747,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R2-I01",
@@ -736,7 +769,8 @@
         "r21-preservation-result.json": "88c59cefd6615571760232a28f807107cc3baee5402aecda84b344b1b7c33100"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R2-I02",
@@ -757,7 +791,8 @@
         "r21-preflight.json": "0189e9cebbc8afa03dbf8737919a8398d228b29199b3739a012a2583e545dc8b"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R2-I03",
@@ -780,7 +815,8 @@
         "candidate-reference-bundle/p4b-r2-correctness-reference-bundle.tar.gz": "8efd7c65856c675773249d19b20165106d92917af56913be3730b5a2de044464"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R2-I04",
@@ -803,7 +839,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R2-I05",
@@ -822,7 +859,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R2-J01",
@@ -841,7 +879,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R2-J02",
@@ -862,7 +901,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R2-J03",
@@ -883,7 +923,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R2-J04",
@@ -893,16 +934,19 @@
       "verification_method": "Interrupted after START / after artifacts resume check",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
       "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
-      "expected_result": "Fail closed with UNFINISHED_ATTEMPT_REQUIRES_MANUAL_RECOVERY",
-      "observed_result": "PASS in test_09_journal_20_scenarios",
+      "expected_result": "Fail closed with state=SESSION_INTERRUPTED and recovery=STARTED_WITHOUT_FINISH_REVIEW_REQUIRED without relaunch",
+      "observed_result": "PASS in test_09_journal_interruption_tamper_and_r2_failure_mutations on R2.1.1 tested revision 9f7701b",
       "evidence_paths": [
+        "green/targeted_tests.log",
         "regression/full-regression.log"
       ],
       "evidence_sha256": {
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf",
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R2-K01",
@@ -923,7 +967,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R2-K02",
@@ -944,7 +989,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R2-K03",
@@ -965,7 +1011,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R2-K04",
@@ -988,7 +1035,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R2-L01",
@@ -1007,7 +1055,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R2-L02",
@@ -1026,7 +1075,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R2-L03",
@@ -1045,7 +1095,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R2-M01",
@@ -1066,7 +1117,8 @@
         "r21-preservation-result.json": "88c59cefd6615571760232a28f807107cc3baee5402aecda84b344b1b7c33100"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R2-M02",
@@ -1087,7 +1139,8 @@
         "r21-preservation-result.json": "88c59cefd6615571760232a28f807107cc3baee5402aecda84b344b1b7c33100"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R2-M03",
@@ -1106,7 +1159,8 @@
         "r21-preservation-result.json": "88c59cefd6615571760232a28f807107cc3baee5402aecda84b344b1b7c33100"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R2-M04",
@@ -1129,7 +1183,8 @@
         "r21-preservation-result.json": "88c59cefd6615571760232a28f807107cc3baee5402aecda84b344b1b7c33100"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R2-M05",
@@ -1139,16 +1194,21 @@
       "verification_method": "Clean fresh extraction manifest & member verification",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
       "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
-      "expected_result": "All archived members verified against manifest",
-      "observed_result": "Both p4b-r2-correctness-reference-bundle & R2.1 archive verified",
+      "expected_result": "Candidate bundle (8efd7c65..., 302 data members) and outer review archive verified cleanly against detached manifests",
+      "observed_result": "Candidate bundle unpacked/reconstructed; R2.1 outer archive (4201ac0b..., 10577 data / 10578 total members) verified cleanly",
       "evidence_paths": [
-        "candidate-reference-bundle/p4b-r2-correctness-reference-bundle.tar.gz"
+        "candidate-reference-bundle/p4b-r2-correctness-reference-bundle.tar.gz",
+        "P4b3B0_R2_1_Independent_Review/archive-verification.json",
+        "P4b3B0_R2_1_Independent_Review/SHA256SUMS"
       ],
       "evidence_sha256": {
-        "candidate-reference-bundle/p4b-r2-correctness-reference-bundle.tar.gz": "8efd7c65856c675773249d19b20165106d92917af56913be3730b5a2de044464"
+        "candidate-reference-bundle/p4b-r2-correctness-reference-bundle.tar.gz": "8efd7c65856c675773249d19b20165106d92917af56913be3730b5a2de044464",
+        "P4b3B0_R2_1_Independent_Review/archive-verification.json": "d423ba5519fe487c9a8d6f7084778a5142ba0bee6ff573aec91e64494963b79c",
+        "P4b3B0_R2_1_Independent_Review/SHA256SUMS": "93c4430ac852ffb7064685cb9fcea3da016b07b3e36ae4d207bcd28bd3e45faa"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R2-N01",
@@ -1167,7 +1227,8 @@
         "configs/rapidflow_apx_p4b_activation_anchors.json": "b74e48dc8ab3ab00d31581ec944e9e8a6743dd729f63d938f3645d82e146408e"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R2-N02",
@@ -1188,7 +1249,8 @@
         "green/unauth_neg_ctrl.log": "1d603023a6021fd711f927bae396d601ebb9803cf0f6490d7e9a5ce551bf2855"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R2-N03",
@@ -1209,7 +1271,8 @@
         "r21-github-state.json": "e78b17ac543598eaa7d4e1736367bd0f031162281567c11c9afeb0bc9b228fc1"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R2-N04",
@@ -1230,7 +1293,8 @@
         "r21-github-state.json": "e78b17ac543598eaa7d4e1736367bd0f031162281567c11c9afeb0bc9b228fc1"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R2-N05",
@@ -1253,7 +1317,8 @@
         "green/unauth_neg_ctrl.log": "1d603023a6021fd711f927bae396d601ebb9803cf0f6490d7e9a5ce551bf2855"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R21-A01",
@@ -1272,7 +1337,8 @@
         "red/red_findings.json": "9ef80fa67e602ddff80e3fbf6b6234ba7dc9dea9e78ae6da2c82606c6ce1aaf0"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R21-A02",
@@ -1293,7 +1359,8 @@
         "configs/rapidflow_apx_p4b_r2_1_candidate_registry.json": "40a28b4d963d8c652bc49ab231aa2ccb6626e3de9b4badc3b3a13a03620fe0b4"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R21-A03",
@@ -1314,7 +1381,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R21-A04",
@@ -1337,7 +1405,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R21-A05",
@@ -1358,7 +1427,8 @@
         "tests/native/rapidflow_apx_engines/build-r2-candidate/rapidflow_apx_native": "3fa35111acd7e7527a80bae6b0caa6d51d1e283d9848747a62c2517d696d1876"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R21-A06",
@@ -1377,7 +1447,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R21-A07",
@@ -1398,7 +1469,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R21-A08",
@@ -1417,7 +1489,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R21-A09",
@@ -1436,7 +1509,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R21-A10",
@@ -1457,7 +1531,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R21-B01",
@@ -1480,7 +1555,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R21-B02",
@@ -1490,18 +1566,23 @@
       "verification_method": "Inspect CLI witness output JSON",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
       "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
-      "expected_result": "RESOURCE_EXHAUSTED, RESOURCE_LIMIT_ERROR, std::bad_alloc, SearchTimingGuard search_ns=48444",
-      "observed_result": "Verified in diagnostic & performance modes",
+      "expected_result": "RESOURCE_EXHAUSTED, RESOURCE_LIMIT_ERROR, std::bad_alloc; timing invariant: work_units>=0 (early) / work_units>0 & neighbor_retrieval_ns>0 (late), search_ns>=neighbor_retrieval_ns, search_ns>=search_core_ns, step_total_ns>=search_ns",
+      "observed_result": "Verified in early-search (work=0, search_ns=49737, step_total_ns=56962), late-search-diagnostic (work=40, nbr_ns=2356, search_ns=101339, core_ns=98983, total_ns=112041), late-search-performance (prof absent), and historical R2.1 diagnostic (search_ns=38947)",
       "evidence_paths": [
-        "native-resource-witnesses/cli_diag_oom.json",
-        "regression/full-regression.log"
+        "native-witnesses/early-search/native-output.json",
+        "native-witnesses/late-search-diagnostic/native-output.json",
+        "native-witnesses/late-search-performance/native-output.json",
+        "green/targeted_tests.log"
       ],
       "evidence_sha256": {
-        "native-resource-witnesses/cli_diag_oom.json": "cbc9c89d04027ab72d2d4aaf6939ae5de9396ac061b69dbf768789bee39fae9c",
-        "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
+        "native-witnesses/early-search/native-output.json": "4ef64ab140db646019e2de72aa3a1bec39939710150694b745b948b8da65924a",
+        "native-witnesses/late-search-diagnostic/native-output.json": "9a642b7a3ddb58881eeba60d1059efff21a8e9839fccfb7e0740359a4a83201e",
+        "native-witnesses/late-search-performance/native-output.json": "c3c9424756a5a4cdebf5d0784adca69902b311d6c8b0e01c5ed8962571a41d3f",
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R21-B03",
@@ -1522,7 +1603,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R21-B04",
@@ -1541,7 +1623,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R21-B05",
@@ -1560,7 +1643,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R21-B06",
@@ -1579,7 +1663,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R21-B07",
@@ -1598,7 +1683,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R21-C01",
@@ -1619,7 +1705,8 @@
         "candidate-reference-bundle/p4b-r2-correctness-reference-bundle.tar.gz": "8efd7c65856c675773249d19b20165106d92917af56913be3730b5a2de044464"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R21-C02",
@@ -1629,18 +1716,19 @@
       "verification_method": "Spy _validate_native call count during rehearsal",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
       "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
-      "expected_result": "4319 exec+resume calls + 1450 replay calls in durable sim (test_08: 1664+1450)",
-      "observed_result": "PASS with 0 bypasses",
+      "expected_result": "Durable rehearsal stops (9, 205, 1205, 1450): 2869 exec+resume + 1450 offline replay = 4319 _validate_native calls; CI test_08 stops (9, 205, 1450): 1664 exec+resume + 1450 offline replay = 3114 calls",
+      "observed_result": "Verified historically at 39396c14 with 0 bypasses (test_08 not re-run at R2.1.1 per impact analysis)",
       "evidence_paths": [
-        "production-format-simulation/simulation-summary.json",
+        "historical-evidence-projections/r21_simulation_summary.json",
         "regression/full-regression.log"
       ],
       "evidence_sha256": {
-        "production-format-simulation/simulation-summary.json": "d8ad5e15c608e7f6f635a268518676481cc27d3b97e2a777ca4ad02cd742f142",
+        "historical-evidence-projections/r21_simulation_summary.json": "d8ad5e15c608e7f6f635a268518676481cc27d3b97e2a777ca4ad02cd742f142",
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R21-C03",
@@ -1661,7 +1749,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R21-C04",
@@ -1671,18 +1760,24 @@
       "verification_method": "Warm-up/primary/diagnostic pauses + 20 journal fault scenarios",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
       "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
-      "expected_result": "All pause/resumes and fail-closed faults verified",
-      "observed_result": "PASS in rehearsal & test_09",
+      "expected_result": "Warm-up/primary/diagnostic pauses plus 13 direct journal/tamper/provenance/malformed scenarios and historical R1/R2 fault coverage verified",
+      "observed_result": "Durable 1450-slot pause/resume historical PASS (39396c14); 13 direct scenarios PASS in renamed test_09_journal_interruption_tamper_and_r2_failure_mutations at 9f7701b",
       "evidence_paths": [
-        "production-format-simulation/simulation-summary.json",
+        "historical-evidence-projections/r21_simulation_summary.json",
+        "green/targeted_tests.log",
         "regression/full-regression.log"
       ],
       "evidence_sha256": {
-        "production-format-simulation/simulation-summary.json": "d8ad5e15c608e7f6f635a268518676481cc27d3b97e2a777ca4ad02cd742f142",
+        "historical-evidence-projections/r21_simulation_summary.json": "d8ad5e15c608e7f6f635a268518676481cc27d3b97e2a777ca4ad02cd742f142",
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf",
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED",
+      "historical_test_name": "test_09_journal_20_scenarios_and_r2_failure_mutations",
+      "current_test_name": "test_09_journal_interruption_tamper_and_r2_failure_mutations",
+      "reason_for_rename": "Align method name with actual 13 direct sub-scenarios (3 interruption + 2 ledger tamper + 2 raw tamper + 1 cross-binary + 5 R2 mutations); broader 20+ historical scenarios cross-referenced across R1/R2 tests."
     },
     {
       "original_gate_id": "R21-C05",
@@ -1703,7 +1798,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R21-C06",
@@ -1722,7 +1818,8 @@
         "production-format-simulation/simulation-summary.json": "d8ad5e15c608e7f6f635a268518676481cc27d3b97e2a777ca4ad02cd742f142"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R21-C07",
@@ -1743,7 +1840,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R21-C08",
@@ -1764,7 +1862,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R21-C09",
@@ -1785,7 +1884,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R21-D01",
@@ -1806,7 +1906,8 @@
         "findings-register.json": "bb737d5da380bb1303f91f5122b6ddf4514bda8b1c9f8e22e1d39c8f2cec18a5"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "STATIC_RECONCILED"
     },
     {
       "original_gate_id": "R21-D02",
@@ -1827,7 +1928,8 @@
         "candidate-reference-bundle/p4b-r2-correctness-reference-bundle.tar.gz": "8efd7c65856c675773249d19b20165106d92917af56913be3730b5a2de044464"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "STATIC_RECONCILED"
     },
     {
       "original_gate_id": "R21-D03",
@@ -1848,7 +1950,8 @@
         "r21-preservation-result.json": "88c59cefd6615571760232a28f807107cc3baee5402aecda84b344b1b7c33100"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "STATIC_RECONCILED"
     },
     {
       "original_gate_id": "R21-D04",
@@ -1867,7 +1970,8 @@
         "configs/rapidflow_apx_p4b_activation_anchors.json": "b74e48dc8ab3ab00d31581ec944e9e8a6743dd729f63d938f3645d82e146408e"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "STATIC_RECONCILED"
     },
     {
       "original_gate_id": "R21-E01",
@@ -1878,15 +1982,20 @@
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
       "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
       "expected_result": "0 failures, 0 errors, 0 skips",
-      "observed_result": "Verified on tested R2.1 commit",
+      "observed_result": "Historical full regression 896/896 PASS at 39396c14 (2816.922s); R2.1.1 ran targeted suite at 9f7701b per test impact analysis",
       "evidence_paths": [
-        "regression/full-regression.log"
+        "regression/full-regression.log",
+        "regression/historical_896_test_inventory.txt",
+        "green/targeted_tests.log"
       ],
       "evidence_sha256": {
-        "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
+        "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788",
+        "regression/historical_896_test_inventory.txt": "bb19b1a630f9ed340e104575f6564f4cbc8367ac2fdc1715386e6bc7cb5a99d5",
+        "green/targeted_tests.log": "5cf34b4b92bf4c8d146d23a3520756205e5daca01e0a7b551b2bfce9a3879baf"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R21-E02",
@@ -1905,7 +2014,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R21-E03",
@@ -1924,7 +2034,8 @@
         "regression/full-regression.log": "b68797717c599971040bd211dbf33466882d924245537fc5cb1dfbcf74ea1788"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "HISTORICAL_RUNTIME_VERIFIED"
     },
     {
       "original_gate_id": "R21-E04",
@@ -1945,7 +2056,8 @@
         "r21-preflight.json": "0189e9cebbc8afa03dbf8737919a8398d228b29199b3739a012a2583e545dc8b"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R21-E05",
@@ -1970,7 +2082,8 @@
         "configs/rapidflow_apx_p4b_protocol.json": "70836770663c32a1a53e52e048be1dd8268fd2e3f02f66859737eef308c4acbb"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R21-E06",
@@ -1991,7 +2104,8 @@
         "review-evidence-p4b3b0-r2.tar.gz": "f1dcbaff61663e256abc95c5e74c04aa212292978b5ed642e1b9fd632c5ea50b"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R21-E07",
@@ -2001,16 +2115,21 @@
       "verification_method": "Fresh clean extraction verifying manifest, hashes, sizes, paths",
       "baseline_revision": "90c059e337daaae62377d165d2b86e099a57c108",
       "tested_revision": "39396c1463c2feabfd53cf7ee5480060755a4b47",
-      "expected_result": "0 missing/extra/duplicate/unsafe/mismatch members",
-      "observed_result": "Verified in clean extraction",
+      "expected_result": "R2.1 outer archive (10577 data members, 10578 total, 205039363 bytes, 0 errors) verified via detached verification record",
+      "observed_result": "Detached archive-verification.json & SHA256SUMS confirm clean extraction PASS on review-evidence-p4b3b0-r2-1.tar.gz (4201ac0b...)",
       "evidence_paths": [
+        "P4b3B0_R2_1_Independent_Review/archive-verification.json",
+        "P4b3B0_R2_1_Independent_Review/SHA256SUMS",
         "candidate-reference-bundle/p4b-r2-correctness-reference-bundle.tar.gz"
       ],
       "evidence_sha256": {
+        "P4b3B0_R2_1_Independent_Review/archive-verification.json": "d423ba5519fe487c9a8d6f7084778a5142ba0bee6ff573aec91e64494963b79c",
+        "P4b3B0_R2_1_Independent_Review/SHA256SUMS": "93c4430ac852ffb7064685cb9fcea3da016b07b3e36ae4d207bcd28bd3e45faa",
         "candidate-reference-bundle/p4b-r2-correctness-reference-bundle.tar.gz": "8efd7c65856c675773249d19b20165106d92917af56913be3730b5a2de044464"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R21-E08",
@@ -2031,7 +2150,8 @@
         "green/unauth_neg_ctrl.log": "1d603023a6021fd711f927bae396d601ebb9803cf0f6490d7e9a5ce551bf2855"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     },
     {
       "original_gate_id": "R21-E09",
@@ -2050,7 +2170,20 @@
         "r21-github-state.json": "e78b17ac543598eaa7d4e1736367bd0f031162281567c11c9afeb0bc9b228fc1"
       },
       "status": "PASS",
-      "remaining_limitation": null
+      "remaining_limitation": null,
+      "verification_basis": "CURRENT_TARGETED_VERIFIED"
     }
-  ]
+  ],
+  "errata_lineage": {
+    "historical_r2_1_matrix_commit": "a7cbbd24c4ae3a0239501b1e76b84a7b3cf81926",
+    "historical_r2_1_matrix_sha256": "ac545baa550837df4df0e4767b0f980b4185fe44f42ace836746fb93df5fb609",
+    "historical_r2_1_tested_logic_commit": "39396c1463c2feabfd53cf7ee5480060755a4b47",
+    "r2_1_1_targeted_tested_commit": "9f7701b960d5e62546cf34f61ae6ba8e1d275aff",
+    "note": "Post-review errata closure for R21-AUD-03 (R21-C02 call accounting, R21-B02 timer invariant, R2-J04 recovery literal, R21-C04 13-scenario reconciliation, R2-M05/R21-E07 detached archive verification, and gate verification_basis classification)."
+  },
+  "verification_basis_counts": {
+    "CURRENT_TARGETED_VERIFIED": 55,
+    "HISTORICAL_RUNTIME_VERIFIED": 39,
+    "STATIC_RECONCILED": 4
+  }
 }

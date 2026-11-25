@@ -11,7 +11,11 @@
 2. **`R2_CANDIDATE_BUNDLE` (Active Candidate Measurement Target):**
    - **Binary:** `3fa35111acd7e7527a80bae6b0caa6d51d1e283d9848747a62c2517d696d1876` (`970,632` bytes, C++ commit `115ce2844d91f6a6588fe0ac50b1179bc3b38012`)
    - **Archive:** `p4b-r2-correctness-reference-bundle.tar.gz` (`8efd7c65856c675773249d19b20165106d92917af56913be3730b5a2de044464`, `33,681,113` bytes, `302` members under `r2-ref/`, manifest `37d649b697212de0e0779a1d33e1fdc990cee5f6473b8cf2b351c365cd0fda15`)
-   - **Replay source commit:** `101272cf85087df621d5e77118ab12a774720a4e` (`R2 TESTED_LOGIC_COMMIT`)
+   - **Registered replay revision (`CANDIDATE_REPLAY_REV` / all `250` `replay.jsonl` rows):** `115ce2844d91f6a6588fe0ac50b1179bc3b38012`
+   - **Commit provenance roles:**
+     - `Native source commit`: `115ce2844d91f6a6588fe0ac50b1179bc3b38012` (production C++ source build revision of `3fa35111...`).
+     - `Registered replay revision`: `115ce2844d91f6a6588fe0ac50b1179bc3b38012` (provenance identifier stamped across all `250` `r2-ref/replay.jsonl` rows and `TRUSTED_BUNDLES["R2_CANDIDATE_BUNDLE"]`; identifies the target native C++ source revision associated with the reference bundle rather than claiming every Python orchestration script ran verbatim from commit `115ce284...`).
+     - `R2 tested logic commit`: `101272cf85087df621d5e77118ab12a774720a4e` (Python/test commit certified by R2 full regression).
    - **Registry:** `configs/rapidflow_apx_p4b_r2_1_candidate_registry.json` (`40a28b4d963d8c652bc49ab231aa2ccb6626e3de9b4badc3b3a13a03620fe0b4`, `505,468` bytes)
    - **Certification breakdown (`250` entries):** `160 M0_VERIFIED`, `64 DIFFERENTIAL_M2_VERIFIED`, `16 CORRECTNESS_NOT_FULLY_CERTIFIED`, `10 C3_BUDGET_UNAVAILABLE`
 
@@ -19,8 +23,8 @@
 
 ## 2. Fail-Closed Archive & Registry Verification (`unpack_references` / `validate_registry`)
 
-- `resolve_trusted_bundle(bundle)` rejects unknown bundle identifiers (`UNREVIEWED_TRUST_BUNDLE`) and unapproved inline specifications lacking an exact match in `TRUSTED_BUNDLES`.
-- `unpack_references` verifies archive byte size, archive SHA-256, `evidence-manifest.json` SHA-256, exact member inventory (`ARCHIVE_MEMBER_INVENTORY_MISMATCH`), path-traversal safety (`UNSAFE_ARCHIVE_MEMBER`), and per-member SHA-256 + byte sizes (`ARCHIVE_MEMBER_IDENTITY_MISMATCH`).
+- `resolve_trusted_bundle(bundle)` rejects non-dict/non-string roots or non-string/unhashable `bundle_id` (`INVALID_TRUST_BUNDLE_SHAPE`), missing identity fields or invalid field scalar types (`MISSING_BUNDLE_IDENTITY_FIELD`, `INVALID_TRUST_BUNDLE_SHAPE`), unknown bundle identifiers (`UNREVIEWED_TRUST_BUNDLE`), and altered identity fields (`BUNDLE_IDENTITY_MISMATCH`), returning only the immutable trusted entry from `TRUSTED_BUNDLES`.
+- `unpack_references` verifies archive byte size, archive SHA-256 (`ARCHIVE_IDENTITY_MISMATCH` / `R1_ARCHIVE_IDENTITY_MISMATCH`), `evidence-manifest.json` SHA-256 (`MANIFEST_HASH_MISMATCH` / `R1_MANIFEST_HASH_MISMATCH`), exact member inventory (`ARCHIVE_MEMBER_INVENTORY_MISMATCH`), path-traversal safety (`UNSAFE_ARCHIVE_PATH`), and per-member SHA-256 + byte sizes (`ARCHIVE_MEMBER_IDENTITY_MISMATCH`).
 - `rebuild_from_store` independently re-computes M0 oracles against frozen workload fixtures (`ORACLE_RECOMPUTATION_MISMATCH`), checks every `replay.jsonl` row against pinned `binary_sha256`, `native_source_commit`, `replay_source_commit`, `protocol_sha256`, `manifest_sha256`, and `schedule_sha256` (`REFERENCE_ROW_IDENTITY`), verifies compressed and raw reference SHA-256s (`RAW_EVIDENCE_MISMATCH`, `REFERENCE_RAW_IDENTITY_MISMATCH`), and re-runs `replay.validate_replay` across all `250` workload/variant pairs.
 - `require_canonical_registry` requires exact structural and content equality (`REGISTRY_DOES_NOT_MATCH_TRUSTED_ARCHIVE`).
 
