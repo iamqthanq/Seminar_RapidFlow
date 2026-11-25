@@ -477,18 +477,27 @@ class TestR21CandidateBinding(unittest.TestCase):
                 bad_arch = parent / "bad_size_or_hash.tar.gz"
                 bad_arch.write_bytes(b"corrupted" * 100)
                 expect_auth_block(runner.DEFAULT_BINARY_PATH, refs.CANDIDATE_REGISTRY_PATH, bad_arch, "ARCHIVE_HASH_MISMATCH")
-            # A-N07: Archive matching member content but wrong manifest identity
-            with self.subTest("A-N07"):
-                m_arch = parent / "bad_manifest.tar.gz"
-                def mod_man(e):
-                    e = dict(e)
-                    m = json.loads(e["evidence-manifest.json"])
-                    m["tampered"] = True
-                    e["evidence-manifest.json"] = runner.canonical_json_bytes(m)
-                    return e
-                _rewrite_tar_with_mutation(CANDIDATE_ARCHIVE, m_arch, mod_man)
-                with self.assertRaisesRegex(runner.LedgerIntegrityError, "ARCHIVE_IDENTITY_MISMATCH|MANIFEST_HASH_MISMATCH"):
-                    refs.validate_registry(refs.CANDIDATE_REGISTRY_PATH, m_arch, parent / "s07", self.protocol, self.manifest, bundle="R2_CANDIDATE_BUNDLE")
+            # A-N07a & A-N07b: Separated outer archive SHA boundary vs inner manifest SHA boundary
+            m_arch = parent / "bad_manifest.tar.gz"
+            def mod_man(e):
+                e = dict(e)
+                m = json.loads(e["evidence-manifest.json"])
+                m["tampered"] = True
+                e["evidence-manifest.json"] = runner.canonical_json_bytes(m)
+                return e
+            _rewrite_tar_with_mutation(CANDIDATE_ARCHIVE, m_arch, mod_man)
+            with self.subTest("A-N07a_outer_archive"):
+                with self.assertRaisesRegex(runner.LedgerIntegrityError, "^ARCHIVE_IDENTITY_MISMATCH$"):
+                    refs.validate_registry(refs.CANDIDATE_REGISTRY_PATH, m_arch, parent / "s07a", self.protocol, self.manifest, bundle="R2_CANDIDATE_BUNDLE")
+            with self.subTest("A-N07b_inner_manifest"):
+                iso_spec = copy.deepcopy(bundle)
+                iso_spec["bundle_id"] = "TEST_AN07B_BUNDLE"
+                iso_spec["reference_archive_sha256"] = runner.compute_sha256(m_arch)
+                iso_spec["reference_archive_size_bytes"] = m_arch.stat().st_size
+                # Deliberately retain original reference_manifest_sha256 to bypass outer SHA check and hit inner MANIFEST_HASH_MISMATCH
+                with patch.dict(refs.TRUSTED_BUNDLES, {"TEST_AN07B_BUNDLE": iso_spec}):
+                    with self.assertRaisesRegex(runner.LedgerIntegrityError, "^MANIFEST_HASH_MISMATCH$"):
+                        refs.unpack_references(m_arch, parent / "s07b", bundle="TEST_AN07B_BUNDLE")
             # A-N08: Wrong native source commit
             with self.subTest("A-N08"):
                 expect_auth_block(runner.DEFAULT_BINARY_PATH, refs.CANDIDATE_REGISTRY_PATH, CANDIDATE_ARCHIVE, "ACTIVATION_IDENTITY_MISMATCH: native_source_commit", {"native_source_commit": "0" * 40})
@@ -593,7 +602,7 @@ class TestR21NativeResourceWitness(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stdout + "\n" + proc.stderr)
         payload = json.loads(proc.stdout.strip())
         self.assertEqual(payload["status"], "PASS")
-        self.assertEqual(payload["witness_paths"], ["B-W01", "B-W02", "B-W03", "B-W04"])
+        self.assertEqual(payload["witness_paths"], ["B-W01", "B-W02", "B-W03a", "B-W03b", "B-W04"])
 
     @unittest.skipUnless(WITNESS_BINARY.is_file() and CANDIDATE_ARCHIVE.is_file(), "R2.1 witness binary or archive missing")
     def test_06_real_native_in_step_resource_end_to_end_session_and_replay(self):
@@ -731,7 +740,8 @@ class TestR21FullRehearsalAndReconciliation(unittest.TestCase):
             self.assertEqual(stat_controls["valid-resource"]["decision"]["priority_triggered"], 3)
 
     @unittest.skipUnless(CANDIDATE_ARCHIVE.is_file(), "Candidate archive unavailable")
-    def test_09_journal_20_scenarios_and_r2_failure_mutations(self):
+    def test_09_journal_interruption_tamper_and_r2_failure_mutations(self):
+        """Verify 13 direct journal/tamper/provenance/malformed scenarios (formerly named test_09_journal_20_scenarios_and_r2_failure_mutations)."""
         protocol, manifest, schedule = runner.load_frozen_plan()
         plan = list(runner.ordered_planned_slots(schedule))
         entries = {w["workload_id"]: w for w in manifest["workloads"]}

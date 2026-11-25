@@ -98,7 +98,18 @@ BUNDLE_IDENTITY_FIELDS = (
 
 
 def bundle_identity_payload(bundle_spec):
-    return {field: bundle_spec[field] for field in BUNDLE_IDENTITY_FIELDS}
+    if not isinstance(bundle_spec, dict):
+        raise p4b.LedgerIntegrityError("INVALID_TRUST_BUNDLE_SHAPE")
+    missing = [field for field in BUNDLE_IDENTITY_FIELDS if field not in bundle_spec]
+    if missing:
+        raise p4b.LedgerIntegrityError(f"MISSING_BUNDLE_IDENTITY_FIELD: {missing[0]}")
+    payload = {}
+    for field in BUNDLE_IDENTITY_FIELDS:
+        val = bundle_spec[field]
+        if type(val) not in (str, int):
+            raise p4b.LedgerIntegrityError(f"INVALID_TRUST_BUNDLE_SHAPE: {field}")
+        payload[field] = val
+    return payload
 
 
 def resolve_trusted_bundle(bundle=None, *, default_id="HISTORICAL_R1_BUNDLE"):
@@ -108,12 +119,17 @@ def resolve_trusted_bundle(bundle=None, *, default_id="HISTORICAL_R1_BUNDLE"):
         if bundle not in TRUSTED_BUNDLES:
             raise p4b.LedgerIntegrityError(f"UNREVIEWED_TRUST_BUNDLE: {bundle}")
         return TRUSTED_BUNDLES[bundle]
-    if isinstance(bundle, dict) and bundle.get("bundle_id") in TRUSTED_BUNDLES:
-        expected = TRUSTED_BUNDLES[bundle["bundle_id"]]
-        if p4b.canonical_json_bytes(bundle_identity_payload(bundle)) != p4b.canonical_json_bytes(bundle_identity_payload(expected)):
-            raise p4b.LedgerIntegrityError(f"BUNDLE_IDENTITY_MISMATCH: {bundle['bundle_id']}")
-        return expected
-    raise p4b.LedgerIntegrityError("UNREVIEWED_TRUST_BUNDLE")
+    if not isinstance(bundle, dict):
+        raise p4b.LedgerIntegrityError("INVALID_TRUST_BUNDLE_SHAPE")
+    bundle_id = bundle.get("bundle_id")
+    if not isinstance(bundle_id, str):
+        raise p4b.LedgerIntegrityError("INVALID_TRUST_BUNDLE_SHAPE: bundle_id")
+    if bundle_id not in TRUSTED_BUNDLES:
+        raise p4b.LedgerIntegrityError(f"UNREVIEWED_TRUST_BUNDLE: {bundle_id}")
+    expected = TRUSTED_BUNDLES[bundle_id]
+    if p4b.canonical_json_bytes(bundle_identity_payload(bundle)) != p4b.canonical_json_bytes(bundle_identity_payload(expected)):
+        raise p4b.LedgerIntegrityError(f"BUNDLE_IDENTITY_MISMATCH: {bundle_id}")
+    return expected
 
 
 def checked_member(name):
