@@ -365,6 +365,14 @@ class TestProductionEvidenceR1(unittest.TestCase):
             n["macro_timing"]["streaming_loop_wall_ns"]=60_000_000_001
             return partial(s,n,p)
         self.assert_invalid(self.direct(slot,partial_time),"TIMING_BOUNDARY")
+        def timed_out_work_prefix(_, native, process):
+            retained = native["steps"][:11]
+            retained[-1]["step_counters"]["work_units"] += 1
+            head = runner.canonical_json_bytes({"case_id":native["case_id"], "status":"FAIL"}).rstrip()
+            step_bytes = b",".join(runner.canonical_json_bytes(step).rstrip() for step in retained)
+            return external_timeout(native, process, head[:-1]+b',"steps":['+step_bytes+b',')
+        self.assert_invalid(self.direct(self.slot("DISC_07_K0"),timed_out_work_prefix),
+                            "INTERRUPTED_WORK_BUDGET_MISMATCH")
         def missing_deadline(s,n,p):
             external_timeout(n,p)
             p["supervisor"]["deadline_fired"]=False

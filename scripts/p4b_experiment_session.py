@@ -331,6 +331,20 @@ def _check_interrupted_output(raw, slot, entry, workload, mode, reference, caps,
                          or not failed and status in ("CALLBACK_ABORTED", "ERROR")
                          and step["error_category"] in ("WORK_BUDGET_EXCEEDED", "RESOURCE_LIMIT_ERROR")),
                     "INTERRUPTED_STEP_LIFECYCLE")
+            if status != "UNATTEMPTED":
+                step_error = step["error_category"]
+                if step_error == "WORK_BUDGET_EXCEEDED":
+                    require(status == "CALLBACK_ABORTED" and require_uint(
+                        step["step_counters"]["work_units"], "interrupted work_units") == caps["logical_work_cap"] + 1,
+                        "INTERRUPTED_WORK_BUDGET_MISMATCH")
+                else:
+                    require(status == "ERROR" and "step_counters" not in step and step["error"] == "std::bad_alloc",
+                            "INTERRUPTED_RESOURCE_STEP_MISMATCH")
+                for key, expected in (("first_failing_step_index", step["step_index"]),
+                                      ("first_failure_category", step_error), ("first_failure_message", step["error"])):
+                    if key in native:
+                        require(type(native[key]) is type(expected) and native[key] == expected,
+                                f"INTERRUPTED_FAILURE_IDENTITY: {key}")
             failed = True
     if "execution" in native:
         life = native["execution"]
@@ -340,6 +354,7 @@ def _check_interrupted_output(raw, slot, entry, workload, mode, reference, caps,
         require(life["total_steps"] == entry["update_count"] == life["attempted_steps"] + life["unattempted_steps"]
                 and life["attempted_steps"] == life["completed_steps"] + life["failed_steps"] == life["delivered_steps"]
                 and life["completed_steps"] == life["committed_steps"]
+                and sum(s["status"] not in ("SUCCESS", "UNATTEMPTED") for s in steps) <= life["failed_steps"] <= 1
                 and sum(s["status"] == "SUCCESS" for s in steps) <= life["committed_steps"]
                 and sum(s["status"] == "UNATTEMPTED" for s in steps) <= life["unattempted_steps"],
                 "INTERRUPTED_LIFECYCLE_MISMATCH")
