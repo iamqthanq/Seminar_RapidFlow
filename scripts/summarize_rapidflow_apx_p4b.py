@@ -301,7 +301,10 @@ def is_slot_eligible(rec, expected, workload):
     if (any(type(rec.get(key)) is not int or rec[key] != planned for key in ("updates_completed", "updates_planned"))
             or rec.get("results_delivered") is not True):
         return False, "INCOMPLETE_UPDATES_OR_DELIVERY"
-    if rec.get("correctness_status") not in ("M0_VERIFIED", "DIFFERENTIAL_M2_VERIFIED", "WITNESS_VERIFIED"):
+    admitted = {"M0_VERIFIED", "DIFFERENTIAL_M2_VERIFIED", "WITNESS_VERIFIED"}
+    if expected["evidence_kind"] == "CONFIRMATORY_MEASUREMENT" and expected["variant_id"] == "BARE":
+        admitted.add("LIMITED_C3_BARE_CONTROL")
+    if rec.get("correctness_status") not in admitted:
         return False, "CORRECTNESS_UNVERIFIED"
     digest = rec.get("raw_output_sha256")
     if not isinstance(digest, str) or not is_valid_hex64(digest):
@@ -422,7 +425,7 @@ def _stratum_registry(workloads, protocol):
     return members
 
 
-def _stratum_reports(registry, cont, blocks, minimum, resamples, seed, alpha):
+def _stratum_reports(registry, cont, blocks, minimum, resamples, seed, alpha, *, conservative=False, disqualified=()):
     reports = []
     for name, nominal in sorted(registry.items()):
         c = [p["speedup"] for p in cont if p["workload_id"] in nominal]
@@ -430,8 +433,13 @@ def _stratum_reports(registry, cont, blocks, minimum, resamples, seed, alpha):
         d = [block for block in d if block]
         observations = c + [v for block in d for v in block]
         eligible = len(observations) >= minimum and not name.endswith("_descriptive_only")
+        if conservative:
+            eligible = eligible and len(c) + len(d) >= 5 and 10 * len(observations) >= 9 * len(nominal)
+            eligible = eligible and not (nominal & set(disqualified))
         report = {
             "name": name, "planned": len(nominal), "observed": len(observations),
+            "coverage_fraction": len(observations) / len(nominal),
+            "resampling_units": len(c) + len(d),
             "continuity_units": len(c), "disc_blocks": len(d), "eligible_for_stratum_decision": eligible,
             "median_speedup": statistics.median(observations) if observations else None,
         }
@@ -460,6 +468,43 @@ def analyze_p4b_ledger(
     if allow_synthetic_mode is not True:
         raise LedgerIntegrityError("CONFIRMATORY_ANALYSIS_NOT_AUTHORIZED")
 
+    return _analyze_observations(
+        ledger_records, protocol, manifest, schedule, _synthetic_identity, "SYNTHETIC_FIXTURE_VERIFICATION")
+
+
+def _synthetic_identity(slot, protocol):
+    return slot_identity(slot, protocol, experiment_id=SYNTHETIC_EXPERIMENT, evidence_kind=SYNTHETIC_KIND,
+                         binary_sha=SYNTHETIC_BINARY, source_revision=SYNTHETIC_SOURCE)
+
+
+def _analyze_reviewed_records(outcome, protocol, manifest, schedule, context):
+    """Called by production_command after locked, independent raw-evidence ingestion."""
+    context.recheck()
+    records = outcome["records"]
+    if outcome["state"] != "SESSION_COMPLETED":
+        return {"state": outcome["state"], "validated_attempts": len(records),
+                "confirmatory_analysis": None, "incident": outcome.get("incident")}
+    if any(r.get("activation_sha256") != context.digest for r in records):
+        raise LedgerIntegrityError("UNTRUSTED_ACTIVATION_PROVENANCE")
+
+    def production_identity(slot, protocol):
+        from scripts.run_rapidflow_apx_p4b import NATIVE_SHA256
+        return slot_identity(slot, protocol, experiment_id=context.experiment_id,
+                             evidence_kind="CONFIRMATORY_MEASUREMENT", binary_sha=NATIVE_SHA256,
+                             source_revision=context.revision)
+
+    report = _analyze_observations(
+        records, protocol, manifest, schedule, production_identity, "CONFIRMATORY_ANALYSIS",
+        same_category=context.resource_regression_rule == "SAME_CATEGORY",
+        conservative_strata=context.stratum_rule == "CONSERVATIVE_3B0",
+    )
+    from scripts.p4b_experiment_session import summarize_diagnostics
+    report["diagnostic_attribution"] = summarize_diagnostics(records)
+    return report
+
+
+def _analyze_observations(ledger_records, protocol, manifest, schedule, expected_identity, analysis_mode,
+                          *, same_category=False, conservative_strata=False):
     w_by_id = {w["workload_id"]: w for w in manifest["workloads"]}
     registry = _stratum_registry(w_by_id, protocol)
     planned_primary = {s["slot_id"]: s for s in schedule["primary_slots"]}
@@ -471,11 +516,10 @@ def analyze_p4b_ledger(
         plan = planned_all.get(rec["slot_id"])
         if plan is None:
             raise LedgerIntegrityError(f"UNPLANNED_SLOT: {rec['slot_id']}")
-        expected = slot_identity(plan, protocol, experiment_id=SYNTHETIC_EXPERIMENT, evidence_kind=SYNTHETIC_KIND,
-                                 binary_sha=SYNTHETIC_BINARY, source_revision=SYNTHETIC_SOURCE)
+        expected = expected_identity(plan, protocol)
         validate_slot_identity(rec, expected)
-        if rec.get("synthetic_test_fixture") is not True:
-            raise LedgerIntegrityError("UNMARKED_SYNTHETIC_EVIDENCE")
+        if rec.get("synthetic_test_fixture") is not (analysis_mode == "SYNTHETIC_FIXTURE_VERIFICATION"):
+            raise LedgerIntegrityError("EVIDENCE_ORIGIN_MISMATCH")
     resolved = resolve_p4b_ledger_records(ledger_records)
     canon_slots = resolved["canonical_slots"]
     missing = planned_primary.keys() - canon_slots.keys()
@@ -498,8 +542,7 @@ def analyze_p4b_ledger(
     for sid, plan in planned_primary.items():
         rec = canon_slots[sid]
         wid, var_id, rep = (plan[key] for key in ("workload_id", "variant_id", "repeat_id"))
-        expected = slot_identity(plan, protocol, experiment_id=SYNTHETIC_EXPERIMENT, evidence_kind=SYNTHETIC_KIND,
-                                 binary_sha=SYNTHETIC_BINARY, source_revision=SYNTHETIC_SOURCE)
+        expected = expected_identity(plan, protocol)
         ok, reason = is_slot_eligible(rec, expected, w_by_id[wid])
         if ok:
             elig_reps[(wid, var_id)][rep] = rec
@@ -543,7 +586,9 @@ def analyze_p4b_ledger(
                 both_complete += 1
             elif b_ok and not v_ok:
                 bare_only += 1
-                if sum(censor_by_cell[(wid, var_id)].values()) >= coverage["variant_only_resource_regression_min_reps"]:
+                failures = censor_by_cell[(wid, var_id)]
+                repeated = max(failures.values(), default=0) if same_category else sum(failures.values())
+                if repeated >= coverage["variant_only_resource_regression_min_reps"]:
                     variant_only_resource_reg = True
                 continue
             elif (not b_ok) and v_ok:
@@ -647,8 +692,12 @@ def analyze_p4b_ledger(
             med_s = ci_l = ci_u = boot = None
             dist = {"eligible_pairs": 0, "excluded_pairs": len(w_by_id), "estimator_status": "UNAVAILABLE",
                     "median": None, "geometric_mean": None}
+        disqualified = {p["workload_id"] for p in per_workload_pairs
+                        if p["noisy_flagged"] or p["rss_limit_exceeded"]}
+        disqualified.update(wid for wid in w_by_id if censor_by_cell[(wid, var_id)] or censor_by_cell[(wid, "BARE")])
         strata = _stratum_reports(registry, cont_pairs, complete_disc_blocks,
-                                 coverage["min_stratum_eligible_count"], resamples, b_seed, alpha)
+                                 coverage["min_stratum_eligible_count"], resamples, b_seed, alpha,
+                                 conservative=conservative_strata, disqualified=disqualified)
         mem_summary = {
             "median_rss_overhead": linear_percentile(sorted(rss_overheads), 0.50) if rss_overheads else None,
             "worst_workload_rss_overhead": max(rss_overheads) if rss_overheads else None,
@@ -710,7 +759,7 @@ def analyze_p4b_ledger(
         if report["bootstrap_95"] is not None and report["decision"]["priority_triggered"] > 4
     }, family_size)
     return {
-        "analysis_mode": "SYNTHETIC_FIXTURE_VERIFICATION",
+        "analysis_mode": analysis_mode,
         "holm_sensitivity": {
             "method": "Holm adjusted centered log bootstrap p-values",
             "family_size": family_size, "adjusted_p_values": sensitivity,

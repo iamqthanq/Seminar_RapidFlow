@@ -497,6 +497,7 @@ def execute_p4b_native_slot(
     max_nlf_memory_mib: int = CANONICAL_MAX_NLF_MEMORY_MIB,
     expected_binary_sha256: Optional[str] = None,
     expected_fixture_sha256: Optional[str] = None,
+    evidence=None,
 ) -> Dict[str, Any]:
     """
     Execute one P4b slot on the frozen fixture bytes directly using POSIX wait4 rusage
@@ -553,6 +554,7 @@ def execute_p4b_native_slot(
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         preexec_fn=preexec,
+        env=evidence["environment"] if evidence else None,
     )
 
     stdout_chunks: List[bytes] = []
@@ -574,6 +576,8 @@ def execute_p4b_native_slot(
     rusage = None
     wait_status = 0
     try:
+        if evidence:
+            evidence["on_start"](proc.pid, cmd)
         while True:
             pid_done, status, ru = os.wait4(proc.pid, os.WNOHANG)
             if pid_done != 0:
@@ -605,14 +609,27 @@ def execute_p4b_native_slot(
     t1_ns = time.perf_counter_ns()
     t_out.join(timeout=2.0)
     t_err.join(timeout=2.0)
+    if t_out.is_alive() or t_err.is_alive():
+        # A descendant holding a pipe open must not hang the supervisor.
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        t_out.join(timeout=2.0)
+        t_err.join(timeout=2.0)
+        if t_out.is_alive() or t_err.is_alive():
+            raise LedgerIntegrityError("UNREAPED_CHILD_PIPE")
     if proc.stdout:
         proc.stdout.close()
     if proc.stderr:
         proc.stderr.close()
 
     outer_wall_ns = t1_ns - t0_ns
-    raw_stdout = b"".join(stdout_chunks).decode("utf-8", errors="replace")
-    raw_stderr = b"".join(stderr_chunks).decode("utf-8", errors="replace")
+    stdout_bytes, stderr_bytes = b"".join(stdout_chunks), b"".join(stderr_chunks)
+    if evidence:
+        evidence["save_streams"](stdout_bytes, stderr_bytes)
+    raw_stdout = stdout_bytes.decode("utf-8", errors="replace")
+    raw_stderr = stderr_bytes.decode("utf-8", errors="replace")
 
     exit_code: Optional[int] = None
     term_signal: Optional[int] = None
@@ -704,7 +721,14 @@ def execute_p4b_native_slot(
         if not ok:
             err_msg = diag
 
+    supervisor = {"pid": proc.pid, "wait_status": wait_status, "deadline_fired": timed_out,
+                  "started_monotonic_ns": t0_ns, "reaped_monotonic_ns": t1_ns,
+                  "wait4_user_seconds": rusage.ru_utime, "wait4_system_seconds": rusage.ru_stime,
+                  "wait4_maxrss_kib": rusage.ru_maxrss,
+                  "resource_caps": {"timeout_seconds": timeout_s, "address_space_mib": as_limit_mib,
+                                    "max_work": max_work, "max_nlf_memory_mib": max_nlf_memory_mib}}
     return {
+        **({"supervisor": supervisor} if evidence else {}),
         "variant_id": variant_id,
         "execution_purpose": execution_purpose,
         "exit_code": exit_code,
@@ -1045,13 +1069,34 @@ def main() -> None:
     parser.add_argument("--binary", type=Path, default=DEFAULT_BINARY_PATH)
     parser.add_argument("--dry-run", action="store_true", help="Inspect planned slots without running benchmarks")
     parser.add_argument("--build-schedule", action="store_true", help="Regenerate and verify schedule JSON")
-    parser.add_argument("--execute-primary", action="store_true", help="Run primary 1,000 benchmark slots (BLOCKED in P4b-3A)")
-    parser.add_argument("--execute-diagnostic", action="store_true", help="Run diagnostic 250 slots (BLOCKED in P4b-3A)")
+    action = parser.add_mutually_exclusive_group()
+    action.add_argument("--execute-primary", action="store_true", help="Execute reviewed warm-up and primary phases")
+    action.add_argument("--execute-diagnostic", action="store_true", help="Execute reviewed diagnostic phase after primary")
+    action.add_argument("--analyze-session", action="store_true", help="Revalidate a reviewed session from persisted evidence")
+    parser.add_argument("--activation", type=Path)
+    parser.add_argument("--registry", type=Path, default=REPO_ROOT / "configs/rapidflow_apx_p4b_correctness_registry.json")
+    parser.add_argument("--archive", type=Path)
+    parser.add_argument("--session", type=Path)
     args = parser.parse_args()
 
-    if args.execute_primary or args.execute_diagnostic:
-        _, message = check_execution_authorization({})
-        parser.exit(2, f"{message}\n")
+    if args.execute_primary or args.execute_diagnostic or args.analyze_session:
+        from scripts.p4b_experiment_session import production_command
+        if args.dry_run or args.build_schedule:
+            parser.error("Select either inspection or reviewed execution/analysis")
+        try:
+            if args.activation is None:
+                raise AuthorizationBlockedError("MEASUREMENT_NOT_AUTHORIZED: no detached activation")
+            load_frozen_plan(args.protocol, args.manifest, args.schedule)
+            result = production_command(
+                "diagnostic" if args.execute_diagnostic else "primary",
+                args.activation.resolve() if args.activation else None, args.binary.resolve(),
+                args.registry.resolve(), args.archive.resolve() if args.archive else None,
+                args.session.resolve() if args.session else None, analyze=args.analyze_session,
+            )
+        except (AuthorizationBlockedError, LedgerIntegrityError, ScheduleIntegrityError, OSError) as error:
+            parser.exit(2, f"{error}\n")
+        print(json.dumps(result, indent=2, sort_keys=True, allow_nan=False))
+        return
 
     if args.build_schedule:
         _, _, schedule = load_frozen_plan(args.protocol, args.manifest, args.schedule)
