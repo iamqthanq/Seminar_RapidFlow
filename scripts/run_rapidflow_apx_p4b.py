@@ -19,6 +19,7 @@ Fail-closed lifecycle rules:
 from __future__ import annotations
 
 import argparse
+import ctypes
 import fcntl
 import hashlib
 import json
@@ -538,8 +539,19 @@ def execute_p4b_native_slot(
         "--output", str(output_path),
     ]
 
+    # A session supervisor can be terminated after START and before wait4.
+    # On Linux the monitored child must die with that supervisor, without
+    # depending on a later process to identify a possibly reused PID.
+    supervisor_pid = os.getpid()
+    prctl = ctypes.CDLL(None, use_errno=True).prctl if evidence else None
+
     def preexec() -> None:
         os.setsid()
+        if prctl is not None:
+            if prctl(1, signal.SIGKILL, 0, 0, 0) != 0:  # PR_SET_PDEATHSIG
+                raise OSError(ctypes.get_errno(), "could not set parent-death signal")
+            if os.getppid() != supervisor_pid:
+                os.kill(os.getpid(), signal.SIGKILL)
         as_bytes = int(as_limit_mib) * 1024 * 1024
         resource.setrlimit(resource.RLIMIT_AS, (as_bytes, as_bytes))
 

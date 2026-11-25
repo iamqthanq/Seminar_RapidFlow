@@ -7,6 +7,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -147,6 +148,51 @@ class TestP4b3b0(unittest.TestCase):
             recovered = exp.session(*args, exp.SyntheticBackend(lambda _: self.fail("relaunched")), execute=True)
             self.assertEqual(recovered["state"], "SESSION_INTERRUPTED")
             self.assertEqual(recovered["observed_process"]["pid"], child)
+
+    @unittest.skipUnless(sys.platform == "linux", "Linux supervisor containment")
+    def test_monitored_child_dies_when_supervisor_is_killed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dummy = root/"dummy-fixture-child"
+            dummy.write_text(f"#!{sys.executable}\nimport time\ntime.sleep(30)\n")
+            dummy.chmod(0o700)
+            fixture = runner.REPO_ROOT/"tests/fixtures/p4b/continuity/P4B_CONT_01.json"
+            program = """
+from pathlib import Path
+import sys
+from scripts.run_rapidflow_apx_p4b import execute_p4b_native_slot
+binary, fixture, base = map(Path, sys.argv[1:])
+execute_p4b_native_slot(binary, fixture, "BARE", "correctness", base/"unused.json", timeout_s=30,
+    evidence={"environment": {"LANG":"C"}, "on_start": lambda pid, _: print(pid,flush=True),
+              "save_streams": lambda *_: None})
+"""
+            supervisor = subprocess.Popen([sys.executable, "-c", program, dummy, fixture, root],
+                                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            child = None
+            try:
+                import select
+                self.assertTrue(select.select([supervisor.stdout], [], [], 5)[0], "missing child PID")
+                child = int(supervisor.stdout.readline())
+                self.assertGreater(child, 1)
+                supervisor.kill()
+                supervisor.wait(timeout=5)
+                status = Path(f"/proc/{child}/stat")
+                for _ in range(100):
+                    try:
+                        state = status.read_text().rsplit(")", 1)[1].split()[0]
+                    except FileNotFoundError:
+                        break
+                    if state == "Z":
+                        break  # reaped by the OS after reparenting
+                    time.sleep(.01)
+                else:
+                    self.fail("native adapter child survived supervisor death")
+            finally:
+                if supervisor.poll() is None:
+                    supervisor.kill()
+                    supervisor.wait(timeout=5)
+                supervisor.stdout.close()
+                supervisor.stderr.close()
 
     def test_semantic_halt_cannot_be_retried_or_hidden_by_resume(self):
         with tempfile.TemporaryDirectory() as tmp:
