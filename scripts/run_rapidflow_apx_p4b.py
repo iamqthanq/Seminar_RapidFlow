@@ -1129,7 +1129,7 @@ def main() -> None:
     action.add_argument("--execute-diagnostic", action="store_true", help="Execute reviewed diagnostic phase after primary")
     action.add_argument("--analyze-session", action="store_true", help="Revalidate a reviewed session from persisted evidence")
     parser.add_argument("--activation", type=Path)
-    parser.add_argument("--registry", type=Path, default=REPO_ROOT / "configs/rapidflow_apx_p4b_correctness_registry.json")
+    parser.add_argument("--registry", type=Path, default=REPO_ROOT / "configs/rapidflow_apx_p4b_r2_1_candidate_registry.json")
     parser.add_argument("--archive", type=Path)
     parser.add_argument("--session", type=Path)
     args = parser.parse_args()

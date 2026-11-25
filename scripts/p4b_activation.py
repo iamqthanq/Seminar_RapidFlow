@@ -15,7 +15,9 @@ from scripts import run_rapidflow_apx_p4b as p4b
 
 ANCHORS = "configs/rapidflow_apx_p4b_activation_anchors.json"
 AMENDMENT = p4b.REPO_ROOT / "configs/rapidflow_apx_p4b_protocol_3b0_candidate.json"
-ENVELOPE = "p4b-detached-activation-v1"
+ENVELOPE = "p4b-detached-activation-v2"
+LEGACY_R1_ENVELOPE = "p4b-detached-activation-v1"
+ACTIVE_BUNDLE_ID = "R2_CANDIDATE_BUNDLE"
 DOCS_ONLY = "docs/"
 NATIVE_ENV = {"LANG": "C", "LC_ALL": "C", "TZ": "UTC", "OMP_NUM_THREADS": "1", "OPENBLAS_NUM_THREADS": "1"}
 VALID_PHASES = (("primary",), ("primary", "diagnostic"))
@@ -25,7 +27,7 @@ SOURCE_PATHS = (
     "scripts/p4b_experiment_session.py", "scripts/p4b_native_evidence.py",
     "scripts/run_rapidflow_apx_engines.py", "scripts/canonical_output_comparator.py",
     "scripts/p4a_evidence_contract.py", "scripts/replay_rapidflow_apx_p4b.py",
-    "scripts/dstar_oracle.py",
+    "scripts/dstar_oracle.py", "configs/rapidflow_apx_p4b_r2_1_candidate_registry.json",
 )
 
 
@@ -127,6 +129,7 @@ class Activation:
     environment_sha256: str
     stratum_rule: str
     resource_regression_rule: str
+    bundle_id: str
 
     def recheck(self, phase=None):
         verified = authorize(self.envelope, self.binary, self.registry, self.archive, self.root, phase=phase)
@@ -144,28 +147,41 @@ def authorize(envelope, binary, registry, archive, root, *, phase=None):
     if not anchor:
         raise p4b.AuthorizationBlockedError("MEASUREMENT_NOT_AUTHORIZED: envelope absent from reviewed trust anchor")
     doc = p4b.load_json_bytes(raw)
-    if not isinstance(doc, dict) or doc.get("schema") != ENVELOPE or doc.get("approval_status") != "MEASUREMENT_AUTHORIZED":
+    if not isinstance(doc, dict):
         raise p4b.AuthorizationBlockedError("INVALID_ACTIVATION_STATE")
+    if doc.get("schema") == LEGACY_R1_ENVELOPE:
+        raise p4b.AuthorizationBlockedError("HISTORICAL_R1_ACTIVATION_DEPRECATED: p4b-detached-activation-v2 required")
+    if doc.get("schema") != ENVELOPE or doc.get("approval_status") != "MEASUREMENT_AUTHORIZED":
+        raise p4b.AuthorizationBlockedError("INVALID_ACTIVATION_STATE")
+    if "r1_evidence" in doc:
+        raise p4b.AuthorizationBlockedError("HISTORICAL_FIELD_NOT_ALLOWED_IN_V2: r1_evidence")
     exp = doc.get("experiment_id")
     if not isinstance(exp, str) or not re.fullmatch("[A-Za-z0-9][A-Za-z0-9._-]{1,95}", exp):
         raise p4b.AuthorizationBlockedError("INVALID_EXPERIMENT_ID")
     for key in ("experiment_id", "reviewer_approval_ref", "coordinator_approval_ref"):
         if not isinstance(anchor.get(key), str) or not anchor[key].strip() or doc.get(key) != anchor[key]:
             raise p4b.AuthorizationBlockedError(f"APPROVAL_REFERENCE_MISMATCH: {key}")
+    bundle_spec = refs.resolve_trusted_bundle(ACTIVE_BUNDLE_ID)
+    if doc.get("bundle_id") != bundle_spec["bundle_id"]:
+        raise p4b.AuthorizationBlockedError("UNREVIEWED_OR_MISMATCHED_BUNDLE_ID")
     protocol, _, _ = p4b.load_frozen_plan()
     env = environment_snapshot(root.parent, binary)
     revision = doc.get("implementation_revision", "")
     sources = _source_state(revision)
-    if binary.stat().st_size != p4b.NATIVE_SIZE_BYTES or p4b.compute_sha256(binary) != p4b.NATIVE_SHA256:
+    if binary.stat().st_size != bundle_spec["native_binary_size_bytes"] or p4b.compute_sha256(binary) != bundle_spec["native_binary_sha256"]:
         raise p4b.AuthorizationBlockedError("BINARY_HASH_MISMATCH")
-    if archive.stat().st_size != refs.ARCHIVE_SIZE or p4b.compute_sha256(archive) != refs.ARCHIVE_SHA:
+    if archive.stat().st_size != bundle_spec["reference_archive_size_bytes"] or p4b.compute_sha256(archive) != bundle_spec["reference_archive_sha256"]:
         raise p4b.AuthorizationBlockedError("ARCHIVE_HASH_MISMATCH")
+    if p4b.compute_sha256(registry) != bundle_spec["registry_sha256"]:
+        raise p4b.AuthorizationBlockedError("REGISTRY_BUNDLE_MISMATCH")
     expected = {
         "scope": "P4b-3B.1_CONFIRMATORY_MEASUREMENT", "protocol_sha256": p4b.PROTOCOL_SHA256,
         "approved_session_path": str(root.resolve()),
         "manifest_sha256": protocol["manifest_sha256"], "schedule_sha256": protocol["schedule_sha256"],
-        "registry_sha256": p4b.compute_sha256(registry), "r1_evidence": refs.ROOT,
-        "native_source_commit": p4b.NATIVE_SOURCE_COMMIT, "native_binary_sha256": p4b.NATIVE_SHA256,
+        "registry_sha256": bundle_spec["registry_sha256"], "bundle_id": bundle_spec["bundle_id"],
+        "correctness_bundle": refs.bundle_identity_payload(bundle_spec),
+        "native_source_commit": bundle_spec["native_source_commit"],
+        "native_binary_sha256": bundle_spec["native_binary_sha256"],
         "source_file_sha256": sources, "resource_policy": protocol["resource_policy"],
         "statistical_amendment_sha256": p4b.compute_sha256(AMENDMENT),
         "environment_sha256": p4b.sha256_bytes(p4b.canonical_json_bytes(env["stable"])),
@@ -188,4 +204,4 @@ def authorize(envelope, binary, registry, archive, root, *, phase=None):
     if (env["dynamic"]["memory"].get("MemAvailable") or 0) < 768 * 1024**2:
         raise p4b.AuthorizationBlockedError("INSUFFICIENT_AVAILABLE_MEMORY")
     return Activation(envelope, binary, registry, archive, root, exp, sha, tuple(phases), revision,
-                      expected["environment_sha256"], strata, resource)
+                      expected["environment_sha256"], strata, resource, bundle_spec["bundle_id"])

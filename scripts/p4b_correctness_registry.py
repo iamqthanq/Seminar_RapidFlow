@@ -18,12 +18,102 @@ ARCHIVE_SIZE = 34_057_918
 MANIFEST_SHA = "cdd7ae9e7063649e8945a6e7a086d16e54410b43c313623f935b2bc9309a1898"
 REPLAY_REV = "dce3cce8f7c2093caccdb83ee82e471f371f1507"
 REGISTRY_PATH = p4b.REPO_ROOT / "configs/rapidflow_apx_p4b_correctness_registry.json"
+CANDIDATE_REGISTRY_PATH = p4b.REPO_ROOT / "configs/rapidflow_apx_p4b_r2_1_candidate_registry.json"
+CANDIDATE_ARCHIVE_SHA = "8efd7c65856c675773249d19b20165106d92917af56913be3730b5a2de044464"
+CANDIDATE_ARCHIVE_SIZE = 33_681_113
+CANDIDATE_MANIFEST_SHA = "37d649b697212de0e0779a1d33e1fdc990cee5f6473b8cf2b351c365cd0fda15"
+CANDIDATE_REPLAY_REV = "115ce2844d91f6a6588fe0ac50b1179bc3b38012"
+CANDIDATE_REGISTRY_SHA = "40a28b4d963d8c652bc49ab231aa2ccb6626e3de9b4badc3b3a13a03620fe0b4"
 SCHEMA = "p4b-correctness-registry-v1"
 ROOT = {"archive_sha256": ARCHIVE_SHA, "evidence_manifest_sha256": MANIFEST_SHA}
+CANDIDATE_ROOT = {
+    "bundle_id": "R2_CANDIDATE_BUNDLE",
+    "archive_sha256": CANDIDATE_ARCHIVE_SHA,
+    "evidence_manifest_sha256": CANDIDATE_MANIFEST_SHA,
+    "archive_size_bytes": CANDIDATE_ARCHIVE_SIZE,
+    "native_binary_sha256": p4b.NATIVE_SHA256,
+    "native_source_commit": p4b.NATIVE_SOURCE_COMMIT,
+    "historical_r1_evidence": ROOT,
+    "superseded_r2_preview_registry_sha256": "90fc2f3ee1e8c4bcf210603caeb218190a294b168377858cd4be276ebb662118",
+}
 EXPECTED_COUNTS = {
     "M0_VERIFIED": 160, "DIFFERENTIAL_M2_VERIFIED": 64,
     "CORRECTNESS_NOT_FULLY_CERTIFIED": 16, "C3_BUDGET_UNAVAILABLE": 10,
 }
+
+TRUSTED_BUNDLES = {
+    "HISTORICAL_R1_BUNDLE": {
+        "bundle_id": "HISTORICAL_R1_BUNDLE",
+        "registry_schema": SCHEMA,
+        "registry_sha256": "a122454b3cdd5b00c221a3f3d847aea372c7e1f9889c4fb1314017c16d4e2117",
+        "reference_archive_sha256": ARCHIVE_SHA,
+        "reference_archive_size_bytes": ARCHIVE_SIZE,
+        "reference_manifest_sha256": MANIFEST_SHA,
+        "native_source_commit": p4b.HISTORICAL_R1_NATIVE_SOURCE_COMMIT,
+        "native_binary_sha256": p4b.HISTORICAL_R1_NATIVE_SHA256,
+        "native_binary_size_bytes": p4b.HISTORICAL_R1_NATIVE_SIZE_BYTES,
+        "replay_revision": REPLAY_REV,
+        "reference_prefix_layout": "pre-r09",
+        "workload_manifest_sha256": "09c78158d541c22f91b48aa484e3fd5e494910c2885635de1fa79bbed1784869",
+        "correctness_policy": "M0_AND_SAME_VARIANT_DIFFERENTIAL",
+        "expected_member_count": 1811,
+        "trusted_root": ROOT,
+        "registry_path": REGISTRY_PATH,
+    },
+    "R2_CANDIDATE_BUNDLE": {
+        "bundle_id": "R2_CANDIDATE_BUNDLE",
+        "registry_schema": SCHEMA,
+        "registry_sha256": CANDIDATE_REGISTRY_SHA,
+        "reference_archive_sha256": CANDIDATE_ARCHIVE_SHA,
+        "reference_archive_size_bytes": CANDIDATE_ARCHIVE_SIZE,
+        "reference_manifest_sha256": CANDIDATE_MANIFEST_SHA,
+        "native_source_commit": p4b.NATIVE_SOURCE_COMMIT,
+        "native_binary_sha256": p4b.NATIVE_SHA256,
+        "native_binary_size_bytes": p4b.NATIVE_SIZE_BYTES,
+        "replay_revision": CANDIDATE_REPLAY_REV,
+        "reference_prefix_layout": "r2-ref",
+        "workload_manifest_sha256": "09c78158d541c22f91b48aa484e3fd5e494910c2885635de1fa79bbed1784869",
+        "correctness_policy": "M0_AND_SAME_VARIANT_DIFFERENTIAL",
+        "expected_member_count": 302,
+        "trusted_root": CANDIDATE_ROOT,
+        "registry_path": CANDIDATE_REGISTRY_PATH,
+    },
+}
+
+BUNDLE_IDENTITY_FIELDS = (
+    "bundle_id",
+    "registry_schema",
+    "registry_sha256",
+    "reference_archive_sha256",
+    "reference_archive_size_bytes",
+    "reference_manifest_sha256",
+    "native_source_commit",
+    "native_binary_sha256",
+    "native_binary_size_bytes",
+    "replay_revision",
+    "reference_prefix_layout",
+    "workload_manifest_sha256",
+    "correctness_policy",
+)
+
+
+def bundle_identity_payload(bundle_spec):
+    return {field: bundle_spec[field] for field in BUNDLE_IDENTITY_FIELDS}
+
+
+def resolve_trusted_bundle(bundle=None, *, default_id="HISTORICAL_R1_BUNDLE"):
+    if bundle is None:
+        return TRUSTED_BUNDLES[default_id]
+    if isinstance(bundle, str):
+        if bundle not in TRUSTED_BUNDLES:
+            raise p4b.LedgerIntegrityError(f"UNREVIEWED_TRUST_BUNDLE: {bundle}")
+        return TRUSTED_BUNDLES[bundle]
+    if isinstance(bundle, dict) and bundle.get("bundle_id") in TRUSTED_BUNDLES:
+        expected = TRUSTED_BUNDLES[bundle["bundle_id"]]
+        if p4b.canonical_json_bytes(bundle_identity_payload(bundle)) != p4b.canonical_json_bytes(bundle_identity_payload(expected)):
+            raise p4b.LedgerIntegrityError(f"BUNDLE_IDENTITY_MISMATCH: {bundle['bundle_id']}")
+        return expected
+    raise p4b.LedgerIntegrityError("UNREVIEWED_TRUST_BUNDLE")
 
 
 def checked_member(name):
@@ -33,11 +123,14 @@ def checked_member(name):
     return path
 
 
-def unpack_references(archive, store):
+def unpack_references(archive, store, *, bundle=None):
     """Verify every member and copy just replay artifacts, without tar extraction."""
+    spec = resolve_trusted_bundle(bundle, default_id="HISTORICAL_R1_BUNDLE")
+    prefix = spec["reference_prefix_layout"]
+    is_hist = spec["bundle_id"] == "HISTORICAL_R1_BUNDLE"
     with archive.open("rb") as stream:
-        if archive.stat().st_size != ARCHIVE_SIZE or p4b.sha256_bytes(stream.read()) != ARCHIVE_SHA:
-            raise p4b.LedgerIntegrityError("R1_ARCHIVE_IDENTITY_MISMATCH")
+        if archive.stat().st_size != spec["reference_archive_size_bytes"] or p4b.sha256_bytes(stream.read()) != spec["reference_archive_sha256"]:
+            raise p4b.LedgerIntegrityError("R1_ARCHIVE_IDENTITY_MISMATCH" if is_hist else "ARCHIVE_IDENTITY_MISMATCH")
         stream.seek(0)
         observed = {}
         members = None
@@ -50,20 +143,23 @@ def unpack_references(archive, store):
                 sha = p4b.sha256_bytes(raw)
                 observed[member.name] = {"sha256": sha, "size_bytes": len(raw)}
                 if member.name == "evidence-manifest.json":
-                    if sha != MANIFEST_SHA:
-                        raise p4b.LedgerIntegrityError("R1_MANIFEST_HASH_MISMATCH")
+                    if sha != spec["reference_manifest_sha256"]:
+                        raise p4b.LedgerIntegrityError("R1_MANIFEST_HASH_MISMATCH" if is_hist else "MANIFEST_HASH_MISMATCH")
                     members = p4b.load_json_bytes(raw)["artifacts"]
-                elif relative.parts[0] == "pre-r09":
+                elif relative.parts[0] == prefix:
                     out = store / relative
                     out.parent.mkdir(parents=True, exist_ok=True)
                     with out.open("xb") as file:
                         file.write(raw)
+                elif not is_hist:
+                    raise p4b.LedgerIntegrityError(f"UNEXPECTED_ARCHIVE_LAYOUT: {member.name}")
         observed.pop("evidence-manifest.json", None)
-        if members is None or len(members) != 1811 or set(members) != set(observed):
+        if members is None or len(members) != spec["expected_member_count"] or set(members) != set(observed):
             raise p4b.LedgerIntegrityError("ARCHIVE_MEMBER_INVENTORY_MISMATCH")
         for name, expected in members.items():
             if observed[name] != {k: expected[k] for k in ("sha256", "size_bytes")}:
                 raise p4b.LedgerIntegrityError(f"ARCHIVE_MEMBER_IDENTITY_MISMATCH: {name}")
+    return spec
 
 
 def read_reference(store, entry):
@@ -164,35 +260,67 @@ def require_canonical_registry(candidate, reconstructed):
         raise p4b.LedgerIntegrityError("REGISTRY_DOES_NOT_MATCH_TRUSTED_ARCHIVE")
 
 
-def validate_registry(registry_path, archive, store, protocol, manifest):
+def validate_registry(registry_path, archive, store, protocol, manifest, *, bundle=None):
     """Trust the archived provenance, not a digest supplied by the caller's registry."""
-    unpack_references(archive, store)
-    canonical = p4b.canonical_json_bytes(rebuild_from_store(store, protocol, manifest))
+    spec = unpack_references(archive, store, bundle=bundle)
+    canonical = p4b.canonical_json_bytes(
+        rebuild_from_store(
+            store,
+            protocol,
+            manifest,
+            prefix_dir=spec["reference_prefix_layout"],
+            binary_sha256=spec["native_binary_sha256"],
+            native_source_commit=spec["native_source_commit"],
+            replay_rev=spec["replay_revision"],
+            trusted_root=spec["trusted_root"],
+        )
+    )
     require_canonical_registry(registry_path.read_bytes(), canonical)
+    reg_sha = p4b.sha256_bytes(canonical)
+    if reg_sha != spec["registry_sha256"]:
+        raise p4b.LedgerIntegrityError("BUNDLE_REGISTRY_HASH_MISMATCH")
     document = p4b.load_json_bytes(canonical)
-    return {(x["workload_id"], x["variant_id"]): x for x in document["entries"]}, p4b.sha256_bytes(canonical)
+    entries = document["entries"]
+    if any(
+        row["binary_sha256"] != spec["native_binary_sha256"]
+        or row["native_source_commit"] != spec["native_source_commit"]
+        for row in entries
+    ):
+        raise p4b.LedgerIntegrityError("BUNDLE_BINARY_PROVENANCE_MISMATCH")
+    return {(x["workload_id"], x["variant_id"]): x for x in entries}, reg_sha
 
 
 def main():
     cli = argparse.ArgumentParser(description=__doc__)
     cli.add_argument("--archive", required=True, type=Path)
-    cli.add_argument("--registry", default=REGISTRY_PATH, type=Path)
+    cli.add_argument("--registry", default=CANDIDATE_REGISTRY_PATH, type=Path)
+    cli.add_argument("--bundle", default="R2_CANDIDATE_BUNDLE", choices=sorted(TRUSTED_BUNDLES))
     mode = cli.add_mutually_exclusive_group(required=True)
     mode.add_argument("--build", action="store_true")
     mode.add_argument("--verify", action="store_true")
     args = cli.parse_args()
+    spec = resolve_trusted_bundle(args.bundle)
     protocol, manifest, _ = p4b.load_frozen_plan()
     with TemporaryDirectory(prefix="p4b-reference-") as tmp:
         store = Path(tmp)
-        unpack_references(args.archive, store)
-        document = rebuild_from_store(store, protocol, manifest)
+        unpack_references(args.archive, store, bundle=spec)
+        document = rebuild_from_store(
+            store,
+            protocol,
+            manifest,
+            prefix_dir=spec["reference_prefix_layout"],
+            binary_sha256=spec["native_binary_sha256"],
+            native_source_commit=spec["native_source_commit"],
+            replay_rev=spec["replay_revision"],
+            trusted_root=spec["trusted_root"],
+        )
         canonical = p4b.canonical_json_bytes(document)
         if args.build:
             with args.registry.open("xb") as stream:
                 stream.write(canonical)
         elif args.registry.read_bytes() != canonical:
             raise p4b.LedgerIntegrityError("REGISTRY_DOES_NOT_MATCH_TRUSTED_ARCHIVE")
-        print({"registry_sha256": p4b.sha256_bytes(canonical), **document["counts"]})
+        print({"bundle_id": spec["bundle_id"], "registry_sha256": p4b.sha256_bytes(canonical), **document["counts"]})
 
 
 if __name__ == "__main__":

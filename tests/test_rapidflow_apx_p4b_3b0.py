@@ -19,6 +19,9 @@ from scripts import summarize_rapidflow_apx_p4b as stats
 from tests.test_rapidflow_apx_p4b_statistics import _make_synthetic_eligible_ledger
 
 DURABLE_ARCHIVE = Path("/home/iamqthanq/Desktop/P4b3A_R1_Independent_Review_2026-11-25/review-evidence-p4b3a-r1.tar.gz")
+CANDIDATE_ARCHIVE = Path(
+    "/home/iamqthanq/Desktop/P4b3B0_R2_1_Independent_Review_2026-11-25/candidate-reference-bundle/p4b-r2-correctness-reference-bundle.tar.gz"
+)
 
 
 class TestP4b3b0(unittest.TestCase):
@@ -261,15 +264,17 @@ execute_p4b_native_slot(binary, fixture, "BARE", "correctness", base/"unused.jso
         env = {"stable": {"fake": True}, "dynamic": {"filesystem_free_bytes": 20 << 30,
                "memory": {"MemAvailable": 1 << 30}}}
         source = {"code.py": "a" * 64}
-        paths = (parent/"envelope.json", runner.DEFAULT_BINARY_PATH, refs.REGISTRY_PATH, DURABLE_ARCHIVE, parent/"session")
+        bundle_spec = refs.resolve_trusted_bundle(auth.ACTIVE_BUNDLE_ID)
+        paths = (parent/"envelope.json", runner.DEFAULT_BINARY_PATH, refs.CANDIDATE_REGISTRY_PATH, CANDIDATE_ARCHIVE, parent/"session")
         doc = {
             "schema": auth.ENVELOPE, "approval_status": "MEASUREMENT_AUTHORIZED",
             "scope": "P4b-3B.1_CONFIRMATORY_MEASUREMENT", "experiment_id": "TEST_ONLY",
             "approved_session_path": str(paths[-1].resolve()),
             "reviewer_approval_ref": "unit test reference", "coordinator_approval_ref": "unit test reference",
             "protocol_sha256": runner.PROTOCOL_SHA256, "manifest_sha256": self.protocol["manifest_sha256"],
-            "schedule_sha256": self.protocol["schedule_sha256"], "registry_sha256": runner.compute_sha256(refs.REGISTRY_PATH),
-            "r1_evidence": refs.ROOT, "native_binary_sha256": runner.NATIVE_SHA256,
+            "schedule_sha256": self.protocol["schedule_sha256"], "registry_sha256": bundle_spec["registry_sha256"],
+            "bundle_id": bundle_spec["bundle_id"], "correctness_bundle": refs.bundle_identity_payload(bundle_spec),
+            "native_binary_sha256": runner.NATIVE_SHA256,
             "native_source_commit": runner.NATIVE_SOURCE_COMMIT, "implementation_revision": "a" * 40,
             "source_file_sha256": source, "resource_policy": self.protocol["resource_policy"],
             "statistical_amendment_sha256": runner.compute_sha256(auth.AMENDMENT),
@@ -279,7 +284,7 @@ execute_p4b_native_slot(binary, fixture, "BARE", "correctness", base/"unused.jso
         }
         return paths, doc, env, source
 
-    @unittest.skipUnless(DURABLE_ARCHIVE.is_file() and runner.DEFAULT_BINARY_PATH.is_file(), "Locked durable R1 archive/binary unavailable")
+    @unittest.skipUnless(CANDIDATE_ARCHIVE.is_file() and runner.DEFAULT_BINARY_PATH.is_file(), "Locked candidate R2 archive/binary unavailable")
     def test_detached_approval_requires_trusted_hash_and_all_bindings(self):
         with tempfile.TemporaryDirectory() as tmp:
             paths, doc, env, source = self._approved_test_context(Path(tmp))
@@ -348,7 +353,7 @@ execute_p4b_native_slot(binary, fixture, "BARE", "correctness", base/"unused.jso
             with self.assertRaisesRegex(runner.LedgerIntegrityError, "R1_ARCHIVE_IDENTITY_MISMATCH"):
                 refs.unpack_references(fake, root)
 
-    @unittest.skipUnless(DURABLE_ARCHIVE.is_file() and runner.DEFAULT_BINARY_PATH.is_file(), "Locked durable R1 archive/binary unavailable")
+    @unittest.skipUnless(CANDIDATE_ARCHIVE.is_file() and runner.DEFAULT_BINARY_PATH.is_file(), "Locked candidate R2 archive/binary unavailable")
     def test_production_adapter_wiring_uses_only_fake_child(self):
         with tempfile.TemporaryDirectory() as tmp:
             parent = Path(tmp)
@@ -358,14 +363,9 @@ execute_p4b_native_slot(binary, fixture, "BARE", "correctness", base/"unused.jso
                 "experiment_id", "reviewer_approval_ref", "coordinator_approval_ref")}}
             store = parent / "refs"
             store.mkdir()
-            refs.unpack_references(DURABLE_ARCHIVE, store)
-            ref_doc = exp.read(refs.REGISTRY_PATH)
-            ref_map = {
-                (r["workload_id"], r["variant_id"]): dict(
-                    r, binary_sha256=runner.NATIVE_SHA256, native_source_commit=runner.NATIVE_SOURCE_COMMIT
-                )
-                for r in ref_doc["entries"]
-            }
+            refs.unpack_references(CANDIDATE_ARCHIVE, store, bundle=auth.ACTIVE_BUNDLE_ID)
+            ref_doc = exp.read(refs.CANDIDATE_REGISTRY_PATH)
+            ref_map = {(r["workload_id"], r["variant_id"]): r for r in ref_doc["entries"]}
             frozen_policy = self.protocol["resource_policy"]
             plan = [s for s in self.plan if s["slot_purpose"] != "diagnostic"]
 
@@ -429,7 +429,7 @@ execute_p4b_native_slot(binary, fixture, "BARE", "correctness", base/"unused.jso
                     exp.session(*args, execute=True, stop_after=2)
                 self.assertEqual(launch.call_count, 1)
 
-    @unittest.skipUnless(DURABLE_ARCHIVE.is_file() and runner.DEFAULT_BINARY_PATH.is_file(), "Locked durable R1 archive/binary unavailable")
+    @unittest.skipUnless(CANDIDATE_ARCHIVE.is_file() and runner.DEFAULT_BINARY_PATH.is_file(), "Locked candidate R2 archive/binary unavailable")
     def test_bounded_real_three_purposes_and_artifact_revalidation(self):
         with tempfile.TemporaryDirectory() as tmp:
             run_bounded_witness(Path(tmp), self.protocol, self.manifest, self.schedule, self)
@@ -483,14 +483,9 @@ execute_p4b_native_slot(binary, fixture, "BARE", "correctness", base/"unused.jso
 def run_bounded_witness(parent, protocol, manifest, schedule, test):
     store = parent / "refs"
     store.mkdir()
-    refs.unpack_references(DURABLE_ARCHIVE, store)
-    entries = exp.read(refs.REGISTRY_PATH)["entries"]
-    reference_map = {
-        (r["workload_id"], r["variant_id"]): dict(
-            r, binary_sha256=runner.NATIVE_SHA256, native_source_commit=runner.NATIVE_SOURCE_COMMIT
-        )
-        for r in entries if r["workload_id"] == exp.BOUNDED_CASE
-    }
+    refs.unpack_references(CANDIDATE_ARCHIVE, store, bundle=auth.ACTIVE_BUNDLE_ID)
+    entries = exp.read(refs.CANDIDATE_REGISTRY_PATH)["entries"]
+    reference_map = {(r["workload_id"], r["variant_id"]): r for r in entries if r["workload_id"] == exp.BOUNDED_CASE}
     base = next(s for s in schedule["primary_slots"] if s["workload_id"] == exp.BOUNDED_CASE and s["variant_id"] == "BARE")
     slots = [dict(base, slot_id=f"FUNCTIONAL_{purpose}", slot_purpose="functional", execution_purpose=purpose)
              for purpose in ("correctness", "performance", "diagnostic")]

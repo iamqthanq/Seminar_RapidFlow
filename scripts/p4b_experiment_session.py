@@ -937,7 +937,9 @@ def production_command(phase, envelope, binary, registry, archive, root, *, anal
     primary_end = len(schedule["warmup_slots"]) + len(schedule["primary_slots"])
     with tempfile.TemporaryDirectory(prefix="p4b-trusted-refs-", dir=root.parent) as temp:
         store = Path(temp)
-        reference_map, _ = refs.validate_registry(registry, archive, store, protocol, manifest)
+        reference_map, _ = refs.validate_registry(
+            registry, archive, store, protocol, manifest, bundle=context.bundle_id
+        )
         context.recheck()
         backend = ProductionBackend(binary, reference_map, store, protocol["resource_policy"], context)
         if analyze or phase == "diagnostic":
