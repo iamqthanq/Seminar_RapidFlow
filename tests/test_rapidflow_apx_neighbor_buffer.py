@@ -1,9 +1,15 @@
 """Canonical CLI identity, transaction and work controls for M2 BUFFER."""
+import copy
+import gzip
+import hashlib
 import json
 from pathlib import Path
 import subprocess
 import sys
+import tarfile
 import tempfile
+from types import MappingProxyType
+from typing import Optional
 import unittest
 from unittest.mock import patch
 
@@ -17,9 +23,31 @@ ROOT = runner.REPO_ROOT
 BINARY = ROOT / "tests/native/rapidflow_apx_engines/build/rapidflow_apx_native"
 C4 = ROOT / "tests/fixtures/rapidflow_apx_p4b_residual/residual-deferred.json"
 FAR = ROOT / "tests/fixtures/rapidflow_apx_foundation_audit"
+P4B2A_BIN_SHA = "d21575c1c70d1f7bc2380d8172ae4044dacfc3f6ec464d06884555c284d36b84"
+P4B2A_COMMIT_SHA = "d2108ec6fee083ce0716e2935e07750e56461a72"
+P4B2B_BIN_SHA = "260e5627799b624bf010c4631011db8874ebf769bf4b4cdd62831f1ad25a9608"
+P4B2B_COMMIT_SHA = "bdb1fd2eda4d7881041e6e32500d62af6da1505d"
+P4B2A_ARCHIVE_SHA = "94833a8876a413fc34dce53ba3a037aea4c0f9a2926a59eb505cb2817b0c10cd"
+R112_MANIFEST_SHA = "bcd359cdb36f19e2343df75ba19c2913f918bf184e11818e04b8f9adcae8f82b"
 ADDITIONS = set(runner.NEIGHBOR_COUNTER_FIELDS) | set(runner.NEIGHBOR_MERGE_COUNTER_FIELDS) | {
     "neighbor_configuration_version", "requested_neighbor_mode", "effective_neighbor_mode",
 }
+
+
+def _find_historical_binary(filename: str) -> Optional[Path]:
+    patterns = (
+        f"/tmp/rapidflow-p4b2b-r1-1-2/binaries/{filename}",
+        f"/tmp/rapidflow-p4b2b-r1-1/binaries/{filename}",
+        f"/tmp/rapidflow-p4b2b-r1-ot7fz8/binaries/{filename}",
+    )
+    for raw in patterns:
+        p = Path(raw)
+        if p.is_file():
+            return p
+    for p in sorted(Path("/tmp").glob(f"rapidflow-p4b2b-r1-1-3-*/binaries/{filename}")):
+        if p.is_file():
+            return p
+    return None
 
 
 def unchanged_output(value):
@@ -146,15 +174,24 @@ class TestNeighborBuffer(unittest.TestCase):
         historical = {k: v for k, v in base.items() if k not in ADDITIONS}
         self.assertTrue(runner.validate_nlf_configuration("m2", "none", historical, True)[0])
         self.assertFalse(runner.validate_nlf_configuration("m2", "none", historical, True, "legacy")[0])
-        # Historical mode with version 1 requires explicit historical_auth authorization:
+        # Historical mode with version 1 requires genuinely verified provenance (caller-constructed dataclass rejected):
         self.assertFalse(runner.validate_nlf_configuration("m2", "none", {**base, "neighbor_configuration_version": 1}, True)[0])
-        auth_buf = runner.VerifiedHistoricalArtifact(
-            binary_sha256="d21575c1c70d1f7bc2380d8172ae4044dacfc3f6ec464d06884555c284d36b84",
-            commit_sha="d21575c1c70d1f7bc2380d8172ae4044dacfc3f",
+        unverified_auth = runner.VerifiedHistoricalArtifact(
+            binary_sha256=P4B2A_BIN_SHA,
+            commit_sha=P4B2A_COMMIT_SHA,
             historical_profile="buffer",
             schema_version=1,
         )
-        self.assertTrue(runner.validate_nlf_configuration("m2", "none", {**base, "neighbor_configuration_version": 1}, True, historical_auth=auth_buf)[0])
+        self.assertFalse(runner.validate_nlf_configuration("m2", "none", {**base, "neighbor_configuration_version": 1}, True, historical_auth=unverified_auth)[0])
+        # Verify genuine replay against frozen binary if present, else hermetic verified receipt binding:
+        bin_2a = _find_historical_binary("p4b2a-baseline-native")
+        if bin_2a is not None:
+            hist_res, _, hist_ok, hist_receipt = runner.run_verified_historical_binary(
+                bin_2a, "m2", self.workload(), neighbor_mode="buffer", expected_commit_sha=P4B2A_COMMIT_SHA
+            )
+            self.assertTrue(hist_ok)
+            self.assertIsNotNone(hist_receipt)
+            self.assertTrue(runner.validate_nlf_configuration("m2", "none", hist_res, True, "buffer", historical_auth=hist_receipt)[0])
         # Live mode rejects version 1:
         self.assertFalse(runner.validate_nlf_configuration("m2", "none", {**base, "neighbor_configuration_version": 1}, True, "buffer")[0])
         for mode in ("buffer", "merge"):
@@ -424,50 +461,140 @@ class TestNeighborBuffer(unittest.TestCase):
         self.assertIn("boolean bypass rejected", get_diag(result))
 
     def test_historical_p4b2a_baseline_compatibility(self):
-        candidates = [
-            Path("/tmp/rapidflow-p4b2b-r1-1/binaries/p4b2a-baseline-native"),
-            Path("/tmp/rapidflow-p4b2b-r1-ot7fz8/binaries/p4b2a-baseline-native"),
-        ]
-        baseline_bin = next((p for p in candidates if p.is_file()), None)
+        baseline_bin = _find_historical_binary("p4b2a-baseline-native")
         if baseline_bin is None:
             self.skipTest("Historical baseline binary not found")
+        w = self.workload()
         # Run workload directly on historical baseline binary
         with tempfile.TemporaryDirectory() as tmp:
             inp, out = Path(tmp) / "in.json", Path(tmp) / "out.json"
-            inp.write_text(json.dumps(self.workload()))
+            inp.write_text(json.dumps(w))
             res = subprocess.run([str(baseline_bin), "--engine", "m2", "--neighbor-mode", "buffer",
                                   "--workload", str(inp), "--output", str(out)], capture_output=True, text=True)
             self.assertEqual(res.returncode, 0, res.stderr)
             hist_out = json.loads(out.read_text())
             self.assertEqual(hist_out.get("neighbor_configuration_version"), 1)
-            # Live validation with requested_neighbor_mode strictly rejects version 1 (downgrade protection)
+            # Live validation strictly rejects version 1 (downgrade protection)
             ok_live, diag_live, _ = runner.validate_nlf_configuration("m2", "none", hist_out, True, "buffer")
             self.assertFalse(ok_live)
             self.assertIn("Missing initialized current neighbor configuration identity", diag_live)
 
-            # Historical validation with VerifiedHistoricalArtifact accepts version 1
-            auth = runner.VerifiedHistoricalArtifact(
-                binary_sha256="d21575c1c70d1f7bc2380d8172ae4044dacfc3f6ec464d06884555c284d36b84",
-                commit_sha="d21575c1c70d1f7bc2380d8172ae4044dacfc3f",
+            # Unverified caller-constructed VerifiedHistoricalArtifact is rejected (R113-B03)
+            fake_auth = runner.VerifiedHistoricalArtifact(
+                binary_sha256=P4B2A_BIN_SHA,
+                commit_sha=P4B2A_COMMIT_SHA,
                 historical_profile="buffer",
                 schema_version=1,
             )
-            ok_hist, diag_hist, _ = runner.validate_historical_artifact_configuration(hist_out, auth, "m2", "none", "buffer")
-            self.assertTrue(ok_hist, diag_hist)
+            ok_fake, diag_fake, _ = runner.validate_historical_artifact_configuration(hist_out, fake_auth, "m2", "none", "buffer")
+            self.assertFalse(ok_fake)
+            self.assertIn("HISTORICAL_PROVENANCE_ERROR", diag_fake)
 
-            # Also verify run_workload_on_binary with historical_auth=auth
-            res_dict, _, acc = runner.run_workload_on_binary(baseline_bin, "m2", self.workload(), neighbor_mode="buffer", historical_auth=auth)
-            self.assertTrue(acc, res_dict.get("error_message"))
+        # Workflow A: verified historical replay returns attested receipt
+        replay_res, _, acc_replay, receipt = runner.run_verified_historical_binary(
+            baseline_bin, "m2", w, neighbor_mode="buffer",
+            expected_commit_sha=P4B2A_COMMIT_SHA, expected_binary_sha256=P4B2A_BIN_SHA,
+        )
+        self.assertTrue(acc_replay, replay_res.get("error_message"))
+        self.assertIsNotNone(receipt)
+        ok_hist, diag_hist, _ = runner.validate_historical_artifact_configuration(
+            replay_res, receipt, "m2", "none", "buffer", workload=w, native_exit_code=0,
+        )
+        self.assertTrue(ok_hist, diag_hist)
+
+        # Also verify run_workload_on_binary accepts HistoricalBinaryRequest against actual frozen binary
+        req = runner.HistoricalBinaryRequest(
+            binary_sha256=P4B2A_BIN_SHA,
+            commit_sha=P4B2A_COMMIT_SHA,
+            historical_profile="buffer",
+            schema_version=1,
+        )
+        res_dict, _, acc = runner.run_workload_on_binary(baseline_bin, "m2", w, neighbor_mode="buffer", historical_auth=req)
+        self.assertTrue(acc, res_dict.get("error_message"))
 
 
 class TestHistoricalSchemaAuthorizationMatrix(unittest.TestCase):
-    """Exhaustive test suite for RV04-T01 through RV04-T19."""
+    """Exhaustive test suite for RV04-T01 through RV04-T19 (updated for R113-A/B provenance binding)."""
 
     def setUp(self):
-        self.p4b2a_sha = "d21575c1c70d1f7bc2380d8172ae4044dacfc3f6ec464d06884555c284d36b84"
-        self.p4b2a_commit = "d21575c1c70d1f7bc2380d8172ae4044dacfc3f"
-        self.p4b2b_sha = "260e5627799b624bf010c4631011db8874ebf769bf4b4cdd62831f1ad25a9608"
-        self.p4b2b_commit = "bdb1fd26c92d56d11f71477708eb107e371a5330"
+        self.p4b2a_sha = P4B2A_BIN_SHA
+        self.p4b2a_commit = P4B2A_COMMIT_SHA
+        self.p4b2b_sha = P4B2B_BIN_SHA
+        self.p4b2b_commit = P4B2B_COMMIT_SHA
+
+    def _base_v1_artifact_dict(self, profile_sha: str, mode: str) -> dict:
+        counters = {
+            "raw_emissions": 1, "unique_emissions": 1, "committed_emissions": 1, "discarded_emissions": 0,
+            "work_units": 1, "max_work": 500000, "anchors_started": 1, "dfs_states": 1,
+            "candidate_evaluations": 1, "candidate_extensions": 1, "edge_lookups": 1, "vertex_label_checks": 2,
+            "edge_decisions": 1, "missing_branches": 0, "commitment_checks": 0, "commitment_rejections": 0,
+            "neighbor_buffer_retrieval_calls": 0, "neighbor_buffer_growth_calls": 0, "neighbor_buffer_no_growth_calls": 0,
+        }
+        if profile_sha == self.p4b2b_sha:
+            for k in runner.NEIGHBOR_MERGE_COUNTER_FIELDS:
+                counters[k] = 0
+        raw_w = {
+            "case_id": "hermetic_v1", "k": 0,
+            "query": {"vertices": [{"id": 1, "label": 0}, {"id": 2, "label": 0}], "edges": [{"u": 1, "v": 2, "label": 0}]},
+            "initial_graph": {"vertices": [{"id": 1, "label": 0}, {"id": 2, "label": 0}], "edges": []},
+            "updates": [{"op": "+", "u": 1, "v": 2, "label": 0}],
+        }
+        in_sha = hashlib.sha256(json.dumps(raw_w).encode("utf-8")).hexdigest()
+        return {
+            "schema_version": "1.1.0", "semantics_version": "D-R-1.0", "status": "SUCCESS", "error_category": "NONE",
+            "engine": "m2", "engine_name": "m2", "case_id": "hermetic_v1", "raw_input_sha256": in_sha,
+            "requested_nlf_mode": "none", "effective_nlf_mode": "none", "configuration_status": "SUCCESS",
+            "nlf_memory_limit_bytes": 1048576, "nlf_index_logical_bytes": 0,
+            "configuration_initialized": True, "neighbor_configuration_version": 1,
+            "requested_neighbor_mode": mode, "effective_neighbor_mode": mode,
+            "work_budget": {"default_limit": 500000, "canonical_cap": 500000,
+                            "workload_requested_limit": 500000, "cli_requested_limit": 500000, "effective_limit": 500000},
+            "execution": {"total_steps": 1, "attempted_steps": 1, "completed_steps": 1, "failed_steps": 0, "unattempted_steps": 0},
+            "steps": [{
+                "step_index": 0, "status": "SUCCESS", "commit_status": "COMMITTED", "error_category": "NONE",
+                "op": "+", "u": 1, "v": 2, "label": 0, "entered_tuples": [[1, 2]], "exited_tuples": [],
+                "step_counters": dict(counters),
+            }],
+            "query_info": {"k": 0, "query_canonical_order": [1, 2], "computed_lambda": 1},
+            "counters": counters,
+        }, raw_w
+
+    def _verify_hermetic_v1(self, bin_sha: str, mode: str):
+        out_dict, raw_w = self._base_v1_artifact_dict(bin_sha, mode)
+        raw_out_str = json.dumps(out_dict)
+        raw_in_str = json.dumps(raw_w)
+        rec = {
+            "workload_family": "hermetic_test",
+            "case_id": "hermetic_v1",
+            "input_sha256": hashlib.sha256(raw_in_str.encode("utf-8")).hexdigest(),
+            "raw_input": raw_in_str,
+            "native_binary_sha256": bin_sha,
+            "engine": "m2", "nlf_mode": "none", "neighbor_mode": mode, "exit_code": 0,
+            "raw_output": raw_out_str,
+        }
+        with tempfile.TemporaryDirectory() as td:
+            tdp = Path(td)
+            ledger_p = tdp / "ledger.jsonl.gz"
+            ledger_bytes = gzip.compress((json.dumps(rec) + "\n").encode("utf-8"))
+            ledger_p.write_bytes(ledger_bytes)
+            manifest_obj = {"files": [{"path": "ledger.jsonl.gz", "size_bytes": len(ledger_bytes),
+                                       "sha256": hashlib.sha256(ledger_bytes).hexdigest()}]}
+            man_p = tdp / "manifest.json"
+            man_bytes = json.dumps(manifest_obj).encode("utf-8")
+            man_p.write_bytes(man_bytes)
+            man_sha = hashlib.sha256(man_bytes).hexdigest()
+            anchors = MappingProxyType({man_sha: MappingProxyType({
+                "anchor_id": "hermetic_anchor", "kind": "manifest_json",
+                "allowed_binary_sha256s": (bin_sha,), "provenance_origin": "hermetic unit test anchor",
+            })})
+            with patch.object(runner, "TRUSTED_HISTORICAL_ANCHORS", anchors):
+                return runner.verify_historical_artifact(
+                    man_p, man_sha, "ledger.jsonl.gz", case_id="hermetic_v1",
+                    expected_binary_sha256=bin_sha,
+                    expected_commit_sha=runner.AUTHORIZED_HISTORICAL_BINARIES[bin_sha]["commit_sha"],
+                    expected_engine="m2", expected_nlf_mode="none", expected_neighbor_mode=mode,
+                    expected_workload=raw_w,
+                )
 
     def make_v2_result(self, mode="merge"):
         return {
@@ -587,39 +714,21 @@ class TestHistoricalSchemaAuthorizationMatrix(unittest.TestCase):
         self.assertIn("Historical commit SHA mismatch", diag)
 
     def test_rv04_t09_v1_buffer_historical_valid_passes(self):
-        auth = runner.VerifiedHistoricalArtifact(
-            binary_sha256=self.p4b2a_sha,
-            commit_sha=self.p4b2a_commit,
-            historical_profile="buffer",
-            schema_version=1,
-        )
-        res = self.make_v1_result("buffer")
-        ok, diag, meta = runner.validate_historical_artifact_configuration(res, auth, "m2", "none", "buffer")
+        ok, diag, receipt, parsed = self._verify_hermetic_v1(self.p4b2a_sha, "buffer")
         self.assertTrue(ok, diag)
+        self.assertIsNotNone(receipt)
+        self.assertEqual(receipt.commit_sha, self.p4b2a_commit)
 
     def test_rv04_t10_v1_merge_historical_valid_passes(self):
-        auth = runner.VerifiedHistoricalArtifact(
-            binary_sha256=self.p4b2b_sha,
-            commit_sha=self.p4b2b_commit,
-            historical_profile="merge",
-            schema_version=1,
-        )
-        res = self.make_v1_result("merge")
-        ok, diag, meta = runner.validate_historical_artifact_configuration(res, auth, "m2", "none", "merge")
+        ok, diag, receipt, parsed = self._verify_hermetic_v1(self.p4b2b_sha, "merge")
         self.assertTrue(ok, diag)
+        self.assertIsNotNone(receipt)
+        self.assertEqual(receipt.commit_sha, self.p4b2b_commit)
 
     def test_rv04_t11_v1_legacy_historical_valid_passes(self):
-        auth = runner.VerifiedHistoricalArtifact(
-            binary_sha256=self.p4b2a_sha,
-            commit_sha=self.p4b2a_commit,
-            historical_profile="legacy",
-            schema_version=1,
-        )
-        res = self.make_v1_result("legacy")
-        for k in runner.ALL_NEIGHBOR_COUNTER_FIELDS:
-            res["counters"][k] = 0
-        ok, diag, meta = runner.validate_historical_artifact_configuration(res, auth, "m2", "none", "legacy")
+        ok, diag, receipt, parsed = self._verify_hermetic_v1(self.p4b2a_sha, "legacy")
         self.assertTrue(ok, diag)
+        self.assertIsNotNone(receipt)
 
     def test_rv04_t12_v2_null_counter_fails(self):
         res = self.make_v2_result("merge")
@@ -647,7 +756,7 @@ class TestHistoricalSchemaAuthorizationMatrix(unittest.TestCase):
         self.assertIn("boolean bypass rejected", diag)
 
     def test_rv04_t16_candidate_binary_historical_auth_sha_mismatch(self):
-        auth = runner.VerifiedHistoricalArtifact(
+        req = runner.HistoricalBinaryRequest(
             binary_sha256=self.p4b2a_sha,
             commit_sha=self.p4b2a_commit,
             historical_profile="buffer",
@@ -655,7 +764,7 @@ class TestHistoricalSchemaAuthorizationMatrix(unittest.TestCase):
         )
         w = json.loads(C4.read_bytes())
         w["case_id"] = "buffer_deferred"
-        res, _, acc = runner.run_workload_on_binary(BINARY, "m2", w, neighbor_mode="buffer", historical_auth=auth)
+        res, _, acc = runner.run_workload_on_binary(BINARY, "m2", w, neighbor_mode="buffer", historical_auth=req)
         self.assertFalse(acc)
         self.assertEqual(res.get("status"), "AUTHORIZATION_ERROR")
         self.assertIn("does not match historical authorization SHA", res.get("error_message", ""))
@@ -674,7 +783,307 @@ class TestHistoricalSchemaAuthorizationMatrix(unittest.TestCase):
 
     def test_rv04_t19_historical_merge_partition_violation_fails(self):
         res = self.make_v1_result("merge")
-        # linear + fast + fallback != retrieval
         res["counters"]["neighbor_merge_linear_calls"] += 1
         err = runner.validate_neighbor_counters(res["counters"], res)
         self.assertIn("Total merge retrievals differ from sum of linear, fast-path, and fallback calls", err)
+
+
+class TestR113ProvenanceClosure(unittest.TestCase):
+    """Focused regression matrix for R113-A, R113-B, R113-C, and strict live invariants."""
+
+    def _c4_workload(self):
+        w = json.loads(C4.read_bytes())
+        w["case_id"] = "r113_c4_witness"
+        return w
+
+    # --- Group A: Historical source identity (R113-A01..A05) ---
+
+    def test_r113_a01_to_a05_historical_git_identities(self):
+        # R113-A01 & A02: Verify real Git commits match registry
+        for sha, exp_commit in ((P4B2A_BIN_SHA, P4B2A_COMMIT_SHA), (P4B2B_BIN_SHA, P4B2B_COMMIT_SHA)):
+            entry = runner.AUTHORIZED_HISTORICAL_BINARIES[sha]
+            self.assertEqual(entry["commit_sha"], exp_commit)
+            res = subprocess.run(["git", "cat-file", "-t", exp_commit], cwd=ROOT, capture_output=True, text=True)
+            self.assertEqual(res.returncode, 0, res.stderr)
+            self.assertEqual(res.stdout.strip(), "commit")
+
+        # R113-A03 & A04: Incorrect / truncated commits rejected
+        bad_commits = (
+            "d21575c1c70d1f7bc2380d8172ae4044dacfc3f",  # 39-char truncated binary SHA
+            "bdb1fd26c92d56d11f71477708eb107e371a5330", # Invalid commit ID
+        )
+        for bad in bad_commits:
+            self.assertNotEqual(runner.AUTHORIZED_HISTORICAL_BINARIES[P4B2A_BIN_SHA]["commit_sha"], bad)
+            self.assertNotEqual(runner.AUTHORIZED_HISTORICAL_BINARIES[P4B2B_BIN_SHA]["commit_sha"], bad)
+            b2a = _find_historical_binary("p4b2a-baseline-native")
+            if b2a is not None:
+                res, _, acc, rec = runner.run_verified_historical_binary(b2a, "m2", self._c4_workload(), expected_commit_sha=bad)
+                self.assertFalse(acc)
+                self.assertIsNone(rec)
+                self.assertEqual(res.get("error_category"), "HISTORICAL_AUTHORIZATION_ERROR")
+
+        # R113-A05: Valid P4b-2A commit paired with wrong binary hash (P4b-2B binary) rejected
+        b2b = _find_historical_binary("p4b2b-release-native")
+        if b2b is not None:
+            res, _, acc, rec = runner.run_verified_historical_binary(
+                b2b, "m2", self._c4_workload(), neighbor_mode="merge", expected_commit_sha=P4B2A_COMMIT_SHA,
+            )
+            self.assertFalse(acc)
+            self.assertIsNone(rec)
+            self.assertIn("does not match authoritative binary source commit", res.get("error_message", ""))
+
+    # --- Group B: Artifact provenance (R113-B01..B12) ---
+
+    def test_r113_b02_b03_b11_forged_witness_and_caller_spoof_rejected(self):
+        # Mandatory witness (R113-B02): Real current MERGE output forged to version 1 + caller metadata
+        w = self._c4_workload()
+        curr_res, _, curr_ok = runner.run_workload_on_binary(BINARY, "m2", w, neighbor_mode="merge")
+        self.assertTrue(curr_ok, curr_res.get("error_message"))
+
+        forged = copy.deepcopy(curr_res)
+        forged["neighbor_configuration_version"] = 1
+        caller_auth = runner.VerifiedHistoricalArtifact(
+            binary_sha256=P4B2B_BIN_SHA,
+            commit_sha=P4B2B_COMMIT_SHA,
+            historical_profile="merge",
+            schema_version=1,
+            artifact_id="forged_r113_b02",
+            manifest_id="forged_manifest",
+        )
+        ok_cert, diag_cert, _ = runner.validate_historical_artifact_configuration(
+            forged, caller_auth, "m2", "none", "merge", workload=w,
+        )
+        self.assertFalse(ok_cert, "Forged current v2->v1 output MUST be rejected")
+        self.assertIn("HISTORICAL_PROVENANCE_ERROR", diag_cert)
+
+        ok_nlf, diag_nlf, _ = runner.validate_nlf_configuration("m2", "none", forged, True, "merge", historical_auth=caller_auth)
+        self.assertFalse(ok_nlf)
+        self.assertIn("HISTORICAL_PROVENANCE_ERROR", diag_nlf)
+
+        # R113-B03: Even when native_result IS version 1, caller-constructed auth without verification seal fails
+        forged_with_all_fields = runner.VerifiedHistoricalArtifact(
+            binary_sha256=P4B2B_BIN_SHA, commit_sha=P4B2B_COMMIT_SHA, historical_profile="merge", schema_version=1,
+            artifact_id="x", manifest_id="y", manifest_sha256=R112_MANIFEST_SHA, artifact_sha256="a"*64,
+            artifact_size=10, workload_input_sha256="b"*64, engine="m2", nlf_mode="none", neighbor_mode="merge",
+            native_output_sha256="c"*64, native_exit_status=0, origin_type="offline_trusted_manifest_artifact",
+            provenance_origin="spoof", parsed_result_sha256="d"*64,
+        )
+        ok_b03, diag_b03, _ = runner.validate_historical_artifact_configuration(
+            forged, forged_with_all_fields, "m2", "none", "merge",
+        )
+        self.assertFalse(ok_b03)
+        self.assertIn("HISTORICAL_PROVENANCE_ERROR", diag_b03)
+
+    def test_r113_b01_b04_to_b12_offline_trusted_anchors_and_mutations(self):
+        # Create hermetic verified ledger & manifest PLUS test real P4b-2A tar / R1.1.2 manifest if present
+        p4b2a_tar = Path("/tmp/rapidflow-p4b2a-4TsBiw/review-evidence.tar.gz")
+        r112_man = Path("/tmp/rapidflow-p4b2b-r1-1-2/evidence-manifest.json")
+        hand0 = runner.build_hand_workloads()[0]
+
+        if p4b2a_tar.is_file():
+            # R113-B01 on real P4b-2A accepted archive
+            ok_2a, diag_2a, art_2a, out_2a = runner.verify_historical_artifact(
+                p4b2a_tar, P4B2A_ARCHIVE_SHA, "canonical-replays.jsonl.gz",
+                stage="m2_none_buffer_hand", case_id="CASE_HAND_01",
+                expected_binary_sha256=P4B2A_BIN_SHA, expected_commit_sha=P4B2A_COMMIT_SHA,
+                expected_engine="m2", expected_nlf_mode="none", expected_neighbor_mode="buffer",
+                expected_workload=hand0,
+            )
+            self.assertTrue(ok_2a, diag_2a)
+            self.assertIsNotNone(art_2a)
+
+            # R113-B11: Valid verified receipt + substituted output dictionary -> REJECTED!
+            sub_out = copy.deepcopy(out_2a)
+            sub_out["counters"]["work_units"] += 1
+            ok_b11, diag_b11, _ = runner.validate_historical_artifact_configuration(
+                sub_out, art_2a, "m2", "none", "buffer", workload=hand0,
+            )
+            self.assertFalse(ok_b11)
+            self.assertIn("does not match verified historical artifact payload digest", diag_b11)
+
+            # R113-B09 & B12: Wrong profile / incompatible modes against real P4b-2A archive
+            ok_b09, diag_b09, _, _ = runner.verify_historical_artifact(
+                p4b2a_tar, P4B2A_ARCHIVE_SHA, "canonical-replays.jsonl.gz",
+                stage="m2_none_buffer_hand", case_id="CASE_HAND_01",
+                expected_binary_sha256=P4B2B_BIN_SHA, expected_engine="m2", expected_nlf_mode="none",
+                expected_neighbor_mode="buffer",
+            )
+            self.assertFalse(ok_b09)
+            ok_b12, diag_b12, _, _ = runner.verify_historical_artifact(
+                p4b2a_tar, P4B2A_ARCHIVE_SHA, "canonical-replays.jsonl.gz",
+                stage="m2_none_buffer_hand", case_id="CASE_HAND_01",
+                expected_engine="m2", expected_nlf_mode="none", expected_neighbor_mode="merge",
+            )
+            self.assertFalse(ok_b12)
+
+            # R113-B10: Wrong workload paired with valid archive record
+            wrong_w = copy.deepcopy(hand0)
+            wrong_w["k"] = 99
+            ok_b10, diag_b10, _, _ = runner.verify_historical_artifact(
+                p4b2a_tar, P4B2A_ARCHIVE_SHA, "canonical-replays.jsonl.gz",
+                stage="m2_none_buffer_hand", case_id="CASE_HAND_01",
+                expected_engine="m2", expected_nlf_mode="none", expected_neighbor_mode="buffer",
+                expected_workload=wrong_w,
+            )
+            self.assertFalse(ok_b10)
+            self.assertIn("does not match expected_workload", diag_b10)
+
+        if r112_man.is_file():
+            # R113-B01 on R1.1.2 manifest (frozen P4b-2B MERGE replay)
+            ok_2b, diag_2b, art_2b, _ = runner.verify_historical_artifact(
+                r112_man, R112_MANIFEST_SHA, "canonical-replays-r1-1-2.jsonl.gz",
+                workload_family="hand", case_id="CASE_HAND_01",
+                expected_binary_sha256=P4B2B_BIN_SHA, expected_commit_sha=P4B2B_COMMIT_SHA,
+                expected_engine="m2", expected_nlf_mode="none", expected_neighbor_mode="merge",
+                expected_workload=hand0,
+            )
+            self.assertTrue(ok_2b, diag_2b)
+            self.assertIsNotNone(art_2b)
+
+            # Temporary manifest/artifact tampering checks (Section 11.2, originals untouched!)
+            with tempfile.TemporaryDirectory() as td:
+                tdp = Path(td)
+                man_data = json.loads(r112_man.read_text(encoding="utf-8"))
+                # R113-B04: Missing manifest SHA
+                ok_b04, _, _, _ = runner.verify_historical_artifact(r112_man, "", "canonical-replays-r1-1-2.jsonl.gz")
+                self.assertFalse(ok_b04)
+
+                # R113-B06: Altered manifest copy vs trusted R112_MANIFEST_SHA
+                bad_man_data = copy.deepcopy(man_data)
+                bad_man_data["description"] = "tampered"
+                bad_man = tdp / "bad_manifest.json"
+                bad_man.write_text(json.dumps(bad_man_data), encoding="utf-8")
+                ok_b06, diag_b06, _, _ = runner.verify_historical_artifact(bad_man, R112_MANIFEST_SHA, "canonical-replays-r1-1-2.jsonl.gz")
+                self.assertFalse(ok_b06)
+                self.assertIn("mismatch", diag_b06)
+
+                # R113-B07: Altered artifact bytes against trusted unmodified manifest
+                unmod_man = tdp / "manifest.json"
+                unmod_man.write_bytes(r112_man.read_bytes())
+                tampered_art = tdp / "canonical-replays-r1-1-2.jsonl.gz"
+                tampered_art.write_bytes(b"corrupted-bytes")
+                ok_b07, diag_b07, _, _ = runner.verify_historical_artifact(unmod_man, R112_MANIFEST_SHA, "canonical-replays-r1-1-2.jsonl.gz")
+                self.assertFalse(ok_b07)
+                self.assertIn("Artifact bytes tampered", diag_b07)
+
+                # R113-B05: Recomputed manifest digest over tampered artifact (not in trusted anchors!)
+                fake_entry_sha = hashlib.sha256(b"corrupted-bytes").hexdigest()
+                recomp_man = copy.deepcopy(man_data)
+                for f_item in recomp_man["files"]:
+                    if f_item["path"] == "canonical-replays-r1-1-2.jsonl.gz":
+                        f_item["sha256"] = fake_entry_sha
+                        f_item["size_bytes"] = len(b"corrupted-bytes")
+                recomp_bytes = json.dumps(recomp_man).encode("utf-8")
+                recomp_man_path = tdp / "recomputed_manifest.json"
+                recomp_man_path.write_bytes(recomp_bytes)
+                recomp_sha = hashlib.sha256(recomp_bytes).hexdigest()
+                ok_b05, diag_b05, _, _ = runner.verify_historical_artifact(recomp_man_path, recomp_sha, "canonical-replays-r1-1-2.jsonl.gz")
+                self.assertFalse(ok_b05)
+                self.assertIn("not in trusted anchors", diag_b05)
+
+                # R113-B08: Artifact absent from trusted manifest
+                ok_b08, diag_b08, _, _ = runner.verify_historical_artifact(r112_man, R112_MANIFEST_SHA, "nonexistent_artifact.jsonl.gz")
+                self.assertFalse(ok_b08)
+                self.assertIn("absent from trusted manifest", diag_b08)
+
+    # --- Group C: Actual historical replay (R113-C01..C06) ---
+
+    def test_r113_c01_to_c06_actual_historical_replay_and_counter_enforcement(self):
+        b2a = _find_historical_binary("p4b2a-baseline-native")
+        b2b = _find_historical_binary("p4b2b-release-native")
+        w = self._c4_workload()
+
+        # R113-C03: Current candidate binary cannot execute under historical replay path
+        res_c03, _, acc_c03, rec_c03 = runner.run_verified_historical_binary(BINARY, "m2", w, neighbor_mode="merge")
+        self.assertFalse(acc_c03)
+        self.assertIsNone(rec_c03)
+        self.assertIn("not an authorized frozen historical binary", res_c03.get("error_message", ""))
+
+        if b2a is not None:
+            # R113-C01: Genuine P4b-2A replay (legacy and buffer)
+            for nbr in ("legacy", "buffer"):
+                r2a, _, ok2a, rec2a = runner.run_verified_historical_binary(
+                    b2a, "m2", w, neighbor_mode=nbr, expected_binary_sha256=P4B2A_BIN_SHA, expected_commit_sha=P4B2A_COMMIT_SHA,
+                )
+                self.assertTrue(ok2a, r2a.get("error_message"))
+                self.assertIsNotNone(rec2a)
+
+            # R113-C04: P4b-2A binary rejected if requested as MERGE
+            r_c04, _, ok_c04, rec_c04 = runner.run_verified_historical_binary(b2a, "m2", w, neighbor_mode="merge")
+            self.assertFalse(ok_c04)
+            self.assertIsNone(rec_c04)
+            self.assertIn("unauthorized", r_c04.get("error_message", ""))
+
+            # R113-C05: Genuine historical expected negative (DOMAIN_ERROR & PREVALIDATION_ERROR)
+            hand = runner.build_hand_workloads()
+            h21 = next(x for x in hand if x["case_id"] == "CASE_HAND_21")
+            r_h21, _, ok_h21, rec_h21 = runner.run_verified_historical_binary(b2a, "m2", h21, neighbor_mode="legacy")
+            self.assertFalse(ok_h21)
+            self.assertEqual(r_h21.get("error_category"), "DOMAIN_ERROR")
+            self.assertIsNotNone(rec_h21)
+            ok_v21, diag_v21, _ = runner.validate_historical_artifact_configuration(
+                r_h21, rec_h21, "m2", "none", "legacy", is_success_run=False, workload=h21, native_exit_code=3,
+            )
+            self.assertTrue(ok_v21, diag_v21)
+
+            h22 = next(x for x in hand if x["case_id"] == "CASE_HAND_22")
+            r_h22, _, ok_h22, rec_h22 = runner.run_verified_historical_binary(b2a, "m2", h22, neighbor_mode="buffer")
+            self.assertFalse(ok_h22)
+            self.assertEqual(r_h22.get("error_category"), "PREVALIDATION_ERROR")
+            self.assertIsNotNone(rec_h22)
+
+        if b2b is not None:
+            # R113-C02: Genuine P4b-2B replay (legacy, buffer, merge)
+            for nbr in ("legacy", "buffer", "merge"):
+                r2b, _, ok2b, rec2b = runner.run_verified_historical_binary(
+                    b2b, "m2", w, neighbor_mode=nbr, expected_binary_sha256=P4B2B_BIN_SHA, expected_commit_sha=P4B2B_COMMIT_SHA,
+                )
+                self.assertTrue(ok2b, r2b.get("error_message"))
+                self.assertIsNotNone(rec2b)
+
+        # R113-C06: Profile-specific mandatory counter enforcement on both P4b-2A (legacy/buffer) and P4b-2B (legacy/buffer/merge)
+        p2a_prof = runner.AUTHORIZED_HISTORICAL_BINARIES[P4B2A_BIN_SHA]
+        p2b_prof = runner.AUTHORIZED_HISTORICAL_BINARIES[P4B2B_BIN_SHA]
+        c_leg = {f: 0 for f in runner.NEIGHBOR_COUNTER_FIELDS}
+        del c_leg["neighbor_buffer_retrieval_calls"]
+        err_c06a = runner.validate_neighbor_counters(c_leg, {"neighbor_configuration_version": 1, "effective_neighbor_mode": "legacy"}, historical_profile=p2a_prof)
+        self.assertIn("Missing required neighbor counter 'neighbor_buffer_retrieval_calls'", err_c06a)
+
+        c_2b_buf = {f: 0 for f in runner.NEIGHBOR_COUNTER_FIELDS} # Missing 4 merge counters expected on P4b-2B transitional schema
+        err_c06b = runner.validate_neighbor_counters(c_2b_buf, {"neighbor_configuration_version": 1, "effective_neighbor_mode": "buffer"}, historical_profile=p2b_prof)
+        self.assertIn("Missing required neighbor counter", err_c06b)
+
+        # P4b-2A forbids merge counter fields even if zero
+        c_2a_extra = {f: 0 for f in runner.ALL_NEIGHBOR_COUNTER_FIELDS}
+        err_c06c = runner.validate_neighbor_counters(c_2a_extra, {"neighbor_configuration_version": 1, "effective_neighbor_mode": "buffer"}, historical_profile=p2a_prof)
+        self.assertIn("Forbidden neighbor counter", err_c06c)
+
+    # --- Group D: Strict live protection invariants (R113-D06/D07) ---
+
+    def test_r113_d06_d07_live_negative_boundaries(self):
+        # R113-D06: Legitimate uninitialized v2 DOMAIN_ERROR preserved on live run
+        early_v2 = {"status": "FAIL", "configuration_initialized": False, "neighbor_configuration_version": 2,
+                    "error_category": "DOMAIN_ERROR", "exit_code": 3}
+        ok_d06, diag_d06, _ = runner.validate_nlf_configuration("m2", "none", early_v2, False, "merge")
+        self.assertTrue(ok_d06, diag_d06)
+        # Early v1 DOMAIN_ERROR rejected on live run without verified provenance
+        early_v1 = {**early_v2, "neighbor_configuration_version": 1}
+        ok_v1, _, _ = runner.validate_nlf_configuration("m2", "none", early_v1, False, "merge")
+        self.assertFalse(ok_v1)
+
+        # R113-D07: Initialized negative with malformed counters rejected on live run
+        hand = runner.build_hand_workloads()
+        h22 = next(x for x in hand if x["case_id"] == "CASE_HAND_22")
+        actual = runner.execute_contained_subprocess
+        def corrupt_neg_counter(cmd, **kwargs):
+            res = actual(cmd, **kwargs)
+            out = Path(cmd[cmd.index("--output") + 1])
+            body = json.loads(out.read_text())
+            body["counters"]["neighbor_merge_linear_calls"] = None
+            out.write_text(json.dumps(body))
+            return res
+        with patch.object(runner, "execute_contained_subprocess", side_effect=corrupt_neg_counter):
+            res_d07, _, acc_d07 = runner.run_workload_on_binary(BINARY, "m2", h22, neighbor_mode="merge")
+        self.assertFalse(acc_d07)
+        self.assertFalse(res_d07.get("schema_valid"))
+        self.assertIn("Invalid neighbor counter neighbor_merge_linear_calls", res_d07.get("schema_error", ""))
