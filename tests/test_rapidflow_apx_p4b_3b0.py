@@ -223,6 +223,22 @@ execute_p4b_native_slot(binary, fixture, "BARE", "correctness", base/"unused.jso
                 self.assertFalse(root.exists())
             spawn.assert_not_called()
 
+    def test_direct_cli_rejects_forged_detached_activation_without_opening_session(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            parent = Path(tmp)
+            forged = parent / "locally-authored.json"
+            forged.write_text(json.dumps({"execution_authorized": True, "approval_status": "MEASUREMENT_AUTHORIZED"}))
+            root = parent / "no-session"
+            for flag in ("--execute-primary", "--execute-diagnostic", "--analyze-session"):
+                result = subprocess.run(
+                    [sys.executable, runner.__file__, flag, "--activation", str(forged),
+                     "--archive", str(DURABLE_ARCHIVE), "--session", str(root)], capture_output=True, text=True,
+                )
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn("MEASUREMENT_NOT_AUTHORIZED", result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
+                self.assertFalse(root.exists())
+
     def _approved_test_context(self, parent):
         env = {"stable": {"fake": True}, "dynamic": {"filesystem_free_bytes": 20 << 30,
                "memory": {"MemAvailable": 1 << 30}}}

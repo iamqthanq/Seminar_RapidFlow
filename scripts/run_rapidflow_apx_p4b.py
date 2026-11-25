@@ -38,6 +38,10 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
+# The CLI lazily imports the session module, which references this runner
+# by its package name. Keep one set of exception classes in either entry.
+if __name__ == "__main__":
+    sys.modules["scripts.run_rapidflow_apx_p4b"] = sys.modules[__name__]
 
 from scripts.p4a_evidence_contract import compute_sha256, is_valid_hex64
 from scripts.run_rapidflow_apx_engines import (
@@ -1105,7 +1109,7 @@ def main() -> None:
                 args.registry.resolve(), args.archive.resolve() if args.archive else None,
                 args.session.resolve() if args.session else None, analyze=args.analyze_session,
             )
-        except (AuthorizationBlockedError, LedgerIntegrityError, ScheduleIntegrityError, OSError) as error:
+        except (AuthorizationBlockedError, ValueError, KeyError, OSError, subprocess.CalledProcessError) as error:
             parser.exit(2, f"{error}\n")
         print(json.dumps(result, indent=2, sort_keys=True, allow_nan=False))
         return
