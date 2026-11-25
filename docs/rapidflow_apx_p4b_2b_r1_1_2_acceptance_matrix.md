@@ -1,13 +1,17 @@
 # RapidFlow-APX P4b-2B R1.1.2 Acceptance Matrix
 ## Corrective Hardening, ODR Integrity, Historical Schema Authorization & Full Regression Verification
 
-**Handoff Status:** `P4B_2B_R1_1_2_READY_FOR_INDEPENDENT_REVIEW`  
-**Repository:** `iamqthanq/Seminar_RapidFlow`  
-**Issue:** [#38](https://github.com/iamqthanq/Seminar_RapidFlow/issues/38)  
-**Pull Request:** [#39](https://github.com/iamqthanq/Seminar_RapidFlow/pull/39) (OPEN / DRAFT)  
-**Branch:** `feature/rf38-p4b-optimization`  
-**Worktree:** `/home/iamqthanq/Desktop/Seminar_RapidFlow_D_INT04B`  
-**Candidate Binary SHA-256:** `4b7902be22c5429b57be09aa84f99e1b8e13af072e932ff4e40774b5aa0dbf78`  
+> [!WARNING]
+> **Superseding Correction Notice (P4b-2B R1.1.3 Provenance Closure):**
+> This historical R1.1.2 document is superseded in targeted provenance areas by [rapidflow_apx_p4b_2b_r1_1_3_implementation_report.md](file:///home/iamqthanq/Desktop/Seminar_RapidFlow_D_INT04B/docs/rapidflow_apx_p4b_2b_r1_1_3_implementation_report.md). Specifically, historical binary-to-source mappings require full artifact/manifest byte binding (`R113-B`), overbroad "cryptographic provenance" wording is bounded to trusted-anchor SHA-256 verification and in-process safeguards, and clean-revision full regression (`827/827`, exit `0`) was completed in R1.1.3.
+
+- **Handoff Status:** `P4B_2B_R1_1_2_READY_FOR_INDEPENDENT_REVIEW`
+- **Repository:** `iamqthanq/Seminar_RapidFlow`
+- **Issue:** [#38](https://github.com/iamqthanq/Seminar_RapidFlow/issues/38)
+- **Pull Request:** [#39](https://github.com/iamqthanq/Seminar_RapidFlow/pull/39) (OPEN / DRAFT)
+- **Branch:** `feature/rf38-p4b-optimization`
+- **Worktree:** `/home/iamqthanq/Desktop/Seminar_RapidFlow_D_INT04B`
+- **Candidate Binary SHA-256:** `4b7902be22c5429b57be09aa84f99e1b8e13af072e932ff4e40774b5aa0dbf78`
 
 ---
 

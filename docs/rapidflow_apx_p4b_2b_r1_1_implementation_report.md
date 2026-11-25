@@ -1,12 +1,16 @@
 # RapidFlow-APX P4b-2B R1.1 Implementation Report
 ## Independent Review Corrections & Verification Closure
 
-**Proposed Handoff Verdict:** `P4B_2B_R1_1_READY_FOR_INDEPENDENT_REVIEW`  
-**Repository:** `iamqthanq/Seminar_RapidFlow`  
-**Issue:** [#38](https://github.com/iamqthanq/Seminar_RapidFlow/issues/38)  
-**Pull Request:** [#39](https://github.com/iamqthanq/Seminar_RapidFlow/pull/39) (OPEN / DRAFT)  
-**Branch:** `feature/rf38-p4b-optimization`  
-**Integration Branch:** `QuangThang`  
+> [!WARNING]
+> **Superseding Identity Notice (P4b-2B R1.1.3):**
+> In Section 1.1 below, the entry `d21575c1c70d1f7bc2380d8172ae4044dacfc3f` listed as the P4b-2A baseline commit is a 39-character prefix of the P4b-2A binary SHA-256 (`d21575c1...`), not a Git commit. The actual P4b-2A tested implementation commit is `d2108ec6fee083ce0716e2935e07750e56461a72` (documentation handoff commit `11e57bc388618c59eab605f0f27e6f05dd9bbcc3`). See `docs/rapidflow_apx_p4b_2b_r1_1_3_implementation_report.md`.
+
+- **Proposed Handoff Verdict:** `P4B_2B_R1_1_READY_FOR_INDEPENDENT_REVIEW`
+- **Repository:** `iamqthanq/Seminar_RapidFlow`
+- **Issue:** [#38](https://github.com/iamqthanq/Seminar_RapidFlow/issues/38)
+- **Pull Request:** [#39](https://github.com/iamqthanq/Seminar_RapidFlow/pull/39) (OPEN / DRAFT)
+- **Branch:** `feature/rf38-p4b-optimization`
+- **Integration Branch:** `QuangThang`
 
 ---
 

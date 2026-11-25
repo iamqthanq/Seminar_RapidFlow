@@ -1,13 +1,21 @@
 # RapidFlow-APX P4b-2B R1.1.2 Implementation Report
 ## Corrective Hardening, ODR Integrity, Historical Schema Authorization & Full Regression Verification
 
-**Proposed Handoff Verdict:** `P4B_2B_R1_1_2_READY_FOR_INDEPENDENT_REVIEW`  
-**Repository:** `iamqthanq/Seminar_RapidFlow`  
-**Issue:** [#38](https://github.com/iamqthanq/Seminar_RapidFlow/issues/38)  
-**Pull Request:** [#39](https://github.com/iamqthanq/Seminar_RapidFlow/pull/39) (OPEN / DRAFT)  
-**Branch:** `feature/rf38-p4b-optimization`  
-**Worktree:** `/home/iamqthanq/Desktop/Seminar_RapidFlow_D_INT04B`  
-**Base Integration Branch:** `QuangThang`  
+> [!WARNING]
+> **Superseding Correction Notice (P4b-2B R1.1.3 Provenance Closure):**
+> This report is superseded in targeted provenance, evidence-table, and regression-reporting areas by `docs/rapidflow_apx_p4b_2b_r1_1_3_implementation_report.md`:
+> 1. **Historical Commits (`R112-F01`):** Accepted P4b-2A tested implementation commit is `d2108ec6fee083ce0716e2935e07750e56461a72` (handoff `11e57bc388618c59eab605f0f27e6f05dd9bbcc3`), NOT truncated binary SHA `d21575c1c70d1f7bc2380d8172ae4044dacfc3f`. Starting P4b-2B tested commit is `bdb1fd2eda4d7881041e6e32500d62af6da1505d` (handoff `adf5f455e25180dd1e22a5b86446f73ec2cc8c8a`), NOT `bdb1fd26c92d56d11f71477708eb107e371a5330`.
+> 2. **Provenance Binding (`R112-F02`):** Metadata-only `VerifiedHistoricalArtifact` authorization is insufficient and was replaced by trusted-anchor byte binding and replay verification in R1.1.3. Overbroad "immutable" / "cryptographic provenance" wording in this document is superseded by exact SHA-256 and in-process safeguard scope statements.
+> 3. **Full Regression History (`R113-F03`):** During R1.1.2, `full-regression-r1-1-2.log` executed 822 tests (821 passed, 1 failed in `test_group_a_provenance_and_build`, exit `1`); a subsequent independent targeted rerun passed `20/20`, and R1.1.3 executed clean-revision full regression (`827/827`, `0` skipped, exit `0`) on tested commit `08f63fe218a8246710cc3039fec56a79df627d6c`.
+> 4. **R1.1.2 Manifest Digest Table (`R113-F04`):** Authoritative R1.1.2 manifest (`bcd359cd...`) records `canonical-replays-r1-1-2.jsonl.gz` SHA-256 as `648a4124...` (not `86cae4da...`), `input-manifest-r1-1-2.json` as `562ac35f...`, `parity-921-results.json` as `e5ab5fae...`, `parity-921-differences.json` as `4f53cda1...`, `frozen-379-results.json` as `5ec38e22...`, `canonical-suite-summary.json` as `6e2ddf17...`, `sanitizer-execution.log` as `6b1b5a7c...`, `trace-execution.log` as `75f8afcb...`, and `verification_run.log` as `198591df...`.
+
+- **Proposed Handoff Verdict:** `P4B_2B_R1_1_2_READY_FOR_INDEPENDENT_REVIEW`
+- **Repository:** `iamqthanq/Seminar_RapidFlow`
+- **Issue:** [#38](https://github.com/iamqthanq/Seminar_RapidFlow/issues/38)
+- **Pull Request:** [#39](https://github.com/iamqthanq/Seminar_RapidFlow/pull/39) (OPEN / DRAFT)
+- **Branch:** `feature/rf38-p4b-optimization`
+- **Worktree:** `/home/iamqthanq/Desktop/Seminar_RapidFlow_D_INT04B`
+- **Base Integration Branch:** `QuangThang`
 
 ---
 
