@@ -1,0 +1,3260 @@
+{
+  "approval_gates": 2,
+  "authoritative_matrix": "docs/rapidflow_apx_p4b_3b0_acceptance_matrix.json",
+  "engineering_gates": 78,
+  "gate_counts": {
+    "PASS": 78,
+    "PENDING_COORDINATOR_APPROVAL": 1,
+    "PENDING_INDEPENDENT_REVIEW": 1
+  },
+  "gates": [
+    {
+      "affected_by_R1": false,
+      "evidence_reference": [
+        {
+          "member": "baseline.log",
+          "sha256": "9c273c76c7972160422b42d6d91275734e79c72cfd9262f3c095c5d544351620"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        }
+      ],
+      "gate_id": "B30-A01",
+      "implementation_check": "Frozen input, history, HEAD and native identity",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Starting HEAD verified",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "Verify exact baseline branch and upstream",
+          "pass": true,
+          "path": "baseline-preflight.json",
+          "sha256": "e6e406014208c0ae2bb53602cf7d71eaf0ae0717c2da1291b51f3a8c5662ef7e"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": false,
+      "evidence_reference": [
+        {
+          "member": "baseline.log",
+          "sha256": "9c273c76c7972160422b42d6d91275734e79c72cfd9262f3c095c5d544351620"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        }
+      ],
+      "gate_id": "B30-A02",
+      "implementation_check": "Frozen input, history, HEAD and native identity",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Official branch and remote verified",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "Verify exact baseline branch and upstream",
+          "pass": true,
+          "path": "baseline-preflight.json",
+          "sha256": "e6e406014208c0ae2bb53602cf7d71eaf0ae0717c2da1291b51f3a8c5662ef7e"
+        },
+        {
+          "observed": "Verify draft PR head equal to baseline",
+          "pass": true,
+          "path": "pr-before.json",
+          "sha256": "2489ee32d42167a80c2c1729555b92d0dca0a356424da7bce341caa12cbf653a"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": false,
+      "evidence_reference": [
+        {
+          "member": "baseline.log",
+          "sha256": "9c273c76c7972160422b42d6d91275734e79c72cfd9262f3c095c5d544351620"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        }
+      ],
+      "gate_id": "B30-A03",
+      "implementation_check": "Frozen input, history, HEAD and native identity",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Upstream pristine and pinned",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "Verify exact baseline branch and upstream",
+          "pass": true,
+          "path": "baseline-preflight.json",
+          "sha256": "e6e406014208c0ae2bb53602cf7d71eaf0ae0717c2da1291b51f3a8c5662ef7e"
+        },
+        {
+          "observed": "Recompute release, protocol, schedule, fixture and archive identities after test",
+          "pass": true,
+          "path": "preservation-final.json",
+          "sha256": "82943e6b4a26b29a6d93e034e55f9cfc4b8d73bd02e9dd98157f2a9eaf58b087"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": false,
+      "evidence_reference": [
+        {
+          "member": "baseline.log",
+          "sha256": "9c273c76c7972160422b42d6d91275734e79c72cfd9262f3c095c5d544351620"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        }
+      ],
+      "gate_id": "B30-A04",
+      "implementation_check": "Frozen input, history, HEAD and native identity",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Native source and binary identity preserved",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "Recompute release, protocol, schedule, fixture and archive identities after test",
+          "pass": true,
+          "path": "preservation-final.json",
+          "sha256": "82943e6b4a26b29a6d93e034e55f9cfc4b8d73bd02e9dd98157f2a9eaf58b087"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": false,
+      "evidence_reference": [
+        {
+          "member": "baseline.log",
+          "sha256": "9c273c76c7972160422b42d6d91275734e79c72cfd9262f3c095c5d544351620"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        }
+      ],
+      "gate_id": "B30-A05",
+      "implementation_check": "Frozen input, history, HEAD and native identity",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "All 50 frozen workload hashes preserved",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "Verify all fixture digests and frozen plan identities",
+          "pass": true,
+          "path": "frozen-artifact-verification.json",
+          "sha256": "ac97263b5a106c950f25ba409f503dfb9e8b70b6d977ce08224fde9300cdf23c"
+        },
+        {
+          "observed": "Recompute release, protocol, schedule, fixture and archive identities after test",
+          "pass": true,
+          "path": "preservation-final.json",
+          "sha256": "82943e6b4a26b29a6d93e034e55f9cfc4b8d73bd02e9dd98157f2a9eaf58b087"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": false,
+      "evidence_reference": [
+        {
+          "member": "baseline.log",
+          "sha256": "9c273c76c7972160422b42d6d91275734e79c72cfd9262f3c095c5d544351620"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        }
+      ],
+      "gate_id": "B30-A06",
+      "implementation_check": "Frozen input, history, HEAD and native identity",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Schedule and generator integrity verified",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "Verify all fixture digests and frozen plan identities",
+          "pass": true,
+          "path": "frozen-artifact-verification.json",
+          "sha256": "ac97263b5a106c950f25ba409f503dfb9e8b70b6d977ce08224fde9300cdf23c"
+        },
+        {
+          "observed": "Independent exact frozen order and artifact check",
+          "pass": true,
+          "path": "schedule-journal-audit.json",
+          "sha256": "f7d05fffba99bbb092e2ed3f5a54a3079a5d287689488f364322db9fc60146d1"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": false,
+      "evidence_reference": [
+        {
+          "member": "baseline.log",
+          "sha256": "9c273c76c7972160422b42d6d91275734e79c72cfd9262f3c095c5d544351620"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        }
+      ],
+      "gate_id": "B30-A07",
+      "implementation_check": "Frozen input, history, HEAD and native identity",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Historical P4a/P4b evidence preserved",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "Size and hash check all required historical evidence",
+          "pass": true,
+          "path": "historical-integrity-verification.json",
+          "sha256": "79a51da8d7037fff31fad3bc4e43d5149547245d879ab08dbb314a47324b1b3f"
+        },
+        {
+          "observed": "Recompute release, protocol, schedule, fixture and archive identities after test",
+          "pass": true,
+          "path": "preservation-final.json",
+          "sha256": "82943e6b4a26b29a6d93e034e55f9cfc4b8d73bd02e9dd98157f2a9eaf58b087"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": false,
+      "evidence_reference": [
+        {
+          "member": "baseline.log",
+          "sha256": "9c273c76c7972160422b42d6d91275734e79c72cfd9262f3c095c5d544351620"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        }
+      ],
+      "gate_id": "B30-A08",
+      "implementation_check": "Frozen input, history, HEAD and native identity",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "R1 archive and manifest verified",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "Size and hash check all required historical evidence",
+          "pass": true,
+          "path": "historical-integrity-verification.json",
+          "sha256": "79a51da8d7037fff31fad3bc4e43d5149547245d879ab08dbb314a47324b1b3f"
+        },
+        {
+          "observed": "test_registry_reconstructs_from_trusted_raw_archive",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": false,
+      "evidence_reference": [
+        {
+          "member": "prior-package-validation.json",
+          "sha256": "bb92790f5f7a4c6944711f4a2e2ad72b942c2e296434b6f631b518037ca9e18c"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        },
+        {
+          "member": "configuration-coverage-matrix.json",
+          "sha256": "067e7bcde4bd7cd347663d95eaf9f549644c1419c09b79dc828627662a96dcac"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-B01",
+      "implementation_check": "Preserved trusted registry plus production-format coverage and archived replay",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Exact 250-entry inventory",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "Reconstruct all 250 entries and verify certification counts",
+          "pass": true,
+          "path": "registry-build.log",
+          "sha256": "ddf0a5f346596e2919a323087af333f95ef327cdfcce68a61972e7624c15588f"
+        },
+        {
+          "observed": "test_registry_reconstructs_from_trusted_raw_archive",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": false,
+      "evidence_reference": [
+        {
+          "member": "prior-package-validation.json",
+          "sha256": "bb92790f5f7a4c6944711f4a2e2ad72b942c2e296434b6f631b518037ca9e18c"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        },
+        {
+          "member": "configuration-coverage-matrix.json",
+          "sha256": "067e7bcde4bd7cd347663d95eaf9f549644c1419c09b79dc828627662a96dcac"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-B02",
+      "implementation_check": "Preserved trusted registry plus production-format coverage and archived replay",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Trusted archive binding",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "Size and hash check all required historical evidence",
+          "pass": true,
+          "path": "historical-integrity-verification.json",
+          "sha256": "79a51da8d7037fff31fad3bc4e43d5149547245d879ab08dbb314a47324b1b3f"
+        },
+        {
+          "observed": "test_registry_reconstructs_from_trusted_raw_archive",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": false,
+      "evidence_reference": [
+        {
+          "member": "prior-package-validation.json",
+          "sha256": "bb92790f5f7a4c6944711f4a2e2ad72b942c2e296434b6f631b518037ca9e18c"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        },
+        {
+          "member": "configuration-coverage-matrix.json",
+          "sha256": "067e7bcde4bd7cd347663d95eaf9f549644c1419c09b79dc828627662a96dcac"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-B03",
+      "implementation_check": "Preserved trusted registry plus production-format coverage and archived replay",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Compressed/uncompressed raw digest binding",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_registry_reconstructs_from_trusted_raw_archive",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Size and hash check all required historical evidence",
+          "pass": true,
+          "path": "historical-integrity-verification.json",
+          "sha256": "79a51da8d7037fff31fad3bc4e43d5149547245d879ab08dbb314a47324b1b3f"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": false,
+      "evidence_reference": [
+        {
+          "member": "prior-package-validation.json",
+          "sha256": "bb92790f5f7a4c6944711f4a2e2ad72b942c2e296434b6f631b518037ca9e18c"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        },
+        {
+          "member": "configuration-coverage-matrix.json",
+          "sha256": "067e7bcde4bd7cd347663d95eaf9f549644c1419c09b79dc828627662a96dcac"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-B04",
+      "implementation_check": "Preserved trusted registry plus production-format coverage and archived replay",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Workload identity binding",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_registry_reconstructs_from_trusted_raw_archive",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Verify all fixture digests and frozen plan identities",
+          "pass": true,
+          "path": "frozen-artifact-verification.json",
+          "sha256": "ac97263b5a106c950f25ba409f503dfb9e8b70b6d977ce08224fde9300cdf23c"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": false,
+      "evidence_reference": [
+        {
+          "member": "prior-package-validation.json",
+          "sha256": "bb92790f5f7a4c6944711f4a2e2ad72b942c2e296434b6f631b518037ca9e18c"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        },
+        {
+          "member": "configuration-coverage-matrix.json",
+          "sha256": "067e7bcde4bd7cd347663d95eaf9f549644c1419c09b79dc828627662a96dcac"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-B05",
+      "implementation_check": "Preserved trusted registry plus production-format coverage and archived replay",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Same-variant identity binding",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_registry_reconstructs_from_trusted_raw_archive",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_bounded_real_three_purposes_and_artifact_revalidation",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": false,
+      "evidence_reference": [
+        {
+          "member": "prior-package-validation.json",
+          "sha256": "bb92790f5f7a4c6944711f4a2e2ad72b942c2e296434b6f631b518037ca9e18c"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        },
+        {
+          "member": "configuration-coverage-matrix.json",
+          "sha256": "067e7bcde4bd7cd347663d95eaf9f549644c1419c09b79dc828627662a96dcac"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-B06",
+      "implementation_check": "Preserved trusted registry plus production-format coverage and archived replay",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Native binary/source identity binding",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_registry_reconstructs_from_trusted_raw_archive",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Recompute release, protocol, schedule, fixture and archive identities after test",
+          "pass": true,
+          "path": "preservation-final.json",
+          "sha256": "82943e6b4a26b29a6d93e034e55f9cfc4b8d73bd02e9dd98157f2a9eaf58b087"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": false,
+      "evidence_reference": [
+        {
+          "member": "prior-package-validation.json",
+          "sha256": "bb92790f5f7a4c6944711f4a2e2ad72b942c2e296434b6f631b518037ca9e18c"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        },
+        {
+          "member": "configuration-coverage-matrix.json",
+          "sha256": "067e7bcde4bd7cd347663d95eaf9f549644c1419c09b79dc828627662a96dcac"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-B07",
+      "implementation_check": "Preserved trusted registry plus production-format coverage and archived replay",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "160 C1 reference classifications verified",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "Reconstruct all 250 entries and verify certification counts",
+          "pass": true,
+          "path": "registry-build.log",
+          "sha256": "ddf0a5f346596e2919a323087af333f95ef327cdfcce68a61972e7624c15588f"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": false,
+      "evidence_reference": [
+        {
+          "member": "prior-package-validation.json",
+          "sha256": "bb92790f5f7a4c6944711f4a2e2ad72b942c2e296434b6f631b518037ca9e18c"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        },
+        {
+          "member": "configuration-coverage-matrix.json",
+          "sha256": "067e7bcde4bd7cd347663d95eaf9f549644c1419c09b79dc828627662a96dcac"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-B08",
+      "implementation_check": "Preserved trusted registry plus production-format coverage and archived replay",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "64 C3 optimized reference classifications verified",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "Reconstruct all 250 entries and verify certification counts",
+          "pass": true,
+          "path": "registry-build.log",
+          "sha256": "ddf0a5f346596e2919a323087af333f95ef327cdfcce68a61972e7624c15588f"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": false,
+      "evidence_reference": [
+        {
+          "member": "prior-package-validation.json",
+          "sha256": "bb92790f5f7a4c6944711f4a2e2ad72b942c2e296434b6f631b518037ca9e18c"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        },
+        {
+          "member": "configuration-coverage-matrix.json",
+          "sha256": "067e7bcde4bd7cd347663d95eaf9f549644c1419c09b79dc828627662a96dcac"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-B09",
+      "implementation_check": "Preserved trusted registry plus production-format coverage and archived replay",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "16 C3 BARE references not self-certified",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "Reconstruct all 250 entries and verify certification counts",
+          "pass": true,
+          "path": "registry-build.log",
+          "sha256": "ddf0a5f346596e2919a323087af333f95ef327cdfcce68a61972e7624c15588f"
+        },
+        {
+          "observed": "test_detached_approval_requires_trusted_hash_and_all_bindings",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": false,
+      "evidence_reference": [
+        {
+          "member": "prior-package-validation.json",
+          "sha256": "bb92790f5f7a4c6944711f4a2e2ad72b942c2e296434b6f631b518037ca9e18c"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        },
+        {
+          "member": "configuration-coverage-matrix.json",
+          "sha256": "067e7bcde4bd7cd347663d95eaf9f549644c1419c09b79dc828627662a96dcac"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-B10",
+      "implementation_check": "Preserved trusted registry plus production-format coverage and archived replay",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "10 censored references ineligible for successful timing",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "Reconstruct all 250 entries and verify certification counts",
+          "pass": true,
+          "path": "registry-build.log",
+          "sha256": "ddf0a5f346596e2919a323087af333f95ef327cdfcce68a61972e7624c15588f"
+        },
+        {
+          "observed": "Offline archived DISC-07 prefix validation",
+          "pass": true,
+          "path": "offline-censor-result.json",
+          "sha256": "cf7863cce7f1869cde598fe08d7321b596ec848d59a664e00a1cb9bf43010b40"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": false,
+      "evidence_reference": [
+        {
+          "member": "prior-package-validation.json",
+          "sha256": "bb92790f5f7a4c6944711f4a2e2ad72b942c2e296434b6f631b518037ca9e18c"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        },
+        {
+          "member": "configuration-coverage-matrix.json",
+          "sha256": "067e7bcde4bd7cd347663d95eaf9f549644c1419c09b79dc828627662a96dcac"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-B11",
+      "implementation_check": "Preserved trusted registry plus production-format coverage and archived replay",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Duplicate/missing/substitution mutations rejected",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_registry_reconstructs_from_trusted_raw_archive",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": false,
+      "evidence_reference": [
+        {
+          "member": "prior-package-validation.json",
+          "sha256": "bb92790f5f7a4c6944711f4a2e2ad72b942c2e296434b6f631b518037ca9e18c"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        },
+        {
+          "member": "configuration-coverage-matrix.json",
+          "sha256": "067e7bcde4bd7cd347663d95eaf9f549644c1419c09b79dc828627662a96dcac"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-B12",
+      "implementation_check": "Preserved trusted registry plus production-format coverage and archived replay",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Registry generation deterministic and reproducible",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "Reconstruct all 250 entries and verify certification counts",
+          "pass": true,
+          "path": "registry-build.log",
+          "sha256": "ddf0a5f346596e2919a323087af333f95ef327cdfcce68a61972e7624c15588f"
+        },
+        {
+          "observed": "test_registry_reconstructs_from_trusted_raw_archive",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "cli-lock-verification.json",
+          "sha256": "ad509ea884a08932bad5dca5cbdf03a810f64deb9712ca21284ec6076a6803a6"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        }
+      ],
+      "gate_id": "B30-C01",
+      "implementation_check": "Authorization anchored to unchanged controls and fail-closed CLI",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Explicit authorization state machine",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_detached_approval_requires_trusted_hash_and_all_bindings",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_native_cannot_launch_from_direct_unverified_calls",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "cli-lock-verification.json",
+          "sha256": "ad509ea884a08932bad5dca5cbdf03a810f64deb9712ca21284ec6076a6803a6"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        }
+      ],
+      "gate_id": "B30-C02",
+      "implementation_check": "Authorization anchored to unchanged controls and fail-closed CLI",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Trusted activation identity binding",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_detached_approval_requires_trusted_hash_and_all_bindings",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": "Actual external anchors are empty pending review. Verified only with isolated test trust."
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "cli-lock-verification.json",
+          "sha256": "ad509ea884a08932bad5dca5cbdf03a810f64deb9712ca21284ec6076a6803a6"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        }
+      ],
+      "gate_id": "B30-C03",
+      "implementation_check": "Authorization anchored to unchanged controls and fail-closed CLI",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Source/binary/protocol/registry binding",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_detached_approval_requires_trusted_hash_and_all_bindings",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "cli-lock-verification.json",
+          "sha256": "ad509ea884a08932bad5dca5cbdf03a810f64deb9712ca21284ec6076a6803a6"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        }
+      ],
+      "gate_id": "B30-C04",
+      "implementation_check": "Authorization anchored to unchanged controls and fail-closed CLI",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Missing or fake approval rejected",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_detached_approval_requires_trusted_hash_and_all_bindings",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_native_cannot_launch_from_direct_unverified_calls",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Direct CLI denies forged detached envelopes without session creation",
+          "pass": true,
+          "path": "cli-lock-verification.json",
+          "sha256": "ad509ea884a08932bad5dca5cbdf03a810f64deb9712ca21284ec6076a6803a6"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "cli-lock-verification.json",
+          "sha256": "ad509ea884a08932bad5dca5cbdf03a810f64deb9712ca21284ec6076a6803a6"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        }
+      ],
+      "gate_id": "B30-C05",
+      "implementation_check": "Authorization anchored to unchanged controls and fail-closed CLI",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Synthetic context cannot authorize production",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_native_cannot_launch_from_direct_unverified_calls",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_shared_core_resumes_all_phases_and_ingests_synthetic_only",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "cli-lock-verification.json",
+          "sha256": "ad509ea884a08932bad5dca5cbdf03a810f64deb9712ca21284ec6076a6803a6"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        }
+      ],
+      "gate_id": "B30-C06",
+      "implementation_check": "Authorization anchored to unchanged controls and fail-closed CLI",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Direct native production launch guarded",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_native_cannot_launch_from_direct_unverified_calls",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_production_adapter_wiring_uses_only_fake_child",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Direct raw adapter and active-attempt binding tests",
+          "pass": true,
+          "path": "low-level-guard-tests.log",
+          "sha256": "6c6f704d764cbe904053e8611f796e3e7402e122c9438b862153eda981fbf5f6"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "cli-lock-verification.json",
+          "sha256": "ad509ea884a08932bad5dca5cbdf03a810f64deb9712ca21284ec6076a6803a6"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        }
+      ],
+      "gate_id": "B30-C07",
+      "implementation_check": "Authorization anchored to unchanged controls and fail-closed CLI",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Unauthorized diagnostic execution blocked",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_detached_approval_requires_trusted_hash_and_all_bindings",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "cli-lock-verification.json",
+          "sha256": "ad509ea884a08932bad5dca5cbdf03a810f64deb9712ca21284ec6076a6803a6"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        }
+      ],
+      "gate_id": "B30-C08",
+      "implementation_check": "Authorization anchored to unchanged controls and fail-closed CLI",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Actual execution authorization remains false",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "Verify lock fields in dry run with zero launch",
+          "pass": true,
+          "path": "dry-run.json",
+          "sha256": "ac1faed7a05a6d45c324c10ddfc6b6569011b0f7d00744659dd6a07fe664c460"
+        },
+        {
+          "observed": "Inspect empty anchor and frozen authorization",
+          "pass": true,
+          "path": "baseline-preflight.json",
+          "sha256": "e6e406014208c0ae2bb53602cf7d71eaf0ae0717c2da1291b51f3a8c5662ef7e"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "simulation-summary.json",
+          "sha256": "6627962995bb587086daa3d54f523fba23788a7bb77fd401290963ff5b26683f"
+        },
+        {
+          "member": "final-source-replay.json",
+          "sha256": "c723f2191f4482be93536d0e0b7d39d7b7ca5b474f7ef3ae23cda7936accf028"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-D01",
+      "implementation_check": "Production-format session for all scheduled slots, with journal and registered ordering",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Shared execution core",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "Rehearse and resume all 1450 slots",
+          "pass": true,
+          "path": "synthetic-rehearsal-summary.json",
+          "sha256": "b1193b6ba8702ea3be117e2736429b6b395a4536f6490acfb66b9b6e5e1b46ef"
+        },
+        {
+          "observed": "Retained three native functional purposes",
+          "pass": true,
+          "path": "bounded-witness-final-summary.json",
+          "sha256": "751f5b8da66ce394bb7dac5f4c6e051c379bb5add287b37faeb68ac899de3b75"
+        },
+        {
+          "observed": "test_production_adapter_wiring_uses_only_fake_child",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "simulation-summary.json",
+          "sha256": "6627962995bb587086daa3d54f523fba23788a7bb77fd401290963ff5b26683f"
+        },
+        {
+          "member": "final-source-replay.json",
+          "sha256": "c723f2191f4482be93536d0e0b7d39d7b7ca5b474f7ef3ae23cda7936accf028"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-D02",
+      "implementation_check": "Production-format session for all scheduled slots, with journal and registered ordering",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Production backend integrated with scheduler",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_production_adapter_wiring_uses_only_fake_child",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Invoke runner main under test-only activation and fake child",
+          "pass": true,
+          "path": "production-entry-verification.json",
+          "sha256": "66b64074855f7599baacdd6c7243e28680802e42f38a5bbfd6a464d4ed88301a"
+        }
+      ],
+      "remaining_limitation": "Production route exercised with a fake child. Native integration exercised on a bounded witness."
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "simulation-summary.json",
+          "sha256": "6627962995bb587086daa3d54f523fba23788a7bb77fd401290963ff5b26683f"
+        },
+        {
+          "member": "final-source-replay.json",
+          "sha256": "c723f2191f4482be93536d0e0b7d39d7b7ca5b474f7ef3ae23cda7936accf028"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-D03",
+      "implementation_check": "Production-format session for all scheduled slots, with journal and registered ordering",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Exact frozen execution order",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "Independent exact frozen order and artifact check",
+          "pass": true,
+          "path": "schedule-journal-audit.json",
+          "sha256": "f7d05fffba99bbb092e2ed3f5a54a3079a5d287689488f364322db9fc60146d1"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "simulation-summary.json",
+          "sha256": "6627962995bb587086daa3d54f523fba23788a7bb77fd401290963ff5b26683f"
+        },
+        {
+          "member": "final-source-replay.json",
+          "sha256": "c723f2191f4482be93536d0e0b7d39d7b7ca5b474f7ef3ae23cda7936accf028"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-D04",
+      "implementation_check": "Production-format session for all scheduled slots, with journal and registered ordering",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Warm-up policy preserved",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "Independent exact frozen order and artifact check",
+          "pass": true,
+          "path": "schedule-journal-audit.json",
+          "sha256": "f7d05fffba99bbb092e2ed3f5a54a3079a5d287689488f364322db9fc60146d1"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "simulation-summary.json",
+          "sha256": "6627962995bb587086daa3d54f523fba23788a7bb77fd401290963ff5b26683f"
+        },
+        {
+          "member": "final-source-replay.json",
+          "sha256": "c723f2191f4482be93536d0e0b7d39d7b7ca5b474f7ef3ae23cda7936accf028"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-D05",
+      "implementation_check": "Production-format session for all scheduled slots, with journal and registered ordering",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Diagnostic isolation",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "Independent exact frozen order and artifact check",
+          "pass": true,
+          "path": "schedule-journal-audit.json",
+          "sha256": "f7d05fffba99bbb092e2ed3f5a54a3079a5d287689488f364322db9fc60146d1"
+        },
+        {
+          "observed": "test_bounded_real_three_purposes_and_artifact_revalidation",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "simulation-summary.json",
+          "sha256": "6627962995bb587086daa3d54f523fba23788a7bb77fd401290963ff5b26683f"
+        },
+        {
+          "member": "final-source-replay.json",
+          "sha256": "c723f2191f4482be93536d0e0b7d39d7b7ca5b474f7ef3ae23cda7936accf028"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-D06",
+      "implementation_check": "Production-format session for all scheduled slots, with journal and registered ordering",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Exclusive session ownership",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_os_lock_releases_after_process_exit_and_pending_child_is_reported",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "simulation-summary.json",
+          "sha256": "6627962995bb587086daa3d54f523fba23788a7bb77fd401290963ff5b26683f"
+        },
+        {
+          "member": "final-source-replay.json",
+          "sha256": "c723f2191f4482be93536d0e0b7d39d7b7ca5b474f7ef3ae23cda7936accf028"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-D07",
+      "implementation_check": "Production-format session for all scheduled slots, with journal and registered ordering",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Unique session and attempt identity",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "Independent exact frozen order and artifact check",
+          "pass": true,
+          "path": "schedule-journal-audit.json",
+          "sha256": "f7d05fffba99bbb092e2ed3f5a54a3079a5d287689488f364322db9fc60146d1"
+        },
+        {
+          "observed": "test_ledger_corruption_lock_recovery_and_cross_session_records",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "simulation-summary.json",
+          "sha256": "6627962995bb587086daa3d54f523fba23788a7bb77fd401290963ff5b26683f"
+        },
+        {
+          "member": "final-source-replay.json",
+          "sha256": "c723f2191f4482be93536d0e0b7d39d7b7ca5b474f7ef3ae23cda7936accf028"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-D08",
+      "implementation_check": "Production-format session for all scheduled slots, with journal and registered ordering",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "START persisted before launch",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_recovery_boundaries_never_relaunch_pending_attempt",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_production_adapter_wiring_uses_only_fake_child",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "simulation-summary.json",
+          "sha256": "6627962995bb587086daa3d54f523fba23788a7bb77fd401290963ff5b26683f"
+        },
+        {
+          "member": "final-source-replay.json",
+          "sha256": "c723f2191f4482be93536d0e0b7d39d7b7ca5b474f7ef3ae23cda7936accf028"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-D09",
+      "implementation_check": "Production-format session for all scheduled slots, with journal and registered ordering",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Raw output persisted before FINISH",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "Independent exact frozen order and artifact check",
+          "pass": true,
+          "path": "schedule-journal-audit.json",
+          "sha256": "f7d05fffba99bbb092e2ed3f5a54a3079a5d287689488f364322db9fc60146d1"
+        },
+        {
+          "observed": "test_recovery_boundaries_never_relaunch_pending_attempt",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "simulation-summary.json",
+          "sha256": "6627962995bb587086daa3d54f523fba23788a7bb77fd401290963ff5b26683f"
+        },
+        {
+          "member": "final-source-replay.json",
+          "sha256": "c723f2191f4482be93536d0e0b7d39d7b7ca5b474f7ef3ae23cda7936accf028"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-D10",
+      "implementation_check": "Production-format session for all scheduled slots, with journal and registered ordering",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Terminal outcome computed before cursor advance",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_recovery_boundaries_never_relaunch_pending_attempt",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_semantic_halt_cannot_be_retried_or_hidden_by_resume",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_production_adapter_wiring_uses_only_fake_child",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "final-source-replay.json",
+          "sha256": "c723f2191f4482be93536d0e0b7d39d7b7ca5b474f7ef3ae23cda7936accf028"
+        },
+        {
+          "member": "simulation-summary.json",
+          "sha256": "6627962995bb587086daa3d54f523fba23788a7bb77fd401290963ff5b26683f"
+        },
+        {
+          "member": "alternate-focused.log",
+          "sha256": "ab7eb49d29c5c683e0ea6c34d46d7d469dae4541f53a784ce61105252a1e95fa"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-E01",
+      "implementation_check": "Persisted terminal reconstruction, interruption boundaries, and raw journal corruption tests",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Append-only ledger",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "Independent exact frozen order and artifact check",
+          "pass": true,
+          "path": "schedule-journal-audit.json",
+          "sha256": "f7d05fffba99bbb092e2ed3f5a54a3079a5d287689488f364322db9fc60146d1"
+        },
+        {
+          "observed": "test_ledger_corruption_lock_recovery_and_cross_session_records",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "final-source-replay.json",
+          "sha256": "c723f2191f4482be93536d0e0b7d39d7b7ca5b474f7ef3ae23cda7936accf028"
+        },
+        {
+          "member": "simulation-summary.json",
+          "sha256": "6627962995bb587086daa3d54f523fba23788a7bb77fd401290963ff5b26683f"
+        },
+        {
+          "member": "alternate-focused.log",
+          "sha256": "ab7eb49d29c5c683e0ea6c34d46d7d469dae4541f53a784ce61105252a1e95fa"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-E02",
+      "implementation_check": "Persisted terminal reconstruction, interruption boundaries, and raw journal corruption tests",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Unique raw evidence locations",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "Independent exact frozen order and artifact check",
+          "pass": true,
+          "path": "schedule-journal-audit.json",
+          "sha256": "f7d05fffba99bbb092e2ed3f5a54a3079a5d287689488f364322db9fc60146d1"
+        },
+        {
+          "observed": "test_ledger_corruption_lock_recovery_and_cross_session_records",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "final-source-replay.json",
+          "sha256": "c723f2191f4482be93536d0e0b7d39d7b7ca5b474f7ef3ae23cda7936accf028"
+        },
+        {
+          "member": "simulation-summary.json",
+          "sha256": "6627962995bb587086daa3d54f523fba23788a7bb77fd401290963ff5b26683f"
+        },
+        {
+          "member": "alternate-focused.log",
+          "sha256": "ab7eb49d29c5c683e0ea6c34d46d7d469dae4541f53a784ce61105252a1e95fa"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-E03",
+      "implementation_check": "Persisted terminal reconstruction, interruption boundaries, and raw journal corruption tests",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Atomic/durable artifact publication",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_recovery_boundaries_never_relaunch_pending_attempt",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Independent exact frozen order and artifact check",
+          "pass": true,
+          "path": "schedule-journal-audit.json",
+          "sha256": "f7d05fffba99bbb092e2ed3f5a54a3079a5d287689488f364322db9fc60146d1"
+        }
+      ],
+      "remaining_limitation": "Crash points injected. No physical power outage or filesystem fault certification."
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "final-source-replay.json",
+          "sha256": "c723f2191f4482be93536d0e0b7d39d7b7ca5b474f7ef3ae23cda7936accf028"
+        },
+        {
+          "member": "simulation-summary.json",
+          "sha256": "6627962995bb587086daa3d54f523fba23788a7bb77fd401290963ff5b26683f"
+        },
+        {
+          "member": "alternate-focused.log",
+          "sha256": "ab7eb49d29c5c683e0ea6c34d46d7d469dae4541f53a784ce61105252a1e95fa"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-E04",
+      "implementation_check": "Persisted terminal reconstruction, interruption boundaries, and raw journal corruption tests",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Torn ledger detection",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_ledger_corruption_lock_recovery_and_cross_session_records",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "final-source-replay.json",
+          "sha256": "c723f2191f4482be93536d0e0b7d39d7b7ca5b474f7ef3ae23cda7936accf028"
+        },
+        {
+          "member": "simulation-summary.json",
+          "sha256": "6627962995bb587086daa3d54f523fba23788a7bb77fd401290963ff5b26683f"
+        },
+        {
+          "member": "alternate-focused.log",
+          "sha256": "ab7eb49d29c5c683e0ea6c34d46d7d469dae4541f53a784ce61105252a1e95fa"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-E05",
+      "implementation_check": "Persisted terminal reconstruction, interruption boundaries, and raw journal corruption tests",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Missing/duplicate journal event rejection",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_ledger_corruption_lock_recovery_and_cross_session_records",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_semantic_halt_cannot_be_retried_or_hidden_by_resume",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "final-source-replay.json",
+          "sha256": "c723f2191f4482be93536d0e0b7d39d7b7ca5b474f7ef3ae23cda7936accf028"
+        },
+        {
+          "member": "simulation-summary.json",
+          "sha256": "6627962995bb587086daa3d54f523fba23788a7bb77fd401290963ff5b26683f"
+        },
+        {
+          "member": "alternate-focused.log",
+          "sha256": "ab7eb49d29c5c683e0ea6c34d46d7d469dae4541f53a784ce61105252a1e95fa"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-E06",
+      "implementation_check": "Persisted terminal reconstruction, interruption boundaries, and raw journal corruption tests",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Cross-slot/cross-session artifact rejection",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_ledger_corruption_lock_recovery_and_cross_session_records",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_bounded_real_three_purposes_and_artifact_revalidation",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "final-source-replay.json",
+          "sha256": "c723f2191f4482be93536d0e0b7d39d7b7ca5b474f7ef3ae23cda7936accf028"
+        },
+        {
+          "member": "simulation-summary.json",
+          "sha256": "6627962995bb587086daa3d54f523fba23788a7bb77fd401290963ff5b26683f"
+        },
+        {
+          "member": "alternate-focused.log",
+          "sha256": "ab7eb49d29c5c683e0ea6c34d46d7d469dae4541f53a784ce61105252a1e95fa"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-E07",
+      "implementation_check": "Persisted terminal reconstruction, interruption boundaries, and raw journal corruption tests",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Resume without repeated completed slots",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "Rehearse and resume all 1450 slots",
+          "pass": true,
+          "path": "synthetic-rehearsal-summary.json",
+          "sha256": "b1193b6ba8702ea3be117e2736429b6b395a4536f6490acfb66b9b6e5e1b46ef"
+        },
+        {
+          "observed": "test_shared_core_resumes_all_phases_and_ingests_synthetic_only",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "final-source-replay.json",
+          "sha256": "c723f2191f4482be93536d0e0b7d39d7b7ca5b474f7ef3ae23cda7936accf028"
+        },
+        {
+          "member": "simulation-summary.json",
+          "sha256": "6627962995bb587086daa3d54f523fba23788a7bb77fd401290963ff5b26683f"
+        },
+        {
+          "member": "alternate-focused.log",
+          "sha256": "ab7eb49d29c5c683e0ea6c34d46d7d469dae4541f53a784ce61105252a1e95fa"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-E08",
+      "implementation_check": "Persisted terminal reconstruction, interruption boundaries, and raw journal corruption tests",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Ambiguous interrupted attempts blocked",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_recovery_boundaries_never_relaunch_pending_attempt",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_os_lock_releases_after_process_exit_and_pending_child_is_reported",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "final-source-replay.json",
+          "sha256": "c723f2191f4482be93536d0e0b7d39d7b7ca5b474f7ef3ae23cda7936accf028"
+        },
+        {
+          "member": "simulation-summary.json",
+          "sha256": "6627962995bb587086daa3d54f523fba23788a7bb77fd401290963ff5b26683f"
+        },
+        {
+          "member": "alternate-focused.log",
+          "sha256": "ab7eb49d29c5c683e0ea6c34d46d7d469dae4541f53a784ce61105252a1e95fa"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-E09",
+      "implementation_check": "Persisted terminal reconstruction, interruption boundaries, and raw journal corruption tests",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Retry policy preserves valid scientific failures",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_04_ledger_no_silent_overwrite_and_incomplete_history_preserved",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Offline archived DISC-07 prefix validation",
+          "pass": true,
+          "path": "offline-censor-result.json",
+          "sha256": "cf7863cce7f1869cde598fe08d7321b596ec848d59a664e00a1cb9bf43010b40"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "final-source-replay.json",
+          "sha256": "c723f2191f4482be93536d0e0b7d39d7b7ca5b474f7ef3ae23cda7936accf028"
+        },
+        {
+          "member": "simulation-summary.json",
+          "sha256": "6627962995bb587086daa3d54f523fba23788a7bb77fd401290963ff5b26683f"
+        },
+        {
+          "member": "alternate-focused.log",
+          "sha256": "ab7eb49d29c5c683e0ea6c34d46d7d469dae4541f53a784ce61105252a1e95fa"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-E10",
+      "implementation_check": "Persisted terminal reconstruction, interruption boundaries, and raw journal corruption tests",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Prior semantic discrepancy cannot be erased",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_semantic_halt_cannot_be_retried_or_hidden_by_resume",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_04_ledger_no_silent_overwrite_and_incomplete_history_preserved",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "paired-red-findings.json",
+          "sha256": "443775b9224588aae44d0c28218c9284a35fe3fa384710876741e1887e5218de"
+        },
+        {
+          "member": "green-findings.json",
+          "sha256": "216656503feb89a3b50c5150639ce1c0187da40420b20943980b5caa9c7a974f"
+        },
+        {
+          "member": "timing-and-resource-map.md",
+          "sha256": "30ae210b76cb8c22268f5560d6a25daf22e4f9e1ff0442c4d4460283175707bc"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-F01",
+      "implementation_check": "Paired RED/GREEN plus real bounded witness and resource/identity/timing mutation regression",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Native process containment",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_monitored_child_dies_when_supervisor_is_killed",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_r10_native_child_resource_outcome_and_stale_output",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": "Linux kills the monitored direct child on supervisor death. Actual locked native does not spawn workers."
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "paired-red-findings.json",
+          "sha256": "443775b9224588aae44d0c28218c9284a35fe3fa384710876741e1887e5218de"
+        },
+        {
+          "member": "green-findings.json",
+          "sha256": "216656503feb89a3b50c5150639ce1c0187da40420b20943980b5caa9c7a974f"
+        },
+        {
+          "member": "timing-and-resource-map.md",
+          "sha256": "30ae210b76cb8c22268f5560d6a25daf22e4f9e1ff0442c4d4460283175707bc"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-F02",
+      "implementation_check": "Paired RED/GREEN plus real bounded witness and resource/identity/timing mutation regression",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Registered resource caps",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_bounded_real_three_purposes_and_artifact_revalidation",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Offline archived DISC-07 prefix validation",
+          "pass": true,
+          "path": "offline-censor-result.json",
+          "sha256": "cf7863cce7f1869cde598fe08d7321b596ec848d59a664e00a1cb9bf43010b40"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "paired-red-findings.json",
+          "sha256": "443775b9224588aae44d0c28218c9284a35fe3fa384710876741e1887e5218de"
+        },
+        {
+          "member": "green-findings.json",
+          "sha256": "216656503feb89a3b50c5150639ce1c0187da40420b20943980b5caa9c7a974f"
+        },
+        {
+          "member": "timing-and-resource-map.md",
+          "sha256": "30ae210b76cb8c22268f5560d6a25daf22e4f9e1ff0442c4d4460283175707bc"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-F03",
+      "implementation_check": "wait4 and post-execution identities gate outcomes including missing child output; the controlled real child deletes a copied fixture.",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Actual process outcome binding",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_bounded_real_three_purposes_and_artifact_revalidation",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Retained three native functional purposes",
+          "pass": true,
+          "path": "bounded-witness-final-summary.json",
+          "sha256": "751f5b8da66ce394bb7dac5f4c6e051c379bb5add287b37faeb68ac899de3b75"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "paired-red-findings.json",
+          "sha256": "443775b9224588aae44d0c28218c9284a35fe3fa384710876741e1887e5218de"
+        },
+        {
+          "member": "green-findings.json",
+          "sha256": "216656503feb89a3b50c5150639ce1c0187da40420b20943980b5caa9c7a974f"
+        },
+        {
+          "member": "timing-and-resource-map.md",
+          "sha256": "30ae210b76cb8c22268f5560d6a25daf22e4f9e1ff0442c4d4460283175707bc"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-F04",
+      "implementation_check": "Validate every update identity and commit lifecycle, including complete emitted suffixes and available torn-output records.",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Strict lifecycle validation",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_bounded_real_three_purposes_and_artifact_revalidation",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Offline archived DISC-07 prefix validation",
+          "pass": true,
+          "path": "offline-censor-result.json",
+          "sha256": "cf7863cce7f1869cde598fe08d7321b596ec848d59a664e00a1cb9bf43010b40"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "paired-red-findings.json",
+          "sha256": "443775b9224588aae44d0c28218c9284a35fe3fa384710876741e1887e5218de"
+        },
+        {
+          "member": "green-findings.json",
+          "sha256": "216656503feb89a3b50c5150639ce1c0187da40420b20943980b5caa9c7a974f"
+        },
+        {
+          "member": "timing-and-resource-map.md",
+          "sha256": "30ae210b76cb8c22268f5560d6a25daf22e4f9e1ff0442c4d4460283175707bc"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-F05",
+      "implementation_check": "Paired RED/GREEN plus real bounded witness and resource/identity/timing mutation regression",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Same-variant correctness-reference comparison",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_bounded_real_three_purposes_and_artifact_revalidation",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_registry_reconstructs_from_trusted_raw_archive",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "paired-red-findings.json",
+          "sha256": "443775b9224588aae44d0c28218c9284a35fe3fa384710876741e1887e5218de"
+        },
+        {
+          "member": "green-findings.json",
+          "sha256": "216656503feb89a3b50c5150639ce1c0187da40420b20943980b5caa9c7a974f"
+        },
+        {
+          "member": "timing-and-resource-map.md",
+          "sha256": "30ae210b76cb8c22268f5560d6a25daf22e4f9e1ff0442c4d4460283175707bc"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-F06",
+      "implementation_check": "Bind raw streaming duration to the independent outer wall; reject the original 10\u00d7 primary timer.",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Raw primary timing binding",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_bounded_real_three_purposes_and_artifact_revalidation",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Retained three native functional purposes",
+          "pass": true,
+          "path": "bounded-witness-final-summary.json",
+          "sha256": "751f5b8da66ce394bb7dac5f4c6e051c379bb5add287b37faeb68ac899de3b75"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "paired-red-findings.json",
+          "sha256": "443775b9224588aae44d0c28218c9284a35fe3fa384710876741e1887e5218de"
+        },
+        {
+          "member": "green-findings.json",
+          "sha256": "216656503feb89a3b50c5150639ce1c0187da40420b20943980b5caa9c7a974f"
+        },
+        {
+          "member": "timing-and-resource-map.md",
+          "sha256": "30ae210b76cb8c22268f5560d6a25daf22e4f9e1ff0442c4d4460283175707bc"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-F07",
+      "implementation_check": "Bound native phases and profiles and reconcile independent CPU and RSS. Reject the original 10\u00d7 graph initialization.",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Secondary timing and supervisor evidence binding",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_bounded_real_three_purposes_and_artifact_revalidation",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Retained three native functional purposes",
+          "pass": true,
+          "path": "bounded-witness-final-summary.json",
+          "sha256": "751f5b8da66ce394bb7dac5f4c6e051c379bb5add287b37faeb68ac899de3b75"
+        },
+        {
+          "observed": "Reread actual bounded raw and detect rehashed mutations",
+          "pass": true,
+          "path": "bounded-mutations.json",
+          "sha256": "e4c8d877ebfa1264f5120575f1e38d9d1189f70b7b24f785c7834a133eba8d15"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "paired-red-findings.json",
+          "sha256": "443775b9224588aae44d0c28218c9284a35fe3fa384710876741e1887e5218de"
+        },
+        {
+          "member": "green-findings.json",
+          "sha256": "216656503feb89a3b50c5150639ce1c0187da40420b20943980b5caa9c7a974f"
+        },
+        {
+          "member": "timing-and-resource-map.md",
+          "sha256": "30ae210b76cb8c22268f5560d6a25daf22e4f9e1ff0442c4d4460283175707bc"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-F08",
+      "implementation_check": "Paired RED/GREEN plus real bounded witness and resource/identity/timing mutation regression",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "RSS method/unit validation",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_bounded_real_three_purposes_and_artifact_revalidation",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_f05_exact_rss_and_priority",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "paired-red-findings.json",
+          "sha256": "443775b9224588aae44d0c28218c9284a35fe3fa384710876741e1887e5218de"
+        },
+        {
+          "member": "green-findings.json",
+          "sha256": "216656503feb89a3b50c5150639ce1c0187da40420b20943980b5caa9c7a974f"
+        },
+        {
+          "member": "timing-and-resource-map.md",
+          "sha256": "30ae210b76cb8c22268f5560d6a25daf22e4f9e1ff0442c4d4460283175707bc"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-F09",
+      "implementation_check": "Distinguish evidenced deadlines, scoped native allocations, fallback and exact work cap from contradictory or unknown resource claims.",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Scientific censoring versus integrity failure",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "Offline archived DISC-07 prefix validation",
+          "pass": true,
+          "path": "offline-censor-result.json",
+          "sha256": "cf7863cce7f1869cde598fe08d7321b596ec848d59a664e00a1cb9bf43010b40"
+        },
+        {
+          "observed": "test_r10_native_child_resource_outcome_and_stale_output",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_statistical_candidate_boundaries_and_shared_failure",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "paired-red-findings.json",
+          "sha256": "443775b9224588aae44d0c28218c9284a35fe3fa384710876741e1887e5218de"
+        },
+        {
+          "member": "green-findings.json",
+          "sha256": "216656503feb89a3b50c5150639ce1c0187da40420b20943980b5caa9c7a974f"
+        },
+        {
+          "member": "timing-and-resource-map.md",
+          "sha256": "30ae210b76cb8c22268f5560d6a25daf22e4f9e1ff0442c4d4460283175707bc"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-F10",
+      "implementation_check": "Paired RED/GREEN plus real bounded witness and resource/identity/timing mutation regression",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Performance/correctness/diagnostic isolation",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "Retained three native functional purposes",
+          "pass": true,
+          "path": "bounded-witness-final-summary.json",
+          "sha256": "751f5b8da66ce394bb7dac5f4c6e051c379bb5add287b37faeb68ac899de3b75"
+        },
+        {
+          "observed": "test_bounded_real_three_purposes_and_artifact_revalidation",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "statistical-control-summary.json",
+          "sha256": "de3d03049f13fdfb8ddc650f9f601cf2c51427148b1359e5120980b6654364f6"
+        },
+        {
+          "member": "statistical-control-crosscheck.json",
+          "sha256": "206a22e02cf9926aec9f36e83b2657a3fdf01dc446a96600863e8ce54818463b"
+        },
+        {
+          "member": "final-source-replay.json",
+          "sha256": "c723f2191f4482be93536d0e0b7d39d7b7ca5b474f7ef3ae23cda7936accf028"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-G01",
+      "implementation_check": "Fresh scan of 1450 raw attempts uses the same live/offline validator and reproduces terminal decisions and non-confirmatory analysis.",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Verified real ingestion path implemented",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_production_adapter_wiring_uses_only_fake_child",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Invoke runner main under test-only activation and fake child",
+          "pass": true,
+          "path": "production-entry-verification.json",
+          "sha256": "66b64074855f7599baacdd6c7243e28680802e42f38a5bbfd6a464d4ed88301a"
+        },
+        {
+          "observed": "Retained three native functional purposes",
+          "pass": true,
+          "path": "bounded-witness-final-summary.json",
+          "sha256": "751f5b8da66ce394bb7dac5f4c6e051c379bb5add287b37faeb68ac899de3b75"
+        },
+        {
+          "observed": "test_bounded_real_three_purposes_and_artifact_revalidation",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": "Authorized complete confirmatory execution remains pending. Real raw ingestion verified on bounded data."
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "statistical-control-summary.json",
+          "sha256": "de3d03049f13fdfb8ddc650f9f601cf2c51427148b1359e5120980b6654364f6"
+        },
+        {
+          "member": "statistical-control-crosscheck.json",
+          "sha256": "206a22e02cf9926aec9f36e83b2657a3fdf01dc446a96600863e8ce54818463b"
+        },
+        {
+          "member": "final-source-replay.json",
+          "sha256": "c723f2191f4482be93536d0e0b7d39d7b7ca5b474f7ef3ae23cda7936accf028"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-G02",
+      "implementation_check": "Independent re-read, eligibility, statistical controls and exact preservation of decision source",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Real ingestion cannot issue unauthorized analysis",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_production_adapter_wiring_uses_only_fake_child",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_native_cannot_launch_from_direct_unverified_calls",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Direct CLI denies forged detached envelopes without session creation",
+          "pass": true,
+          "path": "cli-lock-verification.json",
+          "sha256": "ad509ea884a08932bad5dca5cbdf03a810f64deb9712ca21284ec6076a6803a6"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "statistical-control-summary.json",
+          "sha256": "de3d03049f13fdfb8ddc650f9f601cf2c51427148b1359e5120980b6654364f6"
+        },
+        {
+          "member": "statistical-control-crosscheck.json",
+          "sha256": "206a22e02cf9926aec9f36e83b2657a3fdf01dc446a96600863e8ce54818463b"
+        },
+        {
+          "member": "final-source-replay.json",
+          "sha256": "c723f2191f4482be93536d0e0b7d39d7b7ca5b474f7ef3ae23cda7936accf028"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-G03",
+      "implementation_check": "Independent re-read, eligibility, statistical controls and exact preservation of decision source",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Synthetic evidence isolation",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_shared_core_resumes_all_phases_and_ingests_synthetic_only",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Verify all scenario outcomes",
+          "pass": true,
+          "path": "statistical-scenario-final.json",
+          "sha256": "31b059e924077fcc9276cfc4f7817277714eba802eb17cb19bff9232cf120af4"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "statistical-control-summary.json",
+          "sha256": "de3d03049f13fdfb8ddc650f9f601cf2c51427148b1359e5120980b6654364f6"
+        },
+        {
+          "member": "statistical-control-crosscheck.json",
+          "sha256": "206a22e02cf9926aec9f36e83b2657a3fdf01dc446a96600863e8ce54818463b"
+        },
+        {
+          "member": "final-source-replay.json",
+          "sha256": "c723f2191f4482be93536d0e0b7d39d7b7ca5b474f7ef3ae23cda7936accf028"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-G04",
+      "implementation_check": "The shared validator recomputes eligibility before writing FINISH. Rehashed invalid evidence remains invalid on reopen.",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Computed eligibility independent of supplied status",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_bounded_real_three_purposes_and_artifact_revalidation",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_production_adapter_wiring_uses_only_fake_child",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "statistical-control-summary.json",
+          "sha256": "de3d03049f13fdfb8ddc650f9f601cf2c51427148b1359e5120980b6654364f6"
+        },
+        {
+          "member": "statistical-control-crosscheck.json",
+          "sha256": "206a22e02cf9926aec9f36e83b2657a3fdf01dc446a96600863e8ce54818463b"
+        },
+        {
+          "member": "final-source-replay.json",
+          "sha256": "c723f2191f4482be93536d0e0b7d39d7b7ca5b474f7ef3ae23cda7936accf028"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-G05",
+      "implementation_check": "Independent re-read, eligibility, statistical controls and exact preservation of decision source",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Primary point/bootstrap cohort consistency",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_statistical_candidate_boundaries_and_shared_failure",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Independently recompute seeded workload bootstrap",
+          "pass": true,
+          "path": "statistical-recomputation.json",
+          "sha256": "d4ac5e7f3fb6ff2f28d2f495f0e5d73a65fe64adda507cb50feeeaa355d02612"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "statistical-control-summary.json",
+          "sha256": "de3d03049f13fdfb8ddc650f9f601cf2c51427148b1359e5120980b6654364f6"
+        },
+        {
+          "member": "statistical-control-crosscheck.json",
+          "sha256": "206a22e02cf9926aec9f36e83b2657a3fdf01dc446a96600863e8ce54818463b"
+        },
+        {
+          "member": "final-source-replay.json",
+          "sha256": "c723f2191f4482be93536d0e0b7d39d7b7ca5b474f7ef3ae23cda7936accf028"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-G06",
+      "implementation_check": "Independent re-read, eligibility, statistical controls and exact preservation of decision source",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Complete DISC block resampling",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_symmetric_disc07_censor_coverage_and_exact_jitter",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Independently recompute seeded workload bootstrap",
+          "pass": true,
+          "path": "statistical-recomputation.json",
+          "sha256": "d4ac5e7f3fb6ff2f28d2f495f0e5d73a65fe64adda507cb50feeeaa355d02612"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "statistical-control-summary.json",
+          "sha256": "de3d03049f13fdfb8ddc650f9f601cf2c51427148b1359e5120980b6654364f6"
+        },
+        {
+          "member": "statistical-control-crosscheck.json",
+          "sha256": "206a22e02cf9926aec9f36e83b2657a3fdf01dc446a96600863e8ce54818463b"
+        },
+        {
+          "member": "final-source-replay.json",
+          "sha256": "c723f2191f4482be93536d0e0b7d39d7b7ca5b474f7ef3ae23cda7936accf028"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-G07",
+      "implementation_check": "Independent re-read, eligibility, statistical controls and exact preservation of decision source",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Coverage and censoring semantics",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_symmetric_disc07_censor_coverage_and_exact_jitter",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Offline archived DISC-07 prefix validation",
+          "pass": true,
+          "path": "offline-censor-result.json",
+          "sha256": "cf7863cce7f1869cde598fe08d7321b596ec848d59a664e00a1cb9bf43010b40"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "statistical-control-summary.json",
+          "sha256": "de3d03049f13fdfb8ddc650f9f601cf2c51427148b1359e5120980b6654364f6"
+        },
+        {
+          "member": "statistical-control-crosscheck.json",
+          "sha256": "206a22e02cf9926aec9f36e83b2657a3fdf01dc446a96600863e8ce54818463b"
+        },
+        {
+          "member": "final-source-replay.json",
+          "sha256": "c723f2191f4482be93536d0e0b7d39d7b7ca5b474f7ef3ae23cda7936accf028"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-G08",
+      "implementation_check": "Independent re-read, eligibility, statistical controls and exact preservation of decision source",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Zero-pair/no-estimate handling",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "Verify all scenario outcomes",
+          "pass": true,
+          "path": "statistical-scenario-final.json",
+          "sha256": "31b059e924077fcc9276cfc4f7817277714eba802eb17cb19bff9232cf120af4"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "statistical-control-summary.json",
+          "sha256": "de3d03049f13fdfb8ddc650f9f601cf2c51427148b1359e5120980b6654364f6"
+        },
+        {
+          "member": "statistical-control-crosscheck.json",
+          "sha256": "206a22e02cf9926aec9f36e83b2657a3fdf01dc446a96600863e8ce54818463b"
+        },
+        {
+          "member": "final-source-replay.json",
+          "sha256": "c723f2191f4482be93536d0e0b7d39d7b7ca5b474f7ef3ae23cda7936accf028"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-G09",
+      "implementation_check": "Independent re-read, eligibility, statistical controls and exact preservation of decision source",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Exact RSS gate",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_f05_exact_rss_and_priority",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Verify all scenario outcomes",
+          "pass": true,
+          "path": "statistical-scenario-final.json",
+          "sha256": "31b059e924077fcc9276cfc4f7817277714eba802eb17cb19bff9232cf120af4"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "statistical-control-summary.json",
+          "sha256": "de3d03049f13fdfb8ddc650f9f601cf2c51427148b1359e5120980b6654364f6"
+        },
+        {
+          "member": "statistical-control-crosscheck.json",
+          "sha256": "206a22e02cf9926aec9f36e83b2657a3fdf01dc446a96600863e8ce54818463b"
+        },
+        {
+          "member": "final-source-replay.json",
+          "sha256": "c723f2191f4482be93536d0e0b7d39d7b7ca5b474f7ef3ae23cda7936accf028"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-G10",
+      "implementation_check": "Five BARE reps plus two independently validated invalid variants remain INCONCLUSIVE. The genuine timeout control remains priority 3 NO_GO.",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Noise and resource decision precedence",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_statistical_candidate_boundaries_and_shared_failure",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_symmetric_disc07_censor_coverage_and_exact_jitter",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Verify all scenario outcomes",
+          "pass": true,
+          "path": "statistical-scenario-final.json",
+          "sha256": "31b059e924077fcc9276cfc4f7817277714eba802eb17cb19bff9232cf120af4"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "statistical-control-summary.json",
+          "sha256": "de3d03049f13fdfb8ddc650f9f601cf2c51427148b1359e5120980b6654364f6"
+        },
+        {
+          "member": "statistical-control-crosscheck.json",
+          "sha256": "206a22e02cf9926aec9f36e83b2657a3fdf01dc446a96600863e8ce54818463b"
+        },
+        {
+          "member": "final-source-replay.json",
+          "sha256": "c723f2191f4482be93536d0e0b7d39d7b7ca5b474f7ef3ae23cda7936accf028"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-G11",
+      "implementation_check": "Independent re-read, eligibility, statistical controls and exact preservation of decision source",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Strata and multiplicity candidate amendments",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_statistical_candidate_boundaries_and_shared_failure",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Verify all scenario outcomes",
+          "pass": true,
+          "path": "statistical-scenario-final.json",
+          "sha256": "31b059e924077fcc9276cfc4f7817277714eba802eb17cb19bff9232cf120af4"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "statistical-control-summary.json",
+          "sha256": "de3d03049f13fdfb8ddc650f9f601cf2c51427148b1359e5120980b6654364f6"
+        },
+        {
+          "member": "statistical-control-crosscheck.json",
+          "sha256": "206a22e02cf9926aec9f36e83b2657a3fdf01dc446a96600863e8ce54818463b"
+        },
+        {
+          "member": "final-source-replay.json",
+          "sha256": "c723f2191f4482be93536d0e0b7d39d7b7ca5b474f7ef3ae23cda7936accf028"
+        },
+        {
+          "member": "preservation-result.json",
+          "sha256": "4a7382aeace9e116a465d4322b56f8586a1b3bd4f4bfa13f28e1a575cba5c6e6"
+        },
+        {
+          "member": "full-regression.log",
+          "sha256": "0a4644756eb73544c8b223a6445939f9a62edde1c4e49af7b42e2af121f69314"
+        }
+      ],
+      "gate_id": "B30-G12",
+      "implementation_check": "Independent re-read, eligibility, statistical controls and exact preservation of decision source",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "All 11 decision priorities and 19 DEC cases preserved",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_01_all_19_synthetic_decision_boundary_cases",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "Verify all scenario outcomes",
+          "pass": true,
+          "path": "statistical-scenario-final.json",
+          "sha256": "31b059e924077fcc9276cfc4f7817277714eba802eb17cb19bff9232cf120af4"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "simulation-summary.json",
+          "sha256": "6627962995bb587086daa3d54f523fba23788a7bb77fd401290963ff5b26683f"
+        },
+        {
+          "member": "regression-summary.json",
+          "sha256": "e546cfa005026c5342ed2b6b919db367a3a3cf7d9dd738d83e6021b15ea8808d"
+        },
+        {
+          "member": "archive-verification.json",
+          "sha256": "8ef565744baf69fa45f292128f5611bede921c334c693879640a352bdc81e6cd"
+        },
+        {
+          "member": "baseline.log",
+          "sha256": "9c273c76c7972160422b42d6d91275734e79c72cfd9262f3c095c5d544351620"
+        },
+        {
+          "member": "cli-lock-verification.json",
+          "sha256": "ad509ea884a08932bad5dca5cbdf03a810f64deb9712ca21284ec6076a6803a6"
+        }
+      ],
+      "gate_id": "B30-H01",
+      "implementation_check": "Full simulation, clean regression, archive extraction and authorization",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Full 1,450-slot synthetic execution",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "Rehearse and resume all 1450 slots",
+          "pass": true,
+          "path": "synthetic-rehearsal-summary.json",
+          "sha256": "b1193b6ba8702ea3be117e2736429b6b395a4536f6490acfb66b9b6e5e1b46ef"
+        },
+        {
+          "observed": "Independent exact frozen order and artifact check",
+          "pass": true,
+          "path": "schedule-journal-audit.json",
+          "sha256": "f7d05fffba99bbb092e2ed3f5a54a3079a5d287689488f364322db9fc60146d1"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "simulation-summary.json",
+          "sha256": "6627962995bb587086daa3d54f523fba23788a7bb77fd401290963ff5b26683f"
+        },
+        {
+          "member": "regression-summary.json",
+          "sha256": "e546cfa005026c5342ed2b6b919db367a3a3cf7d9dd738d83e6021b15ea8808d"
+        },
+        {
+          "member": "archive-verification.json",
+          "sha256": "8ef565744baf69fa45f292128f5611bede921c334c693879640a352bdc81e6cd"
+        },
+        {
+          "member": "baseline.log",
+          "sha256": "9c273c76c7972160422b42d6d91275734e79c72cfd9262f3c095c5d544351620"
+        },
+        {
+          "member": "cli-lock-verification.json",
+          "sha256": "ad509ea884a08932bad5dca5cbdf03a810f64deb9712ca21284ec6076a6803a6"
+        }
+      ],
+      "gate_id": "B30-H02",
+      "implementation_check": "Full simulation, clean regression, archive extraction and authorization",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Full synthetic pause/resume verification",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "Rehearse and resume all 1450 slots",
+          "pass": true,
+          "path": "synthetic-rehearsal-summary.json",
+          "sha256": "b1193b6ba8702ea3be117e2736429b6b395a4536f6490acfb66b9b6e5e1b46ef"
+        },
+        {
+          "observed": "test_shared_core_resumes_all_phases_and_ingests_synthetic_only",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "simulation-summary.json",
+          "sha256": "6627962995bb587086daa3d54f523fba23788a7bb77fd401290963ff5b26683f"
+        },
+        {
+          "member": "regression-summary.json",
+          "sha256": "e546cfa005026c5342ed2b6b919db367a3a3cf7d9dd738d83e6021b15ea8808d"
+        },
+        {
+          "member": "archive-verification.json",
+          "sha256": "8ef565744baf69fa45f292128f5611bede921c334c693879640a352bdc81e6cd"
+        },
+        {
+          "member": "baseline.log",
+          "sha256": "9c273c76c7972160422b42d6d91275734e79c72cfd9262f3c095c5d544351620"
+        },
+        {
+          "member": "cli-lock-verification.json",
+          "sha256": "ad509ea884a08932bad5dca5cbdf03a810f64deb9712ca21284ec6076a6803a6"
+        }
+      ],
+      "gate_id": "B30-H03",
+      "implementation_check": "Full simulation, clean regression, archive extraction and authorization",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Crash and fault-injection coverage",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "test_recovery_boundaries_never_relaunch_pending_attempt",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_ledger_corruption_lock_recovery_and_cross_session_records",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        },
+        {
+          "observed": "test_monitored_child_dies_when_supervisor_is_killed",
+          "pass": true,
+          "path": "full-regression-handoff.log",
+          "sha256": "f453105597eb42e0d901f0c308c7e688bb0c83f54749b769062f77a7351b5371"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "simulation-summary.json",
+          "sha256": "6627962995bb587086daa3d54f523fba23788a7bb77fd401290963ff5b26683f"
+        },
+        {
+          "member": "regression-summary.json",
+          "sha256": "e546cfa005026c5342ed2b6b919db367a3a3cf7d9dd738d83e6021b15ea8808d"
+        },
+        {
+          "member": "archive-verification.json",
+          "sha256": "8ef565744baf69fa45f292128f5611bede921c334c693879640a352bdc81e6cd"
+        },
+        {
+          "member": "baseline.log",
+          "sha256": "9c273c76c7972160422b42d6d91275734e79c72cfd9262f3c095c5d544351620"
+        },
+        {
+          "member": "cli-lock-verification.json",
+          "sha256": "ad509ea884a08932bad5dca5cbdf03a810f64deb9712ca21284ec6076a6803a6"
+        }
+      ],
+      "gate_id": "B30-H04",
+      "implementation_check": "Full simulation, clean regression, archive extraction and authorization",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Bounded actual native functional witnesses",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "Retained three native functional purposes",
+          "pass": true,
+          "path": "bounded-witness-final-summary.json",
+          "sha256": "751f5b8da66ce394bb7dac5f4c6e051c379bb5add287b37faeb68ac899de3b75"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "simulation-summary.json",
+          "sha256": "6627962995bb587086daa3d54f523fba23788a7bb77fd401290963ff5b26683f"
+        },
+        {
+          "member": "regression-summary.json",
+          "sha256": "e546cfa005026c5342ed2b6b919db367a3a3cf7d9dd738d83e6021b15ea8808d"
+        },
+        {
+          "member": "archive-verification.json",
+          "sha256": "8ef565744baf69fa45f292128f5611bede921c334c693879640a352bdc81e6cd"
+        },
+        {
+          "member": "baseline.log",
+          "sha256": "9c273c76c7972160422b42d6d91275734e79c72cfd9262f3c095c5d544351620"
+        },
+        {
+          "member": "cli-lock-verification.json",
+          "sha256": "ad509ea884a08932bad5dca5cbdf03a810f64deb9712ca21284ec6076a6803a6"
+        }
+      ],
+      "gate_id": "B30-H05",
+      "implementation_check": "Full simulation, clean regression, archive extraction and authorization",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Environment and storage readiness",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "Compare current available resources and sizing analogue",
+          "pass": true,
+          "path": "storage-environment-review.json",
+          "sha256": "02192ffcc83aabb507dcec420c8447e21579c083e6dc7fef8fc8c84e36edb77d"
+        }
+      ],
+      "remaining_limitation": "Hardware compatible for rehearsal. Actual activation host conditions need Coordinator approval."
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "simulation-summary.json",
+          "sha256": "6627962995bb587086daa3d54f523fba23788a7bb77fd401290963ff5b26683f"
+        },
+        {
+          "member": "regression-summary.json",
+          "sha256": "e546cfa005026c5342ed2b6b919db367a3a3cf7d9dd738d83e6021b15ea8808d"
+        },
+        {
+          "member": "archive-verification.json",
+          "sha256": "8ef565744baf69fa45f292128f5611bede921c334c693879640a352bdc81e6cd"
+        },
+        {
+          "member": "baseline.log",
+          "sha256": "9c273c76c7972160422b42d6d91275734e79c72cfd9262f3c095c5d544351620"
+        },
+        {
+          "member": "cli-lock-verification.json",
+          "sha256": "ad509ea884a08932bad5dca5cbdf03a810f64deb9712ca21284ec6076a6803a6"
+        }
+      ],
+      "gate_id": "B30-H06",
+      "implementation_check": "Full simulation, clean regression, archive extraction and authorization",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Clean-revision full regression",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "Full unittest discovery at the tested clean revision",
+          "pass": true,
+          "path": "regression-summary.json",
+          "sha256": "e7aa0ef52c7a9700334ca0eef21398029b1364cfdede6db280912830b7adebd6"
+        },
+        {
+          "observed": "Check definitive tested source, clean status and upstream",
+          "pass": true,
+          "path": "clean-regression-git.log",
+          "sha256": "9fd8e69f840967858c298d8ca4efb73d4e7b686727cf31cd9763bc636fafd809"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "simulation-summary.json",
+          "sha256": "6627962995bb587086daa3d54f523fba23788a7bb77fd401290963ff5b26683f"
+        },
+        {
+          "member": "regression-summary.json",
+          "sha256": "e546cfa005026c5342ed2b6b919db367a3a3cf7d9dd738d83e6021b15ea8808d"
+        },
+        {
+          "member": "archive-verification.json",
+          "sha256": "8ef565744baf69fa45f292128f5611bede921c334c693879640a352bdc81e6cd"
+        },
+        {
+          "member": "baseline.log",
+          "sha256": "9c273c76c7972160422b42d6d91275734e79c72cfd9262f3c095c5d544351620"
+        },
+        {
+          "member": "cli-lock-verification.json",
+          "sha256": "ad509ea884a08932bad5dca5cbdf03a810f64deb9712ca21284ec6076a6803a6"
+        }
+      ],
+      "gate_id": "B30-H07",
+      "implementation_check": "Full simulation, clean regression, archive extraction and authorization",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "Complete evidence archive and hash verification",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "Hash-check a tar view of all captured evidence members",
+          "pass": true,
+          "path": "archive-preverification.json",
+          "sha256": "be95145492e970a642f2b8cf77df79f61a304ae41f1543d9e72ebe4bbe3f4892"
+        },
+        {
+          "observed": "Reject missing, extra, duplicate, corrupt and escaping members",
+          "pass": true,
+          "path": "archive-mutation-results.json",
+          "sha256": "68fd01af0af8a2ab2cc5dfad5a28f8a8e6a139f5d5013b32c4f5a22ae3946e87"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": true,
+      "evidence_reference": [
+        {
+          "member": "simulation-summary.json",
+          "sha256": "6627962995bb587086daa3d54f523fba23788a7bb77fd401290963ff5b26683f"
+        },
+        {
+          "member": "regression-summary.json",
+          "sha256": "e546cfa005026c5342ed2b6b919db367a3a3cf7d9dd738d83e6021b15ea8808d"
+        },
+        {
+          "member": "archive-verification.json",
+          "sha256": "8ef565744baf69fa45f292128f5611bede921c334c693879640a352bdc81e6cd"
+        },
+        {
+          "member": "baseline.log",
+          "sha256": "9c273c76c7972160422b42d6d91275734e79c72cfd9262f3c095c5d544351620"
+        },
+        {
+          "member": "cli-lock-verification.json",
+          "sha256": "ad509ea884a08932bad5dca5cbdf03a810f64deb9712ca21284ec6076a6803a6"
+        }
+      ],
+      "gate_id": "B30-H08",
+      "implementation_check": "Full simulation, clean regression, archive extraction and authorization",
+      "implementation_status": "PASS",
+      "independent_review_required": true,
+      "original_requirement": "No unauthorized benchmark, ranking, winner or phase transition",
+      "previous_status": "PASS",
+      "prior_evidence": [
+        {
+          "observed": "Inspect empty anchor and frozen authorization",
+          "pass": true,
+          "path": "baseline-preflight.json",
+          "sha256": "e6e406014208c0ae2bb53602cf7d71eaf0ae0717c2da1291b51f3a8c5662ef7e"
+        },
+        {
+          "observed": "Verify lock fields in dry run with zero launch",
+          "pass": true,
+          "path": "dry-run.json",
+          "sha256": "ac1faed7a05a6d45c324c10ddfc6b6569011b0f7d00744659dd6a07fe664c460"
+        },
+        {
+          "observed": "Rehearse and resume all 1450 slots",
+          "pass": true,
+          "path": "synthetic-rehearsal-summary.json",
+          "sha256": "b1193b6ba8702ea3be117e2736429b6b395a4536f6490acfb66b9b6e5e1b46ef"
+        }
+      ],
+      "remaining_limitation": null
+    },
+    {
+      "affected_by_R1": false,
+      "evidence_reference": [
+        {
+          "member": "cli-lock-verification.json",
+          "sha256": "ad509ea884a08932bad5dca5cbdf03a810f64deb9712ca21284ec6076a6803a6"
+        }
+      ],
+      "gate_id": "B30-APP01",
+      "implementation_check": "Independent acceptance or explicit authorization awaits its external owner.",
+      "implementation_status": "PENDING_INDEPENDENT_REVIEW",
+      "independent_review_required": true,
+      "original_requirement": "Independent Technical Lead acceptance",
+      "previous_status": "PENDING_INDEPENDENT_REVIEW",
+      "prior_evidence": [
+        {
+          "path": "baseline-preflight.json",
+          "sha256": "e6e406014208c0ae2bb53602cf7d71eaf0ae0717c2da1291b51f3a8c5662ef7e"
+        }
+      ],
+      "remaining_limitation": "Implementation did not issue approval"
+    },
+    {
+      "affected_by_R1": false,
+      "evidence_reference": [
+        {
+          "member": "cli-lock-verification.json",
+          "sha256": "ad509ea884a08932bad5dca5cbdf03a810f64deb9712ca21284ec6076a6803a6"
+        }
+      ],
+      "gate_id": "B30-APP02",
+      "implementation_check": "Independent acceptance or explicit authorization awaits its external owner.",
+      "implementation_status": "PENDING_COORDINATOR_APPROVAL",
+      "independent_review_required": true,
+      "original_requirement": "Explicit Coordinator confirmatory execution authorization",
+      "previous_status": "PENDING_COORDINATOR_APPROVAL",
+      "prior_evidence": [
+        {
+          "path": "baseline-preflight.json",
+          "sha256": "e6e406014208c0ae2bb53602cf7d71eaf0ae0717c2da1291b51f3a8c5662ef7e"
+        }
+      ],
+      "remaining_limitation": "Implementation did not issue approval"
+    }
+  ],
+  "independent_verdict": "PENDING_INDEPENDENT_RE_REVIEW",
+  "tested_revision": "fb856e249b5c988edc7e95c8596e6377fe166349"
+}
