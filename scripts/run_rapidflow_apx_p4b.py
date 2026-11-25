@@ -830,8 +830,13 @@ def ordered_planned_slots(schedule):
 def verify_raw_artifact(path, digest):
     if not isinstance(digest, str) or not is_valid_hex64(digest):
         raise LedgerIntegrityError("MISSING_RAW_EVIDENCE_HASH")
-    if not path.is_file() or compute_sha256(path) != digest:
+    try:
+        raw = path.read_bytes()
+    except FileNotFoundError as error:
+        raise LedgerIntegrityError(f"MISSING_RAW_EVIDENCE: {path.name}") from error
+    if sha256_bytes(raw) != digest:
         raise LedgerIntegrityError(f"RAW_EVIDENCE_MISMATCH: {path.name}")
+    return raw
 
 
 def validate_native_measurement_evidence(record, expected, workload, raw_path,
@@ -843,15 +848,14 @@ def validate_native_measurement_evidence(record, expected, workload, raw_path,
     certifying that a reference was issued by a future reviewed experiment.
     """
     validate_slot_identity(record, expected)
-    if expected["evidence_kind"] != "CONFIRMATORY_MEASUREMENT" or record.get("synthetic_test_fixture") is not False:
+    if (expected["evidence_kind"] not in ("CONFIRMATORY_MEASUREMENT", "REAL_FUNCTIONAL_SMOKE")
+            or record.get("synthetic_test_fixture") is not False):
         raise LedgerIntegrityError("INVALID_REAL_EVIDENCE_ORIGIN")
-    verify_raw_artifact(raw_path, record.get("raw_output_sha256"))
-    verify_raw_artifact(reference_path, reference_sha256)
-    native = load_json_bytes(raw_path.read_bytes())
-    reference = load_json_bytes(reference_path.read_bytes())
+    native = load_json_bytes(verify_raw_artifact(raw_path, record.get("raw_output_sha256")))
+    reference = load_json_bytes(verify_raw_artifact(reference_path, reference_sha256))
     if not isinstance(reference, dict) or reference.get("execution_purpose") != "correctness":
         raise LedgerIntegrityError("INVALID_CORRECTNESS_REFERENCE")
-    if type(record.get("process_exit_code")) is not int or record["process_exit_code"] != 0 or record.get("process_signal") is not None:
+    if type(record.get("process_exit_code")) is not int or record["process_exit_code"] != 0 or "process_signal" not in record or record["process_signal"] is not None:
         raise LedgerIntegrityError("NON_SUCCESSFUL_NATIVE_MEASUREMENT")
     spec = ALL_VARIANTS[expected["variant_id"]]
     with_context = dict(workload=workload, is_success=True, expected_raw_input_sha256=expected["workload_sha256"])
@@ -874,13 +878,20 @@ def validate_native_measurement_evidence(record, expected, workload, raw_path,
     for key in ("status", "execution", "query_info", "work_budget", "counters"):
         if canonical_json_bytes(native.get(key)) != canonical_json_bytes(reference.get(key)):
             raise LedgerIntegrityError(f"MEASUREMENT_SEMANTIC_MISMATCH: {key}")
+    if len(native["steps"]) != len(reference["steps"]):
+        raise LedgerIntegrityError("MEASUREMENT_SEMANTIC_MISMATCH: step count")
     for index, (actual, wanted) in enumerate(zip(native["steps"], reference["steps"], strict=True)):
         for key in ("step_index", "status", "commit_status", "op", "u", "v", "label",
                     "entered_tuples", "exited_tuples", "step_counters"):
             if canonical_json_bytes(actual.get(key)) != canonical_json_bytes(wanted.get(key)):
                 raise LedgerIntegrityError(f"MEASUREMENT_SEMANTIC_MISMATCH: step {index} field {key}")
     timing = native["macro_timing"]
+    lifecycle = native["execution"]
     for key, value in {
+        "updates_planned": len(workload["updates"]),
+        "updates_completed": lifecycle["completed_steps"],
+        "results_delivered": lifecycle["delivered_steps"] == len(workload["updates"]),
+        "native_status": native["status"],
         "streaming_loop_wall_ns": timing["streaming_loop_wall_ns"],
         "initialization_wall_ns": timing["initialization_wall_ns"],
         "peak_rss_bytes": timing["child_vm_hwm_bytes"],
@@ -907,7 +918,27 @@ def exercise_synthetic_journal(root, simulate, *, stop_after=None):
         return slot_identity(plan, protocol, experiment_id=SYNTHETIC_EXPERIMENT, evidence_kind=SYNTHETIC_KIND,
                              binary_sha=SYNTHETIC_BINARY, source_revision=SYNTHETIC_SOURCE)
 
+    def sync_directory():
+        fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+
+    def bind_payload(payload, expected, outcome):
+        if not isinstance(payload, dict) or payload.get("evidence_kind") != SYNTHETIC_KIND:
+            raise LedgerIntegrityError("NON_SYNTHETIC_JOURNAL_BACKEND")
+        if payload.get("attempt_outcome") != outcome or outcome not in (
+            "COMPLETED", "FAILED", "CENSORED", "INVALID", "INELIGIBLE",
+        ):
+            raise LedgerIntegrityError("INVALID_JOURNAL_TERMINAL_STATE")
+        for key in payload.keys() & expected.keys():
+            if type(payload[key]) is not type(expected[key]) or payload[key] != expected[key]:
+                raise LedgerIntegrityError(f"CONTRADICTORY_SYNTHETIC_PAYLOAD: {key}")
+        return dict(payload, synthetic_test_fixture=True)
+
     with (root / "synthetic-attempts.jsonl").open("a+b") as log:
+        sync_directory()
         try:
             fcntl.flock(log, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as error:
@@ -934,11 +965,14 @@ def exercise_synthetic_journal(root, simulate, *, stop_after=None):
             if row.get("journal_event") == "START" and pending is None:
                 pending = row
             elif row.get("journal_event") == "FINISH" and pending is not None:
-                if row.get("attempt_outcome") not in ("COMPLETED", "FAILED", "CENSORED", "INVALID", "INELIGIBLE"):
-                    raise LedgerIntegrityError("INVALID_JOURNAL_TERMINAL_STATE")
-                verify_raw_artifact(root / f"{expected['slot_id']}.json", row.get("raw_output_sha256"))
+                envelope = load_json_bytes(verify_raw_artifact(
+                    root / f"{expected['slot_id']}.json", row.get("raw_output_sha256")))
+                if (not isinstance(envelope, dict)
+                        or canonical_json_bytes(envelope.get("start")) != canonical_json_bytes(pending)):
+                    raise LedgerIntegrityError("RAW_EVIDENCE_SLOT_MISMATCH")
+                payload = bind_payload(envelope.get("result"), row, row.get("attempt_outcome"))
                 pending = None
-                terminal.append(row)
+                terminal.append({**payload, **row})
             else:
                 raise LedgerIntegrityError("JOURNAL_TRANSITION_VIOLATION")
         if pending is not None:
@@ -948,21 +982,19 @@ def exercise_synthetic_journal(root, simulate, *, stop_after=None):
             expected = identity(plan)
             start = dict(expected, attempt_number=1, attempt_id=f"{plan['slot_id']}/1", journal_event="START")
             append(start)
-            payload = simulate(plan)
-            if payload.get("evidence_kind") != SYNTHETIC_KIND:
-                raise LedgerIntegrityError("NON_SYNTHETIC_JOURNAL_BACKEND")
-            outcome = payload.get("attempt_outcome")
-            if outcome not in ("COMPLETED", "FAILED", "CENSORED", "INVALID", "INELIGIBLE"):
-                raise LedgerIntegrityError("INVALID_JOURNAL_TERMINAL_STATE")
-            raw = canonical_json_bytes(payload)
+            payload = simulate(dict(plan))
+            outcome = payload.get("attempt_outcome") if isinstance(payload, dict) else None
+            payload = bind_payload(payload, dict(start, attempt_outcome=outcome), outcome)
+            raw = canonical_json_bytes({"start": start, "result": payload})
             with (root / f"{plan['slot_id']}.json").open("xb") as artifact:
                 artifact.write(raw)
                 artifact.flush()
                 os.fsync(artifact.fileno())
+            sync_directory()
             row = dict(start, journal_event="FINISH", raw_output_sha256=sha256_bytes(raw),
                        attempt_outcome=outcome)
             append(row)
-            terminal.append(row)
+            terminal.append({**payload, **row})
         return {"state": "FINISHED" if len(terminal) == len(plans) else "PAUSED", "completed_records": terminal}
 
 

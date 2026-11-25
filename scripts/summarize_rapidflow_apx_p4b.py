@@ -285,7 +285,7 @@ def is_slot_eligible(rec, expected, workload):
         reason = rec.get("censoring_reason")
         return False, reason if reason in EVIDENCE_ERROR_REASONS else "PROVENANCE_ERROR"
     if rec.get("native_status") != "SUCCESS" or type(rec.get("process_exit_code")) is not int or (
-        rec["process_exit_code"] != 0 or rec.get("process_signal") is not None
+        rec["process_exit_code"] != 0 or "process_signal" not in rec or rec["process_signal"] is not None
     ):
         return False, "EXECUTION_FAILURE"
     if (rec.get("profiling_enabled") is not False or rec.get("deep_diagnostics_enabled") is not False
@@ -717,6 +717,11 @@ def analyze_p4b_ledger(
         },
         "protocol_version": protocol.get("protocol_version", PROTOCOL_VERSION),
         "manifest_workloads": len(w_by_id),
+        "attempt_accounting": {
+            "raw_attempts": resolved["total_raw_records"],
+            "unique_slots": len(canon_slots),
+            "slots_with_prelaunch_attempt_history": len(resolved["duplicate_attempts"]),
+        },
         "bare_complete_workloads": len(bare_complete_set),
         "variants": variant_reports,
     }

@@ -171,8 +171,11 @@ class TestPreregistrationR1(unittest.TestCase):
 
     def test_r10_synthetic_journal_full_plan_and_resume(self):
         calls = []
+        inputs = {r["slot_id"]: r for r in _make_synthetic_eligible_ledger()}
         def simulate(slot):
             calls.append(slot["slot_id"])
+            if slot["slot_id"] in inputs:
+                return {key: value for key, value in inputs[slot["slot_id"]].items() if key != "raw_output_sha256"}
             return {"evidence_kind": runner.SYNTHETIC_KIND, "attempt_outcome": "COMPLETED"}
 
         with tempfile.TemporaryDirectory() as td, patch.object(runner.subprocess, "Popen") as spawn:
@@ -188,8 +191,27 @@ class TestPreregistrationR1(unittest.TestCase):
             self.assertEqual([r["raw_output_sha256"] for r in first["completed_records"]],
                              [r["raw_output_sha256"] for r in second["completed_records"][:217]])
             self.assertEqual(runner.exercise_synthetic_journal(root, simulate), second)
+            summary = stats.analyze_p4b_ledger(second["completed_records"], allow_synthetic_mode=True)
+            self.assertEqual(summary["attempt_accounting"]["unique_slots"], 1450)
+            self.assertEqual(summary["variants"]["A_STATIC"]["decision"]["priority_triggered"], 7)
+            with self.assertRaisesRegex(runner.LedgerIntegrityError, "CONFIRMATORY_ANALYSIS_NOT_AUTHORIZED"):
+                stats.analyze_p4b_ledger(second["completed_records"])
             spawn.assert_not_called()
-            (root / f"{calls[0]}.json").write_text("tampered")
+            first_file = root / f"{calls[0]}.json"
+            second_file = root / f"{calls[1]}.json"
+            data = second_file.read_bytes()
+            first_file.write_bytes(data)
+            log = root / "synthetic-attempts.jsonl"
+            original = log.read_bytes()
+            rows = original.splitlines()
+            first_finish = json.loads(rows[1])
+            first_finish["raw_output_sha256"] = runner.sha256_bytes(data)
+            rows[1] = json.dumps(first_finish).encode()
+            log.write_bytes(b"\n".join(rows) + b"\n")
+            with self.assertRaisesRegex(runner.LedgerIntegrityError, "RAW_EVIDENCE_SLOT_MISMATCH"):
+                runner.exercise_synthetic_journal(root, simulate)
+            log.write_bytes(original)
+            first_file.write_text("tampered")
             with self.assertRaisesRegex(runner.LedgerIntegrityError, "RAW_EVIDENCE_MISMATCH"):
                 runner.exercise_synthetic_journal(root, simulate)
 
@@ -246,7 +268,7 @@ class TestPreregistrationR1(unittest.TestCase):
         workload = runner.load_json_bytes(fixture.read_bytes())
         binary_digest = runner.compute_sha256(runner.DEFAULT_BINARY_PATH)
         identity = runner.slot_identity(selected, self.protocol, experiment_id="BOUNDED_NATIVE_SMOKE",
-                                        evidence_kind="CONFIRMATORY_MEASUREMENT", binary_sha=binary_digest,
+                                        evidence_kind="REAL_FUNCTIONAL_SMOKE", binary_sha=binary_digest,
                                         source_revision=runner.NATIVE_SOURCE_COMMIT)
         with tempfile.TemporaryDirectory() as td:
             correct_path, measured_path = Path(td) / "correct.json", Path(td) / "measure.json"
@@ -258,6 +280,8 @@ class TestPreregistrationR1(unittest.TestCase):
             self.assertEqual(measurement["censoring_reason"], "NONE")
             timing = measurement["output_data"]["macro_timing"]
             row = dict(identity, synthetic_test_fixture=False, process_exit_code=0, process_signal=None,
+                       updates_planned=len(workload["updates"]), updates_completed=len(workload["updates"]),
+                       results_delivered=True, native_status="SUCCESS",
                        raw_output_sha256=measurement["output_sha256"],
                        streaming_loop_wall_ns=timing["streaming_loop_wall_ns"],
                        initialization_wall_ns=timing["initialization_wall_ns"],
