@@ -22,7 +22,8 @@ VALID_PHASES = (("primary",), ("primary", "diagnostic"))
 SOURCE_PATHS = (
     "scripts/run_rapidflow_apx_p4b.py", "scripts/summarize_rapidflow_apx_p4b.py",
     "scripts/p4b_correctness_registry.py", "scripts/p4b_activation.py",
-    "scripts/p4b_experiment_session.py",
+    "scripts/p4b_experiment_session.py", "scripts/p4b_native_evidence.py",
+    "scripts/run_rapidflow_apx_engines.py",
 )
 
 

@@ -387,14 +387,18 @@ execute_p4b_native_slot(binary, fixture, "BARE", "correctness", base/"unused.jso
                 kwargs["evidence"]["on_start"](12345, argv)
                 kwargs["evidence"]["save_streams"](b"", b"")
                 timing = output["macro_timing"]
-                return dict(variant_id=variant, execution_purpose=purpose, exit_code=0, process_signal=None,
-                            outer_wall_ns=1000, user_cpu_ns=1, system_cpu_ns=1, wait4_ru_maxrss_bytes=1024,
+                outer = 1000 + sum(timing[key] for key in (
+                    "input_parsing_ns", "initialization_wall_ns", "streaming_loop_wall_ns", "reporting_wall_ns"))
+                return dict(variant_id=variant, execution_purpose=purpose, exit_code=0, process_signal=None, censoring_reason="NONE",
+                            outer_wall_ns=outer, user_cpu_ns=1, system_cpu_ns=1, wait4_ru_maxrss_bytes=1024,
                             peak_rss_bytes=timing["child_vm_hwm_bytes"], peak_rss_original_value=timing["child_vm_hwm_kib"],
                             resource_measurement_method="linux_proc_self_status_vmhwm", peak_rss_original_unit="KiB",
                             fixture_sha256=ref["fixture_sha256"], binary_sha256=runner.NATIVE_SHA256, command=argv,
                             output_sha256=runner.sha256_bytes(raw), output_size_bytes=len(raw),
                             supervisor={"pid":12345, "wait_status":0, "deadline_fired":False,
-                                        "started_monotonic_ns": 10, "reaped_monotonic_ns":1010,
+                                        "post_execution_identity":{"binary_sha256":runner.NATIVE_SHA256,
+                                                                   "fixture_sha256":ref["fixture_sha256"]},
+                                        "started_monotonic_ns": 10, "reaped_monotonic_ns":10+outer,
                                         "wait4_user_seconds":1e-9, "wait4_system_seconds":1e-9, "wait4_maxrss_kib":1,
                                         "resource_caps":{"timeout_seconds":60.0, "address_space_mib":512,
                                                          "max_work":500000, "max_nlf_memory_mib":256}})

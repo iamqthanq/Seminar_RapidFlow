@@ -302,7 +302,14 @@ def is_slot_eligible(rec, expected, workload):
             or rec.get("results_delivered") is not True):
         return False, "INCOMPLETE_UPDATES_OR_DELIVERY"
     admitted = {"M0_VERIFIED", "DIFFERENTIAL_M2_VERIFIED", "WITNESS_VERIFIED"}
-    if expected["evidence_kind"] == "CONFIRMATORY_MEASUREMENT" and expected["variant_id"] == "BARE":
+    reference_rehearsal = (
+        expected["evidence_kind"] == SYNTHETIC_KIND and rec.get("synthetic_test_fixture") is True
+        and rec.get("activation_sha256") is None and rec.get("measurement_eligible") is False
+        and rec.get("reference_scope") == "CORRECTNESS_NOT_FULLY_CERTIFIED"
+    )
+    if expected["variant_id"] == "BARE" and (
+        expected["evidence_kind"] == "CONFIRMATORY_MEASUREMENT" or reference_rehearsal
+    ):
         admitted.add("LIMITED_C3_BARE_CONTROL")
     if rec.get("correctness_status") not in admitted:
         return False, "CORRECTNESS_UNVERIFIED"

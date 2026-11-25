@@ -385,6 +385,9 @@ def validate_measurement_output_schema(
     expected_raw_input_sha256: str,
     is_success: bool,
     native_exit_code: Optional[int] = None,
+    *,
+    resource_preexec: bool = False,
+    accept_unavailable: bool = False,
 ) -> Tuple[bool, str, Dict[str, Any]]:
     """
     Distinct strict measurement-output validator (Section XVII.2).
@@ -474,6 +477,7 @@ def validate_measurement_output_schema(
         workload=workload,
         is_success=is_success,
         expected_raw_input_sha256=expected_raw_input_sha256,
+        resource_preexec=resource_preexec,
     )
     if not sem_ok:
         return False, sem_diag, {}
@@ -487,6 +491,7 @@ def validate_measurement_output_schema(
         requested_neighbor_mode=expected_neighbor_mode,
         historical_auth=None,
         native_exit_code=native_exit_code,
+        accept_unavailable=accept_unavailable,
     )
     if not cfg_ok:
         return False, cfg_diag, cfg_meta
@@ -707,7 +712,14 @@ def execute_p4b_native_slot(
 
     err_msg = (out_data or {}).get("error_message", "")
     err_cat = (out_data or {}).get("error_category", "NONE")
-    if compute_sha256(binary_path) != binary_sha or compute_sha256(fixture_path) != fixture_sha:
+    post_execution_identity = {}
+    for key, artifact in (("binary_sha256", binary_path), ("fixture_sha256", fixture_path)):
+        try:
+            post_execution_identity[key] = compute_sha256(artifact)
+        except OSError:
+            # A disappeared or unreadable input has no verified post-launch identity.
+            post_execution_identity[key] = None
+    if post_execution_identity != {"binary_sha256": binary_sha, "fixture_sha256": fixture_sha}:
         censor_class = "PROVENANCE_ERROR"
     elif timed_out or term_signal == signal.SIGALRM:
         censor_class = "TIMEOUT"
@@ -716,6 +728,8 @@ def execute_p4b_native_slot(
     elif exit_code != 0 and ("std::bad_alloc" in str(err_msg) or "std::bad_alloc" in raw_stderr):
         censor_class = "MEMORY_LIMIT_FAILURE"
     elif err_cat == "RESOURCE_LIMIT_ERROR":
+        censor_class = "RESOURCE_UNAVAILABLE"
+    elif exit_code == 5 and out_data is None and raw_stderr.startswith("Resource containment error: "):
         censor_class = "RESOURCE_UNAVAILABLE"
     elif (out_data or {}).get("configuration_status") == "REQUESTED_CONFIGURATION_UNAVAILABLE":
         censor_class = "CONFIGURATION_UNAVAILABLE"
@@ -754,6 +768,7 @@ def execute_p4b_native_slot(
             err_msg = diag
 
     supervisor = {"pid": proc.pid, "wait_status": wait_status, "deadline_fired": timed_out,
+                  "post_execution_identity": post_execution_identity,
                   "started_monotonic_ns": t0_ns, "reaped_monotonic_ns": t1_ns,
                   "wait4_user_seconds": rusage.ru_utime, "wait4_system_seconds": rusage.ru_stime,
                   "wait4_maxrss_kib": rusage.ru_maxrss,
@@ -909,6 +924,11 @@ def validate_native_measurement_evidence(record, expected, workload, raw_path,
         raise LedgerIntegrityError("INVALID_REAL_EVIDENCE_ORIGIN")
     native = load_json_bytes(verify_raw_artifact(raw_path, record.get("raw_output_sha256")))
     reference = load_json_bytes(verify_raw_artifact(reference_path, reference_sha256))
+    validate_measurement_payload(record, expected, workload, native, reference)
+
+
+def validate_measurement_payload(record, expected, workload, native, reference):
+    """Check already digest-bound payloads. Callers enforce origin and activation."""
     if not isinstance(reference, dict) or reference.get("execution_purpose") != "correctness":
         raise LedgerIntegrityError("INVALID_CORRECTNESS_REFERENCE")
     if type(record.get("process_exit_code")) is not int or record["process_exit_code"] != 0 or "process_signal" not in record or record["process_signal"] is not None:

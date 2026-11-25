@@ -1331,6 +1331,8 @@ def validate_native_output_schema(
     is_success: bool = True,
     expected_raw_input_sha256: Optional[str] = None,
     historical_profile: Optional[Mapping[str, Any]] = None,
+    *,
+    resource_preexec: bool = False,
 ) -> Tuple[bool, str]:
     """Multi-layered strict output schema and semantic invariant validator (P3-R3-F01, P3-R3-F04, P3-R3-F07)."""
     if not isinstance(res_data, dict):
@@ -1458,6 +1460,9 @@ def validate_native_output_schema(
         "CALLBACK_ABORTED": {"WORK_BUDGET_EXCEEDED", "CALLBACK_ABORTED", "STEP_FAILURE"},
         "ERROR": {"INPUT_SCHEMA_ERROR", "STEP_FAILURE", "DOMAIN_ERROR", "IO_ERROR", "UNCAUGHT_ERROR"},
     }
+    if resource_preexec:
+        ALLOWED_ERROR_CATEGORIES.add("RESOURCE_LIMIT_ERROR")
+        ALLOWED_STATUS_CATEGORY_MAP["ERROR"].add("RESOURCE_LIMIT_ERROR")
 
     root_status = res_data.get("status")
     if type(root_status) is not str or root_status not in ALLOWED_ROOT_STATUSES:
@@ -1569,7 +1574,12 @@ def validate_native_output_schema(
                         return False, f"Future step {s_idx} after failure must have status UNATTEMPTED: {step_stat}"
 
         # Step counters structural & semantic validation (R6-F01, R7-F01)
-        if step_stat != "UNATTEMPTED":
+        preexec_resource_step = (resource_preexec and step_stat == "ERROR"
+                                 and step.get("error_category") == "RESOURCE_LIMIT_ERROR")
+        if preexec_resource_step:
+            if "step_counters" in step:
+                return False, f"Resource pre-execution step {s_idx} must not report engine counters"
+        elif step_stat != "UNATTEMPTED":
             if "step_counters" not in step:
                 return False, f"Attempted step {s_idx} missing required 'step_counters' object"
             sc = step["step_counters"]
@@ -1940,6 +1950,8 @@ def validate_nlf_configuration(
     requested_neighbor_mode: Optional[str] = None,
     historical_auth: Optional[VerifiedHistoricalArtifact] = None,
     native_exit_code: Optional[int] = None,
+    *,
+    accept_unavailable: bool = False,
 ) -> Tuple[bool, str, Dict[str, Any]]:
     """Validate actual configuration, including on initialized failures.
 
@@ -2104,9 +2116,9 @@ def validate_nlf_configuration(
     if native_eff != "none" and logical > limit:
         return reject(f"Index logical bytes {logical} exceeds limit {limit}")
 
-    if config_status == "REQUESTED_CONFIGURATION_UNAVAILABLE":
+    if config_status == "REQUESTED_CONFIGURATION_UNAVAILABLE" and not accept_unavailable:
         return reject(f"Requested {native_req} optimization unavailable (fallback_reason: {fallback})", "CONFIG_UNAVAILABLE")
-    meta_info["eligible_for_requested_variant"] = is_success_run
+    meta_info["eligible_for_requested_variant"] = is_success_run and config_status == "SUCCESS"
     return True, "", meta_info
 
 

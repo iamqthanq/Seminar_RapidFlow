@@ -13,13 +13,11 @@ import time
 
 from scripts import p4b_activation as auth
 from scripts import p4b_correctness_registry as refs
+from scripts import p4b_native_evidence as evidence
 from scripts import run_rapidflow_apx_p4b as p4b
 
 SCHEMA = "p4b-execution-journal-v2"
 PROCESS_METRICS = ("outer_wall_ns", "user_cpu_ns", "system_cpu_ns", "wait4_ru_maxrss_bytes")
-NATIVE_METRICS = ("streaming_loop_wall_ns", "input_parsing_ns", "initialization_wall_ns",
-                  "graph_init_ns", "query_prep_ns", "engine_and_nlf_init_ns", "reporting_wall_ns")
-PROFILING_METRICS = ("update_maintenance_ns", "search_ns", "neighbor_retrieval_ns", "search_core_ns", "tuple_commit_ns")
 FILES = frozenset({"start.json", "native-output.json", "stdout.log", "stderr.log", "process.json",
                    "invocation.json", "validation.json"})
 HALT_STATES = {"FAILED", "INVALID", "INELIGIBLE", "INTERRUPTED"}
@@ -193,22 +191,176 @@ def _lifecycle(native, planned, success):
 def _diagnostics(native):
     profile = native["profiling"]
     values = profile["cumulative"]
-    timings = {name: require_uint(values[name], name) for name in PROFILING_METRICS}
-    for step in native["steps"]:
-        for name in PROFILING_METRICS:
-            require_uint(step["profiling"][name], name)
+    timings = {name: require_uint(values[name], name) for name in evidence.PROFILING_METRICS}
     return {"timing_ns": timings, "scope": "native diagnostic nested stages",
             "counters": {k: require_uint(v, k) for k, v in native["counters"].items()},
             "denominator": native["execution"]["completed_steps"]}
 
 
-def _require_both(left, right, fields):
-    for key in fields:
-        require(key in left and key in right and p4b.canonical_json_bytes(left[key]) == p4b.canonical_json_bytes(right[key]),
-                f"SEMANTIC_DISCREPANCY: {key}")
+def _invalid(identity, backend, reason, detail):
+    return {**identity, "attempt_outcome": "INVALID", "censoring_reason": reason,
+            "error_detail": detail, "correctness_status": None, "measurement_eligible": False,
+            "synthetic_test_fixture": backend.origin == p4b.SYNTHETIC_KIND}
+
+
+def _provenance_error(process, backend):
+    if process.get("censoring_reason") == "PROVENANCE_ERROR":
+        return "Supervisor reported post-execution provenance drift"
+    post = process["supervisor"].get("post_execution_identity")
+    if post is None and "post_execution_identity" not in process["supervisor"] and backend.origin == NativeBackend.origin:
+        # Historical bounded R0 evidence retains the supervisor classification
+        # but predates explicit post-launch digests. It cannot become a real slot.
+        return None if "censoring_reason" in process else "Missing supervisor provenance disposition"
+    expected = {key: process.get(key) for key in ("binary_sha256", "fixture_sha256")}
+    if not isinstance(post, dict) or post != expected:
+        return "Missing or contradictory post-execution binary/fixture identity"
+    return None
+
+
+def _native_schema(native, slot, entry, workload, mode, exit_code, *, unavailable=False, resource=False):
+    if slot["execution_purpose"] == "correctness":
+        from scripts.run_rapidflow_apx_engines import validate_native_output_schema, validate_nlf_configuration
+        ok, reason = validate_native_output_schema(
+            native, mode["engine"], entry["case_id"], workload=workload, is_success=exit_code == 0,
+            expected_raw_input_sha256=entry["fixture_sha256"], resource_preexec=resource)
+        require(ok, f"NATIVE_OUTPUT_SCHEMA: {reason}")
+        ok, reason, _ = validate_nlf_configuration(
+            mode["engine"], mode["nlf_mode"], native, exit_code == 0, mode["neighbor_mode"],
+            native_exit_code=exit_code, accept_unavailable=unavailable)
+    else:
+        ok, reason, _ = p4b.validate_measurement_output_schema(
+            native, mode["engine"], entry["case_id"], slot["execution_purpose"], mode["nlf_mode"],
+            mode["neighbor_mode"], workload, entry["fixture_sha256"], exit_code == 0, native_exit_code=exit_code,
+            accept_unavailable=unavailable, resource_preexec=resource)
+    require(ok, f"NATIVE_OUTPUT_SCHEMA: {reason}")
+
+
+def _native_identity(native, slot, entry, mode, reference, caps, *, partial=False):
+    expected = {
+        "case_id": entry["case_id"], "raw_input_sha256": entry["fixture_sha256"],
+        "execution_purpose": slot["execution_purpose"], "engine": mode["engine"], "engine_name": mode["engine"],
+        "schema_version": reference["schema_version"], "semantics_version": reference["semantics_version"],
+        "query_info": reference["query_info"], "work_budget": reference["work_budget"],
+        "requested_nlf_mode": mode["nlf_mode"], "requested_neighbor_mode": mode["neighbor_mode"],
+        "effective_neighbor_mode": mode["neighbor_mode"], "nlf_memory_limit_bytes": caps["max_nlf_memory_mib"] * 1024**2,
+    }
+    for key, value in expected.items():
+        if not partial or key in native:
+            require(key in native and p4b.canonical_json_bytes(native[key]) == p4b.canonical_json_bytes(value),
+                    f"NATIVE_RESULT_IDENTITY_MISMATCH: {key}")
+
+
+def _reference_prefix(native, reference, *, fallback=False):
+    committed = [s for s in native["steps"] if s["commit_status"] == "COMMITTED"]
+    require(len(committed) <= reference["execution"]["committed_steps"], "INSUFFICIENT_REFERENCE_PREFIX")
+    fields = ("entered_tuples", "exited_tuples", "step_index", "status", "commit_status")
+    if not fallback:
+        fields += ("step_counters",)
+    for step in committed:
+        wanted = reference["steps"][step["step_index"]]
+        for key in fields:
+            require(key in step and p4b.canonical_json_bytes(step[key]) == p4b.canonical_json_bytes(wanted[key]),
+                    f"RESOURCE_REFERENCE_PREFIX_MISMATCH: step {step['step_index']} {key}")
+
+
+def _fallback_reference(backend, slot):
+    row = backend.registry[slot["workload_id"], "BARE"]
+    return p4b.load_json_bytes(refs.read_reference(backend.store, row))
+
+
+def _check_rss(process, wait4_kib, native=None):
+    macro = native.get("macro_timing", {}) if native else {}
+    fields = {"child_rss_method", "child_vm_hwm_kib", "child_vm_hwm_bytes"}
+    if fields & macro.keys():
+        kib = require_uint(macro.get("child_vm_hwm_kib"), "child_vm_hwm_kib", positive=True)
+        require(macro.get("child_rss_method") == "linux_proc_self_status_vmhwm"
+                and require_uint(macro.get("child_vm_hwm_bytes"), "child_vm_hwm_bytes") == kib * 1024,
+                "NATIVE_RSS_MISMATCH")
+        method = "linux_proc_self_status_vmhwm"
+    else:
+        kib = wait4_kib or None
+        method = "linux_wait4_rusage_ru_maxrss"
+    expected = {"resource_measurement_method": method, "peak_rss_original_unit": "KiB",
+                "peak_rss_original_value": kib, "peak_rss_bytes": kib * 1024 if kib is not None else None}
+    require(all(key in process and type(process[key]) is type(value) and process[key] == value
+                for key, value in expected.items()), "SUPERVISOR_CHILD_RSS_MISMATCH")
+
+
+def _check_interrupted_output(raw, slot, entry, workload, mode, reference, caps, elapsed, backend):
+    native, extent = evidence.interrupted_output(raw)
+    if extent == "ABSENT":
+        return extent
+    complete = extent == "COMPLETE"
+    allowed = reference.keys() | {"profiling", "first_failing_step_index", "first_failure_category",
+                                  "first_failure_message", "fallback_reason"}
+    require(native.keys() <= allowed, "INTERRUPTED_OUTPUT_SCHEMA: unexpected native field")
+    _native_identity(native, slot, entry, mode, reference, caps, partial=not complete)
+    steps = native.get("steps", [])
+    evidence.frozen_updates(steps, workload["updates"], complete=complete)
+    macro = evidence.timings(native, elapsed, complete=complete)
+    evidence.profile_timings(native, macro, elapsed, has_complete_steps=complete)
+    for key, expected in (("measurement_schema_version", 1),
+                          ("profiling_enabled", slot["execution_purpose"] == "diagnostic"),
+                          ("deep_diagnostics_enabled", slot["execution_purpose"] == "correctness")):
+        if key in native:
+            require(type(native[key]) is type(expected) and native[key] == expected, f"INTERRUPTED_MEASUREMENT_MODE: {key}")
+    unavailable = native.get("configuration_status") == "REQUESTED_CONFIGURATION_UNAVAILABLE"
+    effective = "none" if unavailable else mode["nlf_mode"]
+    if "effective_nlf_mode" in native:
+        require(native["effective_nlf_mode"] == effective, "INTERRUPTED_CONFIGURATION_MISMATCH")
+    expected_state = {"SUCCESS", "REQUESTED_CONFIGURATION_UNAVAILABLE"}
+    if "configuration_status" in native:
+        require(native["configuration_status"] in expected_state, "INTERRUPTED_CONFIGURATION_MISMATCH")
+    if "status" in native:
+        require(native["status"] in ("SUCCESS", "FAIL"), "INTERRUPTED_NATIVE_STATUS")
+    error = native.get("error_category")
+    if "error_category" in native:
+        require(error in ("NONE", "WORK_BUDGET_EXCEEDED", "RESOURCE_LIMIT_ERROR"), "INTERRUPTED_FAILURE_IDENTITY")
+        if "status" in native:
+            require(native["status"] == ("SUCCESS" if error == "NONE" else "FAIL"), "INTERRUPTED_NATIVE_STATUS")
+    failed = False
+    for step in steps:
+        status = step.get("status")
+        commit = step.get("commit_status")
+        if status == "SUCCESS":
+            require(not failed and commit == "COMMITTED" and step["error_category"] == "NONE",
+                    "INTERRUPTED_STEP_LIFECYCLE")
+        else:
+            require(commit == "NOT_COMMITTED" and step["entered_tuples"] == step["exited_tuples"] == []
+                    and (status == "UNATTEMPTED" and failed and step["error_category"] == "NONE"
+                         or not failed and status in ("CALLBACK_ABORTED", "ERROR")
+                         and step["error_category"] in ("WORK_BUDGET_EXCEEDED", "RESOURCE_LIMIT_ERROR")),
+                    "INTERRUPTED_STEP_LIFECYCLE")
+            failed = True
+    if "execution" in native:
+        life = native["execution"]
+        for key in ("total_steps", "attempted_steps", "committed_steps", "completed_steps",
+                    "delivered_steps", "failed_steps", "unattempted_steps"):
+            require_uint(life[key], key)
+        require(life["total_steps"] == entry["update_count"] == life["attempted_steps"] + life["unattempted_steps"]
+                and life["attempted_steps"] == life["completed_steps"] + life["failed_steps"] == life["delivered_steps"]
+                and life["completed_steps"] == life["committed_steps"]
+                and sum(s["status"] == "SUCCESS" for s in steps) <= life["committed_steps"]
+                and sum(s["status"] == "UNATTEMPTED" for s in steps) <= life["unattempted_steps"],
+                "INTERRUPTED_LIFECYCLE_MISMATCH")
+    if complete:
+        native_exit = {"NONE": 0, "WORK_BUDGET_EXCEEDED": 4, "RESOURCE_LIMIT_ERROR": 5}[error]
+        _native_schema(native, slot, entry, workload, mode, native_exit,
+                       unavailable=unavailable, resource=native_exit == 5)
+        _lifecycle(native, entry["update_count"], not failed)
+    if unavailable:
+        require(mode["nlf_mode"] in ("static", "residual")
+                and ("fallback_reason" not in native or native["fallback_reason"] in (
+                    "NLF_INDEX_MEMORY_LIMIT", "NLF_INDEX_ALLOCATION_FAILED")), "INTERRUPTED_CONFIGURATION_MISMATCH")
+        reference = _fallback_reference(backend, slot)
+    _reference_prefix({"steps": steps}, reference, fallback=unavailable)
+    return extent
 
 
 def _validate_native(slot, entry, identity, backend, path, process):
+    provenance = _provenance_error(process, backend)
+    if provenance:
+        return _invalid(identity, backend, "PROVENANCE_ERROR", provenance)
     reference_row = backend.registry[slot["workload_id"], slot["variant_id"]]
     raw_ref = refs.read_reference(backend.store, reference_row)
     reference = p4b.load_json_bytes(raw_ref)
@@ -218,7 +370,9 @@ def _validate_native(slot, entry, identity, backend, path, process):
     caps = backend.policy
     for key, value in {"timeout_seconds": caps["wall_timeout_seconds"], "address_space_mib": caps["address_space_limit_mib"],
                        "max_work": caps["logical_work_cap"], "max_nlf_memory_mib": caps["max_nlf_memory_mib"]}.items():
-        require(supervisor["resource_caps"][key] == value, "RESOURCE_POLICY_MISMATCH")
+        observed = supervisor["resource_caps"][key]
+        require(type(observed) in (float, int) and (key == "timeout_seconds" or type(observed) is int)
+                and observed == value, f"RESOURCE_POLICY_MISMATCH: {key}")
     require(type(supervisor["deadline_fired"]) is bool, "INVALID_DEADLINE_EVIDENCE")
     pid = require_uint(supervisor["pid"], "pid", positive=True)
     status = require_uint(supervisor["wait_status"], "wait_status")
@@ -237,12 +391,15 @@ def _validate_native(slot, entry, identity, backend, path, process):
     ]
     require(invocation == {"pid": pid, "argv": expected_command, "environment": auth.NATIVE_ENV}
             and process["command"] == expected_command, "NATIVE_INVOCATION_MISMATCH")
-    require(process["binary_sha256"] == backend.binary_sha == reference_row["binary_sha256"]
-            and process["fixture_sha256"] == entry["fixture_sha256"] == reference_row["fixture_sha256"]
-            and process["variant_id"] == slot["variant_id"]
+    for key, pinned in (("binary_sha256", backend.binary_sha), ("fixture_sha256", entry["fixture_sha256"])):
+        if process.get(key) != pinned or reference_row[key] != pinned:
+            return _invalid(identity, backend, "PROVENANCE_ERROR", f"Pre-launch/reference identity mismatch: {key}")
+    raw = raw_file.read_bytes() if raw_file.is_file() else None
+    require(process["variant_id"] == slot["variant_id"]
             and process["execution_purpose"] == slot["execution_purpose"]
-            and process["output_sha256"] == p4b.compute_sha256(raw_file)
-            and process["output_size_bytes"] == raw_file.stat().st_size, "PROCESS_ARTIFACT_MISMATCH")
+            and process["output_sha256"] == (p4b.sha256_bytes(raw) if raw is not None else None)
+            and type(process["output_size_bytes"]) is int
+            and process["output_size_bytes"] == (len(raw) if raw is not None else 0), "PROCESS_ARTIFACT_MISMATCH")
     metrics = {key: require_uint(process[key], key, positive=key == "outer_wall_ns")
                if process[key] is not None or key != "wait4_ru_maxrss_bytes" else None for key in PROCESS_METRICS}
     started = require_uint(supervisor["started_monotonic_ns"], "start")
@@ -255,67 +412,106 @@ def _validate_native(slot, entry, identity, backend, path, process):
     raw_rss = require_uint(supervisor["wait4_maxrss_kib"], "wait4_maxrss_kib")
     require(metrics["wait4_ru_maxrss_bytes"] == (raw_rss * 1024 if raw_rss else None),
             "SUPERVISOR_RSS_MISMATCH")
+    synthetic = backend.origin == p4b.SYNTHETIC_KIND
     row = {**identity, **metrics, "process_exit_code": exit_code, "process_signal": process_signal,
            "raw_output_sha256": process["output_sha256"], "reference_sha256": reference_row["raw_output_sha256"],
-           "reference_scope": reference_row["certification_scope"], "synthetic_test_fixture": False,
+           "reference_scope": reference_row["certification_scope"], "synthetic_test_fixture": synthetic,
            "measurement_eligible": False, "native_status": None, "correctness_status": None}
-    stdout = (path / "stdout.log").read_bytes()
     stderr = (path / "stderr.log").read_bytes()
-    require(isinstance(stdout, bytes) and isinstance(stderr, bytes), "PROCESS_STREAMS_MISSING")
+    workload_bytes = (p4b.REPO_ROOT / entry["fixture_path"]).read_bytes()
+    if p4b.sha256_bytes(workload_bytes) != entry["fixture_sha256"]:
+        return _invalid(identity, backend, "PROVENANCE_ERROR", "Frozen workload differs during ingestion")
+    workload = p4b.load_json_bytes(workload_bytes)
+    reported = process.get("censoring_reason")
+    elapsed = metrics["outer_wall_ns"]
+
     def complete(outcome, reason, **values):
         return {**row, "attempt_outcome": outcome, "censoring_reason": reason, **values}
 
-    if supervisor["deadline_fired"]:
-        require(metrics["outer_wall_ns"] >= caps["wall_timeout_seconds"] * 10**9
-                and process_signal in (signal.SIGKILL, signal.SIGALRM), "UNSUPPORTED_TIMEOUT_CLAIM")
-        return complete("CENSORED", "TIMEOUT")
-    if process_signal == signal.SIGALRM and metrics["outer_wall_ns"] >= caps["wall_timeout_seconds"] * 10**9:
-        return complete("CENSORED", "TIMEOUT")
-    if process_signal:
-        return complete("INTERRUPTED", "ENVIRONMENT_INTERRUPTION")
-    if not raw_file.stat().st_size:
-        if exit_code != 0 and b"std::bad_alloc" in stderr:
-            return complete("CENSORED", "MEMORY_LIMIT_FAILURE")
-        return complete("INVALID", "MISSING_RESULT")
-    native = read(raw_file)
-    require(isinstance(native, dict) and native.get("case_id") == entry["case_id"]
-            and native.get("raw_input_sha256") == entry["fixture_sha256"]
-            and native.get("execution_purpose") == slot["execution_purpose"],
-            "NATIVE_RESULT_IDENTITY_MISMATCH")
-    error = native.get("error_category")
-    if exit_code != 0:
-        if error == "RESULT_DELIVERY_ERROR":
-            return complete("FAILED", error)
-        if error == "RESOURCE_LIMIT_ERROR":
-            return complete("CENSORED", "RESOURCE_UNAVAILABLE")
-        if b"std::bad_alloc" in stderr or "std::bad_alloc" in native.get("error_message", ""):
-            return complete("CENSORED", "MEMORY_LIMIT_FAILURE")
-        if native.get("configuration_status") == "REQUESTED_CONFIGURATION_UNAVAILABLE":
-            return complete("CENSORED", "CONFIGURATION_UNAVAILABLE")
-        if exit_code != 4 or error != "WORK_BUDGET_EXCEEDED":
-            return complete("FAILED", "PREVALIDATION_ERROR" if error == "PREVALIDATION_ERROR" else "UNKNOWN_FAILURE")
-        data = p4b.load_json_bytes((p4b.REPO_ROOT / entry["fixture_path"]).read_bytes())
-        ok, reason, _ = p4b.validate_measurement_output_schema(
-            native, mode["engine"], entry["case_id"], slot["execution_purpose"], mode["nlf_mode"],
-            mode["neighbor_mode"], data, entry["fixture_sha256"], False, native_exit_code=exit_code)
-        require(ok, f"CENSORED_OUTPUT_SCHEMA: {reason}")
-        life = _lifecycle(native, entry["update_count"], False)
-        require(native["work_budget"]["effective_limit"] == caps["logical_work_cap"], "CENSOR_WORK_CAP_MISMATCH")
-        cap_step = native["steps"][life["committed_steps"]]
-        require(cap_step["error_category"] == error
-                and cap_step["step_counters"]["work_units"] > caps["logical_work_cap"], "INVALID_WORK_BUDGET_EVIDENCE")
-        if reference_row["native_exit_code"] != 0:
-            _require_both(native, reference, ("execution", "error_category", "counters"))
-        else:
-            require(life["committed_steps"] <= reference["execution"]["committed_steps"], "INSUFFICIENT_REFERENCE_PREFIX")
-        for i in range(life["committed_steps"]):
-            _require_both(native["steps"][i], reference["steps"][i],
-                          ("entered_tuples", "exited_tuples", "step_counters", "commit_status", "step_index"))
-        return complete("CENSORED", error, lifecycle=life)
+    def reconcile(*allowed):
+        require(reported in allowed, f"SUPERVISOR_OUTCOME_MISMATCH: {reported!r}; expected {allowed}")
 
+    deadline = supervisor["deadline_fired"]
+    if deadline or process_signal == signal.SIGALRM:
+        reconcile("TIMEOUT")
+        require(elapsed >= caps["wall_timeout_seconds"] * 10**9
+                and process_signal in (signal.SIGKILL, signal.SIGALRM), "UNSUPPORTED_TIMEOUT_CLAIM")
+        extent = _check_interrupted_output(raw, slot, entry, workload, mode, reference, caps, elapsed, backend)
+        _check_rss(process, raw_rss, p4b.load_json_bytes(raw) if extent == "COMPLETE" else None)
+        return complete("CENSORED", "TIMEOUT", raw_output_extent=extent)
+    if process_signal:
+        reconcile("ENVIRONMENT_INTERRUPTION", "EXECUTION_FAILURE")
+        extent = _check_interrupted_output(raw, slot, entry, workload, mode, reference, caps, elapsed, backend)
+        return complete("INTERRUPTED", "ENVIRONMENT_INTERRUPTION", raw_output_extent=extent)
+    if not raw:
+        if exit_code == 5 and stderr.startswith(b"Resource containment error: "):
+            reconcile("RESOURCE_UNAVAILABLE")
+            require(bool(stderr.removeprefix(b"Resource containment error: ").strip()), "MISSING_CONTAINMENT_DIAGNOSTIC")
+            _check_rss(process, raw_rss)
+            return complete("CENSORED", "RESOURCE_UNAVAILABLE", raw_output_extent="ABSENT")
+        return _invalid(identity, backend, "MISSING_RESULT", "No structured native result or supported supervisor resource outcome")
+
+    native = p4b.load_json_bytes(raw)
+    require(isinstance(native, dict), "NATIVE_RESULT_SCHEMA")
+    _native_identity(native, slot, entry, mode, reference, caps, partial=True)
+    metric_values = evidence.timings(native, elapsed)
+    evidence.profile_timings(native, metric_values, elapsed)
+    _check_rss(process, raw_rss, native)
+    error = native.get("error_category")
+    if error == "RESULT_DELIVERY_ERROR":
+        reconcile("EXECUTION_FAILURE")
+        require(exit_code == 9 and native.get("status") == "FAIL", "DELIVERY_EXIT_MISMATCH")
+        return complete("FAILED", error)
+    unavailable = native.get("configuration_status") == "REQUESTED_CONFIGURATION_UNAVAILABLE"
+    resource = error == "RESOURCE_LIMIT_ERROR"
+    work = error == "WORK_BUDGET_EXCEEDED"
+    if not (exit_code == 0 or work or resource or unavailable):
+        reconcile("EXECUTION_FAILURE")
+        require(native.get("status") == "FAIL" and error != "NONE", "NATIVE_PROCESS_STATUS_CONTRADICTION")
+        return complete("FAILED", "PREVALIDATION_ERROR" if error == "PREVALIDATION_ERROR" else "UNKNOWN_FAILURE")
+    require((exit_code, native.get("status"), error) in (
+        (0, "SUCCESS", "NONE"), (4, "FAIL", "WORK_BUDGET_EXCEEDED"), (5, "FAIL", "RESOURCE_LIMIT_ERROR")),
+        "NATIVE_PROCESS_STATUS_CONTRADICTION")
+    _native_identity(native, slot, entry, mode, reference, caps)
+    evidence.frozen_updates(native.get("steps"), workload["updates"])
+    life = _lifecycle(native, entry["update_count"], exit_code == 0)
+    if unavailable or resource or work:
+        _native_schema(native, slot, entry, workload, mode, exit_code, unavailable=unavailable, resource=resource)
+        if slot["execution_purpose"] == "diagnostic":
+            require(isinstance(native.get("profiling"), dict), "TIMING_PROFILE_SCHEMA")
+        require(native["work_budget"]["effective_limit"] == caps["logical_work_cap"], "CENSOR_WORK_CAP_MISMATCH")
+        if work or resource:
+            index = life["committed_steps"]
+            failed_step = native["steps"][index]
+            require(type(native.get("first_failing_step_index")) is int and native["first_failing_step_index"] == index
+                    and native.get("first_failure_category") == failed_step["error_category"] == error,
+                    "RESOURCE_FAILURE_STEP_MISMATCH")
+            if work:
+                reconcile("WORK_BUDGET_EXCEEDED")
+                require(failed_step["status"] == "CALLBACK_ABORTED"
+                        and failed_step["step_counters"]["work_units"] == caps["logical_work_cap"] + 1,
+                        "INVALID_WORK_BUDGET_EVIDENCE")
+            else:
+                reconcile("RESOURCE_UNAVAILABLE", "MEMORY_LIMIT_FAILURE")
+                require(failed_step["status"] == "ERROR" and "step_counters" not in failed_step
+                        and failed_step["error"] == native["error_message"] == native["first_failure_message"]
+                        and native["error_message"] == "std::bad_alloc", "INVALID_NATIVE_RESOURCE_EVIDENCE")
+        else:
+            reconcile("CONFIGURATION_UNAVAILABLE")
+        if unavailable:
+            reference = _fallback_reference(backend, slot)
+        _reference_prefix(native, reference, fallback=unavailable)
+        if work and not unavailable and reference_row["native_exit_code"] == 4:
+            for key in ("execution", "error_category", "counters"):
+                require(p4b.canonical_json_bytes(native[key]) == p4b.canonical_json_bytes(reference[key]),
+                        f"WORK_BUDGET_REFERENCE_MISMATCH: {key}")
+        reason = "CONFIGURATION_UNAVAILABLE" if unavailable else (
+            "WORK_BUDGET_EXCEEDED" if work else "MEMORY_LIMIT_FAILURE" if reported == "MEMORY_LIMIT_FAILURE" else "RESOURCE_UNAVAILABLE")
+        return complete("CENSORED", reason, lifecycle=life, native_status=native["status"])
+
+    reconcile("NONE")
     if reference_row["native_exit_code"] != 0:
         return complete("INELIGIBLE", "REFERENCE_COVERAGE_INSUFFICIENT")
-    life = _lifecycle(native, entry["update_count"], True)
     if slot["execution_purpose"] == "correctness":
         from scripts.replay_rapidflow_apx_p4b import MEASUREMENT_PATHS
         from scripts.canonical_output_comparator import diff_canonical_structures
@@ -323,22 +519,14 @@ def _validate_native(slot, entry, identity, backend, path, process):
                 "SEMANTIC_DISCREPANCY: correctness witness")
         return complete("COMPLETED", "NONE", native_status="SUCCESS", lifecycle=life)
 
-    timing = native["macro_timing"]
-    metric_values = {key: require_uint(timing[key], key, positive=key == "streaming_loop_wall_ns") for key in NATIVE_METRICS}
     for key in ("peak_rss_bytes", "peak_rss_original_value", "resource_measurement_method", "peak_rss_original_unit"):
         row[key] = process[key]
     row.update(**metric_values, native_status=native["status"], updates_planned=entry["update_count"],
                updates_completed=life["completed_steps"], results_delivered=True)
-    workload = p4b.load_json_bytes((p4b.REPO_ROOT / entry["fixture_path"]).read_bytes())
-    # The established R1 comparison authenticates tuples, counters and lifecycle.
-    # Use the archived digest independently of the slot's supplied artifact metadata.
-    with tempfile.TemporaryDirectory() as tmp:
-        rpath = Path(tmp) / "reference.json"
-        rpath.write_bytes(raw_ref)
-        p4b.validate_native_measurement_evidence(row, identity, workload, raw_file, rpath, reference_row["raw_output_sha256"])
+    p4b.validate_measurement_payload(row, identity, workload, native, reference)
     cert = reference_row["certification_scope"]
     if cert == "CORRECTNESS_NOT_FULLY_CERTIFIED":
-        require(backend.origin == ProductionBackend.origin and slot["variant_id"] == "BARE", "UNAPPROVED_C3_BARE_POLICY")
+        require((backend.origin == ProductionBackend.origin or synthetic) and slot["variant_id"] == "BARE", "UNAPPROVED_C3_BARE_POLICY")
         cert = "LIMITED_C3_BARE_CONTROL"
     return complete("COMPLETED", "NONE", **{
         "configuration_initialized": True, "configuration_valid": True, "configuration_status": "SUCCESS",
@@ -365,7 +553,7 @@ def _validate_synthetic(slot, identity, path):
 
 
 def validate_attempt(slot, entry, identity, backend, path):
-    if backend.origin == p4b.SYNTHETIC_KIND:
+    if not isinstance(backend, NativeBackend):
         return _validate_synthetic(slot, identity, path)
     try:
         return _validate_native(slot, entry, identity, backend, path, read(path / "process.json"))
@@ -375,7 +563,7 @@ def validate_attempt(slot, entry, identity, backend, path):
         return {**identity, "attempt_outcome": "FAILED" if semantic else "INVALID",
                 "censoring_reason": "CORRECTNESS_FAILURE" if semantic else "MEASUREMENT_ERROR",
                 "correctness_status": "SEMANTIC_UNSOUND" if semantic else None, "error_detail": detail,
-                "synthetic_test_fixture": False, "measurement_eligible": False}
+                "synthetic_test_fixture": backend.origin == p4b.SYNTHETIC_KIND, "measurement_eligible": False}
 
 
 @contextmanager
@@ -398,15 +586,16 @@ def _plan_identity(protocol, plans, backend, root):
     # the established slot-level accounting and statistical contract.
     exp = context.experiment_id if context else (
         p4b.SYNTHETIC_EXPERIMENT if backend.origin == p4b.SYNTHETIC_KIND else "P4B3B0_BOUNDED_WITNESS")
-    source_revision = context.revision if context else backend.source
+    synthetic = backend.origin == p4b.SYNTHETIC_KIND
+    source_revision = context.revision if context else p4b.SYNTHETIC_SOURCE if synthetic else backend.source
     return {
         "schema": SCHEMA, "experiment_id": exp, "backend": backend.origin,
         "activation_sha256": context.digest if context else None,
         "registry_sha256": p4b.compute_sha256(context.registry) if context else (
             digest({"/".join(k): v for k, v in backend.registry.items()})
-            if backend.origin == NativeBackend.origin else None),
+            if isinstance(backend, NativeBackend) else None),
         "environment_sha256": context.environment_sha256 if context else None,
-        "native_binary_sha256": backend.binary_sha, "source_revision": source_revision,
+        "native_binary_sha256": p4b.SYNTHETIC_BINARY if synthetic else backend.binary_sha, "source_revision": source_revision,
         "native_source_commit": backend.source, "protocol_sha256": p4b.PROTOCOL_SHA256,
         "manifest_sha256": protocol["manifest_sha256"], "schedule_sha256": protocol["schedule_sha256"],
         "plan_slots_sha256": digest(plans), "registered_slots": len(plans),
@@ -436,7 +625,7 @@ def _append(log, event):
 
 
 def _required_files(backend):
-    return FILES if backend.origin != p4b.SYNTHETIC_KIND else FILES - {"invocation.json"}
+    return FILES if isinstance(backend, NativeBackend) else FILES - {"invocation.json"}
 
 
 def _finish_payload(path, outcome, backend):
@@ -568,7 +757,7 @@ def session(root, protocol, manifest, plans, backend, *, execute=False, stop_aft
                         if production:
                             del backend._active_attempt
                     trigger("after_exit")
-                    if backend.origin == p4b.SYNTHETIC_KIND:
+                    if not isinstance(backend, NativeBackend):
                         write(path / "native-output.json", process)
                         publish(path / "stdout.log", b"")
                         publish(path / "stderr.log", b"")
