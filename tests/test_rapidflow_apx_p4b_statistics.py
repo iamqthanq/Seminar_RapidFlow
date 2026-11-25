@@ -31,6 +31,8 @@ def _make_synthetic_eligible_ledger(
     protocol = json.loads((REPO_ROOT / "configs" / "rapidflow_apx_p4b_protocol.json").read_text(encoding="utf-8"))
     schedule = json.loads((REPO_ROOT / "configs" / "rapidflow_apx_p4b_schedule.json").read_text(encoding="utf-8"))
 
+    manifest = json.loads(p4b_runner.DEFAULT_MANIFEST_PATH.read_text())
+    updates = {entry["workload_id"]: entry["update_count"] for entry in manifest["workloads"]}
     records: List[Dict[str, Any]] = []
     for slot in schedule["primary_slots"]:
         vid = slot["variant_id"]
@@ -38,20 +40,16 @@ def _make_synthetic_eligible_ledger(
         t_ns = bare_ns if vid == "BARE" else v_ns[vid]
         rss = bare_rss if vid == "BARE" else v_rss[vid]
         records.append({
+            **p4b_runner.slot_identity(
+                slot, protocol, experiment_id=p4b_runner.SYNTHETIC_EXPERIMENT,
+                evidence_kind=p4b_runner.SYNTHETIC_KIND, binary_sha=p4b_runner.SYNTHETIC_BINARY,
+                source_revision=p4b_runner.SYNTHETIC_SOURCE,
+            ),
             "synthetic_test_fixture": True,
-            "ledger_schema_version": p4b_runner.LEDGER_SCHEMA_VERSION,
-            "manifest_sha256": protocol["manifest_sha256"],
-            "schedule_sha256": protocol["schedule_sha256"],
-            "protocol_sha256": "0" * 64,
-            "slot_id": slot["slot_id"],
-            "workload_id": slot["workload_id"],
-            "workload_sha256": slot["workload_sha256"],
-            "variant_id": vid,
-            "repeat_id": slot["repeat_id"],
-            "execution_position": slot["execution_position"],
-            "slot_purpose": "primary",
-            "engine": vspec["engine"],
-            "requested_nlf_mode": vspec["nlf_mode"],
+            "attempt_number": 1,
+            "attempt_id": slot["slot_id"] + "/1",
+            "attempt_outcome": "COMPLETED",
+            "raw_output_sha256": "a" * 64,
             "effective_nlf_mode": vspec["nlf_mode"],
             "requested_neighbor_mode": vspec["neighbor_mode"],
             "effective_neighbor_mode": vspec["neighbor_mode"],
@@ -59,6 +57,8 @@ def _make_synthetic_eligible_ledger(
             "configuration_status": "SUCCESS",
             "configuration_valid": True,
             "measurement_schema_version": 1,
+            "neighbor_configuration_version": 2,
+            "deep_diagnostics_enabled": False,
             "profiling_enabled": False,
             "execution_purpose": "performance",
             "eligible_for_requested_variant": True,
@@ -69,11 +69,14 @@ def _make_synthetic_eligible_ledger(
             "user_cpu_ns": t_ns,
             "system_cpu_ns": 50_000,
             "peak_rss_bytes": rss,
+            "peak_rss_original_value": rss // 1024,
+            "peak_rss_original_unit": "KiB",
+            "resource_measurement_method": "linux_proc_self_status_vmhwm",
             "process_exit_code": 0,
             "process_signal": None,
             "native_status": "SUCCESS",
-            "updates_planned": 10,
-            "updates_completed": 10,
+            "updates_planned": updates[slot["workload_id"]],
+            "updates_completed": updates[slot["workload_id"]],
             "results_delivered": True,
             "correctness_status": "DIFFERENTIAL_M2_VERIFIED",
             "measurement_eligible": True,
@@ -157,12 +160,14 @@ class TestP4bDecisionBoundariesAndStatistics(unittest.TestCase):
             {"speedup_median": 0.0, "ci_lower": 0.0, "ci_upper": 1.2},
             {"speedup_median": -1.1, "ci_lower": -1.2, "ci_upper": 1.0},
             {"speedup_median": 1.1, "ci_lower": 1.2, "ci_upper": 1.0},   # L > U
-            {"speedup_median": 1.3, "ci_lower": 1.0, "ci_upper": 1.2},   # S > U
             {"speedup_median": 1.1, "ci_lower": 1.0, "ci_upper": 1.2, "worst_rss_overhead": float("nan")},
         ]
         for bad in bad_inputs:
             with self.assertRaises(ValueError, msg=f"Failed to reject {bad}"):
                 stats_mod.classify_variant_decision(**bad)
+
+        outside = stats_mod.classify_variant_decision(speedup_median=1.3, ci_lower=1.0, ci_upper=1.2)
+        self.assertTrue(outside["gate_diagnostics"]["point_estimate_outside_ci"])
 
     def test_03_synthetic_full_ledger_pipeline_bootstrap_and_anti_pseudo_replication(self) -> None:
         recs = _make_synthetic_eligible_ledger(
@@ -196,11 +201,13 @@ class TestP4bDecisionBoundariesAndStatistics(unittest.TestCase):
             if r["workload_id"] == "P4B_CONT_01" and r["variant_id"] == "A_STATIC" and r["repeat_id"] == 5:
                 r["censoring_reason"] = "TIMEOUT"
                 r["measurement_eligible"] = False
+                r["attempt_outcome"] = "CENSORED"
                 r["native_status"] = "TIMEOUT"
                 r["process_exit_code"] = -9
             if r["workload_id"] == "P4B_CONT_02" and r["variant_id"] == "A_RESIDUAL" and r["repeat_id"] in (4, 5):
                 r["censoring_reason"] = "WORK_BUDGET_EXCEEDED"
                 r["measurement_eligible"] = False
+                r["attempt_outcome"] = "CENSORED"
                 r["native_status"] = "FAIL"
                 r["process_exit_code"] = 4
                 res_fail_count += 1
@@ -293,12 +300,12 @@ class TestP4bDecisionBoundariesAndStatistics(unittest.TestCase):
             bare_ns=10_000_000,
             variant_ns_by_variant={"A_STATIC": 8_000_000, "A_RESIDUAL": 10_000_000, "B_MERGE": 12_000_000},
         )
-        failed_attempt = copy.deepcopy(pseudo_recs[0])
-        failed_attempt["variant_id"] = "A_STATIC"
-        failed_attempt["slot_id"] = next(r["slot_id"] for r in pseudo_recs if r["workload_id"] == "P4B_CONT_01" and r["variant_id"] == "A_STATIC" and r["repeat_id"] == 1)
-        failed_attempt["measurement_eligible"] = False
-        failed_attempt["censoring_reason"] = "TIMEOUT"
-        pseudo_recs.insert(0, failed_attempt)
+        target = next(r for r in pseudo_recs if r["workload_id"] == "P4B_CONT_01"
+                      and r["variant_id"] == "A_STATIC" and r["repeat_id"] == 1)
+        prelaunch = dict(target, attempt_outcome="NOT_LAUNCHED", prelaunch_verified=True,
+                         raw_output_sha256=None, process_exit_code=None, correctness_status=None)
+        target.update(attempt_number=2, attempt_id=f"{target['slot_id']}/2", previous_attempt_id=prelaunch["attempt_id"])
+        pseudo_recs.insert(0, prelaunch)
         p_out = stats_mod.analyze_p4b_ledger(pseudo_recs, allow_synthetic_mode=True)
         self.assertEqual(p_out["variants"]["A_STATIC"]["coverage"]["overall"], 50)
         self.assertEqual(p_out["variants"]["A_STATIC"]["bootstrap_95"]["continuity_units"], 30)

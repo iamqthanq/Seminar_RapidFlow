@@ -19,13 +19,13 @@ Fail-closed lifecycle rules:
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import json
 import math
 import os
 import random
 import resource
-import shutil
 import signal
 import subprocess
 import sys
@@ -33,7 +33,7 @@ import threading
 import time
 from collections import Counter, defaultdict
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
@@ -53,6 +53,10 @@ DEFAULT_BINARY_PATH = REPO_ROOT / "tests" / "native" / "rapidflow_apx_engines" /
 
 LEDGER_SCHEMA_VERSION = "p4b-ledger-v1.0"
 PROTOCOL_VERSION = "1.0.0"
+PROTOCOL_SHA256 = "70836770663c32a1a53e52e048be1dd8268fd2e3f02f66859737eef308c4acbb"
+NATIVE_SHA256 = "f02e6ff99c707407d88fa16ebd370e9c43d4359b8192247e394b95cd607d3d75"
+NATIVE_SOURCE_COMMIT = "97d8636b9567d53d3e083c48d61b46feb40ae540"
+SCHEDULE_SESSION = "P4B_PLANNED_SESSION_01"
 
 SCHEDULE_SEED = 380301
 BOOTSTRAP_SEED = 380302
@@ -120,11 +124,55 @@ class LedgerIntegrityError(ValueError):
 
 
 def canonical_json_bytes(obj: Any) -> bytes:
-    return (json.dumps(obj, indent=2, sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8")
+    return (json.dumps(obj, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False) + "\n").encode("utf-8")
 
 
 def sha256_bytes(raw: bytes) -> str:
     return hashlib.sha256(raw).hexdigest()
+
+
+def load_json_bytes(raw: bytes) -> Any:
+    """Reject duplicate keys and non-finite JSON, including exponent overflow."""
+    def object_pairs(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError(f"Duplicate JSON key: {key}")
+            result[key] = value
+        return result
+
+    def number(token):
+        result = float(token)
+        if not math.isfinite(result):
+            raise ValueError(f"Non-finite JSON number: {token}")
+        return result
+
+    return json.loads(raw.decode("utf-8"), object_pairs_hook=object_pairs,
+                      parse_float=number, parse_constant=number)
+
+
+def load_frozen_plan(protocol_path=DEFAULT_PROTOCOL_PATH, manifest_path=DEFAULT_MANIFEST_PATH,
+                     schedule_path=DEFAULT_SCHEDULE_PATH):
+    # An exact byte lock also rejects semantically ambiguous types and caller-supplied
+    # self-consistent changes to all three files. Changes require a new reviewed lock.
+    protocol_bytes = protocol_path.read_bytes()
+    if sha256_bytes(protocol_bytes) != PROTOCOL_SHA256:
+        raise ScheduleIntegrityError("PROTOCOL_HASH_MISMATCH")
+    protocol = load_json_bytes(protocol_bytes)
+    manifest_bytes = manifest_path.read_bytes()
+    schedule_bytes = schedule_path.read_bytes()
+    if sha256_bytes(manifest_bytes) != protocol["manifest_sha256"]:
+        raise ScheduleIntegrityError("MANIFEST_HASH_MISMATCH")
+    if sha256_bytes(schedule_bytes) != protocol["schedule_sha256"]:
+        raise ScheduleIntegrityError("SCHEDULE_HASH_MISMATCH")
+    manifest = load_json_bytes(manifest_bytes)
+    schedule = load_json_bytes(schedule_bytes)
+    validate_schedule(schedule, manifest)
+    for entry in manifest["workloads"]:
+        raw = (REPO_ROOT / entry["fixture_path"]).read_bytes()
+        if len(raw) != entry["fixture_size_bytes"] or sha256_bytes(raw) != entry["fixture_sha256"]:
+            raise ScheduleIntegrityError(f"FIXTURE_IDENTITY_MISMATCH: {entry['workload_id']}")
+    return protocol, manifest, schedule
 
 
 def verify_williams_sequences() -> Dict[str, Any]:
@@ -156,14 +204,26 @@ def verify_williams_sequences() -> Dict[str, Any]:
 def build_p4b_schedule(
     manifest_path: Path = DEFAULT_MANIFEST_PATH,
     out_schedule_path: Optional[Path] = DEFAULT_SCHEDULE_PATH,
-    session_id: str = "P4B_PLANNED_SESSION_01",
+    session_id: str = SCHEDULE_SESSION,
     schedule_seed: int = SCHEDULE_SEED,
     diag_seed: int = DIAGNOSTIC_SCHEDULE_SEED,
 ) -> Dict[str, Any]:
     """Build deterministic Williams 4x4 crossover schedule (1,000 primary + 200 warmup + 250 diagnostic = 1,450 slots)."""
+    manifest = load_json_bytes(manifest_path.read_bytes())
+    schedule = _generate_schedule(manifest, compute_sha256(manifest_path), session_id, schedule_seed, diag_seed)
+    if out_schedule_path is not None:
+        raw = canonical_json_bytes(schedule)
+        if out_schedule_path.exists():
+            if out_schedule_path.read_bytes() != raw:
+                raise ScheduleIntegrityError("Refusing to replace a different schedule")
+        else:
+            with out_schedule_path.open("xb") as stream:
+                stream.write(raw)
+    return schedule
+
+
+def _generate_schedule(manifest, manifest_sha, session_id, schedule_seed, diag_seed):
     verify_williams_sequences()
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    manifest_sha = compute_sha256(manifest_path)
     workloads = manifest.get("workloads", [])
     if len(workloads) != 50:
         raise ScheduleIntegrityError(f"Expected 50 workloads in manifest, found {len(workloads)}")
@@ -278,106 +338,29 @@ def build_p4b_schedule(
         "primary_slots": primary_slots,
         "diagnostic_slots": diagnostic_slots,
     }
-    validate_schedule(schedule, manifest)
-    if out_schedule_path is not None:
-        out_schedule_path.parent.mkdir(parents=True, exist_ok=True)
-        out_schedule_path.write_bytes(canonical_json_bytes(schedule))
     return schedule
 
 
 def validate_schedule(schedule: Mapping[str, Any], manifest: Mapping[str, Any]) -> Dict[str, Any]:
-    """Enforce exact slot counts, Williams crossover balance, unique IDs, and fixture hashes."""
-    w_by_id = {w["workload_id"]: w for w in manifest.get("workloads", [])}
-    if len(w_by_id) != 50:
-        raise ScheduleIntegrityError(f"Expected 50 manifest workloads, got {len(w_by_id)}")
-
-    primary = schedule.get("primary_slots", [])
-    warmup = schedule.get("warmup_slots", [])
-    diag = schedule.get("diagnostic_slots", [])
-    if len(primary) != 1000:
-        raise ScheduleIntegrityError(f"Expected 1000 primary slots, got {len(primary)}")
-    if len(warmup) != 200:
-        raise ScheduleIntegrityError(f"Expected 200 warmup slots, got {len(warmup)}")
-    if len(diag) != 250:
-        raise ScheduleIntegrityError(f"Expected 250 diagnostic slots, got {len(diag)}")
-
-    all_ids: set[str] = set()
-    for bucket_name, bucket in (("primary", primary), ("warmup", warmup), ("diagnostic", diag)):
-        for s in bucket:
-            sid = s.get("slot_id", "")
-            if not sid or sid in all_ids:
-                raise ScheduleIntegrityError(f"Duplicate or empty slot_id {sid!r} in {bucket_name}")
-            all_ids.add(sid)
-            wid = s.get("workload_id")
-            if wid not in w_by_id:
-                raise ScheduleIntegrityError(f"Unknown workload_id {wid!r} in slot {sid}")
-            if s.get("workload_sha256") != w_by_id[wid]["fixture_sha256"]:
-                raise ScheduleIntegrityError(f"Hash mismatch in slot {sid} for {wid}")
-            if s.get("variant_id") not in ALL_VARIANTS:
-                raise ScheduleIntegrityError(f"Unknown variant {s.get('variant_id')!r} in slot {sid}")
-
-    var_counts: Counter[str] = Counter()
-    wl_counts: Counter[str] = Counter()
-    cell_counts: Counter[Tuple[str, str]] = Counter()
-    pos_counts: Dict[str, Counter[int]] = {v: Counter() for v in PRIMARY_VARIANTS}
-    first4_seqs: Dict[Tuple[str, int], str] = {}
-    rep5_seqs: Dict[str, str] = {}
-
-    for s in primary:
-        if s.get("slot_purpose") != "primary":
-            raise ScheduleIntegrityError(f"Unexpected slot_purpose in primary list: {s.get('slot_purpose')}")
-        v = s["variant_id"]
-        if v not in PRIMARY_VARIANTS:
-            raise ScheduleIntegrityError(f"Non-primary variant {v!r} in primary slot list")
-        w = s["workload_id"]
-        r = s["repeat_id"]
-        pos = s["execution_position"]
-        var_counts[v] += 1
-        wl_counts[w] += 1
-        cell_counts[(w, v)] += 1
-        pos_counts[v][pos] += 1
-        if 1 <= r <= 4:
-            first4_seqs[(w, r)] = s["sequence_id"]
-        elif r == 5:
-            rep5_seqs[w] = s["sequence_id"]
-        else:
-            raise ScheduleIntegrityError(f"Invalid repeat_id {r} in primary slot {s['slot_id']}")
-
-    for v in PRIMARY_VARIANTS:
-        if var_counts[v] != 250:
-            raise ScheduleIntegrityError(f"Variant {v} has {var_counts[v]} primary slots != 250")
-    for w in w_by_id:
-        if wl_counts[w] != 20:
-            raise ScheduleIntegrityError(f"Workload {w} has {wl_counts[w]} primary slots != 20")
-        for v in PRIMARY_VARIANTS:
-            if cell_counts[(w, v)] != 5:
-                raise ScheduleIntegrityError(f"Pair ({w},{v}) has {cell_counts[(w, v)]} slots != 5")
-        if sorted(first4_seqs[(w, r)] for r in range(1, 5)) != ["S1", "S2", "S3", "S4"]:
-            raise ScheduleIntegrityError(f"Reps 1..4 for {w} do not cover S1..S4 once each")
-
-    rep5_dist = Counter(rep5_seqs.values())
-    if sorted(rep5_dist.values()) != [12, 12, 13, 13]:
-        raise ScheduleIntegrityError(f"Rep 5 sequence balance invalid: {dict(rep5_dist)}")
-
-    for v, pc in pos_counts.items():
-        vals = [pc[p] for p in range(4)]
-        if sum(vals) != 250 or max(vals) - min(vals) > 1:
-            raise ScheduleIntegrityError(f"Global position imbalance for {v}: {vals}")
-
-    # Diagnostic checks: B_BUFFER allowed strictly in diagnostic, excluded from primary
-    diag_vars = Counter(s["variant_id"] for s in diag)
-    for v in DIAG_VARIANTS:
-        if diag_vars[v] != 50:
-            raise ScheduleIntegrityError(f"Diagnostic variant {v} count {diag_vars[v]} != 50")
-
+    # Replay assignment with the registered RNG seeds. This checks local and
+    # global order, positions, purpose and every slot, not only aggregate totals.
+    expected = _generate_schedule(manifest, sha256_bytes(canonical_json_bytes(manifest)),
+                                  SCHEDULE_SESSION, SCHEDULE_SEED, DIAGNOSTIC_SCHEDULE_SEED)
+    if canonical_json_bytes(schedule) != canonical_json_bytes(expected):
+        for kind in ("warmup_slots", "primary_slots", "diagnostic_slots"):
+            if canonical_json_bytes(schedule.get(kind)) != canonical_json_bytes(expected[kind]):
+                raise ScheduleIntegrityError(f"Exact frozen schedule mismatch: {kind}")
+        raise ScheduleIntegrityError("Frozen schedule metadata mismatch")
+    primary = expected["primary_slots"]
     return {
         "valid": True,
-        "primary_slots": len(primary),
-        "warmup_slots": len(warmup),
-        "diagnostic_slots": len(diag),
-        "total_slots": len(all_ids),
-        "rep5_sequence_counts": dict(rep5_dist),
-        "position_counts_by_variant": {v: dict(pos_counts[v]) for v in PRIMARY_VARIANTS},
+        **expected["planned_counts"],
+        "rep5_sequence_counts": dict(Counter(s["sequence_id"] for s in primary
+                                              if s["repeat_id"] == 5 and s["execution_position"] == 0)),
+        "position_counts_by_variant": {
+            variant: dict(Counter(s["execution_position"] for s in primary if s["variant_id"] == variant))
+            for variant in PRIMARY_VARIANTS
+        },
     }
 
 
@@ -405,7 +388,7 @@ def validate_measurement_output_schema(
     if not isinstance(res_data, dict):
         return False, "Measurement output root is not a JSON object", {}
 
-    if res_data.get("measurement_schema_version") != 1 or isinstance(res_data.get("measurement_schema_version"), bool):
+    if type(res_data.get("measurement_schema_version")) is not int or res_data["measurement_schema_version"] != 1:
         return False, f"Invalid or missing measurement_schema_version: {res_data.get('measurement_schema_version')!r}", {}
 
     obs_purpose = res_data.get("execution_purpose")
@@ -452,7 +435,9 @@ def validate_measurement_output_schema(
     if is_success and workload.get("updates") and mt["streaming_loop_wall_ns"] <= 0:
         return False, f"Successful nonempty workload must have positive streaming_loop_wall_ns, got {mt['streaming_loop_wall_ns']}", {}
 
-    if "child_vm_hwm_kib" in mt or "child_vm_hwm_bytes" in mt:
+    if is_success or "child_vm_hwm_kib" in mt or "child_vm_hwm_bytes" in mt:
+        if mt.get("child_rss_method") != "linux_proc_self_status_vmhwm":
+            return False, "Invalid native child VmHWM method", {}
         kib = mt.get("child_vm_hwm_kib")
         byt = mt.get("child_vm_hwm_bytes")
         if (
@@ -462,7 +447,9 @@ def validate_measurement_output_schema(
             return False, f"Invalid macro_timing VmHWM fields: kib={kib!r}, bytes={byt!r}", {}
 
     # Ensure deep diagnostic fields were omitted from step objects in measurement mode
-    for idx, step in enumerate(res_data.get("steps", [])):
+    if not isinstance(res_data.get("steps"), list):
+        return False, "Measurement steps must be an array", {}
+    for idx, step in enumerate(res_data["steps"]):
         if isinstance(step, dict):
             if "graph_state" in step or "codec_state" in step:
                 return False, f"Step {idx} leaked deep diagnostics ('graph_state'/'codec_state') in {expected_purpose} mode", {}
@@ -508,6 +495,8 @@ def execute_p4b_native_slot(
     as_limit_mib: int = CANONICAL_AS_LIMIT_MIB,
     max_work: int = CANONICAL_MAX_WORK_CAP,
     max_nlf_memory_mib: int = CANONICAL_MAX_NLF_MEMORY_MIB,
+    expected_binary_sha256: Optional[str] = None,
+    expected_fixture_sha256: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Execute one P4b slot on the frozen fixture bytes directly using POSIX wait4 rusage
@@ -521,7 +510,19 @@ def execute_p4b_native_slot(
     vspec = ALL_VARIANTS[variant_id]
     fixture_bytes = fixture_path.read_bytes()
     fixture_sha = sha256_bytes(fixture_bytes)
-    wl = workload_data if workload_data is not None else json.loads(fixture_bytes.decode("utf-8"))
+    if expected_fixture_sha256 is not None and fixture_sha != expected_fixture_sha256:
+        raise LedgerIntegrityError("WORKLOAD_HASH_MISMATCH")
+    binary_sha = compute_sha256(binary_path)
+    if expected_binary_sha256 is not None and binary_sha != expected_binary_sha256:
+        raise LedgerIntegrityError("BINARY_HASH_MISMATCH")
+    if type(timeout_s) not in (int, float) or not math.isfinite(timeout_s) or not 0 < timeout_s <= 60:
+        raise ValueError("Invalid wall timeout")
+    for limit in (as_limit_mib, max_work, max_nlf_memory_mib):
+        if type(limit) is not int or limit <= 0:
+            raise ValueError("Resource limits must be positive integers")
+    wl = load_json_bytes(fixture_bytes)
+    if workload_data is not None and canonical_json_bytes(wl) != canonical_json_bytes(workload_data):
+        raise LedgerIntegrityError("WORKLOAD_DATA_MISMATCH")
 
     cmd = [
         str(binary_path),
@@ -542,6 +543,10 @@ def execute_p4b_native_slot(
         resource.setrlimit(resource.RLIMIT_AS, (as_bytes, as_bytes))
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    # Claim a fresh path before launch. An interrupted attempt keeps its partial
+    # output (or this empty file), which cannot become a later attempt's result.
+    with output_path.open("xb"):
+        pass
     t0_ns = time.perf_counter_ns()
     proc = subprocess.Popen(
         cmd,
@@ -564,25 +569,38 @@ def execute_p4b_native_slot(
     t_out.start()
     t_err.start()
 
-    deadline = time.monotonic() + timeout_s
+    deadline = t0_ns + int(timeout_s * 1_000_000_000)
     timed_out = False
     rusage = None
     wait_status = 0
-    while True:
-        pid_done, status, ru = os.wait4(proc.pid, os.WNOHANG)
-        if pid_done != 0:
-            wait_status = status
-            rusage = ru
-            break
-        if time.monotonic() >= deadline:
-            timed_out = True
-            try:
-                os.killpg(proc.pid, signal.SIGKILL)
-            except OSError:
-                pass
-            _, wait_status, rusage = os.wait4(proc.pid, 0)
-            break
-        time.sleep(0.002)
+    try:
+        while True:
+            pid_done, status, ru = os.wait4(proc.pid, os.WNOHANG)
+            if pid_done != 0:
+                wait_status = status
+                rusage = ru
+                break
+            if time.perf_counter_ns() >= deadline:
+                timed_out = True
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                _, wait_status, rusage = os.wait4(proc.pid, 0)
+                break
+            time.sleep(0.002)
+    except BaseException:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        _, status, _ = os.wait4(proc.pid, 0)
+        proc.returncode = os.waitstatus_to_exitcode(status)
+        for thread in (t_out, t_err):
+            thread.join()
+        proc.stdout.close()
+        proc.stderr.close()
+        raise
 
     t1_ns = time.perf_counter_ns()
     t_out.join(timeout=2.0)
@@ -616,15 +634,18 @@ def execute_p4b_native_slot(
     out_data: Optional[Dict[str, Any]] = None
     if output_path.is_file():
         try:
-            out_data = json.loads(output_path.read_text(encoding="utf-8"))
-        except Exception:
+            decoded = load_json_bytes(output_path.read_bytes())
+            if isinstance(decoded, dict):
+                out_data = decoded
+        except (ValueError, UnicodeError):
             out_data = None
 
     child_mt = (out_data or {}).get("macro_timing") if isinstance((out_data or {}).get("macro_timing"), dict) else {}
     vmhwm_kib = child_mt.get("child_vm_hwm_kib")
     vmhwm_bytes = child_mt.get("child_vm_hwm_bytes")
     if (
-        type(vmhwm_kib) is int and not isinstance(vmhwm_kib, bool) and vmhwm_kib > 0
+        child_mt.get("child_rss_method") == "linux_proc_self_status_vmhwm"
+        and type(vmhwm_kib) is int and vmhwm_kib > 0
         and type(vmhwm_bytes) is int and not isinstance(vmhwm_bytes, bool) and vmhwm_bytes == vmhwm_kib * 1024
     ):
         peak_rss_kib: Optional[int] = vmhwm_kib
@@ -637,18 +658,26 @@ def execute_p4b_native_slot(
 
     err_msg = (out_data or {}).get("error_message", "")
     err_cat = (out_data or {}).get("error_category", "NONE")
-    if timed_out or term_signal == signal.SIGALRM:
+    if compute_sha256(binary_path) != binary_sha or compute_sha256(fixture_path) != fixture_sha:
+        censor_class = "PROVENANCE_ERROR"
+    elif timed_out or term_signal == signal.SIGALRM:
         censor_class = "TIMEOUT"
-    elif exit_code == 4 or err_cat == "WORK_BUDGET_EXCEEDED":
+    elif exit_code == 4 and err_cat == "WORK_BUDGET_EXCEEDED":
         censor_class = "WORK_BUDGET_EXCEEDED"
-    elif "std::bad_alloc" in err_msg or "std::bad_alloc" in raw_stderr or err_cat == "RESOURCE_LIMIT_ERROR":
+    elif exit_code != 0 and ("std::bad_alloc" in str(err_msg) or "std::bad_alloc" in raw_stderr):
         censor_class = "MEMORY_LIMIT_FAILURE"
+    elif err_cat == "RESOURCE_LIMIT_ERROR":
+        censor_class = "RESOURCE_UNAVAILABLE"
     elif (out_data or {}).get("configuration_status") == "REQUESTED_CONFIGURATION_UNAVAILABLE":
         censor_class = "CONFIGURATION_UNAVAILABLE"
+    elif term_signal in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP, signal.SIGKILL):
+        censor_class = "ENVIRONMENT_INTERRUPTION"
     elif term_signal is not None:
-        censor_class = "RESOURCE_UNAVAILABLE"
-    elif exit_code != 0 or out_data is None:
-        censor_class = "SCHEMA_ERROR"
+        censor_class = "EXECUTION_FAILURE"
+    elif out_data is None:
+        censor_class = "MISSING_RESULT" if output_path.stat().st_size == 0 else "SCHEMA_ERROR"
+    elif exit_code != 0:
+        censor_class = "EXECUTION_FAILURE"
     else:
         ok, diag, cfg_meta = (
             validate_measurement_output_schema(
@@ -691,6 +720,8 @@ def execute_p4b_native_slot(
         "resource_measurement_method": rss_method,
         "wait4_ru_maxrss_bytes": wait4_rss_bytes,
         "fixture_sha256": fixture_sha,
+        "binary_sha256": binary_sha,
+        "command": cmd,
         "output_path": str(output_path),
         "output_size_bytes": output_path.stat().st_size if output_path.is_file() else 0,
         "output_sha256": compute_sha256(output_path) if output_path.is_file() else None,
@@ -700,57 +731,248 @@ def execute_p4b_native_slot(
     }
 
 
-def resolve_p4b_ledger_records(records: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
-    """
-    Resolve raw execution ledger fail-closed without silent overwrites:
-    preserves full attempt history and rejects any duplicate conflicting completed attempt
-    on the same slot_id.
-    """
-    attempts_by_slot: Dict[str, List[Mapping[str, Any]]] = defaultdict(list)
-    canonical_slots: Dict[str, Mapping[str, Any]] = {}
-    duplicate_attempts: Dict[str, List[Mapping[str, Any]]] = defaultdict(list)
+ATTEMPT_OUTCOMES = frozenset({
+    "COMPLETED", "CENSORED", "FAILED", "INTERRUPTED", "INVALID", "NOT_LAUNCHED", "INELIGIBLE",
+})
+RESOURCE_CENSORS = frozenset({
+    "TIMEOUT", "WORK_BUDGET_EXCEEDED", "MEMORY_LIMIT_FAILURE",
+    "RESOURCE_UNAVAILABLE", "CONFIGURATION_UNAVAILABLE",
+})
+EVIDENCE_ERROR_REASONS = frozenset({
+    "SCHEMA_ERROR", "PROVENANCE_ERROR", "MEASUREMENT_ERROR", "MISSING_RESULT",
+    "MEASUREMENT_ERROR_MISSING_RSS", "ENVIRONMENT_INTERRUPTION", "EXECUTION_FAILURE",
+})
+SYNTHETIC_KIND = "SYNTHETIC_VALIDATION"
+SYNTHETIC_EXPERIMENT = "P4B_R1_SYNTHETIC"
+SYNTHETIC_BINARY = sha256_bytes(b"P4b synthetic binary placeholder, never native evidence")
+SYNTHETIC_SOURCE = hashlib.sha1(b"P4b synthetic source placeholder, never a Git revision").hexdigest()
 
-    for idx, rec in enumerate(records):
-        if not isinstance(rec, Mapping):
-            raise LedgerIntegrityError(f"Record index {idx} is not a dict")
-        sid = rec.get("slot_id")
-        if not isinstance(sid, str) or not sid:
-            raise LedgerIntegrityError(f"Record index {idx} missing valid slot_id")
-        if rec.get("ledger_schema_version") != LEDGER_SCHEMA_VERSION:
-            raise LedgerIntegrityError(f"Invalid ledger_schema_version on {sid}: {rec.get('ledger_schema_version')!r}")
-        attempts_by_slot[sid].append(rec)
 
-    for sid, group in attempts_by_slot.items():
-        if len(group) > 1:
-            duplicate_attempts[sid] = list(group)
-            valid_or_primary = [g for g in group if g.get("measurement_eligible") is True]
-            if len(valid_or_primary) > 1:
-                raise LedgerIntegrityError(
-                    f"Ambiguous duplicate eligible attempts for slot {sid}: silent overwrite/cherry-pick forbidden"
-                )
-        canonical_slots[sid] = group[-1] if group[-1].get("measurement_eligible") is True else next(
-            (g for g in group if g.get("measurement_eligible") is True), group[0]
-        )
-
+def slot_identity(plan, protocol, *, experiment_id, evidence_kind, binary_sha, source_revision):
+    """Build expected identity from a validated plan and experiment-level bindings."""
+    seed_key = "diagnostic_schedule_seed" if plan["slot_purpose"] == "diagnostic" else "schedule_seed"
+    spec = ALL_VARIANTS[plan["variant_id"]]
     return {
-        "canonical_slots": canonical_slots,
-        "all_attempts_by_slot": dict(attempts_by_slot),
-        "duplicate_attempts": dict(duplicate_attempts),
-        "total_raw_records": len(records),
+        **plan, "experiment_id": experiment_id, "evidence_kind": evidence_kind,
+        "schedule_seed": protocol["seeds"][seed_key], "protocol_sha256": PROTOCOL_SHA256,
+        "manifest_sha256": protocol["manifest_sha256"], "schedule_sha256": protocol["schedule_sha256"],
+        "binary_sha256": binary_sha, "source_revision": source_revision, "engine": spec["engine"],
+        "requested_nlf_mode": spec["nlf_mode"], "requested_neighbor_mode": spec["neighbor_mode"],
+        "ledger_schema_version": LEDGER_SCHEMA_VERSION,
     }
 
 
+def validate_slot_identity(record, expected):
+    for key, value in expected.items():
+        if type(record.get(key)) is not type(value) or record[key] != value:
+            code = "SYNTHETIC_EVIDENCE_REJECTED" if key == "evidence_kind" else "SLOT_IDENTITY_MISMATCH"
+            raise LedgerIntegrityError(f"{code}: {expected['slot_id']} field {key}")
+
+
+def resolve_p4b_ledger_records(records: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
+    """Validate complete attempt lineage before selecting an observation."""
+    attempts = defaultdict(list)
+    seen_ids = set()
+    canonical = {}
+    for record in records:
+        if not isinstance(record, Mapping) or record.get("ledger_schema_version") != LEDGER_SCHEMA_VERSION:
+            raise LedgerIntegrityError("INVALID_ATTEMPT_SCHEMA")
+        sid, aid, number = (record.get(k) for k in ("slot_id", "attempt_id", "attempt_number"))
+        if not isinstance(sid, str) or not sid or type(number) is not int or number < 1:
+            raise LedgerIntegrityError("INVALID_ATTEMPT_IDENTITY")
+        if aid != f"{sid}/{number}" or aid in seen_ids:
+            raise LedgerIntegrityError(f"DUPLICATE_OR_INVALID_ATTEMPT_ID: {sid}")
+        history = attempts[sid]
+        if number != len(history) + 1:
+            raise LedgerIntegrityError(f"MISSING_OR_DISORDERED_ATTEMPT: {sid}")
+        outcome = record.get("attempt_outcome")
+        if outcome not in ATTEMPT_OUTCOMES:
+            raise LedgerIntegrityError(f"INVALID_ATTEMPT_OUTCOME: {sid}")
+        if number == 1:
+            if record.get("previous_attempt_id") is not None:
+                raise LedgerIntegrityError(f"INVALID_FIRST_ATTEMPT_PARENT: {sid}")
+        else:
+            previous = history[-1]
+            # The candidate registers no retry of an execution. A proven
+            # prelaunch cancellation can be followed by the first execution.
+            if (record.get("previous_attempt_id") != previous["attempt_id"]
+                    or previous["attempt_outcome"] != "NOT_LAUNCHED"
+                    or previous.get("prelaunch_verified") is not True
+                    or previous.get("raw_output_sha256") is not None
+                    or previous.get("process_exit_code") is not None
+                    or previous.get("correctness_status") is not None):
+                raise LedgerIntegrityError(f"UNREGISTERED_RETRY: {sid}")
+        if outcome == "NOT_LAUNCHED" and (
+            record.get("raw_output_sha256") is not None or record.get("process_exit_code") is not None
+            or record.get("correctness_status") is not None
+        ):
+            raise LedgerIntegrityError(f"CONTRADICTORY_PRELAUNCH_EVIDENCE: {sid}")
+        history.append(record)
+        seen_ids.add(aid)
+        canonical[sid] = record
+    return {"canonical_slots": canonical, "all_attempts_by_slot": dict(attempts),
+            "duplicate_attempts": {sid: group for sid, group in attempts.items() if len(group) > 1},
+            "total_raw_records": len(records)}
+
+
+def ordered_planned_slots(schedule):
+    """Interleave warmups immediately before each first-repetition block."""
+    warmups = defaultdict(list)
+    for slot in schedule["warmup_slots"]:
+        warmups[slot["workload_id"]].append(slot)
+    for slot in schedule["primary_slots"]:
+        if slot["repeat_id"] == 1 and slot["execution_position"] == 0:
+            yield from warmups[slot["workload_id"]]
+        yield slot
+    yield from schedule["diagnostic_slots"]
+
+
+def verify_raw_artifact(path, digest):
+    if not isinstance(digest, str) or not is_valid_hex64(digest):
+        raise LedgerIntegrityError("MISSING_RAW_EVIDENCE_HASH")
+    if not path.is_file() or compute_sha256(path) != digest:
+        raise LedgerIntegrityError(f"RAW_EVIDENCE_MISMATCH: {path.name}")
+
+
+def validate_native_measurement_evidence(record, expected, workload, raw_path,
+                                         reference_path, reference_sha256):
+    """Bind a real measurement's bytes and semantics to a same-variant correctness reference.
+
+    The reviewed reference digest is a separate input, not taken from the
+    measurement row. This validates a record without authorizing execution or
+    certifying that a reference was issued by a future reviewed experiment.
+    """
+    validate_slot_identity(record, expected)
+    if expected["evidence_kind"] != "CONFIRMATORY_MEASUREMENT" or record.get("synthetic_test_fixture") is not False:
+        raise LedgerIntegrityError("INVALID_REAL_EVIDENCE_ORIGIN")
+    verify_raw_artifact(raw_path, record.get("raw_output_sha256"))
+    verify_raw_artifact(reference_path, reference_sha256)
+    native = load_json_bytes(raw_path.read_bytes())
+    reference = load_json_bytes(reference_path.read_bytes())
+    if not isinstance(reference, dict) or reference.get("execution_purpose") != "correctness":
+        raise LedgerIntegrityError("INVALID_CORRECTNESS_REFERENCE")
+    if type(record.get("process_exit_code")) is not int or record["process_exit_code"] != 0 or record.get("process_signal") is not None:
+        raise LedgerIntegrityError("NON_SUCCESSFUL_NATIVE_MEASUREMENT")
+    spec = ALL_VARIANTS[expected["variant_id"]]
+    with_context = dict(workload=workload, is_success=True, expected_raw_input_sha256=expected["workload_sha256"])
+    ok, reason = validate_native_output_schema(reference, spec["engine"], workload["case_id"], **with_context)
+    if not ok:
+        raise LedgerIntegrityError(f"INVALID_CORRECTNESS_REFERENCE: {reason}")
+    ok, reason, _ = validate_nlf_configuration(
+        spec["engine"], spec["nlf_mode"], reference, True, requested_neighbor_mode=spec["neighbor_mode"],
+        native_exit_code=0,
+    )
+    if not ok:
+        raise LedgerIntegrityError(f"INVALID_REFERENCE_VARIANT: {reason}")
+    ok, reason, _ = validate_measurement_output_schema(
+        native, spec["engine"], workload["case_id"], expected["execution_purpose"],
+        spec["nlf_mode"], spec["neighbor_mode"], workload, expected["workload_sha256"],
+        True, native_exit_code=0,
+    )
+    if not ok:
+        raise LedgerIntegrityError(f"INVALID_MEASUREMENT_SCHEMA: {reason}")
+    for key in ("status", "execution", "query_info", "work_budget", "counters"):
+        if canonical_json_bytes(native.get(key)) != canonical_json_bytes(reference.get(key)):
+            raise LedgerIntegrityError(f"MEASUREMENT_SEMANTIC_MISMATCH: {key}")
+    for index, (actual, wanted) in enumerate(zip(native["steps"], reference["steps"], strict=True)):
+        for key in ("step_index", "status", "commit_status", "op", "u", "v", "label",
+                    "entered_tuples", "exited_tuples", "step_counters"):
+            if canonical_json_bytes(actual.get(key)) != canonical_json_bytes(wanted.get(key)):
+                raise LedgerIntegrityError(f"MEASUREMENT_SEMANTIC_MISMATCH: step {index} field {key}")
+    timing = native["macro_timing"]
+    for key, value in {
+        "streaming_loop_wall_ns": timing["streaming_loop_wall_ns"],
+        "initialization_wall_ns": timing["initialization_wall_ns"],
+        "peak_rss_bytes": timing["child_vm_hwm_bytes"],
+        "peak_rss_original_value": timing["child_vm_hwm_kib"],
+        "resource_measurement_method": "linux_proc_self_status_vmhwm",
+        "peak_rss_original_unit": "KiB",
+    }.items():
+        if type(record.get(key)) is not type(value) or record[key] != value:
+            raise LedgerIntegrityError(f"MEASUREMENT_VALUE_NOT_BOUND_TO_RAW_EVIDENCE: {key}")
+
+
+def exercise_synthetic_journal(root, simulate, *, stop_after=None):
+    """Exercise durable execution/resume using a synthetic backend only.
+
+    A slot with START and no FINISH was interrupted. The existing protocol
+    does not register a retry or order recovery for such a session, so resume
+    fails closed at that slot and retains partial artifacts for audit.
+    """
+    protocol, _, schedule = load_frozen_plan()
+    plans = list(ordered_planned_slots(schedule))
+    root.mkdir(parents=True, exist_ok=True)
+
+    def identity(plan):
+        return slot_identity(plan, protocol, experiment_id=SYNTHETIC_EXPERIMENT, evidence_kind=SYNTHETIC_KIND,
+                             binary_sha=SYNTHETIC_BINARY, source_revision=SYNTHETIC_SOURCE)
+
+    with (root / "synthetic-attempts.jsonl").open("a+b") as log:
+        try:
+            fcntl.flock(log, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise LedgerIntegrityError("JOURNAL_ALREADY_IN_USE") from error
+
+        def append(row):
+            log.write((json.dumps(row, sort_keys=True, allow_nan=False) + "\n").encode("utf-8"))
+            log.flush()
+            os.fsync(log.fileno())
+
+        log.seek(0)
+        terminal = []
+        pending = None
+        for line in log:
+            if not line.endswith(b"\n"):
+                raise LedgerIntegrityError("TORN_JOURNAL_RECORD")
+            row = load_json_bytes(line)
+            if not isinstance(row, dict) or len(terminal) >= len(plans):
+                raise LedgerIntegrityError("UNPLANNED_JOURNAL_RECORD")
+            expected = identity(plans[len(terminal)])
+            validate_slot_identity(row, expected)
+            if row.get("attempt_number") != 1 or type(row["attempt_number"]) is not int or row.get("attempt_id") != f"{expected['slot_id']}/1":
+                raise LedgerIntegrityError("INVALID_JOURNAL_ATTEMPT")
+            if row.get("journal_event") == "START" and pending is None:
+                pending = row
+            elif row.get("journal_event") == "FINISH" and pending is not None:
+                if row.get("attempt_outcome") not in ("COMPLETED", "FAILED", "CENSORED", "INVALID", "INELIGIBLE"):
+                    raise LedgerIntegrityError("INVALID_JOURNAL_TERMINAL_STATE")
+                verify_raw_artifact(root / f"{expected['slot_id']}.json", row.get("raw_output_sha256"))
+                pending = None
+                terminal.append(row)
+            else:
+                raise LedgerIntegrityError("JOURNAL_TRANSITION_VIOLATION")
+        if pending is not None:
+            return {"state": "INTERRUPTED", "slot_id": pending["slot_id"], "completed_records": terminal}
+        limit = len(plans) if stop_after is None else min(stop_after, len(plans))
+        for plan in plans[len(terminal):limit]:
+            expected = identity(plan)
+            start = dict(expected, attempt_number=1, attempt_id=f"{plan['slot_id']}/1", journal_event="START")
+            append(start)
+            payload = simulate(plan)
+            if payload.get("evidence_kind") != SYNTHETIC_KIND:
+                raise LedgerIntegrityError("NON_SYNTHETIC_JOURNAL_BACKEND")
+            outcome = payload.get("attempt_outcome")
+            if outcome not in ("COMPLETED", "FAILED", "CENSORED", "INVALID", "INELIGIBLE"):
+                raise LedgerIntegrityError("INVALID_JOURNAL_TERMINAL_STATE")
+            raw = canonical_json_bytes(payload)
+            with (root / f"{plan['slot_id']}.json").open("xb") as artifact:
+                artifact.write(raw)
+                artifact.flush()
+                os.fsync(artifact.fileno())
+            row = dict(start, journal_event="FINISH", raw_output_sha256=sha256_bytes(raw),
+                       attempt_outcome=outcome)
+            append(row)
+            terminal.append(row)
+        return {"state": "FINISHED" if len(terminal) == len(plans) else "PAUSED", "completed_records": terminal}
+
+
 def check_execution_authorization(protocol: Mapping[str, Any]) -> Tuple[bool, str]:
-    """Fail-closed authorization gate blocking confirmatory execution during P4b-3A."""
-    state = protocol.get("approval_state")
-    authorized = protocol.get("execution_authorized")
-    if state != "MEASUREMENT_AUTHORIZED" or authorized is not True:
-        return (
-            False,
-            f"MEASUREMENT_NOT_AUTHORIZED: approval_state={state!r}, execution_authorized={authorized!r}. "
-            "P4b-3B execution requires independent review and Coordinator authorization.",
-        )
-    return True, ""
+    """R1 contains no reviewed production authorization, irrespective of local input."""
+    return False, (
+        f"MEASUREMENT_NOT_AUTHORIZED: approval_state={protocol.get('approval_state')!r}, "
+        f"execution_authorized={protocol.get('execution_authorized')!r}. "
+        "P4b-3B requires separately reviewed authorization and evidence bindings."
+    )
 
 
 def run_dry_run_inspection(
@@ -760,29 +982,19 @@ def run_dry_run_inspection(
     binary_path: Path,
 ) -> Dict[str, Any]:
     """Verify and print planned execution inventory without spawning any benchmark run."""
-    protocol = json.loads(protocol_path.read_text(encoding="utf-8"))
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    schedule = json.loads(schedule_path.read_text(encoding="utf-8"))
-
-    proto_sha = compute_sha256(protocol_path)
-    man_sha = compute_sha256(manifest_path)
-    sched_sha = compute_sha256(schedule_path)
+    protocol, manifest, schedule = load_frozen_plan(protocol_path, manifest_path, schedule_path)
     bin_sha = compute_sha256(binary_path) if binary_path.is_file() else "MISSING_BINARY"
-
-    if protocol.get("manifest_sha256") != man_sha:
-        raise ValueError(f"Protocol manifest_sha256 mismatch: {protocol.get('manifest_sha256')} != {man_sha}")
-    if protocol.get("schedule_sha256") != sched_sha:
-        raise ValueError(f"Protocol schedule_sha256 mismatch: {protocol.get('schedule_sha256')} != {sched_sha}")
+    if bin_sha != NATIVE_SHA256:
+        raise LedgerIntegrityError("BINARY_HASH_MISMATCH")
     val_res = validate_schedule(schedule, manifest)
-
     return {
         "dry_run": True,
         "launched_subprocess_count": 0,
         "approval_state": protocol.get("approval_state"),
         "execution_authorized": protocol.get("execution_authorized"),
-        "protocol_sha256": proto_sha,
-        "manifest_sha256": man_sha,
-        "schedule_sha256": sched_sha,
+        "protocol_sha256": PROTOCOL_SHA256,
+        "manifest_sha256": protocol["manifest_sha256"],
+        "schedule_sha256": protocol["schedule_sha256"],
         "binary_path": str(binary_path),
         "binary_sha256": bin_sha,
         "planned_totals": schedule["planned_counts"],
@@ -805,18 +1017,13 @@ def main() -> None:
     parser.add_argument("--execute-diagnostic", action="store_true", help="Run diagnostic 250 slots (BLOCKED in P4b-3A)")
     args = parser.parse_args()
 
-    if args.build_schedule:
-        sched = build_p4b_schedule(args.manifest, args.schedule)
-        print(f"Generated verified schedule at {args.schedule}: {sched['planned_counts']}")
-        return
-
     if args.execute_primary or args.execute_diagnostic:
-        protocol = json.loads(args.protocol.read_text(encoding="utf-8"))
-        auth_ok, auth_msg = check_execution_authorization(protocol)
-        if not auth_ok:
-            print(f"ERROR: {auth_msg}", file=sys.stderr)
-            sys.exit(2)
-        print("Execution gate check passed (execution should be launched only under approved P4b-3B run).")
+        _, message = check_execution_authorization({})
+        parser.exit(2, f"{message}\n")
+
+    if args.build_schedule:
+        _, _, schedule = load_frozen_plan(args.protocol, args.manifest, args.schedule)
+        print(f"Verified frozen schedule at {args.schedule}: {schedule['planned_counts']}")
         return
 
     # Safe default or explicit --dry-run: never launches native benchmark measurements

@@ -162,16 +162,24 @@ class TestP4bMeasurementInfrastructure(unittest.TestCase):
             self.assertEqual(bad_cli.returncode, 1)
 
     def test_04_ledger_no_silent_overwrite_and_incomplete_history_preserved(self) -> None:
-        rec1 = {"slot_id": "PRM_X_R1_BARE", "ledger_schema_version": p4b_runner.LEDGER_SCHEMA_VERSION, "measurement_eligible": False}
-        rec2 = {"slot_id": "PRM_X_R1_BARE", "ledger_schema_version": p4b_runner.LEDGER_SCHEMA_VERSION, "measurement_eligible": True}
+        rec1 = {"slot_id": "PRM_X_R1_BARE", "ledger_schema_version": p4b_runner.LEDGER_SCHEMA_VERSION,
+                "attempt_id": "PRM_X_R1_BARE/1", "attempt_number": 1,
+                "attempt_outcome": "NOT_LAUNCHED", "prelaunch_verified": True}
+        rec2 = dict(rec1, attempt_id="PRM_X_R1_BARE/2", attempt_number=2,
+                    previous_attempt_id=rec1["attempt_id"], attempt_outcome="COMPLETED")
         res = p4b_runner.resolve_p4b_ledger_records([rec1, rec2])
-        self.assertEqual(len(res["all_attempts_by_slot"]["PRM_X_R1_BARE"]), 2)
-        self.assertTrue(res["canonical_slots"]["PRM_X_R1_BARE"]["measurement_eligible"])
-
-        # Two conflicting eligible runs for the same slot MUST fail closed (no cherry-picking fastest)
-        rec3 = {"slot_id": "PRM_X_R1_BARE", "ledger_schema_version": p4b_runner.LEDGER_SCHEMA_VERSION, "measurement_eligible": True}
-        with self.assertRaises(p4b_runner.LedgerIntegrityError):
-            p4b_runner.resolve_p4b_ledger_records([rec2, rec3])
+        self.assertEqual(res["all_attempts_by_slot"]["PRM_X_R1_BARE"], [rec1, rec2])
+        self.assertEqual(res["canonical_slots"]["PRM_X_R1_BARE"], rec2)
+        for history, reason in [
+            ([rec1, rec1], "DUPLICATE_OR_INVALID_ATTEMPT_ID"),
+            ([rec2], "MISSING_OR_DISORDERED_ATTEMPT"),
+            ([dict(rec1, attempt_outcome="FAILED", correctness_status="TUPLE_MISMATCH"), rec2], "UNREGISTERED_RETRY"),
+            ([dict(rec1, attempt_outcome="COMPLETED"), rec2], "UNREGISTERED_RETRY"),
+            ([dict(rec1, attempt_outcome="CENSORED"), rec2], "UNREGISTERED_RETRY"),
+            ([dict(rec1, raw_output_sha256="a" * 64), rec2], "CONTRADICTORY_PRELAUNCH_EVIDENCE"),
+        ]:
+            with self.subTest(reason=reason), self.assertRaisesRegex(p4b_runner.LedgerIntegrityError, reason):
+                p4b_runner.resolve_p4b_ledger_records(history)
 
     def test_05_wait4_per_child_peak_rss_independent_not_cumulative_and_diagnostic_mode(self) -> None:
         """Verify wait4 reports independent per-child RSS (small child after large child < large child) and diagnostic mode."""
