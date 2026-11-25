@@ -176,13 +176,13 @@ def validate_replay(record, variant, workload, snapshots, codecs, oracle, contro
     return "CORRECTNESS_NOT_FULLY_CERTIFIED", completed_prefix
 
 
-def git_identity():
+def git_identity(*, expected_native_commit=p4b.NATIVE_SOURCE_COMMIT, allow_candidate=False):
     def git(*args):
         return subprocess.check_output(["git", *args], cwd=p4b.REPO_ROOT, text=True).strip()
 
-    if git("status", "--porcelain", "--untracked-files=all"):
+    if not allow_candidate and git("status", "--porcelain", "--untracked-files=all"):
         raise ValueError("PRE-R09 requires a clean evidence revision")
-    if git("diff", "--name-only", p4b.NATIVE_SOURCE_COMMIT, "HEAD", "--", "extensions", "tests/native"):
+    if not allow_candidate and git("diff", "--name-only", expected_native_commit, "HEAD", "--", "extensions", "tests/native"):
         raise ValueError("Native source differs from the locked binary build revision")
     upstream = "baselines/rapidflow/source"
     if (git("-C", upstream, "rev-parse", "HEAD") != p4b.EXPECTED_UPSTREAM_COMMIT
@@ -191,11 +191,21 @@ def git_identity():
     return git("rev-parse", "HEAD")
 
 
-def replay(binary, output_dir):
+def replay(binary, output_dir, *, candidate_mode=False):
     protocol, manifest, _ = p4b.load_frozen_plan()
-    if p4b.compute_sha256(binary) != p4b.NATIVE_SHA256:
-        raise ValueError("PRE-R09 binary hash does not match the frozen build")
-    revision = git_identity()
+    actual_binary_sha = p4b.compute_sha256(binary)
+    if candidate_mode:
+        if not binary.is_file() or actual_binary_sha == p4b.HISTORICAL_R1_NATIVE_SHA256:
+            raise ValueError("Candidate replay requires the rebuilt candidate native binary")
+        expected_binary_sha = actual_binary_sha
+        revision = git_identity(allow_candidate=True)
+        native_source_commit = p4b.NATIVE_SOURCE_COMMIT if actual_binary_sha == p4b.NATIVE_SHA256 else revision
+    else:
+        expected_binary_sha = p4b.NATIVE_SHA256
+        if actual_binary_sha != expected_binary_sha:
+            raise ValueError("PRE-R09 binary hash does not match the frozen build")
+        revision = git_identity()
+        native_source_commit = p4b.NATIVE_SOURCE_COMMIT
     output_dir.mkdir()
     rows = []
     workload_rows = []
@@ -219,7 +229,7 @@ def replay(binary, output_dir):
                 as_limit_mib=protocol["resource_policy"]["address_space_limit_mib"],
                 max_work=protocol["resource_policy"]["logical_work_cap"],
                 max_nlf_memory_mib=protocol["resource_policy"]["max_nlf_memory_mib"],
-                expected_binary_sha256=p4b.NATIVE_SHA256, expected_fixture_sha256=entry["fixture_sha256"],
+                expected_binary_sha256=expected_binary_sha, expected_fixture_sha256=entry["fixture_sha256"],
             )
             try:
                 if variant != "BARE" and control is None:
@@ -239,7 +249,7 @@ def replay(binary, output_dir):
             row = {k: v for k, v in record.items() if k not in {"output_data", "output_path"}}
             row.update(
                 evidence_kind="REAL_CORRECTNESS", attempt_id=f"PRE-R09/{workload_id}/{variant}/1",
-                workload_id=workload_id, native_source_commit=p4b.NATIVE_SOURCE_COMMIT,
+                workload_id=workload_id, native_source_commit=native_source_commit,
                 replay_source_commit=revision, protocol_sha256=p4b.PROTOCOL_SHA256,
                 manifest_sha256=protocol["manifest_sha256"], schedule_sha256=protocol["schedule_sha256"],
                 oracle_sha256=oracle_sha, oracle_availability=oracle["availability"],
@@ -269,9 +279,13 @@ def replay(binary, output_dir):
         workload_rows.append({"workload_id": workload_id, "result": classification,
                               "oracle_availability": oracle["availability"]})
         print(workload_id, classification, flush=True)
-    if git_identity() != revision or p4b.compute_sha256(binary) != p4b.NATIVE_SHA256:
+    if git_identity(allow_candidate=candidate_mode) != revision or p4b.compute_sha256(binary) != expected_binary_sha:
         raise ValueError("Source or binary changed during the replay")
     summary = {"workload_count": len(workload_rows), "native_executions": len(rows),
+               "candidate_mode": candidate_mode,
+               "binary_sha256": expected_binary_sha,
+               "native_source_commit": native_source_commit,
+               "replay_source_commit": revision,
                "workloads_by_result": dict(Counter(r["result"] for r in workload_rows)),
                "runs_by_result": dict(Counter(r["result"] for r in rows)),
                "oracle_unavailable_workloads": sum(r["oracle_availability"] != "AVAILABLE" for r in workload_rows),
@@ -284,8 +298,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", type=Path, default=p4b.DEFAULT_BINARY_PATH)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--candidate", action="store_true", help="Certify an isolated candidate binary without altering historical R1 locks")
     args = parser.parse_args()
-    outcome = replay(args.binary.resolve(), args.output_dir.resolve())
+    outcome = replay(args.binary.resolve(), args.output_dir.resolve(), candidate_mode=args.candidate)
     if outcome["workloads_by_result"].get("FAILED"):
         return 1
     return 0

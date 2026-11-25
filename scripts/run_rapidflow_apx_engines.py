@@ -1436,7 +1436,14 @@ def validate_native_output_schema(
     if attempted_steps + unattempted_steps != total_steps:
         return False, f"Lifecycle invariant violated: attempted ({attempted_steps}) + unattempted ({unattempted_steps}) != total ({total_steps})"
 
-    if workload and "updates" in workload:
+    pre_parse_resource_rejection = (
+        not is_success
+        and resource_preexec
+        and attempted_steps == 0
+        and res_data.get("error_category") == "RESOURCE_LIMIT_ERROR"
+        and total_steps == 0
+    )
+    if workload and "updates" in workload and not pre_parse_resource_rejection:
         exp_total = len(workload["updates"])
         if total_steps != exp_total:
             return False, f"Execution total_steps mismatch: obs={total_steps} vs exp={exp_total}"
@@ -1444,12 +1451,12 @@ def validate_native_output_schema(
     ALLOWED_ROOT_STATUSES = {"SUCCESS", "FAIL"}
     ALLOWED_STEP_STATUSES = {
         "SUCCESS", "PREVALIDATION_FAILED", "CALLBACK_ABORTED",
-        "FAULT_INJECTED", "ERROR", "UNATTEMPTED"
+        "FAULT_INJECTED", "INVARIANT_VIOLATION", "ERROR", "UNATTEMPTED"
     }
     ALLOWED_COMMIT_STATUSES = {"COMMITTED", "NOT_COMMITTED"}
     ALLOWED_ERROR_CATEGORIES = {
         "NONE", "DOMAIN_ERROR", "PREVALIDATION_ERROR", "FAULT_INJECTED",
-        "WORK_BUDGET_EXCEEDED", "INPUT_SCHEMA_ERROR", "STEP_FAILURE",
+        "INVARIANT_VIOLATION", "WORK_BUDGET_EXCEEDED", "INPUT_SCHEMA_ERROR", "STEP_FAILURE",
         "IO_ERROR", "RESOURCE_LIMIT", "CONTAINMENT_VIOLATION", "UNCAUGHT_ERROR"
     }
     ALLOWED_STATUS_CATEGORY_MAP = {
@@ -1457,12 +1464,15 @@ def validate_native_output_schema(
         "UNATTEMPTED": {"NONE"},
         "PREVALIDATION_FAILED": {"PREVALIDATION_ERROR"},
         "FAULT_INJECTED": {"FAULT_INJECTED"},
+        "INVARIANT_VIOLATION": {"INVARIANT_VIOLATION"},
         "CALLBACK_ABORTED": {"WORK_BUDGET_EXCEEDED", "CALLBACK_ABORTED", "STEP_FAILURE"},
         "ERROR": {"INPUT_SCHEMA_ERROR", "STEP_FAILURE", "DOMAIN_ERROR", "IO_ERROR", "UNCAUGHT_ERROR"},
     }
     if resource_preexec:
+        ALLOWED_STEP_STATUSES.add("RESOURCE_EXHAUSTED")
         ALLOWED_ERROR_CATEGORIES.add("RESOURCE_LIMIT_ERROR")
         ALLOWED_STATUS_CATEGORY_MAP["ERROR"].add("RESOURCE_LIMIT_ERROR")
+        ALLOWED_STATUS_CATEGORY_MAP["RESOURCE_EXHAUSTED"] = {"RESOURCE_LIMIT_ERROR"}
 
     root_status = res_data.get("status")
     if type(root_status) is not str or root_status not in ALLOWED_ROOT_STATUSES:
@@ -1497,7 +1507,11 @@ def validate_native_output_schema(
 
         # Step-derived lifecycle counts (R7-F02)
         obs_completed = sum(1 for s in steps if isinstance(s, dict) and s.get("status") == "SUCCESS")
-        obs_failed = sum(1 for s in steps if isinstance(s, dict) and s.get("status") in {"PREVALIDATION_FAILED", "CALLBACK_ABORTED", "FAULT_INJECTED", "ERROR"})
+        obs_failed = sum(
+            1 for s in steps
+            if isinstance(s, dict)
+            and s.get("status") in {"PREVALIDATION_FAILED", "CALLBACK_ABORTED", "FAULT_INJECTED", "INVARIANT_VIOLATION", "RESOURCE_EXHAUSTED", "ERROR"}
+        )
         obs_unattempted = sum(1 for s in steps if isinstance(s, dict) and s.get("status") == "UNATTEMPTED")
         obs_attempted = obs_completed + obs_failed
 
@@ -1510,12 +1524,16 @@ def validate_native_output_schema(
         if obs_attempted != attempted_steps:
             return False, f"Execution summary attempted_steps mismatch with steps array: summary={attempted_steps} vs steps_observed={obs_attempted}"
     else:
-        # Pre-execution rejection (e.g. DOMAIN_ERROR before update loop started)
+        # Pre-execution rejection (e.g. DOMAIN_ERROR or RESOURCE_LIMIT_ERROR before update loop started)
         if len(steps) != 0:
             return False, f"Pre-execution rejection must have 0 steps in array, got {len(steps)}"
 
     if not is_success and failed_steps > 0:
-        first_failing_step = next(s for s in steps if isinstance(s, dict) and s.get("status") in {"PREVALIDATION_FAILED", "CALLBACK_ABORTED", "FAULT_INJECTED", "ERROR"})
+        first_failing_step = next(
+            s for s in steps
+            if isinstance(s, dict)
+            and s.get("status") in {"PREVALIDATION_FAILED", "CALLBACK_ABORTED", "FAULT_INJECTED", "INVARIANT_VIOLATION", "RESOURCE_EXHAUSTED", "ERROR"}
+        )
         if root_err_cat != first_failing_step.get("error_category"):
             return False, f"Root error_category mismatch with first failing step: root={root_err_cat} vs step={first_failing_step.get('error_category')}"
 
@@ -2022,7 +2040,7 @@ def validate_nlf_configuration(
     if marker is False and (is_success_run or has_metadata or started):
         return reject("Uninitialized configuration contradicts native execution evidence")
     if marker is not True and not has_metadata and not started and not is_success_run:
-        startup_exit = {"CLI_ARG_ERROR": 1, "INPUT_SCHEMA_ERROR": 2, "DOMAIN_ERROR": 3}
+        startup_exit = {"CLI_ARG_ERROR": 1, "INPUT_SCHEMA_ERROR": 2, "DOMAIN_ERROR": 3, "RESOURCE_LIMIT_ERROR": 5}
         category = native_result.get("error_category")
         expected_exit = startup_exit.get(category) if isinstance(category, str) else None
         actual_exit = native_exit_code if native_exit_code is not None else native_result.get("exit_code")

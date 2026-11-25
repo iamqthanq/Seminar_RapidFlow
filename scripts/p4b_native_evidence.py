@@ -41,6 +41,7 @@ def timings(native, outer, *, complete=True):
 
 
 def profile_timings(native, macro, outer, *, has_complete_steps=True):
+    require(isinstance(native, dict), "TIMING_PROFILE_SCHEMA")
     root = native.get("profiling")
     if root is None and "profiling" not in native:
         return
@@ -54,9 +55,17 @@ def profile_timings(native, macro, outer, *, has_complete_steps=True):
             "TIMING_BOUNDARY: profiling.pre_output_wall_ns")
     require(root["streaming_exec_ns"] <= pre_output, "TIMING_BOUNDARY: streaming_exec_ns exceeds pre_output_wall_ns")
     sums = dict.fromkeys(STEP_METRICS, 0)
-    for index, step in enumerate(native.get("steps", ())):
-        if "profiling" not in step and (step["status"] == "UNATTEMPTED" or
-                                         step["error_category"] in ("RESOURCE_LIMIT_ERROR", "RESULT_DELIVERY_ERROR")):
+    steps = native.get("steps", ())
+    require(isinstance(steps, (tuple, list)), "TIMING_STEP_SCHEMA")
+    for index, step in enumerate(steps):
+        require(isinstance(step, dict), f"TIMING_STEP_SCHEMA: {index}")
+        status = step.get("status")
+        err_cat = step.get("error_category")
+        if "profiling" not in step and (
+            status == "UNATTEMPTED"
+            or (status == "ERROR" and err_cat == "RESOURCE_LIMIT_ERROR")
+            or err_cat == "RESULT_DELIVERY_ERROR"
+        ):
             continue
         profile = step.get("profiling")
         require(isinstance(profile, dict), f"TIMING_STEP_SCHEMA: {index}")
@@ -138,6 +147,7 @@ def interrupted_output(raw):
     native = {}
     i = space(i + 1)
     while i < len(text):
+        require(text[i] != "}", "INTERRUPTED_OUTPUT_SCHEMA")
         key, end = decode(i)
         if end is None:
             break
@@ -153,7 +163,12 @@ def interrupted_output(raw):
             require(text[i] == "[", "INTERRUPTED_OUTPUT_SCHEMA")
             steps = native["steps"] = []
             i = space(i + 1)
-            while i < len(text) and text[i] != "]":
+            expect_step = False
+            while i < len(text):
+                if text[i] == "]":
+                    require(not expect_step, "INTERRUPTED_OUTPUT_SCHEMA")
+                    break
+                expect_step = False
                 step, end = decode(i)
                 if end is None:
                     return native, "PARTIAL"
@@ -165,9 +180,16 @@ def interrupted_output(raw):
                 if text[i] == "]":
                     break
                 require(text[i] == ",", "INTERRUPTED_OUTPUT_SCHEMA")
+                expect_step = True
                 i = space(i + 1)
-            require(i == len(text) or not text[i + 1:].strip(), "INTERRUPTED_OUTPUT_SCHEMA")
-            break
+            if i == len(text):
+                return native, "PARTIAL"
+            i = space(i + 1)
+            if i == len(text):
+                return native, "PARTIAL"
+            require(text[i] == ",", "INTERRUPTED_OUTPUT_SCHEMA")
+            i = space(i + 1)
+            continue
         value, end = decode(i)
         if end is None:
             break

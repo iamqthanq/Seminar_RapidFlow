@@ -95,9 +95,13 @@ class NativeBackend:
     binary_sha = p4b.NATIVE_SHA256
     source = p4b.NATIVE_SOURCE_COMMIT
 
-    def __init__(self, binary, registry, store, policy, context=None):
+    def __init__(self, binary, registry, store, policy, context=None, *, binary_sha=None, source=None):
         self.binary, self.registry, self.store, self.policy = binary, registry, store, policy
         self.context = context
+        if binary_sha is not None:
+            self.binary_sha = binary_sha
+        if source is not None:
+            self.source = source
 
     def authorize(self, slot):
         require(slot["workload_id"] == BOUNDED_CASE and slot["variant_id"] == BOUNDED_VARIANT
@@ -164,13 +168,26 @@ class ProductionBackend(NativeBackend):
 
 
 def _lifecycle(native, planned, success):
-    life = native["execution"]
+    require(isinstance(native, dict), "NATIVE_RESULT_SCHEMA")
+    life = native.get("execution")
+    require(isinstance(life, dict), "NATIVE_RESULT_SCHEMA")
+    steps = native.get("steps")
+    require(isinstance(steps, list) and all(isinstance(s, dict) for s in steps), "NATIVE_RESULT_SCHEMA")
     keys = ("total_steps", "attempted_steps", "committed_steps", "completed_steps",
             "delivered_steps", "failed_steps", "unattempted_steps")
     for key in keys:
+        require(key in life, f"INVALID_NUMERIC_EVIDENCE: {key}")
         require_uint(life[key], key)
-    require(life["total_steps"] == len(native["steps"]) == planned, "STEP_INVENTORY_MISMATCH")
-    outcomes = [s["status"] for s in native["steps"]]
+    require(life["total_steps"] == len(steps) == planned, "STEP_INVENTORY_MISMATCH")
+    for step in steps:
+        require(
+            isinstance(step.get("status"), str)
+            and isinstance(step.get("commit_status"), str)
+            and isinstance(step.get("entered_tuples"), list)
+            and isinstance(step.get("exited_tuples"), list),
+            "NATIVE_RESULT_SCHEMA",
+        )
+    outcomes = [s["status"] for s in steps]
     if success:
         require(outcomes == ["SUCCESS"] * planned and all(life[k] == planned for k in keys[:5])
                 and life["failed_steps"] == life["unattempted_steps"] == 0, "SUCCESS_LIFECYCLE_MISMATCH")
@@ -183,18 +200,25 @@ def _lifecycle(native, planned, success):
                 and life["attempted_steps"] == life["delivered_steps"] == committed + 1
                 and life["completed_steps"] == committed and life["failed_steps"] == 1
                 and life["unattempted_steps"] == remaining, "CENSORED_LIFECYCLE_MISMATCH")
-        for step in native["steps"][committed:]:
+        for step in steps[committed:]:
             require(step["entered_tuples"] == step["exited_tuples"] == [], "EVENTS_FROM_UNCOMMITTED_STEP")
     return life
 
 
 def _diagnostics(native):
-    profile = native["profiling"]
-    values = profile["cumulative"]
-    timings = {name: require_uint(values[name], name) for name in evidence.PROFILING_METRICS}
+    require(isinstance(native, dict), "TIMING_PROFILE_SCHEMA")
+    profile = native.get("profiling")
+    require(isinstance(profile, dict), "TIMING_PROFILE_SCHEMA")
+    values = profile.get("cumulative")
+    require(isinstance(values, dict), "TIMING_CUMULATIVE_SCHEMA")
+    counters = native.get("counters")
+    require(isinstance(counters, dict), "NATIVE_RESULT_SCHEMA")
+    execution = native.get("execution")
+    require(isinstance(execution, dict) and "completed_steps" in execution, "NATIVE_RESULT_SCHEMA")
+    timings = {name: require_uint(values.get(name), name) for name in evidence.PROFILING_METRICS}
     return {"timing_ns": timings, "scope": "native diagnostic nested stages",
-            "counters": {k: require_uint(v, k) for k, v in native["counters"].items()},
-            "denominator": native["execution"]["completed_steps"]}
+            "counters": {k: require_uint(v, k) for k, v in counters.items()},
+            "denominator": require_uint(execution["completed_steps"], "completed_steps")}
 
 
 def _invalid(identity, backend, reason, detail):
@@ -204,10 +228,13 @@ def _invalid(identity, backend, reason, detail):
 
 
 def _provenance_error(process, backend):
+    require(isinstance(process, dict), "INVALID_PROCESS_EVIDENCE_SCHEMA")
+    supervisor = process.get("supervisor")
+    require(isinstance(supervisor, dict), "INVALID_SUPERVISOR_SCHEMA")
     if process.get("censoring_reason") == "PROVENANCE_ERROR":
         return "Supervisor reported post-execution provenance drift"
-    post = process["supervisor"].get("post_execution_identity")
-    if post is None and "post_execution_identity" not in process["supervisor"] and backend.origin == NativeBackend.origin:
+    post = supervisor.get("post_execution_identity")
+    if post is None and "post_execution_identity" not in supervisor and backend.origin == NativeBackend.origin:
         # Historical bounded R0 evidence retains the supervisor classification
         # but predates explicit post-launch digests. It cannot become a real slot.
         return None if "censoring_reason" in process else "Missing supervisor provenance disposition"
@@ -269,7 +296,13 @@ def _fallback_reference(backend, slot):
 
 
 def _check_rss(process, wait4_kib, native=None):
-    macro = native.get("macro_timing", {}) if native else {}
+    require(isinstance(process, dict), "INVALID_PROCESS_EVIDENCE_SCHEMA")
+    macro = {}
+    if native is not None:
+        require(isinstance(native, dict), "NATIVE_RESULT_SCHEMA")
+        if "macro_timing" in native:
+            require(isinstance(native["macro_timing"], dict), "TIMING_CLOCK_OR_SCHEMA")
+            macro = native["macro_timing"]
     fields = {"child_rss_method", "child_vm_hwm_kib", "child_vm_hwm_bytes"}
     if fields & macro.keys():
         kib = require_uint(macro.get("child_vm_hwm_kib"), "child_vm_hwm_kib", positive=True)
@@ -297,6 +330,10 @@ def _check_interrupted_output(raw, slot, entry, workload, mode, reference, caps,
     _native_identity(native, slot, entry, mode, reference, caps, partial=not complete)
     steps = native.get("steps", [])
     evidence.frozen_updates(steps, workload["updates"], complete=complete)
+    if slot["execution_purpose"] == "performance":
+        require("profiling" not in native, "INTERRUPTED_MEASUREMENT_MODE: unexpected profiling root")
+        require(all(isinstance(s, dict) and "profiling" not in s for s in steps),
+                "INTERRUPTED_MEASUREMENT_MODE: unexpected step profiling")
     macro = evidence.timings(native, elapsed, complete=complete)
     evidence.profile_timings(native, macro, elapsed, has_complete_steps=complete)
     for key, expected in (("measurement_schema_version", 1),
@@ -320,36 +357,46 @@ def _check_interrupted_output(raw, slot, entry, workload, mode, reference, caps,
             require(native["status"] == ("SUCCESS" if error == "NONE" else "FAIL"), "INTERRUPTED_NATIVE_STATUS")
     failed = False
     for step in steps:
+        require(isinstance(step, dict), "INTERRUPTED_STEP_LIFECYCLE")
         status = step.get("status")
         commit = step.get("commit_status")
+        step_err_cat = step.get("error_category")
         if status == "SUCCESS":
-            require(not failed and commit == "COMMITTED" and step["error_category"] == "NONE",
+            require(not failed and commit == "COMMITTED" and step_err_cat == "NONE",
                     "INTERRUPTED_STEP_LIFECYCLE")
         else:
-            require(commit == "NOT_COMMITTED" and step["entered_tuples"] == step["exited_tuples"] == []
-                    and (status == "UNATTEMPTED" and failed and step["error_category"] == "NONE"
-                         or not failed and status in ("CALLBACK_ABORTED", "ERROR")
-                         and step["error_category"] in ("WORK_BUDGET_EXCEEDED", "RESOURCE_LIMIT_ERROR")),
+            require(commit == "NOT_COMMITTED" and step.get("entered_tuples") == [] and step.get("exited_tuples") == []
+                    and (status == "UNATTEMPTED" and failed and step_err_cat == "NONE"
+                         or not failed and status in ("CALLBACK_ABORTED", "ERROR", "RESOURCE_EXHAUSTED")
+                         and step_err_cat in ("WORK_BUDGET_EXCEEDED", "RESOURCE_LIMIT_ERROR")),
                     "INTERRUPTED_STEP_LIFECYCLE")
             if status != "UNATTEMPTED":
-                step_error = step["error_category"]
+                step_error = step_err_cat
                 if step_error == "WORK_BUDGET_EXCEEDED":
-                    require(status == "CALLBACK_ABORTED" and require_uint(
-                        step["step_counters"]["work_units"], "interrupted work_units") == caps["logical_work_cap"] + 1,
+                    sc = step.get("step_counters")
+                    require(isinstance(sc, dict) and status == "CALLBACK_ABORTED" and require_uint(
+                        sc.get("work_units"), "interrupted work_units") == caps["logical_work_cap"] + 1,
                         "INTERRUPTED_WORK_BUDGET_MISMATCH")
                 else:
-                    require(status == "ERROR" and "step_counters" not in step and step["error"] == "std::bad_alloc",
-                            "INTERRUPTED_RESOURCE_STEP_MISMATCH")
+                    if status == "ERROR":
+                        require("step_counters" not in step and step.get("error") == "std::bad_alloc",
+                                "INTERRUPTED_RESOURCE_STEP_MISMATCH")
+                    else:
+                        require(status == "RESOURCE_EXHAUSTED" and isinstance(step.get("step_counters"), dict)
+                                and step.get("error") == "std::bad_alloc",
+                                "INTERRUPTED_RESOURCE_STEP_MISMATCH")
                 for key, expected in (("first_failing_step_index", step["step_index"]),
-                                      ("first_failure_category", step_error), ("first_failure_message", step["error"])):
+                                      ("first_failure_category", step_error), ("first_failure_message", step.get("error"))):
                     if key in native:
                         require(type(native[key]) is type(expected) and native[key] == expected,
                                 f"INTERRUPTED_FAILURE_IDENTITY: {key}")
             failed = True
     if "execution" in native:
         life = native["execution"]
+        require(isinstance(life, dict), "INTERRUPTED_LIFECYCLE_MISMATCH")
         for key in ("total_steps", "attempted_steps", "committed_steps", "completed_steps",
                     "delivered_steps", "failed_steps", "unattempted_steps"):
+            require(key in life, f"INVALID_NUMERIC_EVIDENCE: {key}")
             require_uint(life[key], key)
         require(life["total_steps"] == entry["update_count"] == life["attempted_steps"] + life["unattempted_steps"]
                 and life["attempted_steps"] == life["completed_steps"] + life["failed_steps"] == life["delivered_steps"]
@@ -381,11 +428,14 @@ def _validate_native(slot, entry, identity, backend, path, process):
     reference = p4b.load_json_bytes(raw_ref)
     raw_file = path / "native-output.json"
     invocation = read(path / "invocation.json")
+    require(isinstance(invocation, dict), "NATIVE_INVOCATION_MISMATCH")
     supervisor = process["supervisor"]
+    resource_caps = supervisor.get("resource_caps")
+    require(isinstance(resource_caps, dict), "INVALID_PROCESS_EVIDENCE_SCHEMA")
     caps = backend.policy
     for key, value in {"timeout_seconds": caps["wall_timeout_seconds"], "address_space_mib": caps["address_space_limit_mib"],
                        "max_work": caps["logical_work_cap"], "max_nlf_memory_mib": caps["max_nlf_memory_mib"]}.items():
-        observed = supervisor["resource_caps"][key]
+        observed = resource_caps.get(key)
         require(type(observed) in (float, int) and (key == "timeout_seconds" or type(observed) is int)
                 and observed == value, f"RESOURCE_POLICY_MISMATCH: {key}")
     require(type(supervisor["deadline_fired"]) is bool, "INVALID_DEADLINE_EVIDENCE")
@@ -468,7 +518,37 @@ def _validate_native(slot, entry, identity, backend, path, process):
 
     native = p4b.load_json_bytes(raw)
     require(isinstance(native, dict), "NATIVE_RESULT_SCHEMA")
-    _native_identity(native, slot, entry, mode, reference, caps, partial=True)
+    if slot["execution_purpose"] == "performance":
+        steps_list = native.get("steps")
+        require("profiling" not in native
+                and (not isinstance(steps_list, list)
+                     or all(isinstance(s, dict) and "profiling" not in s for s in steps_list)),
+                "TIMING_PROFILE_SCHEMA")
+    pre_step_resource = (
+        exit_code == 5
+        and native.get("error_category") == "RESOURCE_LIMIT_ERROR"
+        and isinstance(native.get("execution"), dict)
+        and native["execution"].get("attempted_steps") == 0
+    )
+    if pre_step_resource:
+        startup_partial = native.get("configuration_initialized") is not True
+        startup_keys = {
+            "raw_input_sha256": entry["fixture_sha256"],
+            "execution_purpose": slot["execution_purpose"],
+            "engine": mode["engine"],
+            "engine_name": mode["engine"],
+            "schema_version": reference["schema_version"],
+            "semantics_version": reference["semantics_version"],
+        }
+        if not startup_partial or native.get("case_id") != "UNKNOWN":
+            startup_keys["case_id"] = entry["case_id"]
+        for key, value in startup_keys.items():
+            require(key in native and p4b.canonical_json_bytes(native[key]) == p4b.canonical_json_bytes(value),
+                    f"NATIVE_RESULT_IDENTITY_MISMATCH: {key}")
+        if not startup_partial:
+            _native_identity(native, slot, entry, mode, reference, caps, partial=False)
+    else:
+        _native_identity(native, slot, entry, mode, reference, caps, partial=True)
     metric_values = evidence.timings(native, elapsed)
     evidence.profile_timings(native, metric_values, elapsed)
     _check_rss(process, raw_rss, native)
@@ -487,6 +567,22 @@ def _validate_native(slot, entry, identity, backend, path, process):
     require((exit_code, native.get("status"), error) in (
         (0, "SUCCESS", "NONE"), (4, "FAIL", "WORK_BUDGET_EXCEEDED"), (5, "FAIL", "RESOURCE_LIMIT_ERROR")),
         "NATIVE_PROCESS_STATUS_CONTRADICTION")
+    if pre_step_resource:
+        life = native["execution"]
+        for key in ("total_steps", "attempted_steps", "committed_steps", "completed_steps",
+                    "delivered_steps", "failed_steps", "unattempted_steps"):
+            require(key in life, f"INVALID_NUMERIC_EVIDENCE: {key}")
+            require_uint(life[key], key)
+        require(life["total_steps"] in (0, entry["update_count"])
+                and life["attempted_steps"] == life["committed_steps"] == life["completed_steps"] == life["delivered_steps"] == life["failed_steps"] == 0
+                and life["unattempted_steps"] == life["total_steps"]
+                and native.get("steps") == [],
+                "CENSORED_LIFECYCLE_MISMATCH")
+        _native_schema(native, slot, entry, workload, mode, exit_code, unavailable=unavailable, resource=True)
+        reconcile("RESOURCE_UNAVAILABLE", "MEMORY_LIMIT_FAILURE")
+        require(native.get("error_message") == "std::bad_alloc", "INVALID_NATIVE_RESOURCE_EVIDENCE")
+        reason = "MEMORY_LIMIT_FAILURE" if reported == "MEMORY_LIMIT_FAILURE" else "RESOURCE_UNAVAILABLE"
+        return complete("CENSORED", reason, lifecycle=life, native_status=native["status"])
     _native_identity(native, slot, entry, mode, reference, caps)
     evidence.frozen_updates(native.get("steps"), workload["updates"])
     life = _lifecycle(native, entry["update_count"], exit_code == 0)
@@ -503,14 +599,19 @@ def _validate_native(slot, entry, identity, backend, path, process):
                     "RESOURCE_FAILURE_STEP_MISMATCH")
             if work:
                 reconcile("WORK_BUDGET_EXCEEDED")
-                require(failed_step["status"] == "CALLBACK_ABORTED"
-                        and failed_step["step_counters"]["work_units"] == caps["logical_work_cap"] + 1,
+                sc = failed_step.get("step_counters")
+                require(isinstance(sc, dict) and failed_step["status"] == "CALLBACK_ABORTED"
+                        and sc.get("work_units") == caps["logical_work_cap"] + 1,
                         "INVALID_WORK_BUDGET_EVIDENCE")
             else:
                 reconcile("RESOURCE_UNAVAILABLE", "MEMORY_LIMIT_FAILURE")
-                require(failed_step["status"] == "ERROR" and "step_counters" not in failed_step
-                        and failed_step["error"] == native["error_message"] == native["first_failure_message"]
-                        and native["error_message"] == "std::bad_alloc", "INVALID_NATIVE_RESOURCE_EVIDENCE")
+                is_preexec_err = failed_step["status"] == "ERROR" and "step_counters" not in failed_step
+                is_instep_oom = failed_step["status"] == "RESOURCE_EXHAUSTED" and isinstance(failed_step.get("step_counters"), dict)
+                require((is_preexec_err or is_instep_oom)
+                        and failed_step.get("error") == native.get("error_message") == native.get("first_failure_message")
+                        and native.get("error_message") == "std::bad_alloc", "INVALID_NATIVE_RESOURCE_EVIDENCE")
+                if is_instep_oom and slot["execution_purpose"] == "diagnostic":
+                    require(isinstance(failed_step.get("profiling"), dict), "TIMING_STEP_SCHEMA")
         else:
             reconcile("CONFIGURATION_UNAVAILABLE")
         if unavailable:
@@ -674,12 +775,15 @@ def _read_journal(root, log, plans, entries, protocol, header, backend):
             require_uint(event["time_ns"], "finish_time", positive=True)
             require(event["time_ns"] >= start["time_ns"], "REVERSED_EVENT_TIME")
             require(read(path / "start.json") == start, "MISSING_START_ARTIFACT")
-            for name, expected in event["finish"]["artifacts"].items():
+            finish_obj = event.get("finish")
+            require(isinstance(finish_obj, dict) and isinstance(finish_obj.get("artifacts"), dict),
+                    "ILLEGAL_JOURNAL_TRANSITION")
+            for name, expected in finish_obj["artifacts"].items():
                 require(name in _required_files(backend) and file_info(path / name) == expected,
                         "FINISH_RAW_DIGEST_MISMATCH")
             result = validate_attempt(slot, entries[slot["workload_id"]], identity, backend, path)
             require(read(path / "validation.json") == result
-                    and event["finish"] == _finish_payload(path, result, backend),
+                    and finish_obj == _finish_payload(path, result, backend),
                     "PERSISTED_OUTCOME_NOT_REPRODUCIBLE")
             terminal.append(result)
             start = None

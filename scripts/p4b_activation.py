@@ -23,7 +23,9 @@ SOURCE_PATHS = (
     "scripts/run_rapidflow_apx_p4b.py", "scripts/summarize_rapidflow_apx_p4b.py",
     "scripts/p4b_correctness_registry.py", "scripts/p4b_activation.py",
     "scripts/p4b_experiment_session.py", "scripts/p4b_native_evidence.py",
-    "scripts/run_rapidflow_apx_engines.py",
+    "scripts/run_rapidflow_apx_engines.py", "scripts/canonical_output_comparator.py",
+    "scripts/p4a_evidence_contract.py", "scripts/replay_rapidflow_apx_p4b.py",
+    "scripts/dstar_oracle.py",
 )
 
 
@@ -154,7 +156,7 @@ def authorize(envelope, binary, registry, archive, root, *, phase=None):
     env = environment_snapshot(root.parent, binary)
     revision = doc.get("implementation_revision", "")
     sources = _source_state(revision)
-    if binary.stat().st_size != 941216 or p4b.compute_sha256(binary) != p4b.NATIVE_SHA256:
+    if binary.stat().st_size != p4b.NATIVE_SIZE_BYTES or p4b.compute_sha256(binary) != p4b.NATIVE_SHA256:
         raise p4b.AuthorizationBlockedError("BINARY_HASH_MISMATCH")
     if archive.stat().st_size != refs.ARCHIVE_SIZE or p4b.compute_sha256(archive) != refs.ARCHIVE_SHA:
         raise p4b.AuthorizationBlockedError("ARCHIVE_HASH_MISMATCH")

@@ -360,7 +360,12 @@ execute_p4b_native_slot(binary, fixture, "BARE", "correctness", base/"unused.jso
             store.mkdir()
             refs.unpack_references(DURABLE_ARCHIVE, store)
             ref_doc = exp.read(refs.REGISTRY_PATH)
-            ref_map = {(r["workload_id"], r["variant_id"]): r for r in ref_doc["entries"]}
+            ref_map = {
+                (r["workload_id"], r["variant_id"]): dict(
+                    r, binary_sha256=runner.NATIVE_SHA256, native_source_commit=runner.NATIVE_SOURCE_COMMIT
+                )
+                for r in ref_doc["entries"]
+            }
             frozen_policy = self.protocol["resource_policy"]
             plan = [s for s in self.plan if s["slot_purpose"] != "diagnostic"]
 
@@ -480,7 +485,12 @@ def run_bounded_witness(parent, protocol, manifest, schedule, test):
     store.mkdir()
     refs.unpack_references(DURABLE_ARCHIVE, store)
     entries = exp.read(refs.REGISTRY_PATH)["entries"]
-    reference_map = {(r["workload_id"], r["variant_id"]): r for r in entries if r["workload_id"] == exp.BOUNDED_CASE}
+    reference_map = {
+        (r["workload_id"], r["variant_id"]): dict(
+            r, binary_sha256=runner.NATIVE_SHA256, native_source_commit=runner.NATIVE_SOURCE_COMMIT
+        )
+        for r in entries if r["workload_id"] == exp.BOUNDED_CASE
+    }
     base = next(s for s in schedule["primary_slots"] if s["workload_id"] == exp.BOUNDED_CASE and s["variant_id"] == "BARE")
     slots = [dict(base, slot_id=f"FUNCTIONAL_{purpose}", slot_purpose="functional", execution_purpose=purpose)
              for purpose in ("correctness", "performance", "diagnostic")]

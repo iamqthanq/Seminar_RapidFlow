@@ -238,8 +238,10 @@ class TestPreregistrationR1(unittest.TestCase):
             root = Path(td)
             cases = [
                 ("timeout", "import time; time.sleep(10)", "TIMEOUT", 0.15),
-                ("memory", "import sys\ntry:\n    bytearray(64 << 20)\nexcept MemoryError:\n    sys.exit('std::bad_alloc')",
+                ("memory", "import json,sys\ntry:\n    bytearray(64 << 20)\nexcept MemoryError:\n    out = sys.argv[sys.argv.index('--output') + 1]\n    with open(out, 'w', encoding='utf-8') as f:\n        json.dump({'error_category': 'RESOURCE_LIMIT_ERROR', 'error_message': 'std::bad_alloc'}, f)\n    sys.exit(5)",
                  "MEMORY_LIMIT_FAILURE", 2),
+                ("resource_containment", "import sys\nsys.stderr.write('Resource containment error: simulated RLIMIT_AS\\n')\nsys.exit(5)",
+                 "RESOURCE_UNAVAILABLE", 2),
                 ("interruption", "import os,signal; os.kill(os.getpid(), signal.SIGTERM)", "ENVIRONMENT_INTERRUPTION", 2),
                 ("missing", "pass", "MISSING_RESULT", 2),
             ]
@@ -252,7 +254,8 @@ class TestPreregistrationR1(unittest.TestCase):
                     result = runner.execute_p4b_native_slot(child, fixture, "BARE", "correctness", output,
                                                             timeout_s=timeout, as_limit_mib=48)
                     self.assertEqual(result["censoring_reason"], reason)
-                    self.assertEqual(result["output_size_bytes"], 0)
+                    if name != "memory":
+                        self.assertEqual(result["output_size_bytes"], 0)
                     with self.assertRaises(FileExistsError):
                         runner.execute_p4b_native_slot(child, fixture, "BARE", "correctness", output)
                     with self.assertRaisesRegex(runner.LedgerIntegrityError, "BINARY_HASH_MISMATCH"):

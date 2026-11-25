@@ -55,17 +55,22 @@ DEFAULT_PROTOCOL_PATH = REPO_ROOT / "configs" / "rapidflow_apx_p4b_protocol.json
 DEFAULT_SCHEDULE_PATH = REPO_ROOT / "configs" / "rapidflow_apx_p4b_schedule.json"
 DEFAULT_LEDGER_PATH = REPO_ROOT / "results" / "logs" / "rf38-p4b" / "p4b_raw_ledger.jsonl"
 DEFAULT_BINARY_PATH = REPO_ROOT / "tests" / "native" / "rapidflow_apx_engines" / "build" / "rapidflow_apx_native"
+CANDIDATE_R2_BINARY_PATH = REPO_ROOT / "tests" / "native" / "rapidflow_apx_engines" / "build-r2-candidate" / "rapidflow_apx_native"
 
 LEDGER_SCHEMA_VERSION = "p4b-ledger-v1.0"
 PROTOCOL_VERSION = "1.0.0"
 PROTOCOL_SHA256 = "70836770663c32a1a53e52e048be1dd8268fd2e3f02f66859737eef308c4acbb"
-NATIVE_SHA256 = "f02e6ff99c707407d88fa16ebd370e9c43d4359b8192247e394b95cd607d3d75"
+HISTORICAL_R1_NATIVE_SHA256 = "f02e6ff99c707407d88fa16ebd370e9c43d4359b8192247e394b95cd607d3d75"
+HISTORICAL_R1_NATIVE_SIZE_BYTES = 941216
+HISTORICAL_R1_NATIVE_SOURCE_COMMIT = "97d8636b9567d53d3e083c48d61b46feb40ae540"
+NATIVE_SHA256 = "3fa35111acd7e7527a80bae6b0caa6d51d1e283d9848747a62c2517d696d1876"
+NATIVE_SIZE_BYTES = 970632
 BOUNDED_FIXTURE_SHA256 = "e72dfe854a22f327d32cc73c5aa1149b8009b4414d56d1621fb919b476841ca3"
 BOUNDED_MEASUREMENT_VARIANTS = {
     "performance": frozenset({"BARE", "A_STATIC", "A_RESIDUAL", "B_MERGE"}),
     "diagnostic": frozenset({"BARE", "B_MERGE"}),
 }
-NATIVE_SOURCE_COMMIT = "97d8636b9567d53d3e083c48d61b46feb40ae540"
+NATIVE_SOURCE_COMMIT = "115ce2844d91f6a6588fe0ac50b1179bc3b38012"
 SCHEDULE_SESSION = "P4B_PLANNED_SESSION_01"
 
 SCHEDULE_SEED = 380301
@@ -725,10 +730,8 @@ def execute_p4b_native_slot(
         censor_class = "TIMEOUT"
     elif exit_code == 4 and err_cat == "WORK_BUDGET_EXCEEDED":
         censor_class = "WORK_BUDGET_EXCEEDED"
-    elif exit_code != 0 and ("std::bad_alloc" in str(err_msg) or "std::bad_alloc" in raw_stderr):
-        censor_class = "MEMORY_LIMIT_FAILURE"
-    elif err_cat == "RESOURCE_LIMIT_ERROR":
-        censor_class = "RESOURCE_UNAVAILABLE"
+    elif exit_code == 5 and err_cat == "RESOURCE_LIMIT_ERROR":
+        censor_class = "MEMORY_LIMIT_FAILURE" if str(err_msg) == "std::bad_alloc" else "RESOURCE_UNAVAILABLE"
     elif exit_code == 5 and out_data is None and raw_stderr.startswith("Resource containment error: "):
         censor_class = "RESOURCE_UNAVAILABLE"
     elif (out_data or {}).get("configuration_status") == "REQUESTED_CONFIGURATION_UNAVAILABLE":

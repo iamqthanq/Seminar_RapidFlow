@@ -77,10 +77,21 @@ def read_reference(store, entry):
     return raw
 
 
-def rebuild_from_store(store, protocol, manifest):
-    """Re-derive certification against actual historical bytes and an independently rebuilt M0."""
+def rebuild_from_store(
+    store,
+    protocol,
+    manifest,
+    *,
+    prefix_dir="pre-r09",
+    binary_sha256=p4b.HISTORICAL_R1_NATIVE_SHA256,
+    native_source_commit=p4b.HISTORICAL_R1_NATIVE_SOURCE_COMMIT,
+    replay_rev=REPLAY_REV,
+    trusted_root=None,
+    require_exact_historical_counts=True,
+):
+    """Re-derive certification against actual archived/replay bytes and an independently rebuilt M0."""
     rows = {}
-    for line in (store / "pre-r09/replay.jsonl").read_bytes().splitlines():
+    for line in (store / f"{prefix_dir}/replay.jsonl").read_bytes().splitlines():
         row = p4b.load_json_bytes(line)
         key = (row["workload_id"], row["variant_id"])
         if key in rows:
@@ -95,7 +106,7 @@ def rebuild_from_store(store, protocol, manifest):
         wid = workload["workload_id"]
         fixture = p4b.load_json_bytes((p4b.REPO_ROOT / workload["fixture_path"]).read_bytes())
         oracle, graphs, codecs = replay.oracle_and_snapshots(fixture, workload)
-        oracle_path = f"pre-r09/{wid}/oracle.json"
+        oracle_path = f"{prefix_dir}/{wid}/oracle.json"
         oracle_bytes = (store / oracle_path).read_bytes()
         if oracle_bytes != p4b.canonical_json_bytes(oracle):
             raise p4b.LedgerIntegrityError(f"ORACLE_RECOMPUTATION_MISMATCH: {wid}")
@@ -106,8 +117,8 @@ def rebuild_from_store(store, protocol, manifest):
             relative = f"{wid}/{variant}.json.gz"
             fields = {
                 "attempt_id": f"PRE-R09/{wid}/{variant}/1", "raw_output": relative,
-                "fixture_sha256": workload["fixture_sha256"], "binary_sha256": p4b.NATIVE_SHA256,
-                "native_source_commit": p4b.NATIVE_SOURCE_COMMIT, "replay_source_commit": REPLAY_REV,
+                "fixture_sha256": workload["fixture_sha256"], "binary_sha256": binary_sha256,
+                "native_source_commit": native_source_commit, "replay_source_commit": replay_rev,
                 "protocol_sha256": p4b.PROTOCOL_SHA256, "manifest_sha256": protocol["manifest_sha256"],
                 "schedule_sha256": protocol["schedule_sha256"], "oracle_sha256": p4b.sha256_bytes(oracle_bytes),
                 "oracle_availability": oracle["availability"], "evidence_kind": "REAL_CORRECTNESS",
@@ -124,7 +135,7 @@ def rebuild_from_store(store, protocol, manifest):
                 **{k: row[k] for k in ("fixture_sha256", "binary_sha256", "native_source_commit",
                    "replay_source_commit", "protocol_sha256", "manifest_sha256", "schedule_sha256",
                    "oracle_sha256", "oracle_availability", "compressed_output_sha256")},
-                "raw_output_relative_path": "pre-r09/" + relative,
+                "raw_output_relative_path": f"{prefix_dir}/" + relative,
                 "raw_output_sha256": row["output_sha256"], "raw_output_size": row["output_size_bytes"],
                 "oracle_relative_path": oracle_path,
             }
@@ -143,9 +154,9 @@ def rebuild_from_store(store, protocol, manifest):
             )
             entries.append(entry)
     counts = dict(Counter(r["certification_scope"] for r in entries))
-    if counts != EXPECTED_COUNTS:
+    if require_exact_historical_counts and counts != EXPECTED_COUNTS:
         raise p4b.LedgerIntegrityError("REFERENCE_TIER_INVENTORY_MISMATCH")
-    return {"schema": SCHEMA, "trusted_evidence": ROOT, "counts": counts, "entries": entries}
+    return {"schema": SCHEMA, "trusted_evidence": trusted_root or ROOT, "counts": counts, "entries": entries}
 
 
 def require_canonical_registry(candidate, reconstructed):

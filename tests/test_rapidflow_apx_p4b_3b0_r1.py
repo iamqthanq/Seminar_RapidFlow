@@ -45,7 +45,11 @@ class ControlledNative(session.NativeBackend):
     origin = runner.SYNTHETIC_KIND
 
     def __init__(self, registry, store, policy, mutation=None):
-        super().__init__(runner.DEFAULT_BINARY_PATH.resolve(), registry, store, policy)
+        super().__init__(
+            runner.DEFAULT_BINARY_PATH.resolve(), registry, store, policy,
+            binary_sha=runner.HISTORICAL_R1_NATIVE_SHA256,
+            source=runner.HISTORICAL_R1_NATIVE_SOURCE_COMMIT,
+        )
         self.mutation = mutation
         self.calls = []
 
