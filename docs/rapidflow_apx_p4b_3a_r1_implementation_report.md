@@ -186,8 +186,9 @@ A separate reviewed activation must provide experiment authorization and
 a trusted reference registry. The R1 CLI deliberately blocks both primary
 and diagnostic execution and the analyzer blocks confirmatory result issuance.
 Infrastructure readiness is established by the synthetic schedule and
-bounded native smokes within the R1 authorization. DISC-07 remains censored
-and all C3 results remain differential. Review is independent and the
-experiment still requires coordinator authorization.
+bounded native smokes within the R1 authorization. DISC-07 remains censored. For the 16 other C3 workloads, the four
+optimized variants are differentially verified against BARE; the 16
+corresponding BARE reference executions are not independently certified.
+Review is independent and the experiment still requires coordinator authorization.
 
 `P4B_3A_R1_READY_FOR_INDEPENDENT_REVIEW`
