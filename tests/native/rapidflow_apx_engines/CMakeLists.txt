@@ -23,7 +23,26 @@ find_package(OpenSSL REQUIRED COMPONENTS Crypto)
 
 add_executable(rapidflow_apx_native
     src/main.cpp
+    src/harness_runner.cpp
+    src/measurement_seam_tests.cpp
+    src/p4b_tests.cpp
+    src/residual_tests.cpp
+    src/neighbor_buffer_tests.cpp
 )
 
 target_link_libraries(rapidflow_apx_native PRIVATE rapidflow_apx_foundation OpenSSL::Crypto)
 target_compile_options(rapidflow_apx_native PRIVATE -O3 -Wall -Wextra)
+target_compile_definitions(rapidflow_apx_native PRIVATE APX_TEST_ACCESS=1)
+
+add_executable(rapidflow_apx_json_strings src/json_string_tests.cpp)
+target_include_directories(rapidflow_apx_json_strings PRIVATE ../../../extensions/rapidflow_apx/include)
+target_compile_options(rapidflow_apx_json_strings PRIVATE -Wall -Wextra)
+
+add_executable(rapidflow_apx_r21_resource_witness
+    src/r21_resource_witness.cpp
+    src/harness_runner.cpp
+    src/p4b_tests.cpp
+)
+target_link_libraries(rapidflow_apx_r21_resource_witness PRIVATE rapidflow_apx_foundation OpenSSL::Crypto)
+target_compile_options(rapidflow_apx_r21_resource_witness PRIVATE -O3 -Wall -Wextra)
+target_compile_definitions(rapidflow_apx_r21_resource_witness PRIVATE APX_TEST_ACCESS=1)

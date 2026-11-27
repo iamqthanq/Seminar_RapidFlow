@@ -2,23 +2,106 @@
 
 namespace rapidflow_apx {
 
+namespace {
+class SearchTimingGuard {
+public:
+    SearchTimingGuard(StepProfiling& prof, bool enabled) noexcept
+        : prof_(prof),
+          enabled_(enabled),
+          t0_(enabled ? ProfilingClock::now() : ProfilingTimePoint{}) {}
+
+    SearchTimingGuard(const SearchTimingGuard&) = delete;
+    SearchTimingGuard& operator=(const SearchTimingGuard&) = delete;
+
+    ~SearchTimingGuard() noexcept {
+        if (enabled_) {
+            const auto dt = std::chrono::duration_cast<ProfilingNanoseconds>(
+                ProfilingClock::now() - t0_
+            ).count();
+            prof_.search_ns = dt > 0 ? static_cast<uint64_t>(dt) : 0ULL;
+            if (prof_.search_ns >= prof_.neighbor_retrieval_ns) {
+                prof_.search_core_ns = prof_.search_ns - prof_.neighbor_retrieval_ns;
+            } else {
+                prof_.search_core_ns = 0ULL;
+            }
+        }
+    }
+
+private:
+    StepProfiling& prof_;
+    bool enabled_;
+    ProfilingTimePoint t0_;
+};
+} // namespace
+
 ApxStreamingEngine::ApxStreamingEngine(
     ApxAuthoritativeGraph& graph,
     ApxTypedCodec& codec,
     ApxTupleSink& sink,
     const ApxQueryPlan& query_plan,
     EngineType engine_type,
-    uint64_t max_work
+    uint64_t max_work,
+    NlfMode nlf_mode,
+    size_t max_nlf_memory_bytes,
+    NeighborMode neighbor_mode
 ) : graph_(graph),
     codec_(codec),
     sink_(sink),
     query_plan_(query_plan),
     engine_type_(engine_type),
     max_work_(max_work),
+    requested_nlf_mode_(nlf_mode),
+    effective_nlf_mode_(NlfMode::NONE),
+    neighbor_mode_(neighbor_mode),
+    configuration_status_("SUCCESS"),
+    fallback_reason_(""),
+    max_nlf_memory_bytes_(max_nlf_memory_bytes),
     tx_manager_(graph, codec, sink)
 {
+    if (!is_supported_neighbor_mode(engine_type_, requested_nlf_mode_, neighbor_mode_)) {
+        throw EngineException("Neighbor BUFFER requires M2 with NLF NONE");
+    }
+
     cumulative_counters_.max_work = max_work_;
     step_counters_.max_work = max_work_;
+
+    if (engine_type_ == EngineType::M1) {
+        if (requested_nlf_mode_ != NlfMode::NONE) {
+            throw EngineException("NLF optimization is not supported for M1 engine");
+        }
+        effective_nlf_mode_ = NlfMode::NONE;
+    } else {
+        if (requested_nlf_mode_ == NlfMode::STATIC || requested_nlf_mode_ == NlfMode::RESIDUAL) {
+            if (max_nlf_memory_bytes_ == 0) {
+                max_nlf_memory_bytes_ = DEFAULT_NLF_MEMORY_BYTES;
+            }
+            try {
+                query_signatures_.build(query_plan_);
+                auto idx = std::make_unique<ApxNlfIndex>();
+                idx->initialize(graph_, query_signatures_, max_nlf_memory_bytes_);
+                nlf_index_ = std::move(idx);
+                tx_manager_.set_nlf_context(nlf_index_.get(), &query_signatures_);
+                effective_nlf_mode_ = requested_nlf_mode_;
+                configuration_status_ = "SUCCESS";
+                cumulative_counters_.nlf_index_initialization_cells = nlf_index_->total_cells();
+            } catch (const NlfMemoryLimitException&) {
+                nlf_index_.reset();
+                tx_manager_.set_nlf_context(nullptr, nullptr);
+                effective_nlf_mode_ = NlfMode::NONE;
+                configuration_status_ = "REQUESTED_CONFIGURATION_UNAVAILABLE";
+                fallback_reason_ = "NLF_INDEX_MEMORY_LIMIT";
+            } catch (const std::bad_alloc&) {
+                nlf_index_.reset();
+                tx_manager_.set_nlf_context(nullptr, nullptr);
+                effective_nlf_mode_ = NlfMode::NONE;
+                configuration_status_ = "REQUESTED_CONFIGURATION_UNAVAILABLE";
+                fallback_reason_ = "NLF_INDEX_ALLOCATION_FAILED";
+            }
+        } else {
+            effective_nlf_mode_ = NlfMode::NONE;
+            configuration_status_ = "SUCCESS";
+        }
+    }
 }
 
 StreamStepResult ApxStreamingEngine::execute_step(const UpdateOperation& update, uint32_t step_index) {
@@ -110,26 +193,17 @@ StreamStepResult ApxStreamingEngine::execute_step(const UpdateOperation& update,
 
         try {
             StepProfiling* prof_ptr = profiling_enabled_ ? &step_prof : nullptr;
-            ProfilingTimePoint search_t0;
-            if (profiling_enabled_) {
-                search_t0 = ProfilingClock::now();
-            }
+            SearchTimingGuard search_timing(step_prof, profiling_enabled_);
             if (engine_type_ == EngineType::M1) {
                 m1_engine_.search_event(query_plan_, snapshot, du, dv, dlbl, sink_, step_counters_, prof_ptr);
             } else {
-                m2_engine_.search_event(query_plan_, snapshot, du, dv, dlbl, sink_, step_counters_, prof_ptr);
-            }
-            if (profiling_enabled_) {
-                auto search_t1 = ProfilingClock::now();
-                step_prof.search_ns = std::chrono::duration_cast<ProfilingNanoseconds>(search_t1 - search_t0).count();
-                if (step_prof.search_ns >= step_prof.neighbor_retrieval_ns) {
-                    step_prof.search_core_ns = step_prof.search_ns - step_prof.neighbor_retrieval_ns;
-                } else {
-                    step_prof.search_core_ns = 0;
-                }
+                m2_engine_.search_event(
+                    query_plan_, snapshot, du, dv, dlbl, sink_, step_counters_, prof_ptr,
+                    effective_nlf_mode_, nlf_index_.get(), &query_signatures_, neighbor_mode_
+                );
             }
         } catch (const EngineException& e) {
-            // Re-throw to trigger transaction abort
+            // Re-throw to trigger transaction abort (SearchTimingGuard closes timer on unwind)
             throw;
         }
         return true;
@@ -140,6 +214,7 @@ StreamStepResult ApxStreamingEngine::execute_step(const UpdateOperation& update,
     uint64_t com_before = sink_.committed_emissions();
     uint64_t disc_before = sink_.discarded_emissions();
 
+    tx_manager_.set_counters(&step_counters_);
     StepResult step_res = tx_manager_.execute_update(update, callback);
 
     if (profiling_enabled_) {
@@ -158,7 +233,8 @@ StreamStepResult ApxStreamingEngine::execute_step(const UpdateOperation& update,
     step_counters_.discarded_emissions = sink_.discarded_emissions() - disc_before;
 
     res.status = step_res.status;
-    res.error_message = step_res.error_message;
+    res.committed = step_res.committed;
+    res.error_message = std::move(step_res.error_message);
     res.step_counters = step_counters_;
     cumulative_counters_.accumulate(step_counters_);
 

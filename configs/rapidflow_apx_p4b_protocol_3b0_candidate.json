@@ -1,0 +1,15 @@
+{
+  "amendment_version": "p4b-3b0-candidate-v1",
+  "approval_state": "PREREGISTRATION_CANDIDATE",
+  "execution_authorized": false,
+  "previous_protocol_sha256": "70836770663c32a1a53e52e048be1dd8268fd2e3f02f66859737eef308c4acbb",
+  "proposals": {
+    "continuity_family_sensitivity": "DESCRIPTIVE_DEPENDENCE_LIMITATION_ONLY",
+    "disc07": "RETAIN_DISC_07_UNCHANGED",
+    "multiplicity": "UNADJUSTED_PRIMARY_BONFERRONI_CI_AND_HOLM_ADJUSTED_P_SENSITIVITY",
+    "resource_regression": "REPEATED_SAME_EVIDENCED_CATEGORY",
+    "stratum_min_coverage_fraction": 0.9,
+    "stratum_min_distinct_units": 5,
+    "stratum_min_workloads": 10
+  }
+}

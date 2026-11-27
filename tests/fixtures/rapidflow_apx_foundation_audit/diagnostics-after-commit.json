@@ -1,0 +1,55 @@
+{
+  "query": {
+    "vertices": [
+      {
+        "id": 1,
+        "label": 0
+      },
+      {
+        "id": 0,
+        "label": 0
+      }
+    ],
+    "edges": [
+      {
+        "u": 0,
+        "v": 1,
+        "label": 0
+      }
+    ]
+  },
+  "initial_graph": {
+    "vertices": [
+      {
+        "id": 1,
+        "label": 0
+      },
+      {
+        "id": 0,
+        "label": 0
+      }
+    ],
+    "edges": []
+  },
+  "updates": [
+    {
+      "op": "+",
+      "u": 0,
+      "v": 1,
+      "label": 0
+    },
+    {
+      "op": "+",
+      "u": 0,
+      "v": 1,
+      "label": 0
+    },
+    {
+      "op": "-",
+      "u": 0,
+      "v": 1,
+      "label": 0
+    }
+  ],
+  "k": 0
+}

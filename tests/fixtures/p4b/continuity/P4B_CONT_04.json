@@ -1,0 +1,194 @@
+{
+  "case_id": "P4A_WL_04",
+  "description": "Diamond k=1 approximate mixed micro",
+  "initial_graph": {
+    "edges": [
+      {
+        "label": 10,
+        "u": 0,
+        "v": 1
+      },
+      {
+        "label": 10,
+        "u": 0,
+        "v": 2
+      },
+      {
+        "label": 10,
+        "u": 1,
+        "v": 3
+      },
+      {
+        "label": 10,
+        "u": 2,
+        "v": 3
+      },
+      {
+        "label": 10,
+        "u": 4,
+        "v": 5
+      },
+      {
+        "label": 10,
+        "u": 4,
+        "v": 6
+      },
+      {
+        "label": 10,
+        "u": 5,
+        "v": 7
+      },
+      {
+        "label": 10,
+        "u": 6,
+        "v": 7
+      },
+      {
+        "label": 10,
+        "u": 0,
+        "v": 4
+      },
+      {
+        "label": 10,
+        "u": 1,
+        "v": 5
+      }
+    ],
+    "vertices": [
+      {
+        "id": 0,
+        "label": 1
+      },
+      {
+        "id": 1,
+        "label": 2
+      },
+      {
+        "id": 2,
+        "label": 2
+      },
+      {
+        "id": 3,
+        "label": 3
+      },
+      {
+        "id": 4,
+        "label": 1
+      },
+      {
+        "id": 5,
+        "label": 2
+      },
+      {
+        "id": 6,
+        "label": 3
+      },
+      {
+        "id": 7,
+        "label": 1
+      }
+    ]
+  },
+  "k": 1,
+  "max_work": 500000,
+  "query": {
+    "edges": [
+      {
+        "label": 10,
+        "u": 0,
+        "v": 1
+      },
+      {
+        "label": 10,
+        "u": 0,
+        "v": 2
+      },
+      {
+        "label": 20,
+        "u": 1,
+        "v": 3
+      },
+      {
+        "label": 20,
+        "u": 2,
+        "v": 3
+      },
+      {
+        "label": 30,
+        "u": 1,
+        "v": 2
+      }
+    ],
+    "vertices": [
+      {
+        "id": 0,
+        "label": 1
+      },
+      {
+        "id": 1,
+        "label": 2
+      },
+      {
+        "id": 2,
+        "label": 2
+      },
+      {
+        "id": 3,
+        "label": 3
+      }
+    ]
+  },
+  "query_type": "diamond",
+  "regime": "mixed",
+  "topology": "micro",
+  "updates": [
+    {
+      "label": 30,
+      "op": "+",
+      "u": 1,
+      "v": 2
+    },
+    {
+      "label": 30,
+      "op": "+",
+      "u": 5,
+      "v": 6
+    },
+    {
+      "label": 10,
+      "op": "+",
+      "u": 2,
+      "v": 4
+    },
+    {
+      "label": 10,
+      "op": "+",
+      "u": 3,
+      "v": 7
+    },
+    {
+      "label": 30,
+      "op": "-",
+      "u": 1,
+      "v": 2
+    },
+    {
+      "label": 30,
+      "op": "-",
+      "u": 5,
+      "v": 6
+    },
+    {
+      "label": 10,
+      "op": "-",
+      "u": 2,
+      "v": 4
+    },
+    {
+      "label": 10,
+      "op": "-",
+      "u": 3,
+      "v": 7
+    }
+  ]
+}

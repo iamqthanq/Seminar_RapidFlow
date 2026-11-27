@@ -17,6 +17,8 @@
 
 namespace rapidflow_apx {
 
+struct EngineCounters;
+
 struct EdgeLookupResult {
     bool exists{false};
     uint32_t label{0};
@@ -31,8 +33,27 @@ struct GraphOverlayCheckpoint {
     uint32_t current_edges_count{0};
 };
 
+#ifdef APX_NEIGHBOR_TEST_TRACE
+enum class MergeFaultHook {
+    NONE,
+    FAIL_AFTER_FIRST_EMISSION,
+    FAIL_DURING_FALLBACK,
+    FAIL_DURING_FAST_PATH
+};
+#endif
+
+// Forward declaration of test access adapter (unconditional for C++ ODR consistency)
+struct ApxAuthoritativeGraphTestAccess;
+
 class ApxAuthoritativeGraph {
 public:
+    // Friend declaration (unconditional: guarantees identical class definition across all TUs)
+    friend struct ApxAuthoritativeGraphTestAccess;
+
+#ifdef APX_NEIGHBOR_TEST_TRACE
+    static void set_merge_fault_hook(MergeFaultHook hook);
+    static MergeFaultHook get_merge_fault_hook();
+#endif
     ApxAuthoritativeGraph();
     ~ApxAuthoritativeGraph();
 
@@ -48,12 +69,31 @@ public:
         const std::vector<std::tuple<uint32_t, uint32_t, uint32_t>>& edges
     );
 
+    // Pristine initial state check (for authoritative G0 NLF initialization)
+    bool is_pristine_initial_state() const noexcept {
+        return overlay_labels_.empty() && tombstones_.empty() && dynamic_edge_count_ == 0;
+    }
+
     // Topological & Label Queries
     bool has_vertex(uint32_t u) const;
     uint32_t get_vertex_label(uint32_t u) const;
     bool has_edge(uint32_t u, uint32_t v) const;
     EdgeLookupResult get_edge_label(uint32_t u, uint32_t v) const;
     std::vector<uint32_t> get_neighbors(uint32_t u) const;
+
+    // Replace out with the sorted unique effective neighbor IDs, retaining
+    // its capacity. On allocation failure the partial output must be discarded.
+    void get_neighbors_into(uint32_t u, std::vector<uint32_t>& out) const;
+
+    // Replace out with the sorted unique effective neighbor IDs using a linear
+    // 2-way sorted merge of base and overlay adjacencies, with safe fast paths
+    // and guarded fallback to collect/sort/unique upon ordering violations.
+    void get_neighbors_merged_into(
+        uint32_t u,
+        std::vector<uint32_t>& out,
+        EngineCounters* counters = nullptr
+    ) const;
+
     uint32_t get_degree(uint32_t u) const;
     uint32_t get_vertices_count() const;
     uint32_t get_edges_count() const;
@@ -93,6 +133,17 @@ public:
     }
 
 private:
+    // Helper for linear sorted neighbor merging, accessible for direct testing via ApxAuthoritativeGraphTestAccess.
+    void merge_neighbor_ranges(
+        uint32_t u,
+        const uint32_t* base_nbrs,
+        uint32_t base_count,
+        const uint32_t* overlay_nbrs,
+        uint32_t overlay_count,
+        std::vector<uint32_t>& out,
+        EngineCounters* counters = nullptr
+    ) const;
+
     enum class TxOpType { NONE, INSERT, DELETE };
     struct TxRecord {
         TxOpType op{TxOpType::NONE};
@@ -125,7 +176,33 @@ private:
     // Active transaction state
     bool in_tx_{false};
     TxRecord tx_record_{};
+
+    bool is_key_tentatively_deleted(uint64_t key) const noexcept {
+        return in_tx_ && tx_record_.op == TxOpType::DELETE && tx_record_.key == key;
+    }
+
+    bool has_tentative_overlay_delete(uint32_t u) const noexcept {
+        return in_tx_ && tx_record_.op == TxOpType::DELETE && tx_record_.was_in_overlay
+            && (tx_record_.u == u || tx_record_.v == u);
+    }
 };
+
+#ifdef APX_TEST_ACCESS
+struct ApxAuthoritativeGraphTestAccess {
+    static void merge_neighbor_ranges(
+        const ApxAuthoritativeGraph& graph,
+        uint32_t u,
+        const uint32_t* base_nbrs,
+        uint32_t base_count,
+        const uint32_t* overlay_nbrs,
+        uint32_t overlay_count,
+        std::vector<uint32_t>& out,
+        EngineCounters* counters = nullptr
+    ) {
+        graph.merge_neighbor_ranges(u, base_nbrs, base_count, overlay_nbrs, overlay_count, out, counters);
+    }
+};
+#endif
 
 } // namespace rapidflow_apx
 

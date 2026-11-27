@@ -19,21 +19,27 @@ from __future__ import annotations
 
 import argparse
 import copy
+from dataclasses import dataclass, field
+import gzip
 import hashlib
+import hmac
 import itertools
 import json
 import os
 import random
 import resource
+import secrets
 import shutil
 import signal
 import subprocess
 import sys
+import tarfile
 import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Set
+from types import MappingProxyType
+from typing import Any, Dict, List, Mapping, Optional, Set, Tuple, Union
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EXPECTED_UPSTREAM_COMMIT = "2ea4f4c35bcee95940a5e6c17a74a2a111afc2c1"
@@ -172,11 +178,12 @@ def check_git_provenance() -> Tuple[Dict[str, Any], bool]:
                     allowed = False
                     break
                 fpath = parts[1].strip()
-                # Only execution reports under reports/rapidflow_apx_engines/ and the validation report are allowed during runs
+                # Only execution reports under reports/rapidflow_apx_engines/ and validation/implementation reports are allowed during runs
                 if not (
                     fpath.startswith("reports/rapidflow_apx_engines/")
                     or fpath.startswith("reports\\rapidflow_apx_engines\\")
                     or fpath == "docs/rapidflow_apx_native_engines_validation_report.md"
+                    or fpath.startswith("docs/rapidflow_apx_p4b_")
                 ):
                     allowed = False
                     break
@@ -889,6 +896,432 @@ def validate_step_counters(
     return True, ""
 
 
+RESIDUAL_COUNTER_FIELDS = (
+    "nlf_residual_checks", "nlf_residual_pruned", "nlf_residual_anchor_checks",
+    "nlf_residual_anchor_pruned", "nlf_residual_signature_lookups",
+    "nlf_residual_missing_commits", "nlf_residual_missing_undos",
+)
+
+
+def validate_residual_counters(counters: Dict[str, Any], mode: str, completed: bool) -> str:
+    """Validate additive diagnostics while retaining the historical schema."""
+    if mode != "residual" and not any(field in counters for field in RESIDUAL_COUNTER_FIELDS):
+        return ""
+    for field in RESIDUAL_COUNTER_FIELDS:
+        value = counters.get(field)
+        if type(value) is not int or not 0 <= value <= 500000000000000:
+            return f"Invalid residual counter {field}: {value!r}"
+        if mode != "residual" and value:
+            return f"Nonzero residual counter {field} in effective {mode!r}"
+    for subset, total in (
+        ("pruned", "checks"), ("anchor_checks", "checks"),
+        ("anchor_pruned", "anchor_checks"), ("anchor_pruned", "pruned"),
+        ("missing_undos", "missing_commits"),
+    ):
+        if counters[f"nlf_residual_{subset}"] > counters[f"nlf_residual_{total}"]:
+            return f"Residual {subset} exceeds {total}"
+    if completed and counters["nlf_residual_missing_commits"] != counters["nlf_residual_missing_undos"]:
+        return "Completed residual search did not balance commitments and undo"
+    return ""
+
+
+NEIGHBOR_COUNTER_FIELDS = (
+    "neighbor_buffer_retrieval_calls", "neighbor_buffer_growth_calls",
+    "neighbor_buffer_no_growth_calls",
+)
+NEIGHBOR_MERGE_COUNTER_FIELDS = (
+    "neighbor_merge_retrieval_calls", "neighbor_merge_linear_calls",
+    "neighbor_merge_fast_path_calls", "neighbor_merge_fallback_calls",
+)
+ALL_NEIGHBOR_COUNTER_FIELDS = NEIGHBOR_COUNTER_FIELDS + NEIGHBOR_MERGE_COUNTER_FIELDS
+
+
+# Process-private integrity key to guard against accidental or caller-constructed
+# HistoricalArtifact forgery inside normal Python execution. This is an in-process
+# programming safeguard (not a security boundary against arbitrary in-process memory tampering).
+_PROVENANCE_HMAC_KEY: bytes = secrets.token_bytes(32)
+
+
+@dataclass(frozen=True)
+class HistoricalBinaryRequest:
+    """Target specification when invoking an authorized frozen historical binary."""
+    binary_sha256: str
+    commit_sha: str
+    historical_profile: str  # "buffer", "merge", or "legacy"
+    schema_version: int = 1
+
+
+@dataclass(frozen=True)
+class VerifiedHistoricalArtifact:
+    """Verified provenance binding for a historical version-1 artifact or binary replay (R113-B).
+
+    Direct construction by callers without genuine binary replay or trusted manifest/archive
+    verification fails provenance seal validation and is rejected by historical certification.
+    """
+    binary_sha256: str
+    commit_sha: str
+    historical_profile: str  # "buffer", "merge", or "legacy"
+    schema_version: int = 1
+    artifact_id: Optional[str] = None
+    manifest_id: Optional[str] = None
+    manifest_sha256: Optional[str] = None
+    artifact_sha256: Optional[str] = None
+    artifact_size: Optional[int] = None
+    workload_input_sha256: Optional[str] = None
+    engine: Optional[str] = None
+    nlf_mode: Optional[str] = None
+    neighbor_mode: Optional[str] = None
+    native_output_sha256: Optional[str] = None
+    native_exit_status: Optional[int] = None
+    handoff_commit_sha: Optional[str] = None
+    origin_type: Optional[str] = None  # "historical_binary_replay" or "offline_trusted_manifest_artifact"
+    provenance_origin: Optional[str] = None
+    parsed_result_sha256: Optional[str] = field(default=None, repr=False)
+    _verification_seal: Optional[str] = field(default=None, repr=False, compare=False)
+
+
+# Immutable in-process registry mapping frozen historical binary SHA-256 digests to their
+# actual tested implementation commits, documentation handoff commits, and schema profiles.
+AUTHORIZED_HISTORICAL_BINARIES: Mapping[str, Mapping[str, Any]] = MappingProxyType({
+    "d21575c1c70d1f7bc2380d8172ae4044dacfc3f6ec464d06884555c284d36b84": MappingProxyType({
+        "profile_id": "p4b2a_v1_buffer",
+        "description": "Accepted P4b-2A baseline binary",
+        "commit_sha": "d2108ec6fee083ce0716e2935e07750e56461a72",
+        "handoff_commit_sha": "11e57bc388618c59eab605f0f27e6f05dd9bbcc3",
+        "schema_version": 1,
+        "allowed_profiles": ("buffer", "legacy"),
+        "allowed_schema_versions": (1,),
+        "allowed_neighbor_modes": ("buffer", "legacy"),
+        "allowed_engines": ("m1", "m2"),
+        "required_counter_fields": NEIGHBOR_COUNTER_FIELDS,
+        "forbidden_counter_fields": NEIGHBOR_MERGE_COUNTER_FIELDS,
+    }),
+    "260e5627799b624bf010c4631011db8874ebf769bf4b4cdd62831f1ad25a9608": MappingProxyType({
+        "profile_id": "p4b2b_v1_merge",
+        "description": "Starting P4b-2B release binary",
+        "commit_sha": "bdb1fd2eda4d7881041e6e32500d62af6da1505d",
+        "handoff_commit_sha": "adf5f455e25180dd1e22a5b86446f73ec2cc8c8a",
+        "schema_version": 1,
+        "allowed_profiles": ("merge", "buffer", "legacy"),
+        "allowed_schema_versions": (1,),
+        "allowed_neighbor_modes": ("merge", "buffer", "legacy"),
+        "allowed_engines": ("m1", "m2"),
+        "required_counter_fields": ALL_NEIGHBOR_COUNTER_FIELDS,
+        "forbidden_counter_fields": (),
+    }),
+})
+
+
+# Trusted historical anchor digests recorded from independent reviews (in-process safeguard).
+TRUSTED_HISTORICAL_ANCHORS: Mapping[str, Mapping[str, Any]] = MappingProxyType({
+    "94833a8876a413fc34dce53ba3a037aea4c0f9a2926a59eb505cb2817b0c10cd": MappingProxyType({
+        "anchor_id": "p4b2a_accepted_evidence_archive",
+        "kind": "tar.gz",
+        "description": "Previously accepted P4b-2A review evidence archive",
+        "allowed_binary_sha256s": ("d21575c1c70d1f7bc2380d8172ae4044dacfc3f6ec464d06884555c284d36b84",),
+        "provenance_origin": "Accepted P4b-2A review evidence archive",
+    }),
+    "bcd359cdb36f19e2343df75ba19c2913f918bf184e11818e04b8f9adcae8f82b": MappingProxyType({
+        "anchor_id": "p4b2b_r112_verified_manifest",
+        "kind": "manifest_json",
+        "description": "R1.1.2 reviewer-verified evidence manifest (frozen-binary replay ledger)",
+        "allowed_binary_sha256s": (
+            "d21575c1c70d1f7bc2380d8172ae4044dacfc3f6ec464d06884555c284d36b84",
+            "260e5627799b624bf010c4631011db8874ebf769bf4b4cdd62831f1ad25a9608",
+        ),
+        "provenance_origin": "R1.1.2 verified manifest (frozen-binary replay ledger; not original P4b-2B session)",
+    }),
+})
+
+
+def _canonical_json_sha256(obj: Any) -> str:
+    payload = json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _compute_provenance_seal(
+    binary_sha256: str,
+    commit_sha: str,
+    historical_profile: str,
+    schema_version: int,
+    artifact_id: str,
+    manifest_id: str,
+    manifest_sha256: str,
+    artifact_sha256: str,
+    artifact_size: int,
+    workload_input_sha256: str,
+    engine: str,
+    nlf_mode: str,
+    neighbor_mode: str,
+    native_output_sha256: str,
+    native_exit_status: int,
+    handoff_commit_sha: str,
+    origin_type: str,
+    provenance_origin: str,
+    parsed_result_sha256: str,
+) -> str:
+    msg = "\n".join([
+        binary_sha256,
+        commit_sha,
+        historical_profile,
+        str(schema_version),
+        artifact_id,
+        manifest_id,
+        manifest_sha256,
+        artifact_sha256,
+        str(artifact_size),
+        workload_input_sha256,
+        engine,
+        nlf_mode,
+        neighbor_mode,
+        native_output_sha256,
+        str(native_exit_status),
+        handoff_commit_sha,
+        origin_type,
+        provenance_origin,
+        parsed_result_sha256,
+    ]).encode("utf-8")
+    return hmac.new(_PROVENANCE_HMAC_KEY, msg, hashlib.sha256).hexdigest()
+
+
+def _mint_verified_historical_artifact(
+    *,
+    binary_sha256: str,
+    profile_entry: Mapping[str, Any],
+    historical_profile: str,
+    schema_version: int,
+    artifact_id: str,
+    manifest_id: str,
+    manifest_sha256: str,
+    artifact_sha256: str,
+    artifact_size: int,
+    workload_input_sha256: str,
+    engine: str,
+    nlf_mode: str,
+    neighbor_mode: str,
+    native_output_sha256: str,
+    native_exit_status: int,
+    origin_type: str,
+    provenance_origin: str,
+    parsed_result: Dict[str, Any],
+) -> VerifiedHistoricalArtifact:
+    commit_sha = profile_entry["commit_sha"]
+    handoff_commit_sha = profile_entry.get("handoff_commit_sha", "")
+    parsed_result_sha256 = _canonical_json_sha256(parsed_result)
+    seal = _compute_provenance_seal(
+        binary_sha256=binary_sha256,
+        commit_sha=commit_sha,
+        historical_profile=historical_profile,
+        schema_version=schema_version,
+        artifact_id=artifact_id,
+        manifest_id=manifest_id,
+        manifest_sha256=manifest_sha256,
+        artifact_sha256=artifact_sha256,
+        artifact_size=artifact_size,
+        workload_input_sha256=workload_input_sha256,
+        engine=engine,
+        nlf_mode=nlf_mode,
+        neighbor_mode=neighbor_mode,
+        native_output_sha256=native_output_sha256,
+        native_exit_status=native_exit_status,
+        handoff_commit_sha=handoff_commit_sha,
+        origin_type=origin_type,
+        provenance_origin=provenance_origin,
+        parsed_result_sha256=parsed_result_sha256,
+    )
+    return VerifiedHistoricalArtifact(
+        binary_sha256=binary_sha256,
+        commit_sha=commit_sha,
+        historical_profile=historical_profile,
+        schema_version=schema_version,
+        artifact_id=artifact_id,
+        manifest_id=manifest_id,
+        manifest_sha256=manifest_sha256,
+        artifact_sha256=artifact_sha256,
+        artifact_size=artifact_size,
+        workload_input_sha256=workload_input_sha256,
+        engine=engine,
+        nlf_mode=nlf_mode,
+        neighbor_mode=neighbor_mode,
+        native_output_sha256=native_output_sha256,
+        native_exit_status=native_exit_status,
+        handoff_commit_sha=handoff_commit_sha,
+        origin_type=origin_type,
+        provenance_origin=provenance_origin,
+        parsed_result_sha256=parsed_result_sha256,
+        _verification_seal=seal,
+    )
+
+
+def _verify_historical_artifact_binding(
+    artifact: Any,
+    native_result: Dict[str, Any],
+) -> Tuple[bool, str, Optional[Mapping[str, Any]]]:
+    if isinstance(artifact, bool):
+        return False, "historical_auth must be a VerifiedHistoricalArtifact instance, boolean bypass rejected", None
+    if isinstance(artifact, HistoricalBinaryRequest):
+        return False, "Execution target request cannot substitute for verified historical artifact provenance", None
+    if not isinstance(artifact, VerifiedHistoricalArtifact):
+        return False, "historical_auth must be a VerifiedHistoricalArtifact instance, boolean bypass rejected", None
+    if artifact.binary_sha256 not in AUTHORIZED_HISTORICAL_BINARIES:
+        return False, f"Unauthorized historical binary SHA-256: {artifact.binary_sha256}", None
+    auth_entry = AUTHORIZED_HISTORICAL_BINARIES[artifact.binary_sha256]
+    if artifact.commit_sha != auth_entry["commit_sha"]:
+        return False, f"Historical commit SHA mismatch: expected {auth_entry['commit_sha']}, got {artifact.commit_sha}", None
+    if artifact.schema_version not in auth_entry["allowed_schema_versions"]:
+        return False, f"Unauthorized historical schema version {artifact.schema_version}", None
+    if artifact.historical_profile not in auth_entry["allowed_profiles"]:
+        return False, f"Profile {artifact.historical_profile} not permitted for binary {artifact.binary_sha256}", None
+
+    required_strs = (
+        "artifact_id", "manifest_id", "manifest_sha256", "artifact_sha256",
+        "workload_input_sha256", "engine", "nlf_mode", "neighbor_mode",
+        "native_output_sha256", "origin_type", "provenance_origin", "parsed_result_sha256",
+    )
+    for fname in required_strs:
+        val = getattr(artifact, fname, None)
+        if not isinstance(val, str) or not val.strip():
+            return False, f"Unverified or incomplete historical artifact (missing bound field '{fname}')", None
+
+    if type(artifact.artifact_size) is not int or artifact.artifact_size < 0:
+        return False, "Invalid artifact_size in historical artifact", None
+    if type(artifact.native_exit_status) is not int:
+        return False, "Invalid native_exit_status in historical artifact", None
+
+    if artifact.origin_type == "offline_trusted_manifest_artifact":
+        if artifact.manifest_sha256 not in TRUSTED_HISTORICAL_ANCHORS:
+            return False, f"Untrusted manifest/archive anchor SHA-256: {artifact.manifest_sha256}", None
+        anchor = TRUSTED_HISTORICAL_ANCHORS[artifact.manifest_sha256]
+        if artifact.binary_sha256 not in anchor["allowed_binary_sha256s"]:
+            return False, f"Binary {artifact.binary_sha256} not permitted by anchor {anchor['anchor_id']}", None
+    elif artifact.origin_type == "historical_binary_replay":
+        if artifact.manifest_id != "frozen_binary_reexecution" or artifact.manifest_sha256 != artifact.binary_sha256:
+            return False, "Invalid historical binary replay origin binding", None
+    else:
+        return False, f"Unknown historical origin_type: {artifact.origin_type!r}", None
+
+    expected_seal = _compute_provenance_seal(
+        binary_sha256=artifact.binary_sha256,
+        commit_sha=artifact.commit_sha,
+        historical_profile=artifact.historical_profile,
+        schema_version=artifact.schema_version,
+        artifact_id=artifact.artifact_id,
+        manifest_id=artifact.manifest_id,
+        manifest_sha256=artifact.manifest_sha256,
+        artifact_sha256=artifact.artifact_sha256,
+        artifact_size=artifact.artifact_size,
+        workload_input_sha256=artifact.workload_input_sha256,
+        engine=artifact.engine,
+        nlf_mode=artifact.nlf_mode,
+        neighbor_mode=artifact.neighbor_mode,
+        native_output_sha256=artifact.native_output_sha256,
+        native_exit_status=artifact.native_exit_status,
+        handoff_commit_sha=artifact.handoff_commit_sha or "",
+        origin_type=artifact.origin_type,
+        provenance_origin=artifact.provenance_origin,
+        parsed_result_sha256=artifact.parsed_result_sha256,
+    )
+    if not isinstance(artifact._verification_seal, str) or not hmac.compare_digest(expected_seal, artifact._verification_seal):
+        return False, "Unverified caller-constructed HistoricalArtifact rejected; artifact must originate from verified binary replay or trusted manifest binding", None
+
+    actual_result_sha = _canonical_json_sha256(native_result)
+    if not hmac.compare_digest(actual_result_sha, artifact.parsed_result_sha256):
+        return False, "Output dictionary does not match verified historical artifact payload digest", None
+
+    return True, "", auth_entry
+
+
+def _is_valid_neighbor_counter(value: Any) -> bool:
+    return value is not None and type(value) is int and not isinstance(value, bool) and 0 <= value <= 500000000000000
+
+
+def validate_neighbor_counters(
+    counters: Dict[str, Any],
+    result: Dict[str, Any],
+    historical_profile: Optional[Mapping[str, Any]] = None,
+) -> str:
+    version = result.get("neighbor_configuration_version")
+    eff_mode = result.get("effective_neighbor_mode")
+
+    if version == 2:
+        for field_name in ALL_NEIGHBOR_COUNTER_FIELDS:
+            if field_name not in counters:
+                return f"Missing required neighbor counter '{field_name}'"
+            if not _is_valid_neighbor_counter(counters[field_name]):
+                return f"Invalid neighbor counter {field_name}: {counters[field_name]!r}"
+    elif version == 1:
+        if historical_profile is not None:
+            allowed_modes = historical_profile.get("allowed_neighbor_modes", ())
+            if eff_mode not in allowed_modes:
+                return f"Effective neighbor mode {eff_mode!r} unauthorized in historical profile {historical_profile.get('profile_id')}"
+            for f_bad in historical_profile.get("forbidden_counter_fields", ()):
+                if f_bad in counters:
+                    return f"Forbidden neighbor counter '{f_bad}' present in historical profile {historical_profile.get('profile_id')}"
+            req_fields = historical_profile["required_counter_fields"]
+            for field_name in req_fields:
+                if field_name not in counters:
+                    return f"Missing required neighbor counter '{field_name}' in {historical_profile.get('profile_id')} {eff_mode} profile"
+                if not _is_valid_neighbor_counter(counters[field_name]):
+                    return f"Invalid neighbor counter {field_name}: {counters[field_name]!r}"
+        else:
+            if eff_mode == "merge":
+                for field_name in ALL_NEIGHBOR_COUNTER_FIELDS:
+                    if field_name not in counters:
+                        return f"Missing required neighbor counter '{field_name}' in historical merge profile"
+                    if not _is_valid_neighbor_counter(counters[field_name]):
+                        return f"Invalid neighbor counter {field_name}: {counters[field_name]!r}"
+            elif eff_mode == "buffer":
+                for field_name in NEIGHBOR_COUNTER_FIELDS:
+                    if field_name not in counters:
+                        return f"Missing required neighbor counter '{field_name}' in historical buffer profile"
+                    if not _is_valid_neighbor_counter(counters[field_name]):
+                        return f"Invalid neighbor counter {field_name}: {counters[field_name]!r}"
+                for field_name in NEIGHBOR_MERGE_COUNTER_FIELDS:
+                    if field_name in counters and counters[field_name] is not None:
+                        val = counters[field_name]
+                        if type(val) is not int or isinstance(val, bool) or val != 0:
+                            return f"Nonzero or invalid merge counter '{field_name}' in historical buffer profile: {val!r}"
+            else:
+                for field_name in ALL_NEIGHBOR_COUNTER_FIELDS:
+                    if field_name in counters and counters[field_name] is not None:
+                        val = counters[field_name]
+                        if type(val) is not int or isinstance(val, bool) or val != 0:
+                            return f"Nonzero or invalid neighbor counter '{field_name}' in historical legacy profile: {val!r}"
+    elif version is None:
+        if eff_mode in ("buffer", "merge"):
+            return "Missing neighbor configuration version in buffer/merge run"
+        for field_name in ALL_NEIGHBOR_COUNTER_FIELDS:
+            if counters.get(field_name, 0) != 0:
+                return f"Nonzero neighbor counter {field_name} in unversioned run: {counters.get(field_name)}"
+    else:
+        return f"Unknown or invalid neighbor configuration version: {version!r}"
+
+    if eff_mode not in ("buffer", "merge"):
+        for field_name in ALL_NEIGHBOR_COUNTER_FIELDS:
+            if counters.get(field_name, 0) != 0:
+                return f"Nonzero neighbor counter {field_name} outside buffer/merge mode: {counters.get(field_name)}"
+    elif eff_mode == "buffer":
+        for field_name in NEIGHBOR_MERGE_COUNTER_FIELDS:
+            if counters.get(field_name, 0) != 0:
+                return f"Nonzero merge counter {field_name} in buffer mode: {counters.get(field_name)}"
+        if all(field_name in counters for field_name in NEIGHBOR_COUNTER_FIELDS):
+            completed, growth, no_growth = (counters[field_name] for field_name in NEIGHBOR_COUNTER_FIELDS)
+            if completed != growth + no_growth:
+                return "Completed buffer retrievals differ from growth plus no-growth calls"
+    elif eff_mode == "merge":
+        if all(field_name in counters for field_name in NEIGHBOR_COUNTER_FIELDS):
+            completed, growth, no_growth = (counters[field_name] for field_name in NEIGHBOR_COUNTER_FIELDS)
+            if completed != growth + no_growth:
+                return "Completed buffer retrievals differ from growth plus no-growth calls in merge mode"
+        if all(field_name in counters for field_name in NEIGHBOR_MERGE_COUNTER_FIELDS):
+            retrieval, linear, fast, fallback = (counters[field_name] for field_name in NEIGHBOR_MERGE_COUNTER_FIELDS)
+            if retrieval != linear + fast + fallback:
+                return "Total merge retrievals differ from sum of linear, fast-path, and fallback calls"
+            if "neighbor_buffer_retrieval_calls" in counters and retrieval != counters["neighbor_buffer_retrieval_calls"]:
+                return "Merge retrievals differ from buffer retrieval calls"
+    return ""
+
+
 def validate_native_output_schema(
     res_data: Dict[str, Any],
     expected_engine: str,
@@ -896,6 +1329,10 @@ def validate_native_output_schema(
     raw_input_path: Optional[Path] = None,
     workload: Optional[Dict[str, Any]] = None,
     is_success: bool = True,
+    expected_raw_input_sha256: Optional[str] = None,
+    historical_profile: Optional[Mapping[str, Any]] = None,
+    *,
+    resource_preexec: bool = False,
 ) -> Tuple[bool, str]:
     """Multi-layered strict output schema and semantic invariant validator (P3-R3-F01, P3-R3-F04, P3-R3-F07)."""
     if not isinstance(res_data, dict):
@@ -929,11 +1366,18 @@ def validate_native_output_schema(
 
     if "raw_input_sha256" not in res_data or type(res_data["raw_input_sha256"]) is not str:
         return False, "Missing or invalid 'raw_input_sha256' in native output"
+    if expected_raw_input_sha256 is not None:
+        obs_sha = res_data.get("raw_input_sha256")
+        if obs_sha != expected_raw_input_sha256:
+            return False, f"raw_input_sha256 mismatch: obs={obs_sha} vs exp={expected_raw_input_sha256}"
     if raw_input_path and raw_input_path.is_file():
         exp_sha = compute_sha256(raw_input_path)
         obs_sha = res_data.get("raw_input_sha256")
         if obs_sha != exp_sha:
             return False, f"raw_input_sha256 mismatch: obs={obs_sha} vs exp={exp_sha}"
+
+    if res_data.get("error_category") == "RESULT_DELIVERY_ERROR":
+        return False, "Native result delivery failed; complete step evidence is unavailable"
 
     # 2. Work Budget Precedence & Authority (P3-R3-F07, P3-R7-F01)
     wb = res_data.get("work_budget")
@@ -992,7 +1436,14 @@ def validate_native_output_schema(
     if attempted_steps + unattempted_steps != total_steps:
         return False, f"Lifecycle invariant violated: attempted ({attempted_steps}) + unattempted ({unattempted_steps}) != total ({total_steps})"
 
-    if workload and "updates" in workload:
+    pre_parse_resource_rejection = (
+        not is_success
+        and resource_preexec
+        and attempted_steps == 0
+        and res_data.get("error_category") == "RESOURCE_LIMIT_ERROR"
+        and total_steps == 0
+    )
+    if workload and "updates" in workload and not pre_parse_resource_rejection:
         exp_total = len(workload["updates"])
         if total_steps != exp_total:
             return False, f"Execution total_steps mismatch: obs={total_steps} vs exp={exp_total}"
@@ -1000,12 +1451,12 @@ def validate_native_output_schema(
     ALLOWED_ROOT_STATUSES = {"SUCCESS", "FAIL"}
     ALLOWED_STEP_STATUSES = {
         "SUCCESS", "PREVALIDATION_FAILED", "CALLBACK_ABORTED",
-        "FAULT_INJECTED", "ERROR", "UNATTEMPTED"
+        "FAULT_INJECTED", "INVARIANT_VIOLATION", "ERROR", "UNATTEMPTED"
     }
     ALLOWED_COMMIT_STATUSES = {"COMMITTED", "NOT_COMMITTED"}
     ALLOWED_ERROR_CATEGORIES = {
         "NONE", "DOMAIN_ERROR", "PREVALIDATION_ERROR", "FAULT_INJECTED",
-        "WORK_BUDGET_EXCEEDED", "INPUT_SCHEMA_ERROR", "STEP_FAILURE",
+        "INVARIANT_VIOLATION", "WORK_BUDGET_EXCEEDED", "INPUT_SCHEMA_ERROR", "STEP_FAILURE",
         "IO_ERROR", "RESOURCE_LIMIT", "CONTAINMENT_VIOLATION", "UNCAUGHT_ERROR"
     }
     ALLOWED_STATUS_CATEGORY_MAP = {
@@ -1013,9 +1464,15 @@ def validate_native_output_schema(
         "UNATTEMPTED": {"NONE"},
         "PREVALIDATION_FAILED": {"PREVALIDATION_ERROR"},
         "FAULT_INJECTED": {"FAULT_INJECTED"},
+        "INVARIANT_VIOLATION": {"INVARIANT_VIOLATION"},
         "CALLBACK_ABORTED": {"WORK_BUDGET_EXCEEDED", "CALLBACK_ABORTED", "STEP_FAILURE"},
         "ERROR": {"INPUT_SCHEMA_ERROR", "STEP_FAILURE", "DOMAIN_ERROR", "IO_ERROR", "UNCAUGHT_ERROR"},
     }
+    if resource_preexec:
+        ALLOWED_STEP_STATUSES.add("RESOURCE_EXHAUSTED")
+        ALLOWED_ERROR_CATEGORIES.add("RESOURCE_LIMIT_ERROR")
+        ALLOWED_STATUS_CATEGORY_MAP["ERROR"].add("RESOURCE_LIMIT_ERROR")
+        ALLOWED_STATUS_CATEGORY_MAP["RESOURCE_EXHAUSTED"] = {"RESOURCE_LIMIT_ERROR"}
 
     root_status = res_data.get("status")
     if type(root_status) is not str or root_status not in ALLOWED_ROOT_STATUSES:
@@ -1050,7 +1507,11 @@ def validate_native_output_schema(
 
         # Step-derived lifecycle counts (R7-F02)
         obs_completed = sum(1 for s in steps if isinstance(s, dict) and s.get("status") == "SUCCESS")
-        obs_failed = sum(1 for s in steps if isinstance(s, dict) and s.get("status") in {"PREVALIDATION_FAILED", "CALLBACK_ABORTED", "FAULT_INJECTED", "ERROR"})
+        obs_failed = sum(
+            1 for s in steps
+            if isinstance(s, dict)
+            and s.get("status") in {"PREVALIDATION_FAILED", "CALLBACK_ABORTED", "FAULT_INJECTED", "INVARIANT_VIOLATION", "RESOURCE_EXHAUSTED", "ERROR"}
+        )
         obs_unattempted = sum(1 for s in steps if isinstance(s, dict) and s.get("status") == "UNATTEMPTED")
         obs_attempted = obs_completed + obs_failed
 
@@ -1063,12 +1524,16 @@ def validate_native_output_schema(
         if obs_attempted != attempted_steps:
             return False, f"Execution summary attempted_steps mismatch with steps array: summary={attempted_steps} vs steps_observed={obs_attempted}"
     else:
-        # Pre-execution rejection (e.g. DOMAIN_ERROR before update loop started)
+        # Pre-execution rejection (e.g. DOMAIN_ERROR or RESOURCE_LIMIT_ERROR before update loop started)
         if len(steps) != 0:
             return False, f"Pre-execution rejection must have 0 steps in array, got {len(steps)}"
 
     if not is_success and failed_steps > 0:
-        first_failing_step = next(s for s in steps if isinstance(s, dict) and s.get("status") in {"PREVALIDATION_FAILED", "CALLBACK_ABORTED", "FAULT_INJECTED", "ERROR"})
+        first_failing_step = next(
+            s for s in steps
+            if isinstance(s, dict)
+            and s.get("status") in {"PREVALIDATION_FAILED", "CALLBACK_ABORTED", "FAULT_INJECTED", "INVARIANT_VIOLATION", "RESOURCE_EXHAUSTED", "ERROR"}
+        )
         if root_err_cat != first_failing_step.get("error_category"):
             return False, f"Root error_category mismatch with first failing step: root={root_err_cat} vs step={first_failing_step.get('error_category')}"
 
@@ -1127,7 +1592,12 @@ def validate_native_output_schema(
                         return False, f"Future step {s_idx} after failure must have status UNATTEMPTED: {step_stat}"
 
         # Step counters structural & semantic validation (R6-F01, R7-F01)
-        if step_stat != "UNATTEMPTED":
+        preexec_resource_step = (resource_preexec and step_stat == "ERROR"
+                                 and step.get("error_category") == "RESOURCE_LIMIT_ERROR")
+        if preexec_resource_step:
+            if "step_counters" in step:
+                return False, f"Resource pre-execution step {s_idx} must not report engine counters"
+        elif step_stat != "UNATTEMPTED":
             if "step_counters" not in step:
                 return False, f"Attempted step {s_idx} missing required 'step_counters' object"
             sc = step["step_counters"]
@@ -1141,6 +1611,12 @@ def validate_native_output_schema(
             )
             if not val_sc_ok:
                 return False, val_sc_diag
+            residual_error = validate_residual_counters(sc, res_data.get("effective_nlf_mode"), step_stat == "SUCCESS")
+            if residual_error:
+                return False, f"Step {s_idx}: {residual_error}"
+            neighbor_error = validate_neighbor_counters(sc, res_data, historical_profile=historical_profile)
+            if neighbor_error:
+                return False, f"Step {s_idx}: {neighbor_error}"
 
             if step_stat == "SUCCESS":
                 exp_step_tuples = len(step.get("entered_tuples", [])) + len(step.get("exited_tuples", []))
@@ -1407,6 +1883,12 @@ def validate_native_output_schema(
         cnt = res_data["counters"]
         if not isinstance(cnt, dict):
             return False, "'counters' in native output is not an object"
+        residual_error = validate_residual_counters(cnt, res_data.get("effective_nlf_mode"), is_success)
+        if residual_error:
+            return False, residual_error
+        neighbor_error = validate_neighbor_counters(cnt, res_data, historical_profile=historical_profile)
+        if neighbor_error:
+            return False, neighbor_error
         mandatory_root_fields = [
             "raw_emissions", "unique_emissions", "committed_emissions", "discarded_emissions",
             "work_units", "max_work", "anchors_started", "dfs_states",
@@ -1452,6 +1934,11 @@ def validate_native_output_schema(
         elif expected_engine == "m2":
             reconciliation_fields.extend(["edge_decisions", "missing_branches", "commitment_checks", "commitment_rejections"])
 
+        reconciliation_fields.extend(field for field in RESIDUAL_COUNTER_FIELDS if field in cnt)
+        if historical_profile is not None:
+            reconciliation_fields.extend(historical_profile["required_counter_fields"])
+        else:
+            reconciliation_fields.extend(field for field in ALL_NEIGHBOR_COUNTER_FIELDS if field in cnt)
         for rf in reconciliation_fields:
             step_sum = sum(s.get("step_counters", {}).get(rf, 0) for s in steps if s.get("status") != "UNATTEMPTED" and "step_counters" in s)
             if cnt[rf] != step_sum:
@@ -1473,6 +1960,779 @@ def validate_native_output_schema(
     return True, ""
 
 
+def validate_nlf_configuration(
+    requested_engine: str,
+    requested_nlf_mode: str,
+    native_result: Dict[str, Any],
+    is_success_run: bool,
+    requested_neighbor_mode: Optional[str] = None,
+    historical_auth: Optional[VerifiedHistoricalArtifact] = None,
+    native_exit_code: Optional[int] = None,
+    *,
+    accept_unavailable: bool = False,
+) -> Tuple[bool, str, Dict[str, Any]]:
+    """Validate actual configuration, including on initialized failures.
+
+    A live runner always supplies requested_neighbor_mode and strictly requires schema version 2.
+    Historical schema version 1 artifacts are ONLY permitted through an explicit, seal-verified
+    VerifiedHistoricalArtifact bound to a real frozen historical binary replay or trusted manifest (R113-B).
+    """
+    fields = (
+        "requested_nlf_mode", "effective_nlf_mode", "configuration_status",
+        "nlf_memory_limit_bytes", "nlf_index_logical_bytes",
+    )
+    neighbor_fields = ("requested_neighbor_mode", "effective_neighbor_mode")
+    metadata = (*fields, "fallback_reason", *neighbor_fields)
+    meta_info: Dict[str, Any] = {
+        "configuration_valid": True,
+        "eligible_for_requested_variant": False,
+        "configuration_error": "",
+        "requested_nlf_mode": native_result.get("requested_nlf_mode", requested_nlf_mode),
+        "effective_nlf_mode": native_result.get("effective_nlf_mode", "none"),
+        "configuration_status": native_result.get("configuration_status", "NONE"),
+    }
+
+    def reject(message: str, category: str = "CONFIG_INTEGRITY"):
+        diagnostic = f"[{category}] {message}"
+        meta_info["configuration_valid"] = False
+        meta_info["configuration_error"] = diagnostic
+        return False, diagnostic, meta_info
+
+    auth_entry: Optional[Mapping[str, Any]] = None
+    if historical_auth is not None:
+        bind_ok, bind_diag, auth_entry = _verify_historical_artifact_binding(historical_auth, native_result)
+        if not bind_ok:
+            return reject(bind_diag, "HISTORICAL_PROVENANCE_ERROR")
+        if historical_auth.engine != requested_engine or historical_auth.nlf_mode != requested_nlf_mode:
+            return reject(
+                f"Historical artifact configuration ({historical_auth.engine}/{historical_auth.nlf_mode}) "
+                f"does not match requested ({requested_engine}/{requested_nlf_mode})",
+                "HISTORICAL_PROVENANCE_ERROR",
+            )
+        if requested_engine not in auth_entry["allowed_engines"]:
+            return reject(f"Engine {requested_engine!r} unauthorized in historical binary profile", "HISTORICAL_PROVENANCE_ERROR")
+        if historical_auth.historical_profile not in auth_entry["allowed_neighbor_modes"]:
+            return reject(f"Profile {historical_auth.historical_profile!r} unauthorized in historical binary profile", "HISTORICAL_PROVENANCE_ERROR")
+
+    marker = native_result.get("configuration_initialized")
+    if "configuration_initialized" in native_result and type(marker) is not bool:
+        return reject("configuration_initialized must be a boolean")
+
+    version = native_result.get("neighbor_configuration_version")
+    if "neighbor_configuration_version" in native_result and (type(version) is not int or version not in (1, 2)):
+        return reject("Unknown neighbor configuration version")
+
+    # Require a startup failure category and zero execution evidence before
+    # accepting the absence of configuration metadata. Initialized failures
+    # can have zero attempted updates, for example when 'updates' is missing.
+    has_metadata = any(field in native_result for field in metadata)
+    execution = native_result.get("execution", {})
+    started = (
+        bool(native_result.get("steps"))
+        or "query_info" in native_result
+        or not isinstance(execution, dict)
+        or any(
+            type(execution.get(field, 0)) is not int or execution.get(field, 0) != 0
+            for field in ("attempted_steps", "committed_steps", "delivered_steps", "completed_steps", "failed_steps")
+        )
+        or execution.get("total_steps", 0) != execution.get("unattempted_steps", 0)
+    )
+    if marker is False and (is_success_run or has_metadata or started):
+        return reject("Uninitialized configuration contradicts native execution evidence")
+    if marker is not True and not has_metadata and not started and not is_success_run:
+        startup_exit = {"CLI_ARG_ERROR": 1, "INPUT_SCHEMA_ERROR": 2, "DOMAIN_ERROR": 3, "RESOURCE_LIMIT_ERROR": 5}
+        category = native_result.get("error_category")
+        expected_exit = startup_exit.get(category) if isinstance(category, str) else None
+        actual_exit = native_exit_code if native_exit_code is not None else native_result.get("exit_code")
+        if (native_result.get("status") == "FAIL" and expected_exit is not None
+                and actual_exit == expected_exit):
+            if historical_auth is not None:
+                if version != historical_auth.schema_version:
+                    return reject(f"Artifact version {version} does not match authorized historical version {historical_auth.schema_version}")
+                return True, "", meta_info
+            if requested_neighbor_mode is not None and version == 1:
+                return reject("Missing initialized current neighbor configuration identity (live execution strictly requires version 2 with configuration_initialized=true, downgrade rejected)")
+            if version == 1:
+                return reject("Historical schema version 1 encountered without verified historical provenance")
+            return True, "", meta_info
+
+    for field_name in fields[:3]:
+        if not isinstance(native_result.get(field_name), str):
+            return reject(f"Required NLF metadata field '{field_name}' must be a string")
+
+    native_req = native_result["requested_nlf_mode"]
+    native_eff = native_result["effective_nlf_mode"]
+    config_status = native_result["configuration_status"]
+    fallback = native_result.get("fallback_reason")
+    if native_req not in ("none", "static", "residual") or native_eff not in ("none", "static", "residual"):
+        return reject("Unknown requested or effective NLF mode")
+    if native_req != requested_nlf_mode:
+        return reject(f"Requested mode mismatch: runner requested '{requested_nlf_mode}', native reported '{native_req}'")
+    if requested_engine == "m1" and (native_req != "none" or native_eff != "none"):
+        return reject("NLF optimization is unsupported for M1")
+    if requested_neighbor_mode is not None or version is not None or any(
+        field_name in native_result for field_name in neighbor_fields
+    ):
+        if historical_auth is not None:
+            if version != historical_auth.schema_version:
+                return reject(f"Artifact version {version} does not match authorized historical version {historical_auth.schema_version}")
+            if marker is not True:
+                return reject("Historical artifact missing configuration_initialized=true")
+        else:
+            # LIVE EXECUTION PATH: strictly requires current version 2 with configuration_initialized=true
+            if requested_neighbor_mode is not None:
+                if version != 2 or marker is not True:
+                    return reject("Missing initialized current neighbor configuration identity (live execution strictly requires version 2 with configuration_initialized=true, downgrade rejected)")
+            else:
+                if version is not None and version != 2:
+                    return reject("Unversioned caller encountered historical schema version without authorization")
+                if marker is not True:
+                    return reject("Missing initialized configuration identity")
+
+        if native_result.get("engine") != requested_engine or native_result.get("engine_name") != requested_engine:
+            return reject("Engine identity mismatch in initialized configuration")
+        asked, effective = (native_result.get(field_name) for field_name in neighbor_fields)
+        if asked not in ("legacy", "buffer", "merge") or effective not in ("legacy", "buffer", "merge"):
+            return reject("Missing or unknown requested/effective neighbor mode")
+        if requested_neighbor_mode is not None and asked != requested_neighbor_mode:
+            return reject(f"Requested neighbor mode mismatch: runner requested {requested_neighbor_mode!r}, native reported {asked!r}")
+        if effective != asked:
+            return reject(f"Neighbor mode {asked!r} requires effective {asked!r}, got {effective!r}")
+        if historical_auth is not None:
+            if effective != historical_auth.historical_profile or asked != historical_auth.neighbor_mode:
+                return reject(f"Effective neighbor mode {effective!r} does not match historical authorization profile {historical_auth.historical_profile!r}")
+        if effective in ("buffer", "merge") and (requested_engine != "m2" or native_req != "none" or native_eff != "none"):
+            return reject(f"Neighbor {effective} mode requires M2 with NLF NONE")
+        meta_info.update(requested_neighbor_mode=asked, effective_neighbor_mode=effective)
+
+    if fallback is not None and not isinstance(fallback, str):
+        return reject("fallback_reason must be a string when present")
+
+    if config_status == "SUCCESS":
+        if fallback and fallback.strip():
+            return reject("SUCCESS with a non-empty fallback_reason", "CONFIG_CONTRADICTION")
+        if native_eff != native_req:
+            return reject(f"SUCCESS requires effective mode '{native_req}', got '{native_eff}'")
+    elif config_status == "REQUESTED_CONFIGURATION_UNAVAILABLE":
+        if native_req == "none":
+            return reject("Requested 'none' cannot report unavailable", "CONFIG_UNAVAILABLE")
+        if native_eff != "none":
+            return reject(f"Unavailable {native_req} configuration must use effective 'none'", "CONFIG_CONTRADICTION")
+        if fallback not in ("NLF_INDEX_MEMORY_LIMIT", "NLF_INDEX_ALLOCATION_FAILED"):
+            return reject(f"Unavailable {native_req} configuration has invalid fallback_reason {fallback!r}", "CONFIG_INVALID_METADATA")
+    else:
+        return reject(f"Unknown configuration status '{config_status}'")
+
+    limit = native_result.get("nlf_memory_limit_bytes")
+    logical = native_result.get("nlf_index_logical_bytes")
+    if type(logical) is not int or logical < 0:
+        return reject("Logical bytes must be a non-negative integer")
+    if native_eff == "none" and logical != 0:
+        return reject(f"Logical bytes for effective 'none' must be 0, got {logical}")
+    if type(limit) is not int or limit <= 0:
+        return reject("nlf_memory_limit_bytes must be a positive integer")
+    if native_eff != "none" and logical > limit:
+        return reject(f"Index logical bytes {logical} exceeds limit {limit}")
+
+    if config_status == "REQUESTED_CONFIGURATION_UNAVAILABLE" and not accept_unavailable:
+        return reject(f"Requested {native_req} optimization unavailable (fallback_reason: {fallback})", "CONFIG_UNAVAILABLE")
+    meta_info["eligible_for_requested_variant"] = is_success_run and config_status == "SUCCESS"
+    return True, "", meta_info
+
+
+def validate_historical_artifact_configuration(
+    native_result: Dict[str, Any],
+    historical_auth: Any,
+    requested_engine: str = "m2",
+    requested_nlf_mode: str = "none",
+    requested_neighbor_mode: Optional[str] = None,
+    is_success_run: bool = True,
+    workload: Optional[Dict[str, Any]] = None,
+    native_exit_code: Optional[int] = None,
+    require_full_schema: bool = True,
+) -> Tuple[bool, str, Dict[str, Any]]:
+    """Dedicated validation path requiring a genuinely verified historical artifact binding (R113-B)."""
+    if not isinstance(native_result, dict):
+        return False, "[HISTORICAL_PROVENANCE_ERROR] Historical native_result must be an object", {"configuration_valid": False}
+    if not isinstance(historical_auth, VerifiedHistoricalArtifact):
+        return False, "[HISTORICAL_PROVENANCE_ERROR] VerifiedHistoricalArtifact required (unverified or boolean bypass rejected)", {"configuration_valid": False}
+
+    req_nbr = requested_neighbor_mode or historical_auth.historical_profile
+    ok, diag, meta = validate_nlf_configuration(
+        requested_engine=requested_engine,
+        requested_nlf_mode=requested_nlf_mode,
+        native_result=native_result,
+        is_success_run=is_success_run,
+        requested_neighbor_mode=req_nbr,
+        historical_auth=historical_auth,
+        native_exit_code=native_exit_code,
+    )
+    if not ok:
+        return ok, diag, meta
+
+    if require_full_schema:
+        profile = AUTHORIZED_HISTORICAL_BINARIES[historical_auth.binary_sha256]
+        expected_cid = str(workload.get("case_id", "")) if isinstance(workload, dict) and "case_id" in workload else str(native_result.get("case_id", ""))
+        s_ok, s_diag = validate_native_output_schema(
+            res_data=native_result,
+            expected_engine=requested_engine,
+            expected_case_id=expected_cid,
+            workload=workload,
+            is_success=is_success_run,
+            expected_raw_input_sha256=historical_auth.workload_input_sha256,
+            historical_profile=profile,
+        )
+        if not s_ok:
+            meta["configuration_valid"] = False
+            meta["configuration_error"] = s_diag
+            meta["eligible_for_requested_variant"] = False
+            return False, f"[HISTORICAL_SCHEMA_ERROR] {s_diag}", meta
+
+    return True, "", meta
+
+
+def _extract_cli_modes_from_argv(argv: List[str]) -> Tuple[str, str, str]:
+    eng, nlf, nbr = "m2", "none", "legacy"
+    for idx, tok in enumerate(argv):
+        if tok == "--engine" and idx + 1 < len(argv):
+            eng = argv[idx + 1]
+        elif tok == "--nlf-mode" and idx + 1 < len(argv):
+            nlf = argv[idx + 1]
+        elif tok == "--neighbor-mode" and idx + 1 < len(argv):
+            nbr = argv[idx + 1]
+    return eng, nlf, nbr
+
+
+def _parse_ledger_record(
+    rec: Dict[str, Any],
+    line_num: int,
+    anchor: Mapping[str, Any],
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    if not isinstance(rec, dict):
+        return None, f"Ledger line {line_num} is not a JSON object"
+
+    # Format A (R1.1.2 / R1.1.3 ledger)
+    if "native_binary_sha256" in rec and "raw_output" in rec:
+        raw_out = rec.get("raw_output")
+        if not isinstance(raw_out, str) or not raw_out.strip():
+            return None, f"Ledger line {line_num} missing raw_output string"
+        raw_in = rec.get("raw_input")
+        if not isinstance(raw_in, str):
+            return None, f"Ledger line {line_num} missing raw_input string"
+        raw_out_bytes = raw_out.encode("utf-8")
+        try:
+            parsed_out = json.loads(raw_out)
+        except Exception as exc:
+            return None, f"Ledger line {line_num} invalid JSON raw_output: {exc}"
+        return {
+            "line_num": line_num,
+            "stage": rec.get("workload_family", ""),
+            "workload_family": rec.get("workload_family", ""),
+            "case_id": rec.get("case_id", parsed_out.get("case_id", "")),
+            "binary_sha256": rec.get("native_binary_sha256", ""),
+            "engine": rec.get("engine", ""),
+            "nlf_mode": rec.get("nlf_mode", "none"),
+            "neighbor_mode": rec.get("neighbor_mode", "legacy"),
+            "exit_code": rec.get("exit_code"),
+            "raw_input": raw_in,
+            "recorded_input_sha256": rec.get("input_sha256", ""),
+            "raw_output_sha256": hashlib.sha256(raw_out_bytes).hexdigest(),
+            "parsed_output": parsed_out,
+        }, None
+
+    # Format B (P4b-2A canonical-replays.jsonl.gz)
+    if "native_sha256" in rec and "raw_output" in rec and "argv" in rec:
+        raw_out = rec.get("raw_output")
+        if not isinstance(raw_out, str) or not raw_out.strip():
+            return None, f"Ledger line {line_num} missing raw_output string"
+        raw_in = rec.get("raw_input")
+        if not isinstance(raw_in, str):
+            return None, f"Ledger line {line_num} missing raw_input string"
+        eng, nlf, nbr = _extract_cli_modes_from_argv(list(rec.get("argv") or ()))
+        raw_out_bytes = raw_out.encode("utf-8")
+        try:
+            parsed_out = json.loads(raw_out)
+        except Exception as exc:
+            return None, f"Ledger line {line_num} invalid JSON raw_output: {exc}"
+        return {
+            "line_num": line_num,
+            "stage": rec.get("stage", ""),
+            "workload_family": rec.get("stage", ""),
+            "case_id": parsed_out.get("case_id", ""),
+            "binary_sha256": rec.get("native_sha256", ""),
+            "engine": eng,
+            "nlf_mode": nlf,
+            "neighbor_mode": nbr,
+            "exit_code": rec.get("exit"),
+            "raw_input": raw_in,
+            "recorded_input_sha256": rec.get("input_sha256", ""),
+            "raw_output_sha256": hashlib.sha256(raw_out_bytes).hexdigest(),
+            "parsed_output": parsed_out,
+        }, None
+
+    # Format C (P4b-2A frozen-raw.jsonl.gz)
+    if "after" in rec and isinstance(rec.get("after"), dict) and "raw_input" in rec:
+        after = rec["after"]
+        parsed_out = after.get("result")
+        if not isinstance(parsed_out, dict):
+            return None, f"Ledger line {line_num} missing after.result dict"
+        cmd = list(after.get("cmd") or ())
+        eng, nlf, nbr = _extract_cli_modes_from_argv(cmd)
+        if not cmd or "final-native" not in str(cmd[0]):
+            return None, f"Ledger line {line_num} does not identify final-native historical binary"
+        raw_in = rec.get("raw_input")
+        if not isinstance(raw_in, str):
+            return None, f"Ledger line {line_num} missing raw_input string"
+        bin_sha = anchor["allowed_binary_sha256s"][0] if anchor.get("allowed_binary_sha256s") else ""
+        return {
+            "line_num": line_num,
+            "stage": "frozen_raw_after",
+            "workload_family": "frozen_raw_after",
+            "case_id": rec.get("case_id", parsed_out.get("case_id", "")),
+            "binary_sha256": bin_sha,
+            "engine": rec.get("engine", eng),
+            "nlf_mode": rec.get("mode", nlf),
+            "neighbor_mode": nbr,
+            "exit_code": after.get("exit"),
+            "raw_input": raw_in,
+            "recorded_input_sha256": rec.get("input_sha256", ""),
+            "raw_output_sha256": _canonical_json_sha256(parsed_out),
+            "parsed_output": parsed_out,
+        }, None
+
+    return None, f"Unrecognized historical ledger format at line {line_num}"
+
+
+def verify_historical_artifact(
+    manifest_or_archive_path: Path,
+    expected_manifest_sha256: Optional[str],
+    artifact_relpath: str,
+    *,
+    case_id: Optional[str] = None,
+    expected_binary_sha256: Optional[str] = None,
+    expected_commit_sha: Optional[str] = None,
+    expected_engine: Optional[str] = None,
+    expected_nlf_mode: Optional[str] = None,
+    expected_neighbor_mode: Optional[str] = None,
+    expected_workload: Optional[Dict[str, Any]] = None,
+    expected_workload_sha256: Optional[str] = None,
+    workload_family: Optional[str] = None,
+    stage: Optional[str] = None,
+    artifact_base_dir: Optional[Path] = None,
+) -> Tuple[bool, str, Optional[VerifiedHistoricalArtifact], Optional[Dict[str, Any]]]:
+    """Offline historical provenance verifier (Workflow B, R113-B).
+
+    Anchors verification to a trusted manifest/archive digest, verifies the manifest
+    and artifact bytes, binds exact ledger/output records and workload input SHA-256,
+    checks binary/source profile eligibility, and validates full schema + counters + config.
+    """
+    if not expected_manifest_sha256 or not isinstance(expected_manifest_sha256, str):
+        return False, "[HISTORICAL_PROVENANCE_ERROR] Missing trusted manifest/archive SHA-256", None, None
+    if expected_manifest_sha256 not in TRUSTED_HISTORICAL_ANCHORS:
+        return False, f"[HISTORICAL_PROVENANCE_ERROR] Untrusted manifest/archive SHA-256 not in trusted anchors: {expected_manifest_sha256}", None, None
+
+    src_path = Path(manifest_or_archive_path)
+    if not src_path.is_file():
+        return False, f"[HISTORICAL_PROVENANCE_ERROR] Manifest/archive path does not exist: {src_path}", None, None
+
+    actual_manifest_sha = compute_sha256(src_path)
+    if actual_manifest_sha != expected_manifest_sha256:
+        return False, f"[HISTORICAL_PROVENANCE_ERROR] Manifest/archive SHA-256 mismatch: observed {actual_manifest_sha} vs trusted {expected_manifest_sha256}", None, None
+
+    anchor = TRUSTED_HISTORICAL_ANCHORS[actual_manifest_sha]
+    manifest_id = anchor["anchor_id"]
+
+    if not artifact_relpath or not isinstance(artifact_relpath, str):
+        return False, "[HISTORICAL_PROVENANCE_ERROR] Missing artifact relative path / member name", None, None
+
+    artifact_bytes: Optional[bytes] = None
+    actual_artifact_sha: str = ""
+    actual_artifact_size: int = 0
+
+    if anchor["kind"] == "tar.gz":
+        try:
+            with tarfile.open(src_path, "r:gz") as tf:
+                try:
+                    member = tf.getmember(artifact_relpath)
+                except KeyError:
+                    return False, f"[HISTORICAL_PROVENANCE_ERROR] Artifact member {artifact_relpath!r} absent from trusted archive {manifest_id}", None, None
+                if not member.isfile():
+                    return False, f"[HISTORICAL_PROVENANCE_ERROR] Archive member {artifact_relpath!r} is not a regular file", None, None
+                fobj = tf.extractfile(member)
+                if fobj is None:
+                    return False, f"[HISTORICAL_PROVENANCE_ERROR] Unable to read archive member {artifact_relpath!r}", None, None
+                artifact_bytes = fobj.read()
+                if len(artifact_bytes) != member.size:
+                    return False, f"[HISTORICAL_PROVENANCE_ERROR] Archive member size mismatch for {artifact_relpath!r}", None, None
+                actual_artifact_size = len(artifact_bytes)
+                actual_artifact_sha = hashlib.sha256(artifact_bytes).hexdigest()
+        except Exception as exc:
+            return False, f"[HISTORICAL_PROVENANCE_ERROR] Failed reading trusted archive: {exc}", None, None
+    elif anchor["kind"] == "manifest_json":
+        try:
+            manifest_obj = json.loads(src_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            return False, f"[HISTORICAL_PROVENANCE_ERROR] Failed parsing manifest JSON: {exc}", None, None
+        files_list = manifest_obj.get("files", [])
+        if not isinstance(files_list, list):
+            return False, "[HISTORICAL_PROVENANCE_ERROR] Invalid manifest structure ('files' must be a list)", None, None
+        entry = next((item for item in files_list if isinstance(item, dict) and item.get("path") == artifact_relpath), None)
+        if entry is None:
+            return False, f"[HISTORICAL_PROVENANCE_ERROR] Artifact {artifact_relpath!r} absent from trusted manifest {manifest_id}", None, None
+        base_dir = Path(artifact_base_dir) if artifact_base_dir is not None else src_path.parent
+        resolved_base = base_dir.resolve()
+        artifact_file = (base_dir / artifact_relpath).resolve()
+        if resolved_base not in artifact_file.parents:
+            return False, f"[HISTORICAL_PROVENANCE_ERROR] Artifact path escapes trusted base directory: {artifact_relpath!r}", None, None
+        if not artifact_file.is_file():
+            return False, f"[HISTORICAL_PROVENANCE_ERROR] Manifest artifact missing on disk: {artifact_file}", None, None
+        artifact_bytes = artifact_file.read_bytes()
+        actual_artifact_size = len(artifact_bytes)
+        actual_artifact_sha = hashlib.sha256(artifact_bytes).hexdigest()
+        if actual_artifact_size != entry.get("size_bytes") or actual_artifact_sha != entry.get("sha256"):
+            return False, (
+                f"[HISTORICAL_PROVENANCE_ERROR] Artifact bytes tampered for {artifact_relpath!r}: "
+                f"observed (size={actual_artifact_size}, sha={actual_artifact_sha}) vs "
+                f"manifest (size={entry.get('size_bytes')}, sha={entry.get('sha256')})"
+            ), None, None
+    else:
+        return False, f"[HISTORICAL_PROVENANCE_ERROR] Unsupported anchor kind: {anchor['kind']!r}", None, None
+
+    # Parse ledger or standalone native output JSON strictly from verified bytes
+    selected_rec: Optional[Dict[str, Any]] = None
+    is_ledger = artifact_relpath.endswith(".jsonl.gz") or artifact_relpath.endswith(".jsonl")
+    if is_ledger:
+        try:
+            text_bytes = gzip.decompress(artifact_bytes) if artifact_relpath.endswith(".gz") else artifact_bytes
+            lines = text_bytes.decode("utf-8").splitlines()
+        except Exception as exc:
+            return False, f"[HISTORICAL_PROVENANCE_ERROR] Failed decompressing/decoding ledger {artifact_relpath!r}: {exc}", None, None
+
+        matches: List[Dict[str, Any]] = []
+        for idx, line in enumerate(lines, start=1):
+            if not line.strip():
+                continue
+            try:
+                raw_rec = json.loads(line)
+            except Exception as exc:
+                return False, f"[HISTORICAL_PROVENANCE_ERROR] Corrupt JSON in ledger line {idx}: {exc}", None, None
+            norm, p_err = _parse_ledger_record(raw_rec, idx, anchor)
+            if p_err:
+                # Some helper ledgers may have non-target entries unless matched; fail only if no normalized form fits
+                continue
+            assert norm is not None
+            if case_id is not None and norm["case_id"] != case_id:
+                continue
+            if workload_family is not None and norm["workload_family"] != workload_family:
+                continue
+            if stage is not None and norm["stage"] != stage:
+                continue
+            if expected_engine is not None and norm["engine"] != expected_engine:
+                continue
+            if expected_nlf_mode is not None and norm["nlf_mode"] != expected_nlf_mode:
+                continue
+            if expected_neighbor_mode is not None and norm["neighbor_mode"] != expected_neighbor_mode:
+                continue
+            if expected_binary_sha256 is not None and norm["binary_sha256"] != expected_binary_sha256:
+                continue
+            if expected_workload_sha256 is not None and norm["recorded_input_sha256"] != expected_workload_sha256:
+                continue
+            matches.append(norm)
+
+        if not matches:
+            return False, f"[HISTORICAL_PROVENANCE_ERROR] No matching record found in verified ledger {artifact_relpath!r}", None, None
+        distinct_digests = {
+            (m["binary_sha256"], m["engine"], m["nlf_mode"], m["neighbor_mode"], m["recorded_input_sha256"], m["raw_output_sha256"])
+            for m in matches
+        }
+        if len(distinct_digests) > 1:
+            return False, f"[HISTORICAL_PROVENANCE_ERROR] Ambiguous multiple distinct ledger records matched ({len(matches)} matches); narrow filters", None, None
+        selected_rec = matches[0]
+        artifact_id = f"{artifact_relpath}#line={selected_rec['line_num']}"
+    else:
+        try:
+            parsed_single = json.loads(artifact_bytes.decode("utf-8"))
+        except Exception as exc:
+            return False, f"[HISTORICAL_PROVENANCE_ERROR] Failed parsing single JSON artifact {artifact_relpath!r}: {exc}", None, None
+        if not isinstance(parsed_single, dict) or "raw_input_sha256" not in parsed_single:
+            return False, f"[HISTORICAL_PROVENANCE_ERROR] Artifact {artifact_relpath!r} is not a raw native execution output", None, None
+        if expected_workload is None:
+            return False, "[HISTORICAL_PROVENANCE_ERROR] Single JSON artifact validation requires expected_workload bytes/dict for input binding", None, None
+        raw_in_text = json.dumps(expected_workload)
+        rec_bin = expected_binary_sha256 or (anchor["allowed_binary_sha256s"][0] if len(anchor["allowed_binary_sha256s"]) == 1 else "")
+        selected_rec = {
+            "line_num": 1,
+            "stage": stage or "",
+            "workload_family": workload_family or "",
+            "case_id": parsed_single.get("case_id", ""),
+            "binary_sha256": rec_bin,
+            "engine": parsed_single.get("engine", expected_engine or ""),
+            "nlf_mode": parsed_single.get("requested_nlf_mode", expected_nlf_mode or "none"),
+            "neighbor_mode": parsed_single.get("requested_neighbor_mode", expected_neighbor_mode or "legacy"),
+            "exit_code": parsed_single.get("exit_code", 0 if parsed_single.get("status") == "SUCCESS" else None),
+            "raw_input": raw_in_text,
+            "recorded_input_sha256": parsed_single.get("raw_input_sha256", ""),
+            "raw_output_sha256": actual_artifact_sha,
+            "parsed_output": parsed_single,
+        }
+        artifact_id = artifact_relpath
+
+    # Bind raw workload input & verify input hash
+    raw_input_text = selected_rec["raw_input"]
+    recomputed_input_sha = hashlib.sha256(raw_input_text.encode("utf-8")).hexdigest()
+    recorded_input_sha = selected_rec["recorded_input_sha256"]
+    if recomputed_input_sha != recorded_input_sha:
+        return False, f"[HISTORICAL_PROVENANCE_ERROR] Recorded input SHA-256 mismatch in verified record: {recomputed_input_sha} vs {recorded_input_sha}", None, None
+    try:
+        parsed_workload = json.loads(raw_input_text)
+    except Exception as exc:
+        return False, f"[HISTORICAL_PROVENANCE_ERROR] Invalid raw_input JSON in verified record: {exc}", None, None
+
+    if expected_workload_sha256 is not None and recorded_input_sha != expected_workload_sha256:
+        return False, f"[HISTORICAL_PROVENANCE_ERROR] Artifact workload SHA-256 {recorded_input_sha} does not match expected {expected_workload_sha256}", None, None
+    if expected_workload is not None:
+        if _canonical_json_sha256(parsed_workload) != _canonical_json_sha256(expected_workload):
+            return False, "[HISTORICAL_PROVENANCE_ERROR] Verified artifact workload does not match expected_workload", None, None
+
+    rec_bin_sha = selected_rec["binary_sha256"]
+    if rec_bin_sha not in anchor["allowed_binary_sha256s"]:
+        return False, f"[HISTORICAL_PROVENANCE_ERROR] Binary SHA {rec_bin_sha!r} not permitted by trusted anchor {manifest_id}", None, None
+    if rec_bin_sha not in AUTHORIZED_HISTORICAL_BINARIES:
+        return False, f"[HISTORICAL_PROVENANCE_ERROR] Binary SHA {rec_bin_sha!r} not in AUTHORIZED_HISTORICAL_BINARIES", None, None
+    profile = AUTHORIZED_HISTORICAL_BINARIES[rec_bin_sha]
+
+    if expected_binary_sha256 is not None and expected_binary_sha256 != rec_bin_sha:
+        return False, f"[HISTORICAL_PROVENANCE_ERROR] Binary SHA mismatch: expected {expected_binary_sha256}, found {rec_bin_sha}", None, None
+    if expected_commit_sha is not None and expected_commit_sha != profile["commit_sha"]:
+        return False, f"[HISTORICAL_PROVENANCE_ERROR] Commit SHA mismatch: expected {expected_commit_sha}, authoritative {profile['commit_sha']}", None, None
+
+    rec_eng = selected_rec["engine"]
+    rec_nlf = selected_rec["nlf_mode"]
+    rec_nbr = selected_rec["neighbor_mode"]
+    rec_exit = selected_rec["exit_code"]
+    parsed_out = selected_rec["parsed_output"]
+
+    if expected_engine is not None and rec_eng != expected_engine:
+        return False, f"[HISTORICAL_PROVENANCE_ERROR] Record engine {rec_eng!r} != expected {expected_engine!r}", None, None
+    if expected_nlf_mode is not None and rec_nlf != expected_nlf_mode:
+        return False, f"[HISTORICAL_PROVENANCE_ERROR] Record nlf_mode {rec_nlf!r} != expected {expected_nlf_mode!r}", None, None
+    if expected_neighbor_mode is not None and rec_nbr != expected_neighbor_mode:
+        return False, f"[HISTORICAL_PROVENANCE_ERROR] Record neighbor_mode {rec_nbr!r} != expected {expected_neighbor_mode!r}", None, None
+
+    if rec_eng not in profile["allowed_engines"]:
+        return False, f"[HISTORICAL_PROVENANCE_ERROR] Engine {rec_eng!r} unauthorized for {profile['profile_id']}", None, None
+    if rec_nbr not in profile["allowed_neighbor_modes"]:
+        return False, f"[HISTORICAL_PROVENANCE_ERROR] Neighbor mode {rec_nbr!r} unauthorized for {profile['profile_id']}", None, None
+    if rec_eng == "m1" and (rec_nlf != "none" or rec_nbr != "legacy"):
+        return False, f"[HISTORICAL_PROVENANCE_ERROR] Incompatible M1 historical modes: {rec_eng}/{rec_nlf}/{rec_nbr}", None, None
+    if rec_nbr in ("buffer", "merge") and (rec_eng != "m2" or rec_nlf != "none"):
+        return False, f"[HISTORICAL_PROVENANCE_ERROR] Neighbor mode {rec_nbr!r} requires M2 with NLF none", None, None
+
+    is_success = (rec_exit == 0 and parsed_out.get("status") == "SUCCESS")
+    receipt = _mint_verified_historical_artifact(
+        binary_sha256=rec_bin_sha,
+        profile_entry=profile,
+        historical_profile=rec_nbr,
+        schema_version=profile["schema_version"],
+        artifact_id=artifact_id,
+        manifest_id=manifest_id,
+        manifest_sha256=actual_manifest_sha,
+        artifact_sha256=actual_artifact_sha,
+        artifact_size=actual_artifact_size,
+        workload_input_sha256=recorded_input_sha,
+        engine=rec_eng,
+        nlf_mode=rec_nlf,
+        neighbor_mode=rec_nbr,
+        native_output_sha256=selected_rec["raw_output_sha256"],
+        native_exit_status=rec_exit if type(rec_exit) is int else -1,
+        origin_type="offline_trusted_manifest_artifact",
+        provenance_origin=anchor["provenance_origin"],
+        parsed_result=parsed_out,
+    )
+
+    val_ok, val_diag, _ = validate_historical_artifact_configuration(
+        native_result=parsed_out,
+        historical_auth=receipt,
+        requested_engine=rec_eng,
+        requested_nlf_mode=rec_nlf,
+        requested_neighbor_mode=rec_nbr,
+        is_success_run=is_success,
+        workload=parsed_workload,
+        native_exit_code=rec_exit,
+        require_full_schema=True,
+    )
+    if not val_ok:
+        return False, val_diag, None, None
+
+    return True, "", receipt, parsed_out
+
+
+def run_verified_historical_binary(
+    binary_path: Path,
+    engine: str,
+    workload: Dict[str, Any],
+    max_work: Optional[int] = None,
+    timeout: int = 30,
+    address_space_mib: int = 512,
+    nlf_mode: str = "none",
+    neighbor_mode: str = "legacy",
+    expected_commit_sha: Optional[str] = None,
+    expected_binary_sha256: Optional[str] = None,
+) -> Tuple[Dict[str, Any], float, bool, Optional[VerifiedHistoricalArtifact]]:
+    """Executes an authorized frozen historical binary and returns attested provenance + strict schema validation (Workflow A)."""
+    if not Path(binary_path).is_file():
+        return {
+            "status": "AUTHORIZATION_ERROR",
+            "error_category": "HISTORICAL_AUTHORIZATION_ERROR",
+            "error_message": f"Historical binary not found: {binary_path}",
+            "exit_code": -1,
+        }, 0.0, False, None
+
+    actual_bin_sha = compute_sha256(Path(binary_path))
+    if expected_binary_sha256 is not None and actual_bin_sha != expected_binary_sha256:
+        return {
+            "status": "AUTHORIZATION_ERROR",
+            "error_category": "HISTORICAL_AUTHORIZATION_ERROR",
+            "error_message": f"Binary on disk SHA {actual_bin_sha} does not match expected historical SHA {expected_binary_sha256}",
+            "exit_code": -1,
+        }, 0.0, False, None
+
+    if actual_bin_sha not in AUTHORIZED_HISTORICAL_BINARIES:
+        return {
+            "status": "AUTHORIZATION_ERROR",
+            "error_category": "HISTORICAL_AUTHORIZATION_ERROR",
+            "error_message": f"Executable SHA {actual_bin_sha} is not an authorized frozen historical binary (live/candidate binaries cannot use historical replay path)",
+            "exit_code": -1,
+        }, 0.0, False, None
+
+    profile = AUTHORIZED_HISTORICAL_BINARIES[actual_bin_sha]
+    if expected_commit_sha is not None and expected_commit_sha != profile["commit_sha"]:
+        return {
+            "status": "AUTHORIZATION_ERROR",
+            "error_category": "HISTORICAL_AUTHORIZATION_ERROR",
+            "error_message": f"Expected commit SHA {expected_commit_sha} does not match authoritative binary source commit {profile['commit_sha']}",
+            "exit_code": -1,
+        }, 0.0, False, None
+
+    if engine not in profile["allowed_engines"] or neighbor_mode not in profile["allowed_neighbor_modes"]:
+        return {
+            "status": "AUTHORIZATION_ERROR",
+            "error_category": "HISTORICAL_AUTHORIZATION_ERROR",
+            "error_message": f"Configuration ({engine}/{nlf_mode}/{neighbor_mode}) is unauthorized for historical profile {profile['profile_id']}",
+            "exit_code": -1,
+        }, 0.0, False, None
+
+    if (engine == "m1" and (nlf_mode != "none" or neighbor_mode != "legacy")) or (
+        neighbor_mode in ("buffer", "merge") and (engine != "m2" or nlf_mode != "none")
+    ):
+        return {
+            "status": "AUTHORIZATION_ERROR",
+            "error_category": "HISTORICAL_AUTHORIZATION_ERROR",
+            "error_message": f"Incompatible mode combination ({engine}/{nlf_mode}/{neighbor_mode})",
+            "exit_code": -1,
+        }, 0.0, False, None
+
+    bound_ok, bound_diag = validate_micro_workload_bounds(workload)
+    if not bound_ok:
+        return {
+            "status": "CONTAINMENT_VIOLATION",
+            "error_category": "CONTAINMENT_VIOLATION",
+            "error_message": bound_diag,
+            "exit_code": -1,
+        }, 0.0, False, None
+
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as wf, \
+         tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as of:
+        json.dump(workload, wf)
+        wf.flush()
+        wf_path = Path(wf.name)
+        workload_sha = compute_sha256(wf_path)
+
+        cmd = [str(binary_path), "--engine", engine, "--workload", wf.name, "--output", of.name]
+        if max_work is not None:
+            cmd.extend(["--max-work", str(max_work)])
+        if nlf_mode != "none":
+            cmd.extend(["--nlf-mode", nlf_mode])
+        if neighbor_mode != "legacy":
+            cmd.extend(["--neighbor-mode", neighbor_mode])
+
+        t0 = time.perf_counter()
+        ret, out, err, timed_out = execute_contained_subprocess(
+            cmd, cwd=REPO_ROOT, timeout=timeout, address_space_mib=address_space_mib
+        )
+        duration_ms = (time.perf_counter() - t0) * 1000.0
+
+        raw_output_bytes = b""
+        res_data: Dict[str, Any] = {}
+        json_parse_ok = False
+        if not timed_out and os.path.exists(of.name) and os.path.getsize(of.name) > 0:
+            try:
+                raw_output_bytes = Path(of.name).read_bytes()
+                res_data = json.loads(raw_output_bytes.decode("utf-8"))
+                json_parse_ok = isinstance(res_data, dict)
+            except Exception as exc:
+                res_data = {"status": "ERROR", "error_category": "JSON_PARSE_ERROR", "error_message": f"Output parse error: {exc}"}
+                json_parse_ok = False
+
+        try:
+            os.remove(wf.name)
+            os.remove(of.name)
+        except OSError:
+            pass
+
+    if not res_data or not json_parse_ok:
+        status = "TIMEOUT" if timed_out else "EXEC_ERROR"
+        cat = "TIMEOUT" if timed_out else ("JSON_PARSE_ERROR" if raw_output_bytes else "SUBPROCESS_ERROR")
+        return {"status": status, "error_category": cat, "error_message": err or out, "exit_code": ret}, duration_ms, False, None
+
+    is_success_run = (ret == 0 and not timed_out and res_data.get("status") == "SUCCESS")
+    raw_out_sha = hashlib.sha256(raw_output_bytes).hexdigest()
+    receipt = _mint_verified_historical_artifact(
+        binary_sha256=actual_bin_sha,
+        profile_entry=profile,
+        historical_profile=neighbor_mode,
+        schema_version=profile["schema_version"],
+        artifact_id=f"live_replay:{Path(binary_path).name}:{workload.get('case_id', '')}:{raw_out_sha[:16]}",
+        manifest_id="frozen_binary_reexecution",
+        manifest_sha256=actual_bin_sha,
+        artifact_sha256=raw_out_sha,
+        artifact_size=len(raw_output_bytes),
+        workload_input_sha256=workload_sha,
+        engine=engine,
+        nlf_mode=nlf_mode,
+        neighbor_mode=neighbor_mode,
+        native_output_sha256=raw_out_sha,
+        native_exit_status=ret,
+        origin_type="historical_binary_replay",
+        provenance_origin=f"Direct frozen historical execution of {profile['description']} ({Path(binary_path).name})",
+        parsed_result=res_data,
+    )
+
+    val_ok, val_diag, _ = validate_historical_artifact_configuration(
+        native_result=res_data,
+        historical_auth=receipt,
+        requested_engine=engine,
+        requested_nlf_mode=nlf_mode,
+        requested_neighbor_mode=neighbor_mode,
+        is_success_run=is_success_run,
+        workload=workload,
+        native_exit_code=ret,
+        require_full_schema=True,
+    )
+    if not val_ok:
+        return {
+            "status": "SCHEMA_ERROR",
+            "error_category": "HISTORICAL_VALIDATION_ERROR",
+            "error_message": val_diag,
+            "native_reported_outcome": {k: res_data.get(k) for k in ("status", "error_category", "error_message", "fallback_reason")},
+            "exit_code": ret,
+            "schema_valid": False,
+            "configuration_valid": False,
+        }, duration_ms, False, None
+
+    return res_data, duration_ms, is_success_run, receipt
+
+
 def run_workload_on_binary(
     binary_path: Path,
     engine: str,
@@ -1480,8 +2740,65 @@ def run_workload_on_binary(
     max_work: Optional[int] = None,
     timeout: int = 30,
     address_space_mib: int = 512,
+    nlf_mode: str = "none",
+    neighbor_mode: str = "legacy",
+    historical_auth: Optional[Union[HistoricalBinaryRequest, VerifiedHistoricalArtifact]] = None,
 ) -> Tuple[Dict[str, Any], float, bool]:
     """Runs a single workload JSON through rapidflow_apx_native with micro-containment and strict schema validation."""
+    historical_profile_for_exec: Optional[Mapping[str, Any]] = None
+    if historical_auth is not None:
+        if isinstance(historical_auth, bool):
+            return {
+                "status": "AUTHORIZATION_ERROR",
+                "error_category": "HISTORICAL_AUTHORIZATION_ERROR",
+                "error_message": "historical_auth boolean bypass rejected; supply HistoricalBinaryRequest for frozen historical binary execution",
+                "exit_code": -1,
+            }, 0.0, False
+        if not isinstance(historical_auth, (HistoricalBinaryRequest, VerifiedHistoricalArtifact)):
+            return {
+                "status": "AUTHORIZATION_ERROR",
+                "error_category": "HISTORICAL_AUTHORIZATION_ERROR",
+                "error_message": "historical_auth must be a HistoricalBinaryRequest instance",
+                "exit_code": -1,
+            }, 0.0, False
+        actual_bin_sha = compute_sha256(binary_path)
+        if actual_bin_sha != historical_auth.binary_sha256:
+            return {
+                "status": "AUTHORIZATION_ERROR",
+                "error_category": "HISTORICAL_AUTHORIZATION_ERROR",
+                "error_message": f"Binary on disk SHA {actual_bin_sha} does not match historical authorization SHA {historical_auth.binary_sha256}",
+                "exit_code": -1,
+            }, 0.0, False
+        if isinstance(historical_auth, VerifiedHistoricalArtifact):
+            return {
+                "status": "AUTHORIZATION_ERROR",
+                "error_category": "HISTORICAL_AUTHORIZATION_ERROR",
+                "error_message": "Unverified caller-constructed VerifiedHistoricalArtifact rejected for binary execution; use HistoricalBinaryRequest or run_verified_historical_binary",
+                "exit_code": -1,
+            }, 0.0, False
+        if actual_bin_sha not in AUTHORIZED_HISTORICAL_BINARIES:
+            return {
+                "status": "AUTHORIZATION_ERROR",
+                "error_category": "HISTORICAL_AUTHORIZATION_ERROR",
+                "error_message": f"Unauthorized historical binary SHA-256: {actual_bin_sha}",
+                "exit_code": -1,
+            }, 0.0, False
+        historical_profile_for_exec = AUTHORIZED_HISTORICAL_BINARIES[actual_bin_sha]
+        if historical_auth.commit_sha != historical_profile_for_exec["commit_sha"]:
+            return {
+                "status": "AUTHORIZATION_ERROR",
+                "error_category": "HISTORICAL_AUTHORIZATION_ERROR",
+                "error_message": f"Historical commit SHA mismatch: expected {historical_profile_for_exec['commit_sha']}, got {historical_auth.commit_sha}",
+                "exit_code": -1,
+            }, 0.0, False
+        if historical_auth.historical_profile != neighbor_mode or neighbor_mode not in historical_profile_for_exec["allowed_neighbor_modes"]:
+            return {
+                "status": "AUTHORIZATION_ERROR",
+                "error_category": "HISTORICAL_AUTHORIZATION_ERROR",
+                "error_message": f"Neighbor mode {neighbor_mode!r} unauthorized for historical profile {historical_auth.historical_profile!r}",
+                "exit_code": -1,
+            }, 0.0, False
+
     # Preflight micro-workload containment check (P3-R3-F08)
     bound_ok, bound_diag = validate_micro_workload_bounds(workload)
     if not bound_ok:
@@ -1497,6 +2814,7 @@ def run_workload_on_binary(
         json.dump(workload, wf)
         wf.flush()
         wf_path = Path(wf.name)
+        workload_sha = compute_sha256(wf_path)
 
         cmd = [
             str(binary_path),
@@ -1506,6 +2824,10 @@ def run_workload_on_binary(
         ]
         if max_work is not None:
             cmd.extend(["--max-work", str(max_work)])
+        if nlf_mode != "none":
+            cmd.extend(["--nlf-mode", nlf_mode])
+        if neighbor_mode != "legacy":
+            cmd.extend(["--neighbor-mode", neighbor_mode])
 
         t0 = time.perf_counter()
         ret, out, err, timed_out = execute_contained_subprocess(
@@ -1514,12 +2836,13 @@ def run_workload_on_binary(
         duration_ms = (time.perf_counter() - t0) * 1000.0
 
         res_data: Dict[str, Any] = {}
+        raw_output_bytes = b""
         output_file_exists = os.path.exists(of.name)
         json_parse_ok = False
         if not timed_out and output_file_exists and os.path.getsize(of.name) > 0:
             try:
-                with open(of.name, "r", encoding="utf-8") as rf:
-                    res_data = json.load(rf)
+                raw_output_bytes = Path(of.name).read_bytes()
+                res_data = json.loads(raw_output_bytes.decode("utf-8"))
                 json_parse_ok = isinstance(res_data, dict)
             except Exception as e:
                 res_data = {"status": "ERROR", "error_category": "JSON_PARSE_ERROR", "error_message": f"Output parse error: {e}"}
@@ -1531,6 +2854,10 @@ def run_workload_on_binary(
             res_data = {"status": status, "error_category": cat, "error_message": err or out}
 
         res_data["exit_code"] = ret
+        native_outcome = {
+            key: res_data.get(key)
+            for key in ("status", "error_category", "error_message", "fallback_reason")
+        }
 
         # Validate schema on both success and failure (P3-R3-F01, P3-R3-F04, P3-R4-F01, P3-R4-F03)
         is_success_run = (ret == 0 and not timed_out and res_data.get("status") == "SUCCESS")
@@ -1539,7 +2866,13 @@ def run_workload_on_binary(
 
         if not timed_out and json_parse_ok:
             s_ok, s_diag = validate_native_output_schema(
-                res_data, engine, workload.get("case_id", ""), wf_path, workload=workload, is_success=is_success_run
+                res_data,
+                engine,
+                workload.get("case_id", ""),
+                wf_path,
+                workload=workload,
+                is_success=is_success_run,
+                historical_profile=historical_profile_for_exec,
             )
             if not s_ok:
                 schema_ok = False
@@ -1556,13 +2889,57 @@ def run_workload_on_binary(
         res_data["schema_valid"] = schema_ok
         res_data["contract_valid"] = schema_ok
 
+        minted_receipt: Optional[VerifiedHistoricalArtifact] = None
+        if historical_profile_for_exec is not None and json_parse_ok and not timed_out:
+            raw_out_sha = hashlib.sha256(raw_output_bytes).hexdigest()
+            minted_receipt = _mint_verified_historical_artifact(
+                binary_sha256=historical_auth.binary_sha256,
+                profile_entry=historical_profile_for_exec,
+                historical_profile=neighbor_mode,
+                schema_version=historical_profile_for_exec["schema_version"],
+                artifact_id=f"live_replay:{Path(binary_path).name}:{workload.get('case_id', '')}:{raw_out_sha[:16]}",
+                manifest_id="frozen_binary_reexecution",
+                manifest_sha256=historical_auth.binary_sha256,
+                artifact_sha256=raw_out_sha,
+                artifact_size=len(raw_output_bytes),
+                workload_input_sha256=workload_sha,
+                engine=engine,
+                nlf_mode=nlf_mode,
+                neighbor_mode=neighbor_mode,
+                native_output_sha256=raw_out_sha,
+                native_exit_status=ret,
+                origin_type="historical_binary_replay",
+                provenance_origin=f"Direct frozen historical execution of {historical_profile_for_exec['description']}",
+                parsed_result=res_data,
+            )
+
+        # Validate NLF configuration integrity (P4B-1A-F01)
+        config_ok, config_diag, config_meta = validate_nlf_configuration(
+            requested_engine=engine,
+            requested_nlf_mode=nlf_mode,
+            native_result=res_data,
+            is_success_run=is_success_run,
+            requested_neighbor_mode=neighbor_mode,
+            historical_auth=minted_receipt,
+        )
+        res_data["configuration_valid"] = config_ok
+        if not schema_ok or not config_ok:
+            res_data["native_reported_outcome"] = native_outcome
+        res_data["eligible_for_requested_variant"] = config_meta.get("eligible_for_requested_variant", False)
+        if not config_ok:
+            res_data["configuration_error"] = config_diag
+            if is_success_run:
+                res_data["status"] = "CONFIGURATION_ERROR"
+                res_data["error_category"] = "CONFIGURATION_ERROR"
+                res_data["error_message"] = config_diag
+
         try:
             os.remove(wf.name)
             os.remove(of.name)
         except OSError:
             pass
 
-        final_ok = is_success_run and schema_ok
+        final_ok = is_success_run and schema_ok and config_ok
         return res_data, duration_ms, final_ok
 
 
@@ -2065,6 +3442,8 @@ def run_hand_and_witness_cases(
     binary_path: Path,
     engine_filter: str = "all",
     case_filter: Optional[str] = None,
+    nlf_mode: str = "none",
+    neighbor_mode: str = "legacy",
 ) -> Tuple[List[Dict[str, Any]], bool]:
     """Executes hand and adversarial cases on selected engine(s), strictly verifying against M0 Oracle and negative contract."""
     all_workloads = build_hand_workloads()
@@ -2141,7 +3520,7 @@ def run_hand_and_witness_cases(
         if run_m1:
             res_m1, dur_m1, ok_m1 = run_workload_on_binary(binary_path, "m1", w)
         if run_m2:
-            res_m2, dur_m2, ok_m2 = run_workload_on_binary(binary_path, "m2", w)
+            res_m2, dur_m2, ok_m2 = run_workload_on_binary(binary_path, "m2", w, nlf_mode=nlf_mode, neighbor_mode=neighbor_mode)
 
         case_ok = True
         diag = ""
@@ -2161,6 +3540,10 @@ def run_hand_and_witness_cases(
                 if not eng_res.get("schema_valid", False):
                     case_ok = False
                     diag += f"{eng_name} schema validation failed on negative test: {eng_res.get('schema_error')}. "
+
+                if eng_res.get("configuration_valid") is not True:
+                    case_ok = False
+                    diag += f"{eng_name} configuration integrity failure on negative test: {eng_res.get('configuration_error')}. "
 
                 c_code = eng_res.get("exit_code")
                 c_cat = eng_res.get("error_category")
@@ -2395,6 +3778,8 @@ def run_corpus_840(
     binary_path: Path,
     engine_filter: str = "all",
     case_filter: Optional[str] = None,
+    nlf_mode: str = "none",
+    neighbor_mode: str = "legacy",
 ) -> Tuple[Dict[str, Any], bool]:
     """Runs corpus cases on selected engine(s), locking fixture SHA-256 and recomputing M0 Oracle."""
     # Verify input fixture hashes before reading (P3-R2-F08)
@@ -2504,7 +3889,7 @@ def run_corpus_840(
 
                 # Execute Native M2 if selected
                 if run_m2:
-                    res_m2, _, ok_m2 = run_workload_on_binary(binary_path, "m2", workload)
+                    res_m2, _, ok_m2 = run_workload_on_binary(binary_path, "m2", workload, nlf_mode=nlf_mode, neighbor_mode=neighbor_mode)
                     if ok_m2 and res_m2.get("schema_valid", False):
                         s0 = res_m2["steps"][0]
                         if sorted(s0.get("entered_tuples", [])) == exp_ent and sorted(s0.get("exited_tuples", [])) == exp_ext:
@@ -2638,6 +4023,8 @@ def run_56_stream_matrix(
     binary_path: Path,
     engine_filter: str = "all",
     case_filter: Optional[str] = None,
+    nlf_mode: str = "none",
+    neighbor_mode: str = "legacy",
 ) -> Tuple[Dict[str, Any], bool]:
     """Runs 56-stream matrix, verifying immutable workload locks, active-set reconstruction, deep graph state, codec, and counters."""
     v_ok, v_diag = validate_stream_lock_registry(STREAM_56_LOCK_PATH)
@@ -2806,7 +4193,7 @@ def run_56_stream_matrix(
             if run_m1:
                 res_m1, _, ok_m1 = run_workload_on_binary(binary_path, "m1", workload)
             if run_m2:
-                res_m2, _, ok_m2 = run_workload_on_binary(binary_path, "m2", workload)
+                res_m2, _, ok_m2 = run_workload_on_binary(binary_path, "m2", workload, nlf_mode=nlf_mode, neighbor_mode=neighbor_mode)
 
             if not ok_m1 or not ok_m2 or (run_m1 and not res_m1.get("schema_valid", False)) or (run_m2 and not res_m2.get("schema_valid", False)):
                 stats["status"] = "FAIL"
@@ -3021,13 +4408,54 @@ def main():
     parser.add_argument("--engine", choices=["m1", "m2", "all"], default="all", help="Target engine")
     parser.add_argument("--stage", choices=["provenance", "hand", "corpus", "stream", "all"], default="all", help="Target execution stage")
     parser.add_argument("--case", type=str, default=None, help="Diagnostic single case ID to run")
+    parser.add_argument("--nlf-mode", choices=["none", "static", "residual"], default="none", help="NLF optimization mode (default: none)")
+    parser.add_argument("--neighbor-mode", choices=["legacy", "buffer", "merge"], default="legacy",
+                        help="M2 neighbor storage mode (default: legacy)")
     parser.add_argument("--output", type=str, default=None, help="Output summary report path")
     args = parser.parse_args()
 
-    # Single engine or specific case or specific stage is diagnostic run (P3-R2-F03)
-    is_diagnostic = (args.case is not None or args.stage != "all" or args.engine != "all")
+    # Single engine or specific case or specific stage or NLF mode is diagnostic run (P3-R2-F03)
+    is_diagnostic = (args.case is not None or args.stage != "all" or args.engine != "all"
+                     or args.nlf_mode != "none" or args.neighbor_mode != "legacy")
     output_path = Path(args.output) if args.output else (DIAGNOSTIC_SUMMARY_PATH if is_diagnostic else CANONICAL_SUMMARY_PATH)
     output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if args.neighbor_mode in ("buffer", "merge") and (args.engine != "m2" or args.nlf_mode != "none"):
+        message = f"Neighbor {args.neighbor_mode} mode requires --engine m2 --nlf-mode none"
+        print(f"ERROR: {message}", file=sys.stderr)
+        atomic_write_json(output_path, {
+            "runner_mode": "DIAGNOSTIC_SUBSET_RUN",
+            "overall_status": "UNSUPPORTED_CONFIGURATION",
+            "error_category": "CONFIGURATION_ERROR",
+            "error_message": message,
+            "stages": {},
+        })
+        sys.exit(1)
+
+    # Reject unsupported or ambiguous M1 / all engine combinations with NLF mode (P4B-1A-F01)
+    if args.engine == "m1" and args.nlf_mode != "none":
+        print(f"ERROR: NLF optimization mode '{args.nlf_mode}' is not supported for M1 engine (P4B-1A-F01)!", file=sys.stderr)
+        fail_summary = {
+            "runner_mode": "DIAGNOSTIC_SUBSET_RUN",
+            "overall_status": "UNSUPPORTED_CONFIGURATION",
+            "error_category": "CONFIGURATION_ERROR",
+            "error_message": f"NLF mode '{args.nlf_mode}' is not supported for M1 engine",
+            "stages": {},
+        }
+        atomic_write_json(output_path, fail_summary)
+        sys.exit(1)
+
+    if args.engine == "all" and args.nlf_mode != "none":
+        print(f"ERROR: NLF optimization mode '{args.nlf_mode}' cannot be combined with '--engine all' because M1 does not support NLF optimization. Run with '--engine m2 --nlf-mode {args.nlf_mode}' (P4B-1A-F01)!", file=sys.stderr)
+        fail_summary = {
+            "runner_mode": "DIAGNOSTIC_SUBSET_RUN",
+            "overall_status": "UNSUPPORTED_CONFIGURATION",
+            "error_category": "CONFIGURATION_ERROR",
+            "error_message": f"NLF mode '{args.nlf_mode}' cannot be combined with '--engine all'",
+            "stages": {},
+        }
+        atomic_write_json(output_path, fail_summary)
+        sys.exit(1)
 
     print("================================================================================")
     print("      RapidFlow-APX Native Engines Verification Runner (Phase P3 / D-INT-03)     ")
@@ -3150,6 +4578,8 @@ def main():
         "selected_engine": args.engine,
         "selected_stage": args.stage,
         "selected_case": args.case,
+        "selected_nlf_mode": args.nlf_mode,
+        "selected_neighbor_mode": args.neighbor_mode,
         "provenance": provenance,
         "system_resources": res_info,
         "build_provenance": build_info,
@@ -3171,9 +4601,9 @@ def main():
 
     # Execute Hand Cases
     if "hand" in target_stages:
-        print(f"[4/5] Executing Hand and Adversarial Witness Cases (engine: {args.engine})...")
+        print(f"[4/5] Executing Hand and Adversarial Witness Cases (engine: {args.engine}, nlf_mode: {args.nlf_mode})...")
         hand_results, hand_ok = run_hand_and_witness_cases(
-            bin_path, engine_filter=args.engine, case_filter=args.case
+            bin_path, engine_filter=args.engine, case_filter=args.case, nlf_mode=args.nlf_mode, neighbor_mode=args.neighbor_mode
         )
         hand_passed = sum(1 for c in hand_results if c["status"] == "PASS")
         print(f"  Hand cases: {hand_passed}/{len(hand_results)} passed ({'PASS' if hand_ok else 'FAIL'})")
@@ -3190,9 +4620,9 @@ def main():
 
     # Execute Corpus 840
     if "corpus" in target_stages:
-        print(f"[5/5] Executing Correctness Corpus (Real M0 Recomputed, engine: {args.engine})...")
+        print(f"[5/5] Executing Correctness Corpus (Real M0 Recomputed, engine: {args.engine}, nlf_mode: {args.nlf_mode})...")
         corpus_stats, corpus_ok = run_corpus_840(
-            bin_path, engine_filter=args.engine, case_filter=args.case
+            bin_path, engine_filter=args.engine, case_filter=args.case, nlf_mode=args.nlf_mode, neighbor_mode=args.neighbor_mode
         )
         m1_info = f"{corpus_stats['m1_agreed']}/{corpus_stats.get('selected_cases', 840)} M1 agreed" if corpus_stats['m1_executed'] else "M1 NOT_RUN"
         m2_info = f"{corpus_stats['m2_agreed']}/{corpus_stats.get('selected_cases', 840)} M2 agreed" if corpus_stats['m2_executed'] else "M2 NOT_RUN"
@@ -3205,9 +4635,9 @@ def main():
 
     # Execute 56-Stream Matrix
     if "stream" in target_stages:
-        print(f"[+] Executing Stateful Stream Matrix (engine: {args.engine})...")
+        print(f"[+] Executing Stateful Stream Matrix (engine: {args.engine}, nlf_mode: {args.nlf_mode})...")
         stream_stats, stream_ok = run_56_stream_matrix(
-            bin_path, engine_filter=args.engine, case_filter=args.case
+            bin_path, engine_filter=args.engine, case_filter=args.case, nlf_mode=args.nlf_mode, neighbor_mode=args.neighbor_mode
         )
         m1_s_info = f"M1 agreed {stream_stats['agreed_steps_m1']}/{stream_stats.get('selected_updates', 672)}" if stream_stats['m1_executed'] else "M1 NOT_RUN"
         m2_s_info = f"M2 agreed {stream_stats['agreed_steps_m2']}/{stream_stats.get('selected_updates', 672)}" if stream_stats['m2_executed'] else "M2 NOT_RUN"

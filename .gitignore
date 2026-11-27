@@ -13,6 +13,8 @@ baselines/rapidflow/build/
 tests/native/rapidflow_apx_audit/build/
 tests/native/rapidflow_apx_foundation/build/
 tests/native/rapidflow_apx_engines/build/
+tests/native/rapidflow_apx_engines/build-r2-candidate/
+tests/native/rapidflow_apx_engines/build-r2-asan/
 extensions/rapidflow_apx/build/
 results/raw/*
 !results/raw/.gitkeep

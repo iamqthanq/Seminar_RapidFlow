@@ -11,6 +11,10 @@
 
 namespace rapidflow_apx {
 
+class ApxNlfIndex;
+class ApxQuerySignatures;
+struct EngineCounters;
+
 enum class UpdateOp : char { INSERT = '+', DELETE = '-' };
 
 struct UpdateOperation {
@@ -25,7 +29,9 @@ enum class StepStatus {
     PREVALIDATION_FAILED,
     CALLBACK_ABORTED,
     FAULT_INJECTED,
-    REENTRANCY_BLOCKED
+    REENTRANCY_BLOCKED,
+    INVARIANT_VIOLATION,
+    RESOURCE_EXHAUSTED
 };
 
 inline const char* step_status_to_string(StepStatus s) {
@@ -35,6 +41,8 @@ inline const char* step_status_to_string(StepStatus s) {
         case StepStatus::CALLBACK_ABORTED: return "CALLBACK_ABORTED";
         case StepStatus::FAULT_INJECTED: return "FAULT_INJECTED";
         case StepStatus::REENTRANCY_BLOCKED: return "REENTRANCY_BLOCKED";
+        case StepStatus::INVARIANT_VIOLATION: return "INVARIANT_VIOLATION";
+        case StepStatus::RESOURCE_EXHAUSTED: return "RESOURCE_EXHAUSTED";
     }
     return "UNKNOWN";
 }
@@ -45,6 +53,7 @@ struct StepResult {
     std::vector<std::vector<int64_t>> published_tuples;
     uint64_t update_maintenance_ns{0};
     uint64_t tuple_sink_ns{0};
+    bool committed{false};
 };
 
 using SearchCallback = std::function<bool(
@@ -64,7 +73,10 @@ public:
         AFTER_MUTATION,
         DURING_CALLBACK,
         BEFORE_PUBLISH,
-        ALLOCATION_FAILURE_MUTATION
+        ALLOCATION_FAILURE_MUTATION,
+        AFTER_NLF_PREPARE,
+        AFTER_GRAPH_BEFORE_NLF,
+        AFTER_FIRST_NLF_CELL
     };
 
     ApxTransactionManager(ApxAuthoritativeGraph& graph, ApxTypedCodec& codec, ApxTupleSink& sink);
@@ -77,7 +89,19 @@ public:
     void set_profiling_enabled(bool enabled) noexcept { profiling_enabled_ = enabled; }
     bool is_profiling_enabled() const noexcept { return profiling_enabled_; }
 
+    void set_nlf_context(ApxNlfIndex* nlf, const ApxQuerySignatures* sigs) noexcept {
+        nlf_index_ = nlf;
+        signatures_ = sigs;
+    }
+    ApxNlfIndex* get_nlf_index() const noexcept { return nlf_index_; }
+    const ApxQuerySignatures* get_query_signatures() const noexcept { return signatures_; }
+
+    void set_counters(EngineCounters* counters) noexcept { counters_ = counters; }
+    EngineCounters* get_counters() const noexcept { return counters_; }
+
     bool is_in_transaction() const noexcept { return is_in_transaction_; }
+    bool is_session_poisoned() const noexcept { return session_poisoned_; }
+    void reset_poison_for_testing() noexcept { session_poisoned_ = false; }
 
 private:
     ApxAuthoritativeGraph& graph_;
@@ -85,7 +109,11 @@ private:
     ApxTupleSink& sink_;
     FaultPoint fault_point_{FaultPoint::NONE};
     bool is_in_transaction_{false};
+    bool session_poisoned_{false};
     bool profiling_enabled_{false};
+    ApxNlfIndex* nlf_index_{nullptr};
+    const ApxQuerySignatures* signatures_{nullptr};
+    EngineCounters* counters_{nullptr};
 };
 
 } // namespace rapidflow_apx

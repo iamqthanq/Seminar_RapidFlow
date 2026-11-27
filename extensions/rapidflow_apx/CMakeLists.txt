@@ -26,6 +26,9 @@ set(FOUNDATION_SRCS
     src/transaction_manager.cpp
     src/micro_matcher.cpp
     src/query_plan.cpp
+    src/nlf_signatures.cpp
+    src/nlf_index.cpp
+    src/residual_nlf_state.cpp
     src/m1_enum_engine.cpp
     src/m2_event_engine.cpp
     src/streaming_engine.cpp
@@ -36,3 +39,13 @@ set(FOUNDATION_SRCS
 add_library(rapidflow_apx_foundation STATIC ${FOUNDATION_SRCS})
 
 target_compile_options(rapidflow_apx_foundation PRIVATE -O3 -Wall -Wextra)
+
+option(APX_RESIDUAL_TEST_TRACE "Compile bounded residual DFS verification hooks" OFF)
+if(APX_RESIDUAL_TEST_TRACE)
+    target_compile_definitions(rapidflow_apx_foundation PUBLIC APX_RESIDUAL_TEST_TRACE)
+endif()
+
+option(APX_NEIGHBOR_TEST_TRACE "Compile bounded neighbor-buffer trace and fault hooks" OFF)
+if(APX_NEIGHBOR_TEST_TRACE)
+    target_compile_definitions(rapidflow_apx_foundation PUBLIC APX_NEIGHBOR_TEST_TRACE)
+endif()

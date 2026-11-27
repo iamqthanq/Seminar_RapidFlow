@@ -1,13 +1,13 @@
 # RapidFlow-APX Research & Implementation Master Plan (Direction D)
 
 **Document ID:** `docs/rapidflow_apx_research_plan.md`
-**Date:** 2026-11-18
-**Plan Version:** 1.1 (Realigned with Direction D Master Protocol & Remediation F01–F06)
+**Date:** 2026-11-24
+**Plan Version:** 1.2 (P4a accepted; evidence-driven P4b planning revision)
 **Context:** Seminar RapidFlow / Continuous Subgraph Matching (CSM) — Direction D
-**Associated Issue:** Issue #32 (`D-INT-03 / P3`; previously Issue #28 `P0–P1`, Issue #30 `P2` merged)
-**Base Commit:** `88fbe200ff9217f4dccbad08bfa448d067d2ce4e` (contains accepted P2 HEAD `ebe2894752dc45e2aeb3109c260a34e2f87a9d06`)
-**Current Phase:** Phase P3: Native M1-enum and bare M2 integration (Completed & Verified; PR #33 Ready for Independent Merge Review; Issue #32)
-**Next Gate:** Independent Merge Review & Acceptance of Draft PR #33 (Issue #32)
+**Associated Issue:** Issue #38 (`D-INT-04b / P4b`); P4a Issue #36 / PR #37 closed and merged
+**Base Commit:** `7009daea477721c12eb52aa3d5db62f54f5b2ca4` (P4a merge into `QuangThang`)
+**Current Phase:** P4b-0 planning / design; P4a technical acceptance complete (`R4A_PROFILE_READY_FOR_P4B_REVIEW`). This revision updates the plan only.
+**Next Gate:** Coordinator review of the P4b mathematical design, architecture and experimental protocol before any optimization implementation.
 
 ---
 
@@ -64,21 +64,29 @@ The final research product must be a **demonstrably integrated C++ system** deri
                                        |
                                        v
 +---------------------------------------------------------------------------------+
-| Phase P3: Integrated Native Bare M1 & M2 Engines [COMPLETED & VERIFIED: Issue #32 / PR #33] |
+| Phase P3: Integrated Native Bare M1 & M2 Engines [COMPLETED & VERIFIED]         |
 | - Native M1-enum-Exact-k baseline on variant queries Q - D                      |
 | - Native Bare M2-Event-k DFS (PRESENT/MISSING branching, deferred vertices)     |
-| - Bit-for-bit M0 verification across 840 corpus cases and stream matrices        |
-| - Gate Decision R3: Design review, corpus verification, and next-gate verdict   |
-|   (Verdict: ENGINES_VERIFIED_READY_FOR_P4_DESIGN, Pending Independent Merge Review)  |
+| - Bit-for-bit M0 verification across 840 corpus cases and stream matrices       |
+| - P3 integration and pre-P4 hardening precede the accepted P4a baseline         |
 +---------------------------------------------------------------------------------+
                                        |
                                        v
 +---------------------------------------------------------------------------------+
-| Phase P4: Safe & Optional Approximate Pruning Optimizations                     |
-| - Partial mapping defect bound delta'(f_p, free neighbors)                      |
-| - Relaxed approximate NLF filter (optional: skip if overhead >= savings)        |
-| - Dynamic candidate ordering for approximate branch reduction                   |
-| - Continuous M0 invariant checking across all optimizations                     |
+| Phase P4a: Frozen Bare M2 Profiling [COMPLETED: Issue #36 / PR #37 MERGED]      |
+| - Preserve 180 historical slots / 90 paired comparisons and certified evidence  |
+| - Identify search-core and neighbor-retrieval cost centers                      |
+| - R4a: R4A_PROFILE_READY_FOR_P4B_REVIEW                                         |
++---------------------------------------------------------------------------------+
+                                       |
+                                       v
++---------------------------------------------------------------------------------+
+| Phase P4b: Evidence-Driven Optional Optimizations [PLANNING: Issue #38]         |
+| - P4b-0: mathematical design, architecture, and pre-registered protocol         |
+| - P4b-1: isolated A (sound static / conservative residual Relaxed NLF)          |
+| - P4b-2: isolated B (neighbor retrieval); preserve candidate semantics          |
+| - P4b-3: paired evaluation; P4b-4: conditional A+B ablation                     |
+| - R4b: retain, gate, defer, or reject optimizations; keep Bare M2 fallback      |
 +---------------------------------------------------------------------------------+
                                        |
                                        v
@@ -133,13 +141,78 @@ The final research product must be a **demonstrably integrated C++ system** deri
   2. Native Bare M2-Event-k: Single-pass anchored DFS with PRESENT and MISSING branches; unmapped vertex deferral; leaf condition $|R| == k$.
 - **Exit Criteria**: 100% agreement with M0 Oracle on 840 corpus cases and stream regression matrix.
 
-### 3.5. Phase P4: Safe & Optional Approximate Pruning
-- **Scope**: Develop sound pruning strategies for approximate matching:
-  1. Dynamic Defect Bound $\delta'$: Track committed missing edges $|R_p|$ and unassigned query edges; prune when $|R_p| + \text{unavoidable} > k$.
-  2. Relaxed NLF: Construct neighbor label frequency multisets with tolerance $k$, avoiding false rejections.
-  3. Dynamic Candidate Ordering: Select next frontier edge based on candidate set cardinality.
-  4. **Strict Optional Pruning Principle & Bare M2 Fallback**: Candidate pruning (NLF, $\delta'$) is strictly an optional optimization. If the CPU and memory overhead of computing approximate NLF or maintaining dynamic candidate lists exceeds the backtracking search reduction, the engine must safely and unconditionally fall back to bare M2 without filtering.
-- **Exit Criteria**: Pruned M2 produces identical tuple output to bare M2 while demonstrating positive net work reduction when pruning is enabled.
+### 3.5. Phase P4: Evidence-Driven, Safe & Optional Approximate Optimizations
+
+P4 is split into P4a (diagnose and freeze the baseline) and P4b (design, evaluate, and select optimizations). The original objectives of sound defect bounds, Relaxed NLF, optional ordering, and Bare M2 fallback remain; the execution order and the additional neighbor-retrieval hypothesis are grounded in P4a. This revision is a planning document, not evidence that P4b has been implemented or approved for execution.
+
+#### 3.5.1. P4a — Accepted Frozen Profiling Baseline (R4a)
+
+- **Status:** Issue #36 closed; PR #37 merged into `QuangThang` at `7009daea477721c12eb52aa3d5db62f54f5b2ca4`. Reviewed feature HEAD: `f8f04ece29788041bca97156536e68b5980137fb` (Round 10.1). No further P4a code-remediation round is required by the accepted review.
+- **Sources of truth:** `docs/rapidflow_apx_p4a_protocol.md`, `docs/rapidflow_apx_p4a_profile_report.md`, `docs/research_decisions/D-R4a-native-profiling.md`, `docs/evidence/p4a_evidence_manifest.json`, and the registered historical artifacts.
+- **Frozen evidence:** 30 workloads, 3 repetitions, 2 engines, 180 slots, 90 valid pairs, zero rejected or missing pairs; `CANONICAL_PASS`. Historical execution commit `cf97a7840dff0c0f2bf791834263f3911545110c`; raw SHA-256 `34452fb4eeccd812882a5c2c47cca0c49b070bf8b48e5ea86d8ac68c8cc521d5`. Do not overwrite or rerun the historical measurements as a P4b prerequisite.
+- **Observed paired medians (M1 / Bare M2):** Search 2.1269x (84 computable pairs; 6 zero-duration search pairs excluded from that ratio only); Native Step 1.8021x, Streaming Loop 1.1136x, Outer Wall 1.0414x (90 pairs each). Candidate evaluations 455,148 vs 245,055 (46.16% relative reduction), with 37,152 events and 828 steps per engine. Correctness rests on oracle verification, not equality of total counts alone.
+- **Cost centers:** Bare M2 search-core median 77.2165% and neighbor-retrieval median 22.7835%, both normalized by Search time. Native step sum median 7.35% and input parsing median 45.81% are normalized by pre-output wall time, not Search.
+- **Interpretation:** These are directional pilot observations, not statistically established general end-to-end speedup, scalability, or novelty. Three timing scopes have minima below 1x. Repetitions of the same workload are not independent workloads. Observer overhead was assessed over 16 paired trials on four workloads (outer-wall median -0.789%, mean +0.4338%, SD 10.396%); it does not rule out per-call micro-timer overhead. P4b must separate main performance measurement from attribution.
+- **Acceptance boundary:** Independent review verified focused 73/73, fresh checkout 59 PASS + 14 justified historical skips, native 41/41 and 106/106 mutations detected, and 7/7 registered evidence artifacts. Full 753/753 repository regression at the final feature HEAD was reported by Antigravity, not independently rerun in that review. Multi-artifact publication provides per-file atomic replacement and compensating rollback for handled exceptions, with recovery backup retention on inconsistent rollback; it is not crash-proof multi-file ACID.
+
+#### 3.5.2. P4b — Research question, scope and non-negotiable invariants
+
+**Question:** Which optional optimization(s) improve the native Bare M2 cost while preserving complete D-R event enumeration, and on which workloads is the benefit real?
+
+- **Unchanged mathematical contract:** `docs/rapidflow_apx_contract.md` remains authoritative: simple undirected connected Q, fixed data vertex universe and immutable vertex labels, typed vertex/edge labels, injective non-induced embeddings, Edge Recall, $0 \le k < \lambda(Q)$, single-edge INSERT/DELETE. Search the after snapshot for INSERT and before snapshot for DELETE, anchored in both valid orientations, with event leaf $|R(f)| = k$. A mismatched edge label consumes missing-edge budget. No D-G extension, RELABEL shortcut, vertex insert/delete, count-only substitution, loss of symmetric mappings, or duplicate tuples.
+- **Native integration:** Preserve the pinned RapidFlow source and actual CSR / GlobalEdgeView reuse. APX search kernels, tuple materialization, typed codec and transaction adapters are APX code; do not claim that the original exact search kernel is being reused unchanged.
+- **Controls:** Frozen Bare M2 is the main P4b comparison and always-available fallback; M0 remains the independent oracle and M1 the research baseline. Default flags must preserve Bare M2 behavior until R4b approval. No rewriting historical P4a evidence or comparing new runtime directly to historical runtime from a different execution identity.
+- **Priority:** Option A is the primary algorithmic research direction; Option B is independent systems optimization. Option C (ordering) and stronger multi-vertex dynamic defect bounds are deferred unless justified. Option D (retain Bare M2) is a valid outcome.
+
+#### 3.5.3. P4b-0 — Design gate (before implementation)
+
+Create and review `docs/rapidflow_apx_p4b_design.md` with actual source references, mathematical proof obligations, counter definitions, data structure ownership/lifetime, transaction and failure behavior, configuration flags, bounded workload registry, paired measurement protocol and pre-registered decision criteria. Verify live source and upstream sortedness; do not assume it. Evaluate index memory cost and resource limits, including large G and varied Q, without promising unverified scale.
+
+The coordinator must approve the design before P4b-1 or P4b-2. The current Issue #38 documentation update does not itself authorize code implementation or benchmark execution.
+
+#### 3.5.4. P4b-1 — Option A: isolated sound Relaxed NLF
+
+Use typed incident signatures $\sigma=(\ell_E,\ell_V)$ (edge label and neighboring vertex label). Let $N_Q(u,\sigma)$ and $N_G(v,\sigma)$ be incident signature counts for query vertex $u$ and data vertex $v$ in the authoritative search snapshot.
+
+1. **Static necessary condition:** $\delta_{static}(u,v)=\sum_\sigma \max(0,N_Q(u,\sigma)-N_G(v,\sigma))$. Prune only if $\delta_{static}>k$. Injectivity implies this is a lower bound on missing incident query edges, not a sufficient matching condition.
+2. **Conservative residual defect bound:** At a mapped-vertex state after resolving edges with both endpoints mapped, let $M_{cur}$ be committed MISSING edges and $m_{cur}=|M_{cur}|$. Let $I_Q^{miss}(u,\sigma)$ be the committed MISSING incident edges of the given signature (including deferred MISSING commitments). A candidate local bound is
+   $$\delta_{res}^{cons}(u,f(u))=\sum_\sigma \max(0,N_Q(u,\sigma)-|I_Q^{miss}(u,\sigma)|-N_G(f(u),\sigma)).$$
+   Prove $m_{cur}+\delta_{res}^{cons}(u,f(u))\le |R(f)|$ for every valid completion before use. Prune when the bound exceeds $k$. Do not add static deficits to already counted missing edges, or sum overlapping per-vertex deficits. Any later multi-vertex residual aggregation requires a separate disjoint-edge proof. No full free-neighbor scan inside DFS for the minimal variant.
+3. **Index proposal:** Query-relevant signature IDs and sparse per-query-vertex requirements; a snapshot-consistent frequency index with dense or sparse representation selected by memory analysis. Update both endpoints consistently with the INSERT-after / DELETE-before search contract and restore exactly on transaction abort. Indexed lookup may be O(1); checking a vertex is O(number of relevant signatures), plus any missing-status accounting. Do not claim the entire filter is O(1) or ignore initialization / maintenance overhead.
+4. **Isolation and instrumentation:** Proposed `--nlf-mode none|static|residual` (none = Bare M2). Retain original candidate_evaluations, dfs_states and work-unit definitions; add versioned NLF checks/prunes, index maintenance, and overhead metrics without manufacturing gains by moving counters. Evaluate static and residual components explicitly if the design requires.
+5. **Proof and tests:** Include exact-NLF false negatives at $k>0$, double-counted MISSING edge commitments, deferred vertices, already-used neighbors / PRESENT accounting, int 0 versus string "0", wrong edge labels, both update directions and rollback/fault/work-budget paths. Preserve explicit ordered tuples and validate against M0 and Bare M2. Reject any unsound variant.
+
+#### 3.5.5. P4b-2 — Option B: isolated neighbor retrieval optimization
+
+Target `ApxAuthoritativeGraph::get_neighbors()` and the Bare M2 PRESENT branch, which currently materialize a vector, scan CSR with tombstone/overlay checks, append dynamic neighbors, sort and deduplicate. The measured 22.78% includes this combined cost and potential profiling overhead, not just copying.
+
+1. Proposed `get_neighbors_into(u, out)` with reusable scratch vectors indexed by **actual recursive DFS depth**, not assigned vertex count. Pre-size the outer pool and prove the maximum depth accounting for MISSING deferral; preserve parent buffer lifetime and reentrancy.
+2. Add an empty-overlay/tombstone fast path only when logically valid. Use sorted two-pointer merge only after proving actual upstream CSR and overlay ordering/uniqueness contracts; otherwise retain a correct sort/unique fallback. Preserve identical sorted unique neighbor sets including deletion, reinsertion, relabel-via-delete/insert and rollback. Do not expose raw CSR spans as the general dynamic adjacency.
+3. Consider a constant-time degree index **only if** profiling or call-site audit shows material benefit; its memory and transactional rollback costs must be evaluated. Do not introduce snapshot caches or new persistent state without evidence.
+4. Proposed `--neighbor-opt off|on` (off = Bare M2), independently switchable from NLF. For minimal B, preserve output, candidate traversal order and logical search counters on completed comparable runs; add separate retrieval/degree/overlay/tombstone and allocation attribution counters as justified.
+5. Test base-edge deletion, overlay-only edges, delete/reinsert same or new label, duplicate adjacency, parent/child buffers including deferred MISSING recursion, transaction abort and continue-on-error, and equivalent logical work-budget behavior. Verify memory safety (sanitizer builds where supported) and differential neighbor-set equality. No upstream edits.
+
+#### 3.5.6. P4b-3 — Isolated comparative experiment (pre-register before measurement)
+
+- **Comparators:** Bare M2 versus A-only and B-only on the same input, machine, compiler/flags and build identity where practicable; M1 for research comparison, M0 for correctness. Test both optimizations independently, even when implemented on one feature branch.
+- **Correctness gate:** Reuse the verified P3 hand/corpus/stream suites (25 hand cases, 840 corpus cases, 56 streams / 672 steps; verify actual registry), add A/B adversarial and seeded differential cases, and check tuple sets per update and raw duplicates. Require zero missing, extra, or duplicate ordered tuples for all completed correctness cases. Explicitly record oracle/resource failures rather than treating them as passes. Keep the frozen Bare M2 fallback tested.
+- **Workloads:** Preserve the 30 P4a workloads as a new-run continuity set. Pre-register a separate bounded discrimination suite with mixed and uniform typed labels, diverse degree/density and hub/churn patterns, event and zero-event streams, and varied Q topology, Q size and valid k. Proposed exploration: G of 16/32/64 vertices, Q beyond Diamond/K4 where feasible, streams 32–100 updates. These are proposed pilot scales, not fixed supported limits or P5 NetFlow results. Aim to reduce harness dominance through longer/larger workloads; do not exclude results because native time fails a desired share such as 60%.
+- **Measurement:** Main performance comparisons use PROFILE_OFF with a consistent low-overhead end-to-end/stream timing boundary; separate PROFILE_ON runs for native stage attribution and counters. Do not pretend disabled micro-timers supply Search/Step measurements. If those scopes are primary outcomes, pre-register an appropriate equivalent low-overhead measurement seam and measure its observer effect. Balance/randomize paired variant order with a fixed seed, warm up consistently, choose repeat count from pilot variance (initial proposal 5 repeats per workload), record environment, hashes, flags, statuses, wall/CPU time, peak RSS, counts and output volume. Measure index construction and maintenance, not just DFS time.
+- **Statistics:** Report absolute times and paired speedups by scope; aggregate repeats within workload before across-workload summaries and workload-level confidence intervals (e.g. clustered bootstrap). Report relevant strata and all attempted cases; avoid pseudo-replication. Report TIMEOUT, OOM_CENSORED and WORK_BUDGET_EXCEEDED, and censored proportions, not zeros/infinities or silently discarded trials. Preserve initial bounded budget (60 s, 512 MiB, 500,000 canonical work units for P4a continuity unless a separately registered and approved P4b protocol justifies another limit). Resource guards are not a proof of maximum graph size.
+- **Decision thresholds:** Final practical effect sizes, uncertainty, regression and memory tolerances must be locked in the design before running the experiment. Suggested starting criteria for review, not established results: target-stratum median speedup at least 1.15x with workload-level 95% interval above 1.0; report regressions beyond 5% and memory overhead above 20%; distinguish PARITY from uncertain results, and verify absolute memory ceiling. A query-dependent opt-in can be retained if its selector is justified and tested. No requirement that an optimization must produce a positive result.
+- **Amdahl interpretation:** 77.22% and 22.78% are measured Search-time shares, not promised gains. For a hypothetical fixed share $p=0.227835$, eliminating that component gives $1/(1-p)\approx1.295$ in that same scope. Do not apply median shares across scopes or treat the illustration as a universal upper bound. A can reduce B's call volume; combined effects are non-additive.
+
+#### 3.5.7. P4b-4 — Conditional ablation, alternatives and stop rule
+
+Only after A and B pass their individual correctness gates and at least one has a meaningful measured benefit, decide whether a combined variant is worth testing. If authorized, compare Bare, A-only, B-only and A+B on the same pre-registered inputs with independent flags and full combined correctness gate. Do not assume A+B is fastest. Prefer a simpler variant if performance is comparable.
+
+Dynamic frontier / candidate ordering (Option C) and stronger $\delta'$ bounds remain optional alternatives; pursue only with a documented hypothesis and coordinator approval if A/B fail or the evidence warrants them. Re-check completeness, duplication, counters and budget effects for any changed traversal order. Option D keeps Bare M2. Time-box P4b to the two minimal isolated variants and one justified combined ablation; no unbounded micro-optimization rounds.
+
+#### 3.5.8. R4b — Acceptance and P5 handoff
+
+- Record the design, configuration and code provenance, full correctness outcomes, actual benchmark ledger and reproducible commands, limitations, and a decision in proposed `docs/research_decisions/D-R4b-optimization-selection.md`. Keep historical artifacts separate from new P4b results.
+- Classify each variant as ADVANTAGE_OBSERVED, QUERY_DEPENDENT, PARITY, INCONCLUSIVE, NO_GO or UNSOUND (correctness failure). An unsound variant is never enabled; it cannot support a performance claim. Use a gated/fallback configuration for negative or workload-dependent results, rather than silently requiring success.
+- Select a justified configuration for P5 (Bare M2, A, B, or A+B) and retain reproducible controls. Require independent review and explicit coordinator approval before P5. P4b does not establish general scaling, real-world NetFlow advantage, or academic novelty. P5 and P6 retain their existing scope.
 
 ### 3.6. Phase P5: Pilot, Scaling & NetFlow Workload Evaluation
 - **Scope**: Replicate the S4 pilot natively and scale to representative workloads:
@@ -176,7 +249,8 @@ The final research product must be a **demonstrably integrated C++ system** deri
 | **R1** | P1 | Is native RapidFlow integration feasible and architecturally sound? | Probes A–F execution, integration map, source audit | `READY_FOR_P2_DESIGN (PENDING_USER_PR_CLOSURE)` / `NEEDS_ADJUSTMENT` / `BLOCKED` |
 | **R2** | P2 | Can native components materialize tuples and handle rollback? | Foundation unit tests, tuple sink verification, rollback tests | `READY_FOR_ENGINES` / `FIX_FOUNDATION` |
 | **R3** | P3 | Do native M1 and M2 match M0 Oracle 100% on corpus? | 840 corpus verification, 56-stream matrix | `ENGINES_VERIFIED` / `DISCREPANCY_FOUND` |
-| **R4** | P4 | Are NLF/$\delta'$ pruning optimizations sound and effective? | Equivalence verification, operation counter reduction | `PRUNING_VALIDATED` / `PRUNING_UNSOUND` |
+| **R4a** | P4a | Is the frozen Bare M2 profiling baseline valid and useful for optimization hypotheses? | Canonical evidence, 180 slots / 90 pairs, four timing scopes, independent review | `R4A_PROFILE_READY_FOR_P4B_REVIEW` (accepted) |
+| **R4b** | P4b | Which optional optimizations are sound and useful, if any? | Approved design, isolated A/B correctness and paired performance evidence, conditional ablation, explicit fallback and decision record | `PRUNING_VALIDATED` / `PRUNING_UNSOUND` for soundness; ADVANTAGE_OBSERVED / QUERY_DEPENDENT / PARITY / INCONCLUSIVE / NO_GO for empirical selection |
 | **R5** | P5 | Does M2 outperform M1 on real-world NetFlow benchmarks? | Microbenchmarks, RSS, latency distributions, NetFlow logs | `ADVANTAGE_PROVEN` / `PARITY` / `QUERY_DEPENDENT` / `INCONCLUSIVE` / `NO_GO` |
 | **R6** | P6 | Are all deliverables reproducible and ready for thesis defense? | Independent verification script, clean build, PR merge | `READY_FOR_DEFENSE` / `REVISE` |
 

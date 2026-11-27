@@ -9,6 +9,7 @@
 #include <cctype>
 #include <cstdint>
 #include <iomanip>
+#include <utility>
 
 namespace rapidflow_apx {
 namespace json {
@@ -36,6 +37,7 @@ struct Value {
     Value(double v) : type(Type::Float), f_val(v) {}
     Value(const char* s) : type(Type::String), s_val(s) {}
     Value(const std::string& s) : type(Type::String), s_val(s) {}
+    Value(std::string&& s) noexcept : type(Type::String), s_val(std::move(s)) {}
 
     static Value make_array() {
         Value v;
@@ -193,37 +195,123 @@ private:
         throw std::runtime_error("JSON parse error: expected bool");
     }
 
+    static uint32_t read_hex_quad(const std::string& s, size_t& pos) {
+        if (s.size() - pos < 4) {
+            throw std::invalid_argument("JSON parse error: incomplete Unicode escape");
+        }
+        uint32_t value = 0;
+        for (int i = 0; i < 4; ++i) {
+            const char digit = s[pos++];
+            value <<= 4;
+            if (digit >= '0' && digit <= '9') value += digit - '0';
+            else if (digit >= 'a' && digit <= 'f') value += digit - 'a' + 10;
+            else if (digit >= 'A' && digit <= 'F') value += digit - 'A' + 10;
+            else throw std::invalid_argument("JSON parse error: invalid Unicode hex digit");
+        }
+        return value;
+    }
+
+    static void append_utf8(std::string& out, uint32_t scalar) {
+        if (scalar < 0x80) {
+            out += static_cast<char>(scalar);
+            return;
+        }
+        if (scalar >= 0x10000) {
+            out += static_cast<char>(0xF0 | (scalar >> 18));
+            out += static_cast<char>(0x80 | ((scalar >> 12) & 0x3F));
+        } else if (scalar >= 0x800) {
+            out += static_cast<char>(0xE0 | (scalar >> 12));
+        } else {
+            out += static_cast<char>(0xC0 | (scalar >> 6));
+        }
+        if (scalar >= 0x800) out += static_cast<char>(0x80 | ((scalar >> 6) & 0x3F));
+        out += static_cast<char>(0x80 | (scalar & 0x3F));
+    }
+
+    static uint32_t read_unicode_escape(const std::string& s, size_t& pos) {
+        const uint32_t first = read_hex_quad(s, pos);
+        if (first < 0xD800 || first > 0xDFFF) return first;
+        if (first >= 0xDC00 || s.compare(pos, 2, "\\u") != 0) {
+            throw std::invalid_argument("JSON parse error: unpaired Unicode surrogate");
+        }
+        pos += 2;
+        const uint32_t second = read_hex_quad(s, pos);
+        if (second < 0xDC00 || second > 0xDFFF) {
+            throw std::invalid_argument("JSON parse error: invalid Unicode surrogate pair");
+        }
+        return 0x10000 + ((first - 0xD800) << 10) + (second - 0xDC00);
+    }
+
+    static void copy_utf8(const std::string& s, size_t& pos, std::string& out) {
+        const size_t start = pos;
+        const auto lead = static_cast<unsigned char>(s[pos++]);
+        uint32_t scalar;
+        uint32_t minimum;
+        size_t remaining;
+        if (lead >= 0xC2 && lead <= 0xDF) {
+            scalar = lead & 0x1F;
+            minimum = 0x80;
+            remaining = 1;
+        } else if (lead >= 0xE0 && lead <= 0xEF) {
+            scalar = lead & 0x0F;
+            minimum = 0x800;
+            remaining = 2;
+        } else if (lead >= 0xF0 && lead <= 0xF4) {
+            scalar = lead & 0x07;
+            minimum = 0x10000;
+            remaining = 3;
+        } else {
+            throw std::invalid_argument("JSON parse error: invalid UTF-8 lead byte");
+        }
+        if (s.size() - pos < remaining) {
+            throw std::invalid_argument("JSON parse error: truncated UTF-8");
+        }
+        for (size_t i = 0; i < remaining; ++i) {
+            const auto byte = static_cast<unsigned char>(s[pos++]);
+            if ((byte & 0xC0) != 0x80) {
+                throw std::invalid_argument("JSON parse error: invalid UTF-8 continuation");
+            }
+            scalar = (scalar << 6) | (byte & 0x3F);
+        }
+        if (scalar < minimum || scalar > 0x10FFFF || (scalar >= 0xD800 && scalar <= 0xDFFF)) {
+            throw std::invalid_argument("JSON parse error: invalid UTF-8 scalar");
+        }
+        out.append(s, start, pos - start);
+    }
+
     static Value parse_string(const std::string& s, size_t& pos) {
-        pos++; // skip opening quote
+        ++pos; // opening quote
         std::string res;
         while (pos < s.size()) {
-            char c = s[pos++];
-            if (c == '"') return Value(res);
-            if (c == '\\') {
-                if (pos >= s.size()) throw std::runtime_error("JSON parse error: incomplete escape");
-                char esc = s[pos++];
-                switch (esc) {
-                    case '"': res += '"'; break;
-                    case '\\': res += '\\'; break;
-                    case '/': res += '/'; break;
-                    case 'b': res += '\b'; break;
-                    case 'f': res += '\f'; break;
-                    case 'n': res += '\n'; break;
-                    case 'r': res += '\r'; break;
-                    case 't': res += '\t'; break;
-                    case 'u': {
-                        if (pos + 4 > s.size()) throw std::runtime_error("JSON parse error: incomplete unicode escape");
-                        pos += 4; // basic skip for ascii
-                        res += '?';
-                        break;
-                    }
-                    default: res += esc; break;
-                }
-            } else {
-                res += c;
+            const auto c = static_cast<unsigned char>(s[pos]);
+            if (c >= 0x80) {
+                copy_utf8(s, pos, res);
+                continue;
+            }
+            ++pos;
+            if (c == '"') return Value(std::move(res));
+            if (c < 0x20) {
+                throw std::invalid_argument("JSON parse error: unescaped control character");
+            }
+            if (c != '\\') {
+                res += static_cast<char>(c);
+                continue;
+            }
+            if (pos == s.size()) throw std::invalid_argument("JSON parse error: incomplete escape");
+            switch (s[pos++]) {
+                case '"': res += '"'; break;
+                case '\\': res += '\\'; break;
+                case '/': res += '/'; break;
+                case 'b': res += '\b'; break;
+                case 'f': res += '\f'; break;
+                case 'n': res += '\n'; break;
+                case 'r': res += '\r'; break;
+                case 't': res += '\t'; break;
+                case 'u': append_utf8(res, read_unicode_escape(s, pos)); break;
+                default: throw std::invalid_argument("JSON parse error: unsupported escape");
             }
         }
-        throw std::runtime_error("JSON parse error: unterminated string");
+        throw std::invalid_argument("JSON parse error: unterminated string");
     }
 
     static Value parse_number(const std::string& s, size_t& pos) {

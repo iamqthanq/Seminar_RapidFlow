@@ -1,0 +1,85 @@
+{
+  "query": {
+    "vertices": [
+      {
+        "id": 3,
+        "label": 0
+      },
+      {
+        "id": 2,
+        "label": 0
+      },
+      {
+        "id": 1,
+        "label": 0
+      },
+      {
+        "id": 0,
+        "label": 0
+      }
+    ],
+    "edges": [
+      {
+        "u": 0,
+        "v": 1,
+        "label": 0
+      },
+      {
+        "u": 0,
+        "v": 2,
+        "label": 0
+      },
+      {
+        "u": 1,
+        "v": 3,
+        "label": 0
+      },
+      {
+        "u": 2,
+        "v": 3,
+        "label": 0
+      }
+    ]
+  },
+  "initial_graph": {
+    "vertices": [
+      {
+        "id": 3,
+        "label": 0
+      },
+      {
+        "id": 2,
+        "label": 0
+      },
+      {
+        "id": 1,
+        "label": 0
+      },
+      {
+        "id": 0,
+        "label": 0
+      }
+    ],
+    "edges": [
+      {
+        "u": 1,
+        "v": 3,
+        "label": 0
+      },
+      {
+        "u": 2,
+        "v": 3,
+        "label": 0
+      }
+    ]
+  },
+  "updates": [
+    {
+      "op": "+",
+      "u": 0,
+      "v": 1,
+      "label": 0
+    }
+  ],
+  "k": 1
+}

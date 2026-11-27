@@ -1,4 +1,5 @@
 #include "rapidflow_apx/authoritative_graph.h"
+#include "rapidflow_apx/engine_counters.h"
 #include "rapidflow_apx/typed_codec.h"
 #include <iostream>
 
@@ -96,6 +97,9 @@ bool ApxAuthoritativeGraph::has_edge(uint32_t u, uint32_t v) const {
         return false;
     }
     uint64_t key = make_edge_key(u, v);
+    if (is_key_tentatively_deleted(key)) {
+        return false;
+    }
     if (overlay_labels_.find(key) != overlay_labels_.end()) {
         return true;
     }
@@ -113,6 +117,9 @@ EdgeLookupResult ApxAuthoritativeGraph::get_edge_label(uint32_t u, uint32_t v) c
         return {false, 0};
     }
     uint64_t key = make_edge_key(u, v);
+    if (is_key_tentatively_deleted(key)) {
+        return {false, 0};
+    }
     auto it = overlay_labels_.find(key);
     if (it != overlay_labels_.end()) {
         return {true, it->second};
@@ -152,12 +159,362 @@ std::vector<uint32_t> ApxAuthoritativeGraph::get_neighbors(uint32_t u) const {
     uint32_t overlay_count = 0;
     uint32_t* overlay_nbrs = self->fwd_overlay_.get_neighbor(u, overlay_count);
     for (uint32_t i = 0; i < overlay_count; ++i) {
+        if (is_key_tentatively_deleted(make_edge_key(u, overlay_nbrs[i]))) {
+            continue;
+        }
         neighbors.push_back(overlay_nbrs[i]);
     }
 
     std::sort(neighbors.begin(), neighbors.end());
     neighbors.erase(std::unique(neighbors.begin(), neighbors.end()), neighbors.end());
     return neighbors;
+}
+
+void ApxAuthoritativeGraph::get_neighbors_into(uint32_t u, std::vector<uint32_t>& out) const {
+    out.clear();
+    if (!has_vertex(u)) {
+        return;
+    }
+
+    // Match the legacy control's collection and sort/unique steps while
+    // retaining the caller's storage across independent retrievals.
+    if (base_graph_) {
+        ui count = 0;
+        const VertexID* base_nbrs = base_graph_->getVertexNeighbors(u, count);
+        for (ui i = 0; i < count; ++i) {
+            const uint32_t v = base_nbrs[i];
+            const uint64_t key = make_edge_key(u, v);
+            if (tombstones_.find(key) != tombstones_.end()
+                || overlay_labels_.find(key) != overlay_labels_.end()) {
+                continue;
+            }
+            out.push_back(v);
+        }
+    }
+
+    auto* self = const_cast<ApxAuthoritativeGraph*>(this);
+    uint32_t overlay_count = 0;
+    const uint32_t* overlay_nbrs = self->fwd_overlay_.get_neighbor(u, overlay_count);
+    for (uint32_t i = 0; i < overlay_count; ++i) {
+        if (is_key_tentatively_deleted(make_edge_key(u, overlay_nbrs[i]))) {
+            continue;
+        }
+        out.push_back(overlay_nbrs[i]);
+    }
+    std::sort(out.begin(), out.end());
+    out.erase(std::unique(out.begin(), out.end()), out.end());
+}
+
+void ApxAuthoritativeGraph::get_neighbors_merged_into(
+    uint32_t u,
+    std::vector<uint32_t>& out,
+    EngineCounters* counters
+) const {
+    out.clear();
+    if (!has_vertex(u)) {
+        return;
+    }
+
+    ui base_count = 0;
+    const VertexID* base_nbrs = nullptr;
+    if (base_graph_) {
+        base_nbrs = base_graph_->getVertexNeighbors(u, base_count);
+    }
+    if (base_count > 0 && base_nbrs == nullptr) {
+        throw InvariantViolationException("Corrupt base CSR: positive count with null pointer");
+    }
+
+    auto* self = const_cast<ApxAuthoritativeGraph*>(this);
+    uint32_t overlay_count = 0;
+    const uint32_t* overlay_nbrs = self->fwd_overlay_.get_neighbor(u, overlay_count);
+    if (overlay_count > 0 && overlay_nbrs == nullptr) {
+        throw InvariantViolationException("Corrupt overlay: positive count with null pointer");
+    }
+
+    merge_neighbor_ranges(u, base_nbrs, base_count, overlay_nbrs, overlay_count, out, counters);
+}
+
+#ifdef APX_NEIGHBOR_TEST_TRACE
+static MergeFaultHook s_merge_fault_hook = MergeFaultHook::NONE;
+
+void ApxAuthoritativeGraph::set_merge_fault_hook(MergeFaultHook hook) {
+    s_merge_fault_hook = hook;
+}
+
+MergeFaultHook ApxAuthoritativeGraph::get_merge_fault_hook() {
+    return s_merge_fault_hook;
+}
+#endif
+
+void ApxAuthoritativeGraph::merge_neighbor_ranges(
+    uint32_t u,
+    const uint32_t* base_nbrs,
+    uint32_t base_count,
+    const uint32_t* overlay_nbrs,
+    uint32_t overlay_count,
+    std::vector<uint32_t>& out,
+    EngineCounters* counters
+) const {
+    out.clear();
+
+    try {
+        if (!has_vertex(u)) {
+            throw InvariantViolationException("merge_neighbor_ranges: vertex u does not exist");
+        }
+
+        if (base_count > 0 && base_nbrs == nullptr) {
+            throw InvariantViolationException("merge_neighbor_ranges: base_count > 0 with null pointer");
+        }
+        if (overlay_count > 0 && overlay_nbrs == nullptr) {
+            throw InvariantViolationException("merge_neighbor_ranges: overlay_count > 0 with null pointer");
+        }
+
+        auto is_valid_neighbor = [this, u](uint32_t v) -> bool {
+            return has_vertex(v) && v != u;
+        };
+
+        // Fast Path 1: Both empty
+        if (base_count == 0 && overlay_count == 0) {
+            if (counters) {
+                ++counters->neighbor_merge_retrieval_calls;
+                ++counters->neighbor_merge_fast_path_calls;
+            }
+            return;
+        }
+
+        // Fast Path 2: Empty base, nonempty overlay (no pending overlay deletion at u)
+        if (base_count == 0 && overlay_count > 0 && !has_tentative_overlay_delete(u)) {
+            for (uint32_t k = 0; k < overlay_count; ++k) {
+                if (!is_valid_neighbor(overlay_nbrs[k])) {
+                    throw InvariantViolationException("merge_neighbor_ranges: invalid neighbor ID in overlay");
+                }
+            }
+            bool overlay_sorted = true;
+            for (uint32_t k = 1; k < overlay_count; ++k) {
+                if (overlay_nbrs[k] <= overlay_nbrs[k - 1]) {
+                    overlay_sorted = false;
+                    break;
+                }
+            }
+            if (overlay_sorted) {
+#ifdef APX_NEIGHBOR_TEST_TRACE
+                if (s_merge_fault_hook == MergeFaultHook::FAIL_DURING_FAST_PATH) {
+                    out.push_back(overlay_nbrs[0]);
+                    throw std::runtime_error("Simulated failure during fast path");
+                }
+#endif
+                out.assign(overlay_nbrs, overlay_nbrs + overlay_count);
+                if (counters) {
+                    ++counters->neighbor_merge_retrieval_calls;
+                    ++counters->neighbor_merge_fast_path_calls;
+                }
+                return;
+            } else {
+                goto do_fallback;
+            }
+        }
+
+        // Fast Path 3: Nonempty base, empty overlay, no tombstones and no overlay labels
+        if (base_count > 0 && overlay_count == 0 && tombstones_.empty() && overlay_labels_.empty()) {
+            for (uint32_t k = 0; k < base_count; ++k) {
+                if (!is_valid_neighbor(base_nbrs[k])) {
+                    throw InvariantViolationException("merge_neighbor_ranges: invalid neighbor ID in base");
+                }
+            }
+            bool base_sorted = true;
+            for (uint32_t k = 1; k < base_count; ++k) {
+                if (base_nbrs[k] <= base_nbrs[k - 1]) {
+                    base_sorted = false;
+                    break;
+                }
+            }
+            if (base_sorted) {
+#ifdef APX_NEIGHBOR_TEST_TRACE
+                if (s_merge_fault_hook == MergeFaultHook::FAIL_DURING_FAST_PATH) {
+                    out.push_back(base_nbrs[0]);
+                    throw std::runtime_error("Simulated failure during fast path");
+                }
+#endif
+                out.assign(base_nbrs, base_nbrs + base_count);
+                if (counters) {
+                    ++counters->neighbor_merge_retrieval_calls;
+                    ++counters->neighbor_merge_fast_path_calls;
+                }
+                return;
+            } else {
+                goto do_fallback;
+            }
+        }
+
+        // Linear 2-way sorted merge with Strategy B fused validation
+        {
+            uint32_t i = 0; // index in base_nbrs
+            uint32_t j = 0; // index in overlay_nbrs
+
+            // Advance base index i to next eligible base neighbor while verifying raw base sortedness
+            auto advance_base = [&]() -> bool {
+                while (i < base_count) {
+                    uint32_t b = base_nbrs[i];
+                    if (!is_valid_neighbor(b)) {
+                        throw InvariantViolationException("merge_neighbor_ranges: invalid neighbor ID in base");
+                    }
+                    if (i > 0 && base_nbrs[i] <= base_nbrs[i - 1]) {
+                        return false; // raw base not strictly ascending
+                    }
+                    uint64_t key = make_edge_key(u, b);
+                    if (tombstones_.find(key) == tombstones_.end() &&
+                        overlay_labels_.find(key) == overlay_labels_.end()) {
+                        return true;
+                    }
+                    ++i;
+                }
+                return true;
+            };
+
+            auto advance_overlay = [&]() -> bool {
+                while (j < overlay_count) {
+                    uint32_t o = overlay_nbrs[j];
+                    if (!is_valid_neighbor(o)) {
+                        throw InvariantViolationException("merge_neighbor_ranges: invalid neighbor ID in overlay");
+                    }
+                    if (j > 0 && overlay_nbrs[j] <= overlay_nbrs[j - 1]) {
+                        return false; // raw overlay not strictly ascending
+                    }
+                    if (!is_key_tentatively_deleted(make_edge_key(u, o))) {
+                        return true;
+                    }
+                    ++j;
+                }
+                return true;
+            };
+
+            if (!advance_base() || !advance_overlay()) goto do_fallback;
+
+            while (i < base_count && j < overlay_count) {
+                uint32_t b = base_nbrs[i];
+                uint32_t o = overlay_nbrs[j];
+
+                if (b < o) {
+                    if (!out.empty() && b <= out.back()) goto do_fallback;
+                    out.push_back(b);
+#ifdef APX_NEIGHBOR_TEST_TRACE
+                    if (s_merge_fault_hook == MergeFaultHook::FAIL_AFTER_FIRST_EMISSION) {
+                        throw std::runtime_error("Simulated failure after first emission");
+                    }
+#endif
+                    ++i;
+                    if (!advance_base()) goto do_fallback;
+                } else if (o < b) {
+                    if (!out.empty() && o <= out.back()) goto do_fallback;
+                    out.push_back(o);
+#ifdef APX_NEIGHBOR_TEST_TRACE
+                    if (s_merge_fault_hook == MergeFaultHook::FAIL_AFTER_FIRST_EMISSION) {
+                        throw std::runtime_error("Simulated failure after first emission");
+                    }
+#endif
+                    ++j;
+                    if (!advance_overlay()) goto do_fallback;
+                } else { // b == o: defensive equality handling
+                    if (!out.empty() && o <= out.back()) goto do_fallback;
+                    out.push_back(o);
+#ifdef APX_NEIGHBOR_TEST_TRACE
+                    if (s_merge_fault_hook == MergeFaultHook::FAIL_AFTER_FIRST_EMISSION) {
+                        throw std::runtime_error("Simulated failure after first emission");
+                    }
+#endif
+                    ++i;
+                    ++j;
+                    if (!advance_base() || !advance_overlay()) goto do_fallback;
+                }
+            }
+
+            while (i < base_count) {
+                uint32_t b = base_nbrs[i];
+                if (!is_valid_neighbor(b)) {
+                    throw InvariantViolationException("merge_neighbor_ranges: invalid neighbor ID in base");
+                }
+                if (!out.empty() && b <= out.back()) goto do_fallback;
+                out.push_back(b);
+#ifdef APX_NEIGHBOR_TEST_TRACE
+                if (s_merge_fault_hook == MergeFaultHook::FAIL_AFTER_FIRST_EMISSION) {
+                    throw std::runtime_error("Simulated failure after first emission");
+                }
+#endif
+                ++i;
+                if (!advance_base()) goto do_fallback;
+            }
+
+            while (j < overlay_count) {
+                uint32_t o = overlay_nbrs[j];
+                if (!is_valid_neighbor(o)) {
+                    throw InvariantViolationException("merge_neighbor_ranges: invalid neighbor ID in overlay");
+                }
+                if (!out.empty() && o <= out.back()) goto do_fallback;
+                out.push_back(o);
+#ifdef APX_NEIGHBOR_TEST_TRACE
+                if (s_merge_fault_hook == MergeFaultHook::FAIL_AFTER_FIRST_EMISSION) {
+                    throw std::runtime_error("Simulated failure after first emission");
+                }
+#endif
+                ++j;
+                if (!advance_overlay()) goto do_fallback;
+            }
+
+            if (counters) {
+                ++counters->neighbor_merge_retrieval_calls;
+                ++counters->neighbor_merge_linear_calls;
+            }
+            return;
+        }
+
+do_fallback:
+        out.clear();
+        if (base_nbrs) {
+            for (uint32_t k = 0; k < base_count; ++k) {
+                uint32_t v = base_nbrs[k];
+                if (!is_valid_neighbor(v)) {
+                    throw InvariantViolationException("merge_neighbor_ranges: invalid neighbor ID in fallback base");
+                }
+                uint64_t key = make_edge_key(u, v);
+                if (tombstones_.find(key) != tombstones_.end() ||
+                    overlay_labels_.find(key) != overlay_labels_.end()) {
+                    continue;
+                }
+                out.push_back(v);
+#ifdef APX_NEIGHBOR_TEST_TRACE
+                if (s_merge_fault_hook == MergeFaultHook::FAIL_DURING_FALLBACK && !out.empty()) {
+                    throw std::runtime_error("Simulated failure during fallback with partial output");
+                }
+#endif
+            }
+        }
+        if (overlay_nbrs) {
+            for (uint32_t k = 0; k < overlay_count; ++k) {
+                uint32_t v = overlay_nbrs[k];
+                if (!is_valid_neighbor(v)) {
+                    throw InvariantViolationException("merge_neighbor_ranges: invalid neighbor ID in fallback overlay");
+                }
+                if (is_key_tentatively_deleted(make_edge_key(u, v))) {
+                    continue;
+                }
+                out.push_back(v);
+#ifdef APX_NEIGHBOR_TEST_TRACE
+                if (s_merge_fault_hook == MergeFaultHook::FAIL_DURING_FALLBACK && !out.empty()) {
+                    throw std::runtime_error("Simulated failure during fallback with partial output");
+                }
+#endif
+            }
+        }
+        std::sort(out.begin(), out.end());
+        out.erase(std::unique(out.begin(), out.end()), out.end());
+        if (counters) {
+            ++counters->neighbor_merge_retrieval_calls;
+            ++counters->neighbor_merge_fallback_calls;
+        }
+    } catch (...) {
+        out.clear();
+        throw;
+    }
 }
 
 uint32_t ApxAuthoritativeGraph::get_degree(uint32_t u) const {
